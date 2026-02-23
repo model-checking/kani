@@ -1,0 +1,1062 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>0009-function-contracts - Kani RFC Book</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Design documents for Kani Rust Verifier">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-c71429e3.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-1678352e.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Kani RFC Book</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/model-checking/kani" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/model-checking/kani/edit/main/rfc/src/rfcs/0009-function-contracts.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <ul>
+<li><strong>Feature Name:</strong> Function Contracts</li>
+<li><strong>Feature Request Issue:</strong> <a href="https://github.com/model-checking/kani/issues/2652">#2652</a> and <a href="https://github.com/model-checking/kani/milestone/31">Milestone</a></li>
+<li><strong>RFC PR:</strong> <a href="https://github.com/model-checking/kani/pull/2620">#2620</a></li>
+<li><strong>Status:</strong> Unstable</li>
+<li><strong>Version:</strong> 1</li>
+<li><strong>Proof-of-concept:</strong> <a href="https://github.com/model-checking/kani/tree/features/contracts">features/contracts</a></li>
+<li><strong>Feature Gate:</strong> <code>-Zfunction-contracts</code>, enforced by compile time error<sup class="footnote-reference" id="fr-gate-1"><a href="#footnote-gate">1</a></sup></li>
+</ul>
+<hr>
+<h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
+<p>Function contracts are a means to specify and check function behavior. On top of
+that the specification can then be used as a sound<sup class="footnote-reference" id="fr-simple-unsoundness-1"><a href="#footnote-simple-unsoundness">2</a></sup>
+abstraction to replace the concrete implementation, similar to <a href="https://model-checking.github.io/kani/rfc/rfcs/0002-function-stubbing.html">stubbing</a>.</p>
+<p>This allows for a modular verification.</p>
+<!-- Shorter? -->
+<h2 id="user-impact"><a class="header" href="#user-impact">User Impact</a></h2>
+<!-- Is basically the pitch and addressing the user. -->
+<p>Function contracts provide an interface for a verified,
+sound<sup class="footnote-reference" id="fr-simple-unsoundness-2"><a href="#footnote-simple-unsoundness">2</a></sup> function abstraction. This is similar to <a href="https://model-checking.github.io/kani/rfc/rfcs/0002-function-stubbing.html">stubbing</a>
+but with verification of the abstraction instead of blind trust. This allows for
+modular verification, which paves the way for the following two ambitious goals.</p>
+<ul>
+<li><strong>Scalability:</strong> A function contract is an abstraction (sound
+overapproximation) of a function’s behavior. After verifying the contract
+against its implementation we can subsequently use the (cheaper) abstraction
+instead of the concrete implementation when analyzing its callers.
+Verification is thus modularized and even cacheable.</li>
+<li><strong>Unbounded Verification:</strong> Contracts enable inductive reasoning for recursive
+functions where the first call is checked against the contract and recursive
+calls are stubbed out using the abstraction.</li>
+</ul>
+<p>Function contracts are completely optional with no user impact if unused. This
+RFC proposes the addition of new attributes, and functions, that shouldn’t
+interfere with existing functionalities.</p>
+<h2 id="user-experience"><a class="header" href="#user-experience">User Experience</a></h2>
+<p>A function contract specifies the behavior of a function as a predicate that
+can be checked against the function implementation and also used as an
+abstraction of the implementation at the call sites.</p>
+<p>The lifecycle of a contract is split into three phases: specification,
+verification and call abstraction, which we will explore on this example:</p>
+<pre><code class="language-rs">fn my_div(dividend: u32, divisor: u32) -&gt; u32 {
+  dividend / divisor
+}
+</code></pre>
+<ol>
+<li>
+<p>In the first phase we <strong>specify</strong> the contract. Kani provides two new
+annotations: <code>requires</code> (preconditions) to describe the expectations this
+function has as to the calling context and <code>ensures</code> (postconditions) which
+approximates function outputs in terms of function inputs.</p>
+<pre><code class="language-rs">#[kani::requires(divisor != 0)]
+#[kani::ensures(|result : &amp;u32| *result &lt;= dividend)]
+fn my_div(dividend: u32, divisor: u32) -&gt; u32 {
+  dividend / divisor
+}
+</code></pre>
+<p><code>requires</code> here indicates this function expects its <code>divisor</code> input to never
+be 0, or it will not execute correctly (for instance panic or cause undefined
+behavior).</p>
+<p><code>ensures</code> puts a bound on the output, relative to the <code>dividend</code> input.</p>
+<p>Conditions in contracts are Rust expressions which reference the
+function arguments and, in case of <code>ensures</code>, the return value of the
+function. The return value is passed into the ensures closure statement by reference. Syntactically
+Kani supports any Rust expression, including function calls, defining types
+etc. However they must be side-effect free (see also side effects
+<a href="#changes-to-other-components">here</a>) or Kani will throw a compile error.</p>
+<p>Multiple <code>requires</code> and <code>ensures</code> clauses are allowed on the same function,
+they are implicitly logically conjoined.</p>
+</li>
+<li>
+<p>Next, Kani ensures that the function implementation respects all the conditions specified in its contract.</p>
+<p>To perform this check Kani needs a suitable harness to verify the function
+in. The harness is mainly responsible for providing the function arguments
+but also set up a valid heap that pointers may refer to and properly
+initialize <code>static</code> variables.</p>
+<p>Kani demands of us, as the user, to provide this harness; a limitation of
+this proposal. See also <a href="#future-possibilities">future possibilities</a> for a
+discussion about the arising soundness issues and their remedies.</p>
+<p>Harnesses for checking contract are defined with the
+<code>proof_for_contract(TARGET)</code> attribute which references <code>TARGET</code>, the
+function for which the contract is supposed to be checked.</p>
+<pre><code class="language-rs">#[kani::proof_for_contract(my_div)]
+fn my_div_harness() {
+  my_div(kani::any(), kani::any())
+}
+</code></pre>
+<p>Similar to a verification harness for any other function, we are supposed to
+create all possible input combinations the function can encounter, then call
+the function at least once with those abstract inputs. If we forget to call
+<code>my_div</code> Kani reports an error. Unlike other harnesses we only need to create
+suitable data structures but we don’t need to add any checks as Kani will
+use the conditions we specified in the contract.</p>
+<p>Kani inserts preconditions (<code>requires</code>) as <code>kani::assume</code> <em>before</em> the call
+to <code>my_div</code>, limiting inputs to those the function is actually defined for.
+It inserts postconditions (<code>ensures</code>) as <code>kani::assert</code> checks <em>after</em> the
+call to <code>my_div</code>, enforcing the contract.</p>
+<p>The expanded version of our harness that Kani generates looks roughly like
+this:</p>
+<pre><code class="language-rs">#[kani::proof]
+fn my_div_harness() {
+  let dividend = kani::any();
+  let divisor = kani::any();
+  kani::assume(divisor != 0); // requires
+  let result_kani_internal = my_div(dividend, divisor);
+  kani::assert((|result : &amp;u32| *result &lt;= dividend)(result_kani_internal)); // ensures
+}
+</code></pre>
+<p>Kani verifies the expanded harness like any other harness, giving the
+green light for the next step: call abstraction.</p>
+</li>
+<li>
+<p>In the last phase the <strong>verified</strong> contract is ready for us to use to
+abstract the function at its call sites.</p>
+<p>Kani requires that there has to be at least one associated
+<code>proof_for_contract</code> harness for each abstracted function, otherwise an error is
+thrown. In addition, by default, it requires all <code>proof_for_contract</code>
+harnesses to pass verification before attempting verification of any
+harnesses that use the contract as a stub.</p>
+<p>A possible harness that uses our <code>my_div</code> contract could be the following:</p>
+<pre><code class="language-rs">#[kani::proof]
+#[kani::stub_verified(my_div)]
+fn use_div() {
+  let v = vec![...];
+  let some_idx = my_div(v.len() - 1, 3);
+  v[some_idx];
+}
+</code></pre>
+<p>At a call site where the contract is used as an abstraction Kani
+<code>kani::assert</code>s the preconditions (<code>requires</code>) and produces a
+nondeterministic value (<code>kani::any</code>) which satisfies the postconditions.</p>
+<p>Mutable memory is similarly made non-deterministic, discussed later in
+<a href="#memory-predicates-and-havocking">havocking</a>.</p>
+<p>An expanded stubbing of <code>my_div</code> looks like this:</p>
+<pre><code class="language-rs">fn my_div_stub(dividend: u32, divisor: u32) -&gt; u32 {
+  kani::assert(divisor != 0); // pre-condition
+  kani::any_where(|result| { /* post-condition */ result &lt;= dividend })
+}
+</code></pre>
+<p>Notice that this performs no actual computation for <code>my_div</code> (other than the
+conditions) which allows us to avoid something potentially costly.</p>
+</li>
+</ol>
+<p>Also notice that Kani was able to express both contract checking and abstracting
+with existing capabilities; the important feature is the enforcement. The
+checking is, by construction, performed <strong>against the same condition</strong> that is
+later used as the abstraction, which ensures soundness (see discussion on
+lingering threats to soundness in the <a href="#future-possibilities">future</a> section)
+and guarding against abstractions diverging from their checks.</p>
+<h3 id="write-sets-and-havocking"><a class="header" href="#write-sets-and-havocking">Write Sets and Havocking</a></h3>
+<p>Functions can have side effects on data reachable through mutable references or
+pointers. To overapproximate all such modifications a function could apply to
+pointed-to data, the verifier “havocs” those regions, essentially replacing
+their content with non-deterministic values.</p>
+<p>Let us consider a simple example of a <code>pop</code> method.</p>
+<pre><code class="language-rs">impl&lt;T&gt; Vec&lt;T&gt; {
+  fn pop(&amp;mut self) -&gt; Option&lt;T&gt; {
+    ...
+  }
+}
+</code></pre>
+<p>This function can, in theory, modify any memory behind <code>&amp;mut self</code>, so this is
+what Kani will assume it does by default. It infers the “write set”, that is the
+set of memory locations a function may modify, from the type of the function
+arguments. As a result, any data pointed to by a mutable reference or pointer is
+considered part of the write set<sup class="footnote-reference" id="fr-write-set-recursion-1"><a href="#footnote-write-set-recursion">3</a></sup>. In addition, a static
+analysis of the source code discovers any <code>static mut</code> variables the function or
+it’s dependencies reference and adds all pointed-to data to the write set also.</p>
+<p>During havocking the verifier replaces all locations in the write set with
+non-deterministic values. Kani emits a set of automatically generated
+postconditions which encode the expectations from the Rust type system and
+<code>assume</code>s them for the havocked locations to ensure they are valid. This
+encompasses both limits as to what values are acceptable for a given type, such
+as <code>char</code> or the possible values of an enum discriminator, as well as lifetime
+constraints.</p>
+<p>While the inferred write set is sound and enough for successful contract
+checking<sup class="footnote-reference" id="fr-inferred-footprint-1"><a href="#footnote-inferred-footprint">4</a></sup> in many cases this inference is too coarse
+grained. In the case of <code>pop</code> every value in this vector will be made
+non-deterministic.</p>
+<p>To address this the proposal also adds a <code>modifies</code> and <code>frees</code> clause which
+limits the scope of havocking. Both clauses represent an assertion that the
+function will modify only the specified memory regions. Similar to
+requires/ensures the verifier enforces the assertion in the checking stage to
+ensure soundness. When the contract is used as an abstraction, the <code>modifies</code>
+clause is used as the write set to havoc.</p>
+<p>In our <code>pop</code> example the only modified memory location is the last element and
+only if the vector was not already empty, which would be specified thusly.</p>
+<pre><code class="language-rs">impl&lt;T&gt; Vec&lt;T&gt; {
+  #[modifies(if !self.is_empty() =&gt; (*self).buf.ptr.pointer.pointer[self.len])]
+  #[modifies(if self.is_empty())]
+  fn pop(&amp;mut self) -&gt; Option&lt;T&gt; {
+    ...
+  }
+}
+</code></pre>
+<p>The <code>#[modifies(when = CONDITION, targets = { MODIFIES_RANGE, ... })]</code> consists
+of a <code>CONDITION</code> and zero or more, comma separated <code>MODIFIES_RANGE</code>s which are
+essentially a place expression.</p>
+<p>Place expressions describe a position in the abstract program memory. You may
+think of it as what goes to the left of an assignment. They compose of the name
+of one function argument (or static variable) and zero or more projections
+(dereference <code>*</code>, field access <code>.x</code> and slice indexing <code>[1]</code><sup class="footnote-reference" id="fr-slice-exprs-1"><a href="#footnote-slice-exprs">5</a></sup>).</p>
+<p>If no <code>when</code> is provided the condition defaults to <code>true</code>, meaning the modifies
+ranges apply to all invocations of the function. If <code>targets</code> is omitted it
+defaults to <code>{}</code>, e.g. an empty set of targets meaning under this condition the
+function modifies no mutable memory.</p>
+<p>Because place expressions are restricted to using projections only, Kani must
+break Rusts <code>pub</code>/no-<code>pub</code> encapsulation here<sup class="footnote-reference" id="fr-assigns-encapsulation-breaking-1"><a href="#footnote-assigns-encapsulation-breaking">6</a></sup>.
+If need be we can reference fields that are usually hidden, without an error
+from the compiler.</p>
+<p>In addition to a place expression, a <code>MODIFIES_RANGE</code> can also be terminated
+with more complex <em>slice</em> expressions as the last projection. This only applies
+to <code>*mut</code> pointers to arrays. For instance this is needed for <code>Vec::truncate</code>
+where all of the latter section of the allocation is assigned (dropped).</p>
+<pre><code class="language-rs">impl&lt;T&gt; Vec&lt;T&gt; {
+  #[modifies(self.buf.ptr.pointer.pointer[len..])]
+  fn truncate(&amp;mut self, len: usize) {
+    ...
+  }
+}
+</code></pre>
+<p><code>[..]</code> denotes the entirety of an allocation, <code>[i..]</code>, <code>[..j]</code> and <code>[i..j]</code> are
+ranges of pointer offsets<sup class="footnote-reference" id="fr-slice-exprs-2"><a href="#footnote-slice-exprs">5</a></sup>. The slice indices are offsets with sizing <code>T</code>, e.g.
+in Rust <code>p[i..j]</code> would be equivalent to
+<code>std::slice::from_raw_parts(p.offset(i), i - j)</code>. <code>i</code> must be smaller or equal
+than <code>j</code>.</p>
+<p>A <code>#[frees(when = CONDITION, targets = { PLACE, ... })]</code> clause works similarly
+to <code>modifies</code> but denotes memory that is deallocated. Like <code>modifies</code> it applies
+only to pointers but unlike modifies it does not admit slice syntax, only
+place expressions, because the whole allocation has to be freed.</p>
+<h3 id="history-expressions"><a class="header" href="#history-expressions">History Expressions</a></h3>
+<p>Kani’s contract language contains additional support to reason about changes of
+mutable memory. One case where this is necessary is whenever <code>ensures</code> needs to
+refer to state before the function call. By default variables in the ensures
+clause are interpreted in the post-call state whereas history expressions are
+interpreted in the pre-call state.</p>
+<p>Returning to our <code>pop</code> function from before we may wish to describe in which
+case the result is <code>Some</code>. However that depends on whether <code>self</code> is empty
+<em>before</em> <code>pop</code> is called. To do this Kani provides the <code>old(EXPR)</code> pseudo
+function (see <a href="#open-questions">this section</a> about a discussion on naming),
+which evaluates <code>EXPR</code> before the call (e.g. to <code>pop</code>) and makes the result
+available to <code>ensures</code>. It is used like so:</p>
+<pre><code class="language-rs">impl&lt;T&gt; Vec&lt;T&gt; {
+  #[kani::ensures(|result : &amp;Option&lt;T&gt;| old(self.is_empty()) || result.is_some())]
+  fn pop(&amp;mut self) -&gt; Option&lt;T&gt; {
+    ...
+  }
+}
+</code></pre>
+<p><code>old</code> allows evaluating any Rust expression in the pre-call context, so long as
+it is free of side-effects. See also <a href="#changes-to-other-components">this
+explanation</a>. The borrow checker enforces that the
+mutations performed by e.g. <code>pop</code> cannot be observed by the history expression, as
+that would defeat the purpose. If you wish to return borrowed content from
+<code>old</code>, make a copy instead (using e.g. <code>clone()</code>).</p>
+<p>Note also that <code>old</code> is syntax, not a function and implemented as an extraction
+and lifting during code generation. It can reference e.g. <code>pop</code>’s arguments but
+not local variables. Compare the following</p>
+<p><strong>Invalid ❌:</strong> <code>#[kani::ensures(|result : &amp;Option&lt;T&gt;| { let x = self.is_empty(); old(x) } || result.is_some())]</code>
+<strong>Valid ✅:</strong> <code>#[kani::ensures(|result : &amp;Option&lt;T&gt;| old({ let x = self.is_empty(); x }) || result.is_some())]</code></p>
+<p>And it will only be recognized as <code>old(...)</code>, not as <code>let old1 = old; old1(...)</code> etc.</p>
+<h3 id="workflow-and-attribute-constraints-overview"><a class="header" href="#workflow-and-attribute-constraints-overview">Workflow and Attribute Constraints Overview</a></h3>
+<ol>
+<li>By default <code>kani</code> or <code>cargo kani</code> first verifies all contract harnesses
+(<code>proof_for_contract</code>) reachable from the file or in the local workspace
+respectively.</li>
+<li>Each contract (from the local
+crate<sup class="footnote-reference" id="fr-external-contract-checking-expectations-1"><a href="#footnote-external-contract-checking-expectations">7</a></sup>) that is used in a
+<code>stub_verified</code> is required to have at least one associated contract harness.
+Kani reports any missing contract harnesses as errors.</li>
+<li>Kani verifies all regular harnesses <em>if</em> their <code>stub_verified</code> contracts
+passed step 1 and 2.</li>
+</ol>
+<p>When specific harnesses are selected (with <code>--harness</code>) contracts are not
+verified.</p>
+<p>Kani reports a compile time error if any of the following constraints are violated:</p>
+<ul>
+<li>
+<p>A function may have any number of <code>requires</code>, <code>ensures</code>, <code>modifies</code> and <code>frees</code>
+attributes. Any function with at least one such annotation is considered as
+“having a contract”.</p>
+<p>Harnesses (general or for contract checking) may not have any such annotation.</p>
+</li>
+<li>
+<p>A harness may have up to one <code>proof_for_contract(TARGET)</code> annotation where <code>TARGET</code> must
+“have a contract”. One or more <code>proof_for_contract</code> harnesses may have the
+same <code>TARGET</code>.</p>
+<p>A <code>proof_for_contract</code> harness may use any harness attributes, including
+<code>stub</code> and <code>stub_verified</code>, though the <code>TARGET</code> may not appear in either.</p>
+</li>
+<li>
+<p>Kani checks that <code>TARGET</code> is reachable from the <code>proof_for_contract</code> harness,
+but it does not warn if abstracted functions use <code>TARGET</code><sup class="footnote-reference" id="fr-stubcheck-1"><a href="#footnote-stubcheck">8</a></sup>.</p>
+</li>
+<li>
+<p>A <code>proof_for_contract</code> function may not have the <code>kani::proof</code> attribute (it
+is already implied by <code>proof_for_contract</code>).</p>
+</li>
+<li>
+<p>A harness may have multiple <code>stub_verified(TARGET)</code> attributes. Each <code>TARGET</code>
+must “have a contract”. No <code>TARGET</code> may appear twice. Each local <code>TARGET</code> is
+expected to have at least one associated <code>proof_for_contract</code> harness which
+passes verification, see also the discussion on when to check contracts in
+<a href="#open-questions">open questions</a>.</p>
+</li>
+<li>
+<p>Harnesses may combine <code>stub(S_TARGET, ..)</code> and <code>stub_verified(V_TARGET)</code>
+annotations, though no target may occur in <code>S_TARGET</code>s and <code>V_TARGET</code>s
+simultaneously.</p>
+</li>
+<li>
+<p>For mutually recursive functions using <code>stub_verified</code>, Kani will check their
+contracts in non-deterministic order and assume each time the respective other
+check succeeded.</p>
+</li>
+</ul>
+<h2 id="detailed-design"><a class="header" href="#detailed-design">Detailed Design</a></h2>
+<!-- For the implementors or the hackers -->
+<p>Kani implements the functionality of function contracts in three places.</p>
+<ol>
+<li>Code generation in the <code>requires</code> and <code>ensures</code> macros (<code>kani_macros</code>).</li>
+<li>GOTO level contracts using CBMC’s contract language generated in
+<code>kani-compiler</code> for <code>modifies</code> clauses.</li>
+<li>Dependencies and ordering among harnesses in <code>kani-driver</code> to enforce
+contract checking before replacement. Also plumbing between compiler and
+driver for enforcement of assigns clauses.</li>
+</ol>
+<h3 id="code-generation-in-kani_macros"><a class="header" href="#code-generation-in-kani_macros">Code generation in <code>kani_macros</code></a></h3>
+<p>The <code>requires</code> and <code>ensures</code> macros perform code generation in the macro,
+creating a <code>check</code> and a <code>replace</code> function which use <code>assert</code> and <code>assume</code> as
+described in the <a href="#user-experience">user experience</a> section. Both are attached
+to the function they are checking/replacing by  <code>kanitool::checked_with</code> and
+<code>kanitool::replaced_with</code> attributes respectively. See also the
+<a href="#rationale-and-alternatives">discussion</a> about why we decided to generate check
+and replace functions like this.</p>
+<p>The code generation in the macros is straightforward, save two aspects: <code>old</code>
+and the borrow checker.</p>
+<p>The special <code>old</code> builtin function is implemented as an AST rewrite. Consider
+the below example:</p>
+<pre><code class="language-rs">impl&lt;T&gt; Vec&lt;T&gt; {
+  #[kani::ensures(|result : &amp;Option&lt;T&gt;| self.is_empty() || self.len() == old(self.len()) - 1)]
+  fn pop(&amp;mut self) -&gt; Option&lt;T&gt; {
+    ...
+  }
+}
+</code></pre>
+<p>The <code>ensures</code> macro performs an AST rewrite consisting of an extraction of the
+expressions in <code>old</code> and a replacement with a fresh local variable, creating the
+following:</p>
+<pre><code class="language-rs">impl&lt;T&gt; Vec&lt;T&gt; {
+  fn check_pop(&amp;mut self) -&gt; Option&lt;T&gt; {
+    let old_1 = self.len();
+    let result_kani_internal = Self::pop(self);
+    kani::assert((|result : &amp;Option&lt;T&gt;| self.is_empty() || self.len() == old_1 - 1)(result_kani_internal))
+  }
+}
+</code></pre>
+<p>Nested invocations of <code>old</code> are prohibited (Kani throws an error) and the
+expression inside may only refer to the function arguments and not other local
+variables in the contract (Rust will report those variables as not being in
+scope).</p>
+<p>The borrow checker also ensures for us that none of the temporary variables
+borrow in a way that would be able to observe the modification in <code>pop</code> which
+would occur for instance if the user wrote <code>old(self)</code>. Instead of borrowing
+copies should be created (e.g. <code>old(self.clone())</code>). This is only enforced for
+safe Rust though.</p>
+<p>The second part relevant for the implementation is how we deal with the borrow
+checker for postconditions. They reference the arguments of the function after
+the call which is problematic if part of an input is borrowed mutably in the
+return value. For instance the <code>Vec::split_at_mut</code> function does this and a
+sensible contract for it might look as follows:</p>
+<pre><code class="language-rs">impl&lt;T&gt; Vec&lt;T&gt; {
+  #[ensures(|result : &amp;(&amp;mut [T], &amp;mut [T])| self.len() == result.0.len() + result.1.len())]
+  fn split_at_mut(&amp;mut self, i: usize) -&gt; (&amp;mut [T], &amp;mut [T]) {
+    ...
+  }
+}
+</code></pre>
+<p>This contract refers simultaneously to <code>self</code> and the result. Since the method
+however borrows <code>self</code> mutably, it would no longer be accessible in the
+postcondition. To work around this we strategically break the borrowing rules
+using a new hidden builtin <code>kani::unchecked_deref</code> with the type signature <code>for &lt;T&gt; fn (&amp;T) -&gt; T</code> which is essentially a C-style dereference operation. Breaking
+the borrow checker like this is safe for 2 reasons:</p>
+<ol>
+<li>Postconditions are not allowed perform mutation and</li>
+<li>Post conditions are of type <code>bool</code>, meaning they cannot leak references to
+the arguments and cause the race conditions the Rust type system tries to
+prevent.</li>
+</ol>
+<p>The “copies” of arguments created by <code>unsafe_deref</code> are stored as fresh local
+variables and their occurrence in the postcondition is renamed. In addition a
+<code>mem::forget</code> is emitted for each copy to avoid a double free.</p>
+<h3 id="recursion"><a class="header" href="#recursion">Recursion</a></h3>
+<p>Kani verifies contracts for recursive functions inductively. Reentry of the
+function is detected with a function-specific static variable. Upon detecting
+reentry we use the replacement of the contract instead of the function body.</p>
+<p>Kani generates an additional wrapper around the function to add the detection.
+The additional wrapper is there so we can place the <code>modifies</code> contract on
+<code>check_pop</code> and <code>replace_pop</code> instead of <code>recursion_wrapper</code> which prevents CBMC
+from triggering its recursion induction as this would skip our replacement checks.</p>
+<pre><code class="language-rs">#[checked_with = "recursion_wrapper"]
+#[replaced_with = "replace_pop"]
+fn pop(&amp;mut self) { ... }
+
+fn check_pop(&amp;mut self) { ... }
+
+fn replace_pop(&amp;mut self) { ... }
+
+fn recursion_wrapper(&amp;mut self) { 
+  static mut IS_ENTERED: bool = false;
+
+  if unsafe { IS_ENTERED } {
+    replace_pop(self)
+  } else {
+    unsafe { IS_ENTERED = true; }
+    let result = check_pop(self);
+    unsafe { IS_ENTERED = false; }
+    result
+  };
+}
+</code></pre>
+<p>Note that this is insufficient to verify all types of recursive functions, as
+the contract specification language has no support for inductive lemmas (for
+instance in <a href="https://frama-c.com/download/acsl.pdf">ACSL</a> section 2.6.3
+“inductive predicates”). Inductive lemmas are usually needed for recursive
+data structures.</p>
+<h3 id="changes-to-other-components"><a class="header" href="#changes-to-other-components">Changes to Other Components</a></h3>
+<p>Contract enforcement and replacement (<code>kani::proof_for_contract(f)</code>,
+<code>kani::stub_verified(f)</code>) both dispatch to the <strong>stubbing logic</strong>, stubbing <code>f</code>
+with the generated check and replace function respectively. If <code>f</code> has no
+contract, Kani throws an error.</p>
+<p>For <strong>write sets</strong> Kani relies on CBMC. <code>modifies</code> clauses (whether derived from
+types or from explicit clauses) are emitted from the compiler as GOTO contracts
+in the artifact. Then the driver invokes <code>goto-instrument</code> with the name of the
+GOTO-level function names to enforce or replace the memory contracts. The
+compiler communicates the names of the function via harness metadata.</p>
+<p>Code used in contracts is required to be <strong>side effect</strong> free which means it
+must not perform I/O, mutate memory (<code>&amp;mut</code> vars and such) or (de)allocate heap
+memory. This is enforced in two layers. First with an MIR traversal over all
+code reachable from a contract expression. An error is thrown if known
+side-effecting actions are performed such as <code>ptr::write</code>, <code>malloc</code>, <code>free</code> or
+functions which we cannot check, such as e.g. <code>extern "C"</code>, with the exception
+of known side effect free functions in e.g. the standard library.</p>
+<!-- 
+This is the technical portion of the RFC. Please provide high level details of the implementation you have in mind:
+
+- What are the main components that will be modified? (E.g.: changes to `kani-compiler`, `kani-driver`, metadata,
+  installation...)
+- How will they be modified? Any changes to how these components communicate?
+- Will this require any new dependency?
+- What corner cases do you anticipate? 
+-->
+<h2 id="rationale-and-alternatives"><a class="header" href="#rationale-and-alternatives">Rationale and alternatives</a></h2>
+<!-- For Developers -->
+<!-- `old` discussion here -->
+<p>We developed the <code>old</code> contract for history expressions via understanding it as a <a href="https://en.wikipedia.org/wiki/Monad_(functional_programming)">modality</a> originating from <a href="https://www.sciencedirect.com/science/article/pii/0890540191900524">Moggi 1991</a>.
+The <code>old</code> monad links the “language of the past” to the “language of the present”.
+Implementing the full generality of the monad is rather difficult, so we focus on a particular usage of the monad.</p>
+<p>We have an external syntax representation which is what the user inputs. We then parse this and logically manipulate it as a monad, prefixing all the <code>bind</code> operations. We then output the final compiled macro output as Rust code.</p>
+<p>In particular, if we have an ensures statement like</p>
+<pre><code class="language-rust">#[kani::ensures(old(*ptr)+1==*ptr)]</code></pre>
+<p>Then we comprehend this as syntax for the statement (not within Rust)</p>
+<pre><code>bind (*ptr : O(u32)) (|remember : u32| remember + 1 == *ptr)
+</code></pre>
+<p>Here, the <code>O(u32)</code> is taking the type of the past <code>u32</code> and converting it into a type in the present <code>O(u32)</code> while the bind operation lets you use the value of the past <code>u32</code> to express a type in the present <code>bool</code>.</p>
+<p>This then gets compiled to (within Rust)</p>
+<pre><code class="language-rust">let remember = *ptr;
+let result = ...;
+kani::assert(remember + 1 == *ptr)</code></pre>
+<p>This means that the underlying principle of the monad is there, but external syntax appears to be less like a monad because otherwise it would be too difficult to implement, and the user most likely only cares about this particular construction of prefixing all the <code>bind</code> operations.</p>
+<p>This construction requires that <code>old</code> expressions are closed with resprect to the input parameters. This is due to the lifting into the prefixed <code>bind</code> operations.</p>
+<p>A major drawback is that eta expansion fails. If we eta expand a function f, it becomes |x|f(x). Note that eta expansions guarantee that the original f and the |x|f(x) are equivalent which makes a lot of sense since you’re just calling the same function. However, we have that <code>old(y)</code> is not equivalent to <code>(|x|old(x))(y)</code>. <code>y</code> is a closed expression, so the first statement works. <code>x</code> is a bound variable, so it is an open expression, so compilation will fail.</p>
+<p>The reason for this restriction is that the user will most likely only want to use this particular prefixed <code>bind</code> structure for their code, so exposing the concept of monads to the user level would only confuse the user. It is also simpler from an implementation perspective to limit the monad to this particular usage.</p>
+<p>As for nested old, such as <code>old(old(*ptr)+*ptr)</code>, it is reasonable to interpret this as syntax representing</p>
+<pre><code>bind (bind(*ptr)(|remember_1| remember_1 + *ptr)) (|remember_0| ...)
+</code></pre>
+<p>which compiles to</p>
+<pre><code class="language-rust">let remember_1 = *ptr;
+let remember_0 = remember_1 + *ptr;
+let result = ...;
+...</code></pre>
+<p>so the restriction is just a matter of there not being implementation support for this kind of statement rather than the theory itself. It is not particularly useful to implement this because we claim that there should be no effectful computation within the contracts, so you can substitute the <code>remember_1</code> into the second line without worrying about the effects. Hence, we opt for simply restricting this behavior instead of implementing it. (Note: it can be implemented by changing <code>denier.visit_expr_mut(e);</code> into <code>self.visit_expr_mut(e);</code>)</p>
+<!-- 
+- What are the pros and cons of this design?
+- What is the impact of not doing this?
+- What other designs have you considered? Why didn't you choose them? 
+-->
+<h3 id="kani-side-implementation-vs-cbmc"><a class="header" href="#kani-side-implementation-vs-cbmc">Kani-side implementation vs CBMC</a></h3>
+<p>Instead of generating check and replace functions in Kani, we could use the contract instrumentation provided by CBMC.</p>
+<p>We tried this earlier but came up short, because it is difficult to implement,
+while supporting arbitrary Rust syntax. We exported the conditions into
+functions so that Rust would do the parsing/type checking/lowering for us and
+then call the lowered function in the CBMC contract.</p>
+<p>The trouble is that CBMC’s <code>old</code> is only supported directly in the contract, not
+in functions called from the contract. This means we either need to inline the
+contract function body, which is brittle in the presence of control flow, or we
+must extract the <code>old</code> expressions, evaluate them in the contract directly and
+pass the results to the check function. However this means we must restrict the
+expressions in <code>old</code>, because we now need to lower those by hand and even if we
+could let <code>rustc</code> do it, CBMC’s <code>old</code> has no support for function calls in its
+argument expression.</p>
+<h3 id="expanding-all-contract-macros-at-the-same-time"><a class="header" href="#expanding-all-contract-macros-at-the-same-time">Expanding all contract macros at the same time</a></h3>
+<p>Instead of expanding contract macros one-at-a-time and layering the checks we
+could expand all subsequent one’s with the outermost one in one go.</p>
+<p>This is however brittle with respect to renaming. If a user does <code>use kani::requires as my_requires</code> and then does multiple
+<code>#[my_requires(condition)]</code> macro would not collect them properly since it can
+only match syntactically and it does not know about the <code>use</code> and neither can we
+restrict this kind of use or warn the user. By contrast, the collection with
+<code>kanitool::checked_with</code> is safe, because that attribute is generated by our
+macro itself, so we can rely on the fact that it uses the canonical
+representation.</p>
+<h3 id="generating-nested-functions-instead-of-siblings"><a class="header" href="#generating-nested-functions-instead-of-siblings">Generating nested functions instead of siblings</a></h3>
+<p>Instead of generating the <code>check</code> and <code>replace</code> functions as siblings to the
+contracted function we could nest them like so</p>
+<pre><code class="language-rs">fn my_div(dividend: u32, divisor: u32) -&gt; u32 {
+  fn my_div_check_5e3713(dividend: u32, divisor: u32) -&gt; u32 {
+    ...
+  }
+  ...
+}
+</code></pre>
+<p>This could be beneficial if we want to be able to allow contracts on trait impl
+items, in which case generating sibling functions is not allowed. On the other
+hand this makes it harder to implement contracts on <em>trait definitions</em>,
+because there is no body available which we could nest the function into.
+Ultimately we may require both so that we can support both.</p>
+<p>What is required to make this work is an additional pass over the condition that
+replaces every <code>self</code> with a fresh identifier that now becomes the first
+argument of the function. In addition there are open questions as to how to
+resolve the nested name inside the compiler.</p>
+<h3 id="explicit-command-line-checkingsubstitution-vs-attributes"><a class="header" href="#explicit-command-line-checkingsubstitution-vs-attributes">Explicit command line checking/substitution vs attributes:</a></h3>
+<p>Instead of
+adding a new special <code>proof_for_contact</code> attributes we could have instead done:</p>
+<ol>
+<li><strong>Check contracts on the command line</strong> like CBMC does. This makes contract
+checking a separate <code>kani</code> invocation with something like a
+<code>--check-contract</code> flag that directs the system to instrument the function.
+This is a very flexible design, but also easily used incorrectly.
+Specifically nothing in the source indicates which harnesses are supposed
+to be used for which contract, users must remember to invoke the check and
+are also responsible for ensuring they really do verify <em>all</em> contacts they
+will later be replacing and lastly.</li>
+<li><strong>Check contracts with a <code>#[kani::proof]</code> harness.</strong> This would have used
+e.g. a <code>#[kani::for_contract]</code> attributes on a <code>#[kani::proof]</code>. Since
+<code>#[kani::for_contract]</code> is <em>only</em> valid on a proof, we decided to just
+imply it and save the user some headache. Contract checking harnesses are
+not meant to be reused for other purposes anyway and if the user <em>really</em>
+wants to the can just factor out the actual contents of the harness to
+reuse it.</li>
+</ol>
+<h3 id="polymorphism-during-contract-checking"><a class="header" href="#polymorphism-during-contract-checking">Polymorphism during contract checking</a></h3>
+<p>A current limitation with how contracts are enforced means that if the target of
+a <code>proof_for_contract</code> is polymorphic, only one monomorphization is permitted to
+occur in the harness. This does not limit the target to a single occurrence,
+<em>but</em> to a single instantiation of its generic parameters.</p>
+<p>This is because we rely on CBMC for enforcing the <code>modifies</code> contract. At the
+GOTO level all monomorphized instances are distinct functions <em>and</em> CBMC only
+allows checking one function contract at a time, hence this restriction.</p>
+<h3 id="user-supplied-harnesses"><a class="header" href="#user-supplied-harnesses">User supplied harnesses</a></h3>
+<p>We make the user supply the harnesses for checking contracts. This is our major
+source of unsoundness, if corner cases are not adequately covered. Having Kani
+generate the harnesses automatically is a non-trivial task (because heaps are
+hard) and will be the subject of <a href="#future-possibilities">future improvements</a>.</p>
+<p>In limited cases we could generate harnesses, for instance if only bounded types
+(integers, booleans, enums, tuples, structs, references and their combinations)
+were used. We could restrict the use of contracts to cases where only such types
+are involved in the function inputs and outputs, however this would drastically
+limit the applicability, as even simple heap data structures such as <code>Vec</code>,
+<code>String</code> and even <code>&amp;[T]</code> and <code>&amp;str</code> (slices) would be out of scope. These data
+structures however are ubiquitous and users can avoid the unsoundness with
+relative confidence by overprovisioning (generating inputs that are several
+times larger than what they expect the function will touch).</p>
+<h2 id="open-questions"><a class="header" href="#open-questions">Open questions</a></h2>
+<!-- For Developers -->
+<ul>
+<li>
+<p>Returning <strong><code>kani::any()</code> in a replacement isn’t great</strong>, because it wouldn’t work
+for references as they can’t have an <code>Arbitrary</code> implementation. Plus the
+soundness then relies on a correct implementation of <code>Arbitrary</code>. Instead it
+may be better to allow for the user to specify type invariants which can the
+be used to generate correct values in replacement but also be checked as part
+of the contract checking.</p>
+</li>
+<li>
+<p>Making result special. Should we use special syntax here like <code>@result</code> or
+<code>kani::result()</code>, though with the latter I worry that people may get confused
+because it is syntactic and not subject to usual <code>use</code> renaming and import
+semantics. Alternatively we can let the user pick the name with an additional
+argument to <code>ensures</code>, e.g. <code>ensures(my_result_var, CONDITION)</code></p>
+<p>Similar concerns apply to <code>old</code>, which may be more appropriate to be special
+syntax, e.g. <code>@old</code>.</p>
+<p>See <a href="https://github.com/model-checking/kani/issues/2597">#2597</a></p>
+</li>
+<li>
+<p>How to <strong>check the right contracts at the right time</strong>. By default <code>kani</code> and
+<code>cargo kani</code> check all contracts in a crate/workspace. This represents the
+safest option for the user but may be too costly in some cases.</p>
+<p>The user should be provided with options to disable contract checking for the
+sake of efficiency. Such options may look like this:</p>
+<ul>
+<li><strong>By default</strong> (<code>kani</code>/<code>cargo kani</code>) all local contracts are checked,
+harnesses are only checked if the contracts they depend on succeeded their check.</li>
+<li><strong>With harness selection</strong> (<code>--harness</code>) only those contracts which the
+selected harnesses depend on are checked.</li>
+<li><strong>For high assurance</strong> passing a <code>--paranoid</code> flag also checks contracts for
+dependencies (other crates) when they are used in abstractions.</li>
+<li><strong>Per harness</strong> the users can disable the checking for specific contracts
+via attribute, like <code>#[stub_verified(TARGET, trusted)]</code> or
+<code>#[stub_unverified(TARGET)]</code>. This also plays nicely with <code>cfg_attr</code>.</li>
+<li><strong>On the command line</strong> users can similarly disable contract checks by
+passing (multiple times) <code>--trusted TARGET</code> to skip checking those
+contracts.</li>
+<li><strong>The bold</strong> (or naïve) user can skip all contracts with <code>--all-trusted</code>.</li>
+<li><strong>For the lawyer</strong> that is only interested in checking contracts and nothing
+else a <code>--litigate</code> flag checks only contract harnesses.</li>
+</ul>
+<p>Aside: I’m obviously having some fun here with the names, happy to change,
+it’s really just about the semantics.</p>
+</li>
+<li>
+<p><strong>Can <code>old</code> accidentally break scope?</strong> The <code>old</code> function cannot reference local
+variables. For instance <code>#[ensures({let x = ...; old(x)})]</code> cannot work as an
+AST rewrite because the expression in <code>old</code> is lifted out of it’s context into
+one where the only bound variables are the function arguments (see also
+<a href="#history-expressions">history expressions</a>). In most cases this will be a
+compiler error complaining that <code>x</code> is unbound, however it is possible that
+<em>if</em> there is also a function argument <code>x</code>, then it may silently succeed the
+code generation but confusingly fail verification. For instance <code>#[ensures({ let x = 1; old(x) == x })]</code> on a function that has an argument named <code>x</code> would
+<em>not</em> hold.</p>
+<p>To handle this correctly we would need an extra check that detects if <code>old</code>
+references local variables. That would also enable us to provide a better
+error message than the default “cannot find value <code>x</code> in this scope”.</p>
+</li>
+<li>
+<p><strong>Can panicking be expected behavior?</strong> Usually preconditions are used to rule
+out panics but it is conceivable that a user would want to specify that a
+function panics under certain conditions. Specifying this would require an
+extension to the current interface.</p>
+</li>
+<li>
+<p><strong>UB checking.</strong> With unsafe rust it is possible to break the type system
+guarantees in Rust without causing immediate errors. Contracts must be
+cognizant of this and enforce the guarantees as part of the contract <em>or</em>
+require users to explicitly defer such checks to use sites. The latter case
+requires dedicated support because the potential UB must be reflected in the
+havoc.</p>
+</li>
+<li>
+<p><strong><code>modifies</code> clauses over patterns.</strong> Modifies clauses mention values bound in
+the function header and as a user I would expect that if I use a pattern in
+the function header then I can use the names bound in that pattern as base
+variables in the <code>modifies</code> clause. However <code>modifies</code> clauses are implemented
+as <code>assigns</code> clauses in CBMC which does not have a notion of function header
+patterns. Thus it is necessary to project any <code>modifies</code> ranges deeper by the
+fields used in the matched pattern.</p>
+</li>
+</ul>
+<!-- 
+- Is there any part of the design that you expect to resolve through the RFC process?
+- What kind of user feedback do you expect to gather before stabilization? How will this impact your design? 
+-->
+<h2 id="future-possibilities"><a class="header" href="#future-possibilities">Future possibilities</a></h2>
+<!-- For Developers -->
+<ul>
+<li>
+<p><strong>Quantifiers:</strong> Quantifiers are like logic-level loops and a powerful
+reasoning helper. CBMC has support for both <code>exists</code> and <code>forall</code>, but the
+code generation is difficult. The most ergonomic and easy way to implement
+quantifiers on the Rust side is as higher-order functions taking <code>Fn(T) -&gt; bool</code>, where <code>T</code> is some arbitrary type that can be quantified over. This
+interface is familiar to developers, but the code generation is tricky, as
+CBMC level quantifiers only allow certain kinds of expressions. This
+necessitates a rewrite of the <code>Fn</code> closure to a compliant expression.</p>
+</li>
+<li>
+<p>Letting the user supply the <strong>harnesses for checking contracts</strong> is a source of
+unsoundness, if corner cases are not adequately covered. Ideally Kani would
+generate the check harness automatically, but this is difficult both because
+heap data structures are potentially infinite, and also because it must observe
+user-level type invariants.</p>
+<p>A complete solution for this is not known to us but there are ongoing
+investigations into harness generation mechanisms in CBMC.</p>
+<p>Function inputs that are non-inductive could be created from the type as the
+safe Rust type constraints describe a finite space.</p>
+<p>For dealing with pointers one applicable mechanism could be <em>memory
+predicates</em> to declaratively describe the state of the heap both before and
+after the function call.</p>
+<p>In CBMC’s implementation memory predicates are part of the pre/postconditions.
+This does not easily translate to Kani, since we handle pre/postconditions
+manually and mainly in proc-macros. There are multiple ways to bridge this
+gap, perhaps the easiest being to add memory predicates <em>separately</em> to Kani
+instead of as part of pre/postconditions, so they can be handled by forwarding
+them to CBMC. However this is also tricky, because memory predicates are used
+to describe pointers and pointers only. Meaning that if they are encapsulated
+in a structure (such as <code>Vec</code> or <code>RefCell</code>) there is no way of specifying the
+target of the predicate without breaking encapsulation (similar to
+<code>modifies</code>). In addition there are limitations also on the pointer predicates
+in CBMC itself. For instance they cannot be combined with quantifiers.</p>
+<p>A better solution would be for the data structure to declare its own
+invariants at definition site which are automatically swapped in on every
+contract that uses this type.</p>
+</li>
+<li>
+<p>What about mutable trait inputs (wrt memory access patters), e.g. a <code>mut impl AccessMe</code></p>
+</li>
+<li>
+<p><strong>Trait contracts:</strong> Our proposal could be extended easily to handle simple
+trait contracts. The macros would generate new trait methods with default
+implementations, similar to the functions it generates today. Using sealed
+types we can prevent the user from overwriting the generated contract methods.
+Contracts for the trait and contracts on it’s <code>impl</code>s are combined by abstracting
+the original method depending on context. The occurrence inside the contract
+generated from the trait method is replaced by the <code>impl</code> contract. Any other
+occurrence is replaced by the just altered trait method contract.</p>
+</li>
+<li>
+<p><strong>Cross Session Verification Caching:</strong> This proposal focuses on scalability
+benefits within a single verification session, but those verification results
+could be cached across sessions and speed up verification for large projects
+using contacts in the future.</p>
+</li>
+<li>
+<p><strong>Inductive Reasoning:</strong> Describing recursive functions can require that the
+contract also recurse, describing a fixpoint logic. This is needed for
+instance for linked data structures like linked lists or trees. Consider for
+instance a reachability predicate for a linked list:</p>
+<pre><code class="language-rs">struct LL&lt;T&gt; { head: T, next: *const LL&lt;T&gt; }
+
+fn reachable(list: &amp;LL&lt;T&gt;, t: &amp;T) -&gt; bool {
+    list.head == t
+    || unsafe { next.as_ref() }.map_or(false, |p| reachable(p, t))
+}
+
+</code></pre>
+</li>
+<li>
+<p><strong>Compositional Contracts:</strong> The proposal in this document lacks a
+comprehensive handling of type parameters. Contract checking harnesses require
+monomorphization. However this means the contract is only checked against a
+finite number of instantiations of any type parameter (at most as many as
+contract checking harnesses were defined). There is nothing preventing the
+user from using different instantiations of the function’s type parameters.</p>
+<p>A function (<code>f()</code>) can only interact with its type parameters <code>P</code> through the
+traits (<code>T</code>) they are constrained over. We can require <code>T</code> to carry contracts
+on each method <code>T::m()</code>. During checking we can use a synthetic type that
+abstracts <code>T::m()</code> with its contract. This way we check <code>f()</code> against <code>T</code>s
+contract. Then we later abstract <code>f()</code> we can ensure any instantiations of <code>P</code>
+have passed verification of the contract of <code>T::m()</code>. This makes the
+substitution safe even if the particular type has not been used in a checking
+harness.</p>
+<p>For higher order functions this gets a bit more tricky, as closures are ad-hoc
+defined types. Here the contract for the closure could be attached to <code>f()</code>
+and then checked for each closure that may be provided. However this does not
+work so long as the user has to provide the harnesses, as they cannot recreate
+the closure type.</p>
+</li>
+</ul>
+<hr>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-gate">
+<p>Enforced gates means all uses of constructs (functions, annotations,
+macros) in this RFC are an error. <a href="#fr-gate-1">↩</a></p>
+</li>
+<li id="footnote-simple-unsoundness">
+<p>The main remaining threat to soundness in the use of
+contracts, as defined in this proposal, is the reliance on user-supplied
+harnesses for contract checking (explained in item 2 of <a href="#user-experience">user
+experience</a>). A more thorough discussion on the dangers
+and potential remedies can be found in the <a href="#future-possibilities">future</a>
+section. <a href="#fr-simple-unsoundness-1">↩</a> <a href="#fr-simple-unsoundness-2">↩2</a></p>
+</li>
+<li id="footnote-write-set-recursion">
+<p>For inductively defined types the write set inference
+will only add the first “layer” to the write set. If you wish to modify
+deeper layers of a recursive type an explicit <code>modifies</code> clause is required. <a href="#fr-write-set-recursion-1">↩</a></p>
+</li>
+<li id="footnote-inferred-footprint">
+<p>While inferred memory footprints are sound for both safe
+and unsafe Rust certain features in unsafe rust (e.g. <code>RefCell</code>) get
+inferred incorrectly and will lead to a failing contract check. <a href="#fr-inferred-footprint-1">↩</a></p>
+</li>
+<li id="footnote-slice-exprs">
+<p>Slice indices can be place expressions referencing function
+arguments, constants and integer arithmetic expressions. Take for example
+this <code>Vec</code> method (places simplified vs. actual implementation in <code>std</code>):
+<code>fn truncate(&amp;mut self, len: usize)</code>. A relatively precise contract for this
+method can be achieved with slice indices like so:
+<code>#[modifies(self.buf[len..self.len], self.len)]</code> <a href="#fr-slice-exprs-1">↩</a> <a href="#fr-slice-exprs-2">↩2</a></p>
+</li>
+<li id="footnote-assigns-encapsulation-breaking">
+<p>Breaking the <code>pub</code> encapsulation has
+unfortunate side effects because it means the contract depends on non-public
+elements which are not expected to be stable and can drastically change even
+in minor versions. For instance if your project depends on crate <code>a</code> which
+in turn depends on crate <code>b</code>, and <code>a::foo</code> has a contract that takes as
+input a pointer data structure <code>b::Bar</code> then <code>a::foo</code>s <code>assigns</code> contract
+must reference internal fields of <code>b::Bar</code>. Say your project depends on the
+<em>replacement</em> of <code>a::foo</code>, if <code>b</code> changes the internal representation of
+<code>Bar</code> in a minor version update cargo could bump your version of <code>b</code>,
+breaking the contract of <code>a::foo</code> (it now crashes because it e.g. references
+non-existent fields).
+You cannot easily update the contract for <code>a::foo</code>, since it is a
+third-party crate; in fact even the author of <code>a</code> could not properly update
+to the new contract since their old version specification would still admit
+the new, broken version of <code>b</code>. They would have to yank the old version and
+explicitly nail down the exact minor version of <code>b</code> which defeats the whole
+purpose of semantic versioning. <a href="#fr-assigns-encapsulation-breaking-1">↩</a></p>
+</li>
+<li id="footnote-external-contract-checking-expectations">
+<p>Contracts for functions from
+external crates (crates from outside the workspace, which is not quite the
+definition of <code>extern crate</code> in Rust) are not checked by default. The
+expectation is that the library author providing the contract has performed
+this check. See also <a href="#open-questions">open question</a> for a discussion on
+defaults and checking external contracts. <a href="#fr-external-contract-checking-expectations-1">↩</a></p>
+</li>
+<li id="footnote-stubcheck">
+<p>Kani cannot report the occurrence of a contract function to check
+in abstracted functions as errors, because the mechanism is needed to verify
+mutually recursive functions. <a href="#fr-stubcheck-1">↩</a></p>
+</li>
+</ol>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../rfcs/0008-line-coverage.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../rfcs/0010-quantifiers.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../rfcs/0008-line-coverage.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../rfcs/0010-quantifiers.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>
