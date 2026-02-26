@@ -47,6 +47,8 @@ mod args;
 mod codegen_aeneas_llbc;
 #[cfg(feature = "cprover")]
 mod codegen_cprover_gotoc;
+#[cfg(feature = "strata")]
+mod codegen_strata;
 mod intrinsics;
 mod kani_compiler;
 mod kani_middle;
