@@ -16,10 +16,7 @@ fn timelock_policy_matches_release_rule() {
     let allowed = can_release_funds(caller, agent, api, now, expires_at);
 
     if now < expires_at {
-        kani::assert(
-            !allowed || caller == agent,
-            "only agent can release before expiry",
-        );
+        kani::assert(!allowed || caller == agent, "only agent can release before expiry");
     } else {
         kani::assert(
             !allowed || (caller == agent || caller == api),
@@ -65,10 +62,7 @@ fn settlement_splits_conserve_value() {
 fn required_oracle_count_is_monotonic_and_bounded() {
     let amount: u64 = kani::any();
     let r = required_oracle_count(amount);
-    kani::assert(
-        r == MIN_ORACLES || r == 4 || r == 5,
-        "required oracle count must be in {3,4,5}",
-    );
+    kani::assert(r == MIN_ORACLES || r == 4 || r == 5, "required oracle count must be in {3,4,5}");
 
     let a1: u64 = kani::any();
     let a2: u64 = kani::any();
