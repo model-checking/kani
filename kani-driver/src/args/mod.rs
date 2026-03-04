@@ -351,6 +351,10 @@ pub struct VerificationArgs {
     #[arg(long, hide_short_help = true)]
     pub run_sanity_checks: bool,
 
+    /// Write SARIF output (Static Analysis Results Interchange Format) to the given path.
+    #[arg(long, value_name = "PATH")]
+    pub sarif: Option<PathBuf>,
+
     /// Specify the CBMC solver to use. Overrides the harness `solver` attribute.
     /// If no solver is specified (with --solver or harness attribute), Kani will use CaDiCaL.
     #[arg(long, value_parser = CbmcSolverValueParser::new(CbmcSolver::VARIANTS))]
@@ -767,11 +771,23 @@ impl ValidateArgs for VerificationArgs {
                 --output-format=old.",
                 ));
             }
+            if self.sarif.is_some() && self.output_format == OutputFormat::Old {
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    "Conflicting options: --sarif isn't compatible with --output-format=old.",
+                ));
+            }
             if self.concrete_playback.is_some() && self.jobs().will_multithread() {
                 // Concrete playback currently embeds a lot of assumptions about the order in which harnesses get called.
                 return Err(Error::raw(
                     ErrorKind::ArgumentConflict,
                     "Conflicting options: --concrete-playback isn't compatible with --jobs specifying multiple threads.",
+                ));
+            }
+            if self.sarif.is_some() && self.only_codegen {
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    "Conflicting options: --sarif isn't compatible with --only-codegen.",
                 ));
             }
             if self.jobs().will_multithread() && self.output_format != OutputFormat::Terse {
@@ -850,6 +866,18 @@ impl ValidateArgs for VerificationArgs {
                 format!(
                     "Invalid argument: `--target-dir` argument `{}` is not a directory",
                     out_dir.display()
+                ),
+            ));
+        }
+        if let Some(out_file) = &self.sarif
+            && out_file.exists()
+            && out_file.is_dir()
+        {
+            return Err(Error::raw(
+                ErrorKind::InvalidValue,
+                format!(
+                    "Invalid argument: `--sarif` argument `{}` is a directory",
+                    out_file.display()
                 ),
             ));
         }
@@ -1134,6 +1162,24 @@ mod tests {
         );
         expect_validation_error(
             "kani --concrete-playback=inplace --output-format=old -Z concrete-playback test.rs",
+            ErrorKind::ArgumentConflict,
+        );
+    }
+
+    #[test]
+    fn check_sarif_parsing() {
+        let args = parse_unstable_disabled("--sarif out.sarif").unwrap();
+        assert_eq!(args.verify_opts.sarif, Some(PathBuf::from("out.sarif")));
+    }
+
+    #[test]
+    fn check_sarif_conflicts() {
+        expect_validation_error(
+            "kani file.rs --sarif out.sarif --output-format=old",
+            ErrorKind::ArgumentConflict,
+        );
+        expect_validation_error(
+            "kani file.rs --sarif out.sarif --only-codegen",
             ErrorKind::ArgumentConflict,
         );
     }
