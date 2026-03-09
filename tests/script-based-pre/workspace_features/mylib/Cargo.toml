@@ -1,0 +1,11 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+[package]
+name = "mylib"
+version = "0.1.0"
+edition = "2021"
+
+# This package has NO features defined intentionally
+# to test that --workspace --features works when some packages
+# don't have the requested features

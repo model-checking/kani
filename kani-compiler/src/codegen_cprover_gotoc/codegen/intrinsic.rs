@@ -805,16 +805,15 @@ impl GotocCtx<'_, '_> {
     /// its primary argument and returns a tuple that contains:
     ///  * the previous value
     ///  * a boolean value indicating whether the operation was successful or not
-    ///
-    /// In a sequential context, the update is always sucessful so we assume the
-    /// second value to be true.
     /// -------------------------
     /// var = atomic_cxchg(var1, var2, var3)
     /// -------------------------
     /// unsigned char tmp;
+    /// bool success;
     /// tmp = *var1;
-    /// if (*var1 == var2) *var1 = var3;
-    /// var = (tmp, true);
+    /// success = (*var1 == var2);
+    /// if (success) *var1 = var3;
+    /// var = (tmp, success);
     /// -------------------------
     fn codegen_atomic_cxchg(
         &mut self,
@@ -830,16 +829,21 @@ impl GotocCtx<'_, '_> {
             self.decl_temp_variable(var1.typ().clone(), Some(var1.to_owned()), loc);
         let var2 = fargs.remove(0).with_location(loc);
         let var3 = fargs.remove(0).with_location(loc);
-        let eq_expr = (var1.clone()).eq(var2);
+        let eq_expr = var1.clone().eq(var2);
+        // Store the comparison result so we can use it both for the condition and the return value
+        let (success, success_decl) = self.decl_temp_variable(Type::bool(), Some(eq_expr), loc);
         let assign_stmt = var1.assign(var3, loc);
-        let cond_update_stmt = Stmt::if_then_else(eq_expr, assign_stmt, None, loc);
+        let cond_update_stmt = Stmt::if_then_else(success.clone(), assign_stmt, None, loc);
         let place_type = self.place_ty_stable(p);
         let res_type = self.codegen_ty_stable(place_type);
-        let tuple_expr =
-            Expr::struct_expr_from_values(res_type, vec![tmp, Expr::c_true()], &self.symbol_table)
-                .with_location(loc);
+        let tuple_expr = Expr::struct_expr_from_values(
+            res_type,
+            vec![tmp, success.cast_to(Type::c_bool())],
+            &self.symbol_table,
+        )
+        .with_location(loc);
         let res_stmt = self.codegen_expr_to_place_stable(p, tuple_expr, loc);
-        Stmt::atomic_block(vec![decl_stmt, cond_update_stmt, res_stmt], loc)
+        Stmt::atomic_block(vec![decl_stmt, success_decl, cond_update_stmt, res_stmt], loc)
     }
 
     /// An atomic store updates the value referenced in

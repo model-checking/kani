@@ -262,6 +262,10 @@ pub enum UnaryOperator {
     IsDynamicObject,
     /// `isfinite(self)`
     IsFinite,
+    /// `isinf(self)`
+    IsInf,
+    /// `isnan(self)`
+    IsNan,
     /// `!self`
     Not,
     /// `__CPROVER_OBJECT_SIZE(self)`
@@ -1402,7 +1406,7 @@ impl Expr {
             Bitnot | BitReverse | Bswap | Popcount => arg.typ.is_integer(),
             CountLeadingZeros { .. } | CountTrailingZeros { .. } => arg.typ.is_integer(),
             IsDynamicObject | ObjectSize | PointerObject => arg.typ().is_pointer(),
-            IsFinite => arg.typ().is_floating_point(),
+            IsFinite | IsInf | IsNan => arg.typ().is_floating_point(),
             PointerOffset => arg.typ == Type::void_pointer(),
             Not => arg.typ.is_bool(),
             UnaryMinus => arg.typ().is_numeric(),
@@ -1415,7 +1419,7 @@ impl Expr {
             CountLeadingZeros { .. } | CountTrailingZeros { .. } => Type::unsigned_int(32),
             ObjectSize | PointerObject => Type::size_t(),
             PointerOffset => Type::ssize_t(),
-            IsDynamicObject | IsFinite | Not => Type::bool(),
+            IsDynamicObject | IsFinite | IsInf | IsNan | Not => Type::bool(),
             Popcount => Type::unsigned_int(32),
         }
     }
@@ -1449,6 +1453,16 @@ impl Expr {
     /// `isfinite(self)`
     pub fn is_finite(self) -> Self {
         self.unop(IsFinite)
+    }
+
+    /// `isinf(self)`
+    pub fn is_inf(self) -> Self {
+        self.unop(IsInf)
+    }
+
+    /// `isnan(self)`
+    pub fn is_nan(self) -> Self {
+        self.unop(IsNan)
     }
 
     /// `-self`
