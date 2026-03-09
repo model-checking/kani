@@ -372,7 +372,7 @@ jobs:
           OWNER: '${{ github.repository_owner }}'
 
       - name: Build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: scripts/ci/Dockerfile.bundle-release-24-04
