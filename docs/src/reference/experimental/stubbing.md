@@ -106,6 +106,41 @@ VERIFICATION:- SUCCESSFUL
 
 Kani shows that the assertion is successful, avoiding any issues that appear if we attempt to verify the code without stubbing.
 
+## Stubbing foreign functions
+
+Kani supports stubbing foreign functions declared in `extern` blocks. This is useful for
+replacing system calls, C library functions, or other FFI functions with verification-friendly
+implementations:
+
+```rust
+extern "C" {
+    fn my_c_function(input: u32) -> u32;
+}
+
+fn my_c_function_stub(input: u32) -> u32 {
+    // Return a nondeterministic value for verification
+    kani::any()
+}
+
+#[kani::proof]
+#[kani::stub(my_c_function, my_c_function_stub)]
+fn check_with_ffi_stub() {
+    let result = unsafe { my_c_function(42) };
+    assert!(result < 100 || result >= 100); // trivially true for any value
+}
+```
+
+## Stub compatibility and lifetime considerations
+
+When validating stub compatibility, Kani compares parameter and return types after erasing
+lifetime information. This means that a stub with different lifetime annotations than the
+original will be accepted. For example, a stub returning `&'static i32` will be accepted as
+a replacement for a function returning `&'a i32`.
+
+**Warning:** While Kani accepts such stubs, lifetime mismatches can cause subtle verification
+failures (e.g., "dereference failure: dead object"). If you encounter unexpected failures with
+stubs, check whether the lifetime annotations match.
+
 ## Limitations
 
 In the following, we describe all the limitations of the stubbing feature.
