@@ -4,6 +4,12 @@
 // kani-flags: -Z stubbing
 //
 //! Check support for stubbing out foreign functions.
+//!
+//! FIXME: On Linux (x86_64), function pointer assignments to stubbed libc
+//! functions cause a type mismatch panic in GOTO codegen because CInteger(Int)
+//! and Signedbv{32} are different type representations for the same underlying
+//! type. This is a pre-existing platform-specific bug.
+//! See: https://github.com/model-checking/kani/issues/2673
 
 #![feature(rustc_private)]
 extern crate libc;

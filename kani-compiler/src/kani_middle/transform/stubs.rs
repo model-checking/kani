@@ -232,14 +232,12 @@ struct StubScanner<'a> {
 
 impl MirVisitor for StubScanner<'_> {
     fn visit_operand(&mut self, op: &Operand, _loc: Location) {
-        if !self.found {
-            if let Operand::Constant(c) = op {
-                if let TyKind::RigidTy(RigidTy::FnDef(def, _)) = c.const_.ty().kind() {
-                    if self.stubs.contains_key(&def) {
-                        self.found = true;
-                    }
-                }
-            }
+        if !self.found
+            && let Operand::Constant(c) = op
+            && let TyKind::RigidTy(RigidTy::FnDef(def, _)) = c.const_.ty().kind()
+            && self.stubs.contains_key(&def)
+        {
+            self.found = true;
         }
     }
 }
