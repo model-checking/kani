@@ -125,45 +125,39 @@ pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Resul
     let old_generics = tcx.generics_of(old_def_id);
     let new_generics = tcx.generics_of(new_def_id);
 
-    // Collect ALL params (parent + own) for both functions.
-    let old_all_params: Vec<_> = old_generics.own_params.iter()
-        .map(|p| (p.index, p))
-        .collect();
-    let new_all_params: Vec<_> = new_generics.own_params.iter()
-        .map(|p| (p.index, p))
-        .collect();
+    let old_all_params: Vec<_> = old_generics.own_params.iter().collect();
+    let new_all_params: Vec<_> = new_generics.own_params.iter().collect();
 
     // Build identity substitution for the new function, then override with
-    // old param names where positions match.
+    // old param names where positions match. Using identity_for_item ensures
+    // parent type params (e.g., T in `impl<T> MyStruct<T>`) are included.
     let new_identity = ty::GenericArgs::identity_for_item(tcx, new_def_id);
-    let mut substs: Vec<ty::GenericArg<'_>> = new_identity.iter().collect();
+    let mut rename_args: Vec<ty::GenericArg<'_>> = new_identity.iter().collect();
 
-    // Only rename the function's own params (not parent type params which must match).
     for (i, new_param) in new_all_params.iter().enumerate() {
         if i < old_all_params.len() {
-            let (_, old_param) = &old_all_params[i];
-            let (_, new_param) = new_param;
+            let old_param = old_all_params[i];
             let idx = new_param.index as usize;
-            if idx < substs.len() {
+            if idx < rename_args.len() {
                 match (&old_param.kind, &new_param.kind) {
                     (ty::GenericParamDefKind::Type { .. }, ty::GenericParamDefKind::Type { .. }) => {
-                        substs[idx] = ty::GenericArg::from(
+                        rename_args[idx] = ty::GenericArg::from(
                             ty::Ty::new_param(tcx, old_param.index, old_param.name),
                         );
                     }
                     (ty::GenericParamDefKind::Lifetime, ty::GenericParamDefKind::Lifetime) => {
-                        substs[idx] = ty::GenericArg::from(ty::Region::new_early_param(
+                        rename_args[idx] = ty::GenericArg::from(ty::Region::new_early_param(
                             tcx,
                             ty::EarlyParamRegion { index: old_param.index, name: old_param.name },
                         ));
                     }
                     (ty::GenericParamDefKind::Const { .. }, ty::GenericParamDefKind::Const { .. }) => {
-                        substs[idx] = ty::GenericArg::from(ty::Const::new_param(
+                        rename_args[idx] = ty::GenericArg::from(ty::Const::new_param(
                             tcx,
                             ty::ParamConst { index: old_param.index, name: old_param.name },
                         ));
                     }
-                    _ => {} // Keep identity substitution for mismatched kinds
+                    _ => {} // Keep identity for mismatched kinds; type comparison will catch it
                 }
             }
         }
@@ -175,16 +169,16 @@ pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Resul
     // The renaming substitution ensures different generic parameter names
     // (e.g., T vs S) don't cause false mismatches either (fixes #1953).
     // Note: Lifetime mismatches may still cause verification failures (#2007).
-    let new_substs = tcx.mk_args(&substs);
-    let typing_env = TypingEnv::fully_monomorphized();
+    let rename_args = tcx.mk_args(&rename_args);
 
     let old_ret_ty = old_body.ret_local().ty;
     let new_ret_ty = new_body.ret_local().ty;
     let old_ret_internal = rustc_internal::internal(tcx, old_ret_ty);
     let new_ret_internal = rustc_internal::internal(tcx, new_ret_ty);
-    let new_ret_renamed = EarlyBinder::bind(new_ret_internal).instantiate(tcx, new_substs);
+    let new_ret_renamed = EarlyBinder::bind(new_ret_internal).instantiate(tcx, rename_args);
 
     let mut diff = vec![];
+    // Error messages show the user's original types (before renaming) for clarity.
     if old_ret_internal != new_ret_renamed {
         diff.push(format!("Expected return type `{old_ret_ty}`, but found `{new_ret_ty}`"));
     }
@@ -193,7 +187,7 @@ pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Resul
     {
         let old_ty_internal = rustc_internal::internal(tcx, old_arg.ty);
         let new_ty_internal = rustc_internal::internal(tcx, new_arg.ty);
-        let new_renamed = EarlyBinder::bind(new_ty_internal).instantiate(tcx, new_substs);
+        let new_renamed = EarlyBinder::bind(new_ty_internal).instantiate(tcx, rename_args);
         if old_ty_internal != new_renamed {
             diff.push(format!(
                 "Expected type `{}` for parameter {}, but found `{}`",

@@ -3,8 +3,7 @@
 //
 // kani-flags: -Z stubbing
 //
-//! Test stubbing multiple foreign functions from the same extern block,
-//! and that non-stubbed foreign functions are unaffected.
+//! Test stubbing multiple foreign functions from the same extern block.
 //! Regression test for https://github.com/model-checking/kani/issues/2686
 
 extern "C" {

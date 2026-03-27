@@ -118,15 +118,14 @@ extern "C" {
 }
 
 fn my_c_function_stub(input: u32) -> u32 {
-    // Return a nondeterministic value for verification
-    kani::any()
+    input + 1
 }
 
 #[kani::proof]
 #[kani::stub(my_c_function, my_c_function_stub)]
 fn check_with_ffi_stub() {
     let result = unsafe { my_c_function(42) };
-    assert!(result < 100 || result >= 100); // trivially true for any value
+    assert_eq!(result, 43);
 }
 ```
 

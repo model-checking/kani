@@ -455,6 +455,10 @@ fn resolve_relative(tcx: TyCtxt, current_module: LocalModDefId, name: &str) -> R
 
     let mut glob_imports = vec![];
     let mut foreign_items = vec![];
+    // Note: `find_map` short-circuits on `Some`, but the `ForeignMod` branch
+    // always returns `None`, so foreign items are always collected even if
+    // `find_map` returns early from a different branch. This is intentional:
+    // direct module items take precedence over foreign items.
     let result = tcx.hir_module_free_items(current_module).find_map(|item_id| {
         let item = tcx.hir_item(item_id);
         if item.kind.ident().is_some_and(|ident| ident.as_str() == name) {
@@ -492,6 +496,9 @@ fn resolve_relative(tcx: TyCtxt, current_module: LocalModDefId, name: &str) -> R
     if let Some(def_id) = result {
         return RelativeResolution::Found(def_id);
     }
+    // Take the first matching foreign item. If multiple `extern` blocks declare
+    // functions with the same name, that is a user error (rustc would reject it
+    // as a duplicate symbol), so we don't need ambiguity diagnostics here.
     if let Some(def_id) = foreign_items.into_iter().next() {
         return RelativeResolution::Found(def_id);
     }
