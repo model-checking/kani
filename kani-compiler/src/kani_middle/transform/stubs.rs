@@ -181,15 +181,11 @@ impl MirVisitor for FnStubValidator<'_, '_> {
             self.tcx.dcx().span_err(
                 rustc_internal::internal(self.tcx, loc.span()),
                 format!(
-                    "`{}` doesn't implement \
-                                        `{}`. The function `{}` \
-                                        cannot be stubbed by `{}` due to \
-                                        generic bounds not being met. Callee: {}",
-                    receiver_ty,
-                    trait_,
+                    "type `{receiver_ty}` doesn't implement trait `{trait_}`, \
+                     so `{}` cannot be stubbed by `{}`. \
+                     All trait bounds of the stub must be satisfied by the original's call sites.",
                     self.stub.0.name(),
                     self.stub.1.name(),
-                    callee,
                 ),
             );
         }

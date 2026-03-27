@@ -156,6 +156,18 @@ stubs, check whether the lifetime annotations match.
 
 In the following, we describe the known limitations of the stubbing feature.
 
+### Feature interactions
+
+- **Function contracts:** Stubbing works with function contracts. Use `#[kani::stub_verified(fn)]`
+  to replace a function with its verified contract abstraction. This requires a
+  `#[kani::proof_for_contract(fn)]` harness to exist. Regular `#[kani::stub]` can also be
+  combined with `-Z function-contracts` in the same harness.
+- **Loop contracts:** Stubbing and loop contracts (`-Z loop-contracts`) can be used together
+  in the same harness without issues.
+- **Concrete playback:** Stubbing is compatible with `--concrete-playback`. When a stubbed
+  harness fails, Kani can generate a concrete test case that reproduces the failure using
+  the stub's behavior.
+
 ### Trait method stubbing
 
 Stubbing trait method implementations (e.g., `<MyType as MyTrait>::method`) is **not supported**.
@@ -170,8 +182,6 @@ conditional compilation (`#[cfg(kani)]`) to provide an alternative implementatio
 
 The usage of stubbing is limited to the verification of a single harness.
 Therefore, users are **required to pass the `--harness` option** when using the stubbing feature.
-
-In addition, this feature **isn't compatible with [concrete playback](./concrete-playback.md)**.
 
 ### Support
 
