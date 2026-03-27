@@ -100,24 +100,13 @@ impl TransformPass for ExternFnStubPass {
     /// Only allocate a mutable copy of the body if stubs actually apply (#2664).
     fn transform(&mut self, _tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
-        // Check if any operand in the body references a stubbed function before
-        // allocating a mutable copy (COW pattern).
-        let dominated_by_stub = body.locals().iter().any(|local| {
-            if let TyKind::RigidTy(RigidTy::FnDef(def, _)) = local.ty.kind() {
-                self.stubs.contains_key(&def)
-            } else {
-                false
-            }
-        }) || body.blocks.iter().any(|bb| {
-            if let TerminatorKind::Call { ref func, .. } = bb.terminator.kind {
-                func.ty(body.locals())
-                    .ok()
-                    .is_some_and(|ty| matches!(ty.kind(), TyKind::RigidTy(RigidTy::FnDef(def, _)) if self.stubs.contains_key(&def)))
-            } else {
-                false
-            }
-        });
-        if !dominated_by_stub {
+        // Scan the body for any reference to a stubbed function before allocating
+        // a mutable copy (COW pattern). This uses the read-only MirVisitor to
+        // check all operands (calls, function pointers, constants) without
+        // heap-allocating a MutableBody.
+        let mut scanner = StubScanner { stubs: &self.stubs, found: false };
+        scanner.visit_body(&body);
+        if !scanner.found {
             return (false, body);
         }
         let mut new_body = MutableBody::from(body);
@@ -229,6 +218,28 @@ impl MutMirVisitor for ExternFnStubVisitor<'_> {
             let new_func = ConstOperand { span: *span, user_ty: None, const_: literal };
             *operand = Operand::Constant(new_func);
             self.changed = true;
+        }
+    }
+}
+
+/// Read-only visitor that checks if a body contains any reference to a stubbed
+/// function. Used as a fast pre-scan to avoid allocating a MutableBody when no
+/// stubs apply (COW pattern for #2664).
+struct StubScanner<'a> {
+    stubs: &'a Stubs,
+    found: bool,
+}
+
+impl MirVisitor for StubScanner<'_> {
+    fn visit_operand(&mut self, op: &Operand, _loc: Location) {
+        if !self.found {
+            if let Operand::Constant(c) = op {
+                if let TyKind::RigidTy(RigidTy::FnDef(def, _)) = c.const_.ty().kind() {
+                    if self.stubs.contains_key(&def) {
+                        self.found = true;
+                    }
+                }
+            }
         }
     }
 }

@@ -205,11 +205,22 @@ impl KaniSession {
 
             // Print stubs applied to this harness so users know which
             // assumptions are in effect (#2119).
+            let multi = rayon::current_num_threads() > 1;
             for stub in &harness.attributes.stubs {
-                println!("  - Stub: {} -> {}", stub.original, stub.replacement);
+                let line = format!("  - Stub: {} -> {}", stub.original, stub.replacement);
+                if multi {
+                    println!("Thread {thread_index}: {line}");
+                } else {
+                    println!("{line}");
+                }
             }
             for verified in &harness.attributes.verified_stubs {
-                println!("  - Verified stub: {verified}");
+                let line = format!("  - Verified stub: {verified}");
+                if multi {
+                    println!("Thread {thread_index}: {line}");
+                } else {
+                    println!("{line}");
+                }
             }
         }
 
