@@ -106,6 +106,18 @@ VERIFICATION:- SUCCESSFUL
 
 Kani shows that the assertion is successful, avoiding any issues that appear if we attempt to verify the code without stubbing.
 
+## Stub visibility in verification output
+
+When stubs are applied to a harness, Kani prints them before verification begins:
+
+```
+Checking harness encrypt_then_decrypt_is_identity...
+  - Stub: rand::random -> mock_random
+```
+
+This helps you confirm which stubs are active and makes the assumptions introduced by
+stubbing visible in the verification output.
+
 ## Stubbing foreign functions
 
 Kani supports stubbing foreign functions declared in `extern` blocks. This is useful for
@@ -142,7 +154,17 @@ stubs, check whether the lifetime annotations match.
 
 ## Limitations
 
-In the following, we describe all the limitations of the stubbing feature.
+In the following, we describe the known limitations of the stubbing feature.
+
+### Trait method stubbing
+
+Stubbing trait method implementations (e.g., `<MyType as MyTrait>::method`) is **not supported**.
+Only free functions and inherent methods can be stubbed. Rust's attribute path syntax does not
+support the fully-qualified `<Type as Trait>::method` form, and the resolution algorithm does not
+search through trait implementations.
+
+If you need to stub a trait method, consider stubbing the calling function instead, or using
+conditional compilation (`#[cfg(kani)]`) to provide an alternative implementation.
 
 ### Usage restrictions
 

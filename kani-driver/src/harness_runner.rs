@@ -202,6 +202,15 @@ impl KaniSession {
             }
 
             println!("{msg}");
+
+            // Print stubs applied to this harness so users know which
+            // assumptions are in effect (#2119).
+            for stub in &harness.attributes.stubs {
+                println!("  - Stub: {} -> {}", stub.original, stub.replacement);
+            }
+            for verified in &harness.attributes.verified_stubs {
+                println!("  - Verified stub: {verified}");
+            }
         }
 
         let mut result = self.with_timer(|| self.run_cbmc(binary, harness), "run_cbmc")?;
