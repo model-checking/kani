@@ -454,6 +454,11 @@ fn resolve_relative(tcx: TyCtxt, current_module: LocalModDefId, name: &str) -> R
     debug!(?name, ?current_module, "resolve_relative");
 
     let mut glob_imports = vec![];
+    let mut foreign_items = vec![];
+    // Note: `find_map` short-circuits on `Some`, but the `ForeignMod` branch
+    // always returns `None`, so foreign items are always collected even if
+    // `find_map` returns early from a different branch. This is intentional:
+    // direct module items take precedence over foreign items.
     let result = tcx.hir_module_free_items(current_module).find_map(|item_id| {
         let item = tcx.hir_item(item_id);
         if item.kind.ident().is_some_and(|ident| ident.as_str() == name) {
@@ -473,10 +478,31 @@ fn resolve_relative(tcx: TyCtxt, current_module: LocalModDefId, name: &str) -> R
                 // since paths resolved via non-globs take precedence.
                 glob_imports.extend(use_path.res.present_items());
             }
+            // Collect foreign items declared inside `extern` blocks so we can
+            // search them if the name is not found as a direct module item.
+            // This handles `extern "C" { fn foo(); }` where `foo` is a child
+            // of the ForeignMod, not a top-level module item. (fixes #2686, #2673)
+            if let ItemKind::ForeignMod { items, .. } = item.kind {
+                for foreign_item in items {
+                    let fi = tcx.hir_foreign_item(*foreign_item);
+                    if fi.ident.as_str() == name {
+                        foreign_items.push(fi.owner_id.def_id.to_def_id());
+                    }
+                }
+            }
             None
         }
     });
-    result.map_or(RelativeResolution::Globs(glob_imports), RelativeResolution::Found)
+    if let Some(def_id) = result {
+        return RelativeResolution::Found(def_id);
+    }
+    // Take the first matching foreign item. If multiple `extern` blocks declare
+    // functions with the same name, that is a user error (rustc would reject it
+    // as a duplicate symbol), so we don't need ambiguity diagnostics here.
+    if let Some(def_id) = foreign_items.into_iter().next() {
+        return RelativeResolution::Found(def_id);
+    }
+    RelativeResolution::Globs(glob_imports)
 }
 
 /// Resolves a path relative to a local or foreign module.
