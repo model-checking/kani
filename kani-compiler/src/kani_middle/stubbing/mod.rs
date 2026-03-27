@@ -140,10 +140,15 @@ pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Resul
             let idx = new_param.index as usize;
             if idx < rename_args.len() {
                 match (&old_param.kind, &new_param.kind) {
-                    (ty::GenericParamDefKind::Type { .. }, ty::GenericParamDefKind::Type { .. }) => {
-                        rename_args[idx] = ty::GenericArg::from(
-                            ty::Ty::new_param(tcx, old_param.index, old_param.name),
-                        );
+                    (
+                        ty::GenericParamDefKind::Type { .. },
+                        ty::GenericParamDefKind::Type { .. },
+                    ) => {
+                        rename_args[idx] = ty::GenericArg::from(ty::Ty::new_param(
+                            tcx,
+                            old_param.index,
+                            old_param.name,
+                        ));
                     }
                     (ty::GenericParamDefKind::Lifetime, ty::GenericParamDefKind::Lifetime) => {
                         rename_args[idx] = ty::GenericArg::from(ty::Region::new_early_param(
@@ -151,7 +156,10 @@ pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Resul
                             ty::EarlyParamRegion { index: old_param.index, name: old_param.name },
                         ));
                     }
-                    (ty::GenericParamDefKind::Const { .. }, ty::GenericParamDefKind::Const { .. }) => {
+                    (
+                        ty::GenericParamDefKind::Const { .. },
+                        ty::GenericParamDefKind::Const { .. },
+                    ) => {
                         rename_args[idx] = ty::GenericArg::from(ty::Const::new_param(
                             tcx,
                             ty::ParamConst { index: old_param.index, name: old_param.name },
