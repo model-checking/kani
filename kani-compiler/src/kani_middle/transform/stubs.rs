@@ -97,13 +97,32 @@ impl TransformPass for ExternFnStubPass {
     /// Search for calls to extern functions that should be stubbed.
     ///
     /// We need to find function calls and function pointers.
-    /// We should replace this with a visitor once rustc_public includes a mutable one.
+    /// Only allocate a mutable copy of the body if stubs actually apply (#2664).
     fn transform(&mut self, _tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
+        // Check if any operand in the body references a stubbed function before
+        // allocating a mutable copy (COW pattern).
+        let dominated_by_stub = body.locals().iter().any(|local| {
+            if let TyKind::RigidTy(RigidTy::FnDef(def, _)) = local.ty.kind() {
+                self.stubs.contains_key(&def)
+            } else {
+                false
+            }
+        }) || body.blocks.iter().any(|bb| {
+            if let TerminatorKind::Call { ref func, .. } = bb.terminator.kind {
+                func.ty(body.locals())
+                    .ok()
+                    .is_some_and(|ty| matches!(ty.kind(), TyKind::RigidTy(RigidTy::FnDef(def, _)) if self.stubs.contains_key(&def)))
+            } else {
+                false
+            }
+        });
+        if !dominated_by_stub {
+            return (false, body);
+        }
         let mut new_body = MutableBody::from(body);
-        let changed = false;
         let locals = new_body.locals().to_vec();
-        let mut visitor = ExternFnStubVisitor { changed, locals, stubs: &self.stubs };
+        let mut visitor = ExternFnStubVisitor { changed: false, locals, stubs: &self.stubs };
         visitor.visit_body(&mut new_body);
         (visitor.changed, new_body.into())
     }
