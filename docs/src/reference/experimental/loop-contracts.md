@@ -585,3 +585,10 @@ Loop contracts comes with the following limitations.
    We observed this happens when some fields of structs are modified by some other functions called in the loops.
 3. We don't check if loop contracts (invariants, decreases clauses) are side-effect free. A loop contract with a side effect could lead to an unsound proof result. Make sure that the specified loop contracts are side-effect free.
 4. Decreases clauses only support integer-typed expressions. See the [decreases clause limitations](#decreases-clause-limitations-and-comparison-with-other-tools) section for a detailed comparison with other verification tools.
+5. Decreases clauses have the following known bugs (tracked in [#3168](https://github.com/model-checking/kani/issues/3168)):
+   - **Struct field projections** in decreases expressions (e.g., `#[kani::loop_decreases(s.field)]`) are not correctly processed by CBMC — the check always fails even when the measure genuinely decreases.
+   - **Multi-dimensional decreases** (e.g., `#[kani::loop_decreases(a, b)]`) are not correctly processed — CBMC does not perform lexicographic comparison on tuple expressions passed through Kani's irep encoding.
+   - **Combining `loop_decreases` with `loop_modifies`** causes the assigns clause check to conflict with the decreases instrumentation.
+   - **Nested loops with decreases** on both inner and outer loops can cause assigns clause conflicts.
+   
+   These limitations are documented as `fixme` tests in `tests/expected/loop-contract/`.
