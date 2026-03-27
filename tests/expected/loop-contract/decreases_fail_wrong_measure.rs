@@ -11,13 +11,13 @@
 
 #[kani::proof]
 fn wrong_decreases_harness() {
-    let mut x: u8 = kani::any_where(|i| *i >= 1 && *i < 200);
+    let mut x: u16 = kani::any_where(|i| *i >= 2 && *i <= 200);
 
-    #[kani::loop_invariant(x >= 1)]
+    #[kani::loop_invariant(x >= 2)]
     #[kani::loop_decreases(x)]
     while x > 1 {
         // Bug: x increases instead of decreasing.
-        // The decreases clause should fail.
+        // Using u16 to avoid overflow obscuring the decreases failure.
         x = x + 1;
     }
 }

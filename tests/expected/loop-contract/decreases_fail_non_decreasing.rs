@@ -4,19 +4,21 @@
 // kani-flags: -Z loop-contracts
 
 //! Check that a non-decreasing measure correctly fails verification.
-//! The loop body does not modify x, so the decreases clause cannot be proved.
+//! The loop body sets x to a nondeterministic value that satisfies the
+//! invariant but does not guarantee strict decrease.
 
 #![feature(stmt_expr_attributes)]
 #![feature(proc_macro_hygiene)]
 
 #[kani::proof]
 fn non_decreasing_harness() {
-    let mut x: u8 = kani::any_where(|i| *i >= 1);
+    let mut x: u16 = kani::any_where(|i| *i >= 2 && *i <= 300);
 
-    #[kani::loop_invariant(x >= 1)]
+    #[kani::loop_invariant(x >= 2)]
     #[kani::loop_decreases(x)]
     while x > 1 {
-        // Bug: x is not modified, so it never decreases.
+        // Bug: x increases instead of decreasing.
         // The decreases clause should fail.
+        x = x + 1;
     }
 }

@@ -5,17 +5,20 @@
 
 //! Loop max function with decreases clause.
 //! Inspired by Prusti's loop_max.rs test.
+//! Uses a countdown variable to avoid unsigned subtraction in the measure.
 
 #![feature(stmt_expr_attributes)]
 #![feature(proc_macro_hygiene)]
 
 fn loop_max(x: u8, y: u8) -> u8 {
     let mut r = x;
+    let mut remaining: u8 = y - x;
 
-    #[kani::loop_invariant(x <= r && r <= y)]
-    #[kani::loop_decreases(y - r)]
+    #[kani::loop_invariant(x <= r && r <= y && remaining == y - r)]
+    #[kani::loop_decreases(remaining)]
     while r < y {
         r += 1;
+        remaining -= 1;
     }
 
     r

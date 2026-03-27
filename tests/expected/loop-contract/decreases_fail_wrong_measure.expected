@@ -1,5 +1,3 @@
-loop_decreases\
-	 - Status: FAILURE\
-	 - Description: "Check variant decreases after step for loop
+Status: FAILURE
 
 VERIFICATION:- FAILED
