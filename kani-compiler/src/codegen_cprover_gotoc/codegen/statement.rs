@@ -97,6 +97,11 @@ impl GotocCtx<'_, '_> {
                     self.current_loop_modifies = assigns.clone();
                     return Stmt::skip(location);
                 }
+                if localname.contains("kani_loop_decreases") {
+                    let decreases_expr = self.codegen_rvalue_stable(rhs, location);
+                    self.current_loop_decreases = Some(decreases_expr);
+                    return Stmt::skip(location);
+                }
                 // we ignore assignment for all zero size types
                 if self.is_zst_stable(lty) {
                     Stmt::skip(location)
