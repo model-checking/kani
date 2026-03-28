@@ -871,6 +871,9 @@ impl GotocHook for LoopInvariantRegister {
             // When loop-contracts is not enabled, codegen
             // assign_to = true
             // goto target
+            // Discard any decreases clause since it won't be checked without
+            // the loop-contracts flag.
+            gcx.current_loop_decreases = None;
             Stmt::block(
                 vec![
                     unwrap_or_return_codegen_unimplemented_stmt!(

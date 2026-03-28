@@ -376,6 +376,11 @@ Here, `x` strictly decreases at each iteration and is bounded below by `1` (the 
 
 ### Multi-dimensional decreases (lexicographic ordering)
 
+> **Note:** Multi-dimensional decreases clauses are not yet fully supported. The syntax is
+> accepted, but CBMC does not correctly process tuple expressions passed through Kani's irep
+> encoding. This is tracked as a [known bug](#decreases-clause-limitations-and-comparison-with-other-tools).
+> Use a single integer expression for now.
+
 Some loops cannot be proved terminating with a single expression. For example, a loop with two
 counters where the inner counter resets may need a tuple `(outer, inner)`. CBMC compares tuples
 lexicographically: if the first element decreases, the remaining elements are free to increase or

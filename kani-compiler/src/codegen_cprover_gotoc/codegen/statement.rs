@@ -98,6 +98,19 @@ impl GotocCtx<'_, '_> {
                     return Stmt::skip(location);
                 }
                 if localname.contains("kani_loop_decreases") {
+                    if !self
+                        .queries
+                        .args()
+                        .unstable_features
+                        .contains(&"loop-contracts".to_string())
+                    {
+                        let msg = "found `#[kani::loop_decreases]` without \
+                                   `-Z loop-contracts`. The decreases clause \
+                                   will be ignored.";
+                        let internal_span = rustc_internal::internal(self.tcx, stmt.span);
+                        self.tcx.dcx().span_warn(internal_span, msg);
+                        return Stmt::skip(location);
+                    }
                     let decreases_expr = self.codegen_rvalue_stable(rhs, location);
                     self.current_loop_decreases = Some(decreases_expr);
                     return Stmt::skip(location);

@@ -4,6 +4,10 @@
 // kani-flags: -Z loop-contracts
 
 //! Check decreases clause on a loop that counts down by 2.
+//! Note: This was originally a `loop { break }` test, but `loop` with
+//! decreases triggers an internal unreachable in the loop contract
+//! transformation. Rewritten as `while` as a workaround.
+//! Tracked in: https://github.com/model-checking/kani/issues/3168
 
 #![feature(stmt_expr_attributes)]
 #![feature(proc_macro_hygiene)]
