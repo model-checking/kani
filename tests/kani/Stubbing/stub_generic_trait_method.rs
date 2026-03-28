@@ -13,14 +13,20 @@ trait Convert<T> {
 struct MyType;
 
 impl Convert<u32> for MyType {
-    fn convert(&self) -> u32 { 100 }
+    fn convert(&self) -> u32 {
+        100
+    }
 }
 
 impl Convert<bool> for MyType {
-    fn convert(&self) -> bool { false }
+    fn convert(&self) -> bool {
+        false
+    }
 }
 
-fn stub_convert_u32(_x: &MyType) -> u32 { 42 }
+fn stub_convert_u32(_x: &MyType) -> u32 {
+    42
+}
 
 #[kani::proof]
 #[kani::stub(<MyType as Convert<u32>>::convert, stub_convert_u32)]

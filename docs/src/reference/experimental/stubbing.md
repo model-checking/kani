@@ -170,13 +170,37 @@ In the following, we describe the known limitations of the stubbing feature.
 
 ### Trait method stubbing
 
-Stubbing trait method implementations (e.g., `<MyType as MyTrait>::method`) is **not supported**.
-Only free functions and inherent methods can be stubbed. Rust's attribute path syntax does not
-support the fully-qualified `<Type as Trait>::method` form, and the resolution algorithm does not
-search through trait implementations.
+Kani supports stubbing trait method implementations using fully-qualified syntax:
 
-If you need to stub a trait method, consider stubbing the calling function instead, or using
-conditional compilation (`#[cfg(kani)]`) to provide an alternative implementation.
+```rust
+trait MyTrait {
+    fn method(&self) -> u32;
+}
+
+struct MyType;
+
+impl MyTrait for MyType {
+    fn method(&self) -> u32 { 0 }
+}
+
+fn stub_method(_x: &MyType) -> u32 { 42 }
+
+#[kani::proof]
+#[kani::stub(<MyType as MyTrait>::method, stub_method)]
+fn check_trait_stub() {
+    let x = MyType;
+    assert_eq!(x.method(), 42);
+}
+```
+
+This also works with generic traits:
+
+```rust
+#[kani::stub(<MyType as Convert<u32>>::convert, stub_convert)]
+```
+
+When two traits define methods with the same name, the fully-qualified syntax
+disambiguates which implementation to stub.
 
 ### Usage restrictions
 

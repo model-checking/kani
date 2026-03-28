@@ -18,21 +18,35 @@ trait B {
 struct X {}
 
 impl X {
-    fn new() -> Self { Self {} }
+    fn new() -> Self {
+        Self {}
+    }
 }
 
 impl A for X {
-    fn foo(&self) -> u32 { 100 }
-    fn bar(&self) -> u32 { 200 }
+    fn foo(&self) -> u32 {
+        100
+    }
+    fn bar(&self) -> u32 {
+        200
+    }
 }
 
 impl B for X {
-    fn bar(&self) -> u32 { 300 }
+    fn bar(&self) -> u32 {
+        300
+    }
 }
 
-fn stub_1(_x: &X) -> u32 { 1 }
-fn stub_2(_x: &X) -> u32 { 2 }
-fn stub_3(_x: &X) -> u32 { 3 }
+fn stub_1(_x: &X) -> u32 {
+    1
+}
+fn stub_2(_x: &X) -> u32 {
+    2
+}
+fn stub_3(_x: &X) -> u32 {
+    3
+}
 
 #[kani::proof]
 #[kani::stub(<X as A>::foo, stub_1)]
