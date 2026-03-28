@@ -212,6 +212,57 @@ The following trait patterns are supported:
 
 **Known limitation:** Traits with const generic parameters (e.g., `<Type as Buf<16>>::write`) or associated type constraints (e.g., `<Type as Iterator<Item = u32>>::next`) are not currently supported and will produce a resolution error.
 
+### Stub sets
+
+When multiple harnesses share the same set of stubs, you can define a reusable stub set
+with the `kani::stub_set!` macro and apply it with `#[kani::use_stub_set(...)]`:
+
+```rust
+fn mock_read(_path: std::path::PathBuf) -> std::io::Result<Vec<u8>> {
+    Ok(vec![0; 10])
+}
+
+fn mock_write(_path: std::path::PathBuf, _contents: &[u8]) -> std::io::Result<()> {
+    Ok(())
+}
+
+kani::stub_set!(io_stubs,
+    stub(std::fs::read, mock_read),
+    stub(std::fs::write, mock_write),
+);
+
+#[kani::proof]
+#[kani::use_stub_set(io_stubs)]
+fn check_with_io_stubs() {
+    // Both stubs are applied
+}
+```
+
+Stub sets can compose other stub sets using `use_stub_set(...)`:
+
+```rust
+kani::stub_set!(all_stubs,
+    use_stub_set(io_stubs),
+    stub(other::func, my_func),
+);
+```
+
+You can also combine `#[kani::use_stub_set(...)]` with individual `#[kani::stub(...)]`
+attributes on the same harness. Different harnesses can use different stub sets.
+
+To make a stub set accessible from other modules, add a visibility modifier:
+
+```rust
+mod stubs {
+    kani::stub_set!(pub my_set,
+        stub(real_fn, stub_fn),
+    );
+}
+```
+
+**Note:** Paths inside a stub set are resolved relative to the harness that uses it,
+not relative to the module where the stub set is defined.
+
 ### Usage restrictions
 
 Stub annotations (`#[kani::stub]`) are specified per-harness. When a crate contains multiple
