@@ -22,3 +22,5 @@ fn check_priv_method_stub() {
 fn check_priv_type_method_stub() {
     assert_eq!(other_crate::PubType::new().fn_delegating_to_priv_type(), 42);
 }
+
+fn main() {}

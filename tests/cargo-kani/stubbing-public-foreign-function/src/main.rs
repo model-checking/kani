@@ -20,3 +20,5 @@ fn check_pub_fn_stub() {
 fn check_pub_mod_fn_stub() {
     assert_eq!(other_crate::pub_mod::pub_fn(), 42);
 }
+
+fn main() {}

@@ -16,3 +16,5 @@ fn check_priv_fn_stub() {
 fn check_priv_mod_fn_stub() {
     assert_eq!(other_crate::pub_mod::fn_delegating_to_priv_fn(), 42);
 }
+
+fn main() {}
