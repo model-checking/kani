@@ -5,7 +5,7 @@
 # Note: this package is intentionally named std to make sure the names of
 # standard library symbols are preserved
 name = "std"
-version = "0.66.0"
+version = "0.67.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 publish = false

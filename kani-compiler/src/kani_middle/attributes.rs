@@ -787,10 +787,14 @@ impl<'tcx> KaniAttributes<'tcx> {
                     let replace_res = self.resolve_path(current_module, replace, attr.span()).map(|res| res.def());
 
                     if let Ok(original_res) = original_res && let Ok(replace_res) = replace_res {
-                        // Emit an error if either function is local, yet doesn't have a body.
-                        // This can happen if a user specifies a trait fn without a default body, e.g. B::bar, where B is a trait.
-                        let o_bad = original_res.krate().is_local && !original_res.has_body();
-                        let r_bad = replace_res.krate().is_local && !replace_res.has_body();
+                        // Emit an error if either the original or the replacement is local yet
+                        // doesn't have a body. This catches trait fns without a default body
+                        // (e.g., B::bar where B is a trait). Foreign functions (extern "C") are
+                        // expected to not have bodies, so we exclude them on both sides.
+                        let o_def_id = rustc_internal::internal(self.tcx, original_res.def_id());
+                        let r_def_id = rustc_internal::internal(self.tcx, replace_res.def_id());
+                        let o_bad = original_res.krate().is_local && !original_res.has_body() && !self.tcx.is_foreign_item(o_def_id);
+                        let r_bad = replace_res.krate().is_local && !replace_res.has_body() && !self.tcx.is_foreign_item(r_def_id);
 
                         if o_bad || r_bad {
                             let mut err = self.tcx.dcx().struct_span_err(

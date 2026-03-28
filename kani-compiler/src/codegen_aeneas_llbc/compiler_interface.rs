@@ -11,7 +11,7 @@ use crate::kani_middle::codegen_units::{CodegenUnit, CodegenUnits};
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
 use crate::kani_middle::transform::{BodyTransformation, GlobalPasses};
-use crate::kani_queries::QueryDb;
+use crate::kani_queries::QUERY_DB;
 use charon_lib::ast::{AnyTransId, TranslatedCrate, meta::ItemOpacity::*, meta::Span};
 use charon_lib::errors::ErrorCtx;
 use charon_lib::name_matcher::NamePattern;
@@ -43,22 +43,15 @@ use rustc_target::spec::Arch;
 use std::any::Any;
 use std::fs::File;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tracing::{debug, info, trace};
 
 #[derive(Clone)]
-pub struct LlbcCodegenBackend {
-    /// The query is shared with `KaniCompiler` and it is initialized as part of `rustc`
-    /// initialization, which may happen after this object is created.
-    /// Since we don't have any guarantees on when the compiler creates the Backend object, neither
-    /// in which thread it will be used, we prefer to explicitly synchronize any query access.
-    queries: Arc<Mutex<QueryDb>>,
-}
+pub struct LlbcCodegenBackend {}
 
 impl LlbcCodegenBackend {
-    pub fn new(queries: Arc<Mutex<QueryDb>>) -> Self {
-        LlbcCodegenBackend { queries }
+    pub fn new() -> Self {
+        LlbcCodegenBackend {}
     }
 
     /// Generate code that is reachable from the given starting points.
@@ -91,16 +84,18 @@ impl LlbcCodegenBackend {
             .collect();
 
         // Apply all transformation passes, including global passes.
-        let mut global_passes = GlobalPasses::new(&self.queries.lock().unwrap(), tcx);
-        global_passes.run_global_passes(
-            &mut transformer,
-            tcx,
-            starting_items,
-            instances,
-            call_graph,
-        );
+        QUERY_DB.with(|db| {
+            let mut global_passes = GlobalPasses::new(&db.borrow(), tcx);
+            global_passes.run_global_passes(
+                &mut transformer,
+                tcx,
+                starting_items,
+                instances,
+                call_graph,
+            );
+        });
 
-        let queries = self.queries.lock().unwrap().clone();
+        let queries = QUERY_DB.with(|db| db.borrow().clone());
         check_reachable_items(tcx, &queries, &items);
 
         // Follow rustc naming convention (cx is abbrev for context).
@@ -192,7 +187,7 @@ impl LlbcCodegenBackend {
 
 impl CodegenBackend for LlbcCodegenBackend {
     fn provide(&self, providers: &mut Providers) {
-        provide::provide(providers, &self.queries.lock().unwrap());
+        QUERY_DB.with(|db| provide::provide(providers, &db.borrow()));
     }
 
     fn print_version(&self) {
@@ -211,7 +206,7 @@ impl CodegenBackend for LlbcCodegenBackend {
     fn codegen_crate(&self, tcx: TyCtxt) -> Box<dyn Any> {
         let ret_val = rustc_internal::run(tcx, || {
             // Queries shouldn't change today once codegen starts.
-            let queries = self.queries.lock().unwrap().clone();
+            let queries = QUERY_DB.with(|db| db.borrow().clone());
 
             // Codegen all items that need to be processed according to the selected reachability mode:
             //

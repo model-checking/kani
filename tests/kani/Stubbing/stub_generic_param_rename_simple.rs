@@ -3,9 +3,8 @@
 //
 // kani-flags: -Z stubbing --harness main
 //
-// We currently require a stub and the original/function method to have the same
-// names for generic parameters; instead, we should allow for renaming.
-// See <https://github.com/model-checking/kani/issues/1953> for more information.
+// Regression test: generic parameter names can differ between original and stub.
+// Previously this was a fixme test for https://github.com/model-checking/kani/issues/1953
 
 fn foo<T>(_x: T) -> bool {
     false

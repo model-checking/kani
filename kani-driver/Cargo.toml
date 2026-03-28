@@ -3,7 +3,7 @@
 
 [package]
 name = "kani-driver"
-version = "0.66.0"
+version = "0.67.0"
 edition = "2024"
 description = "Build a project with Kani and run all proof harnesses"
 license = "MIT OR Apache-2.0"
@@ -33,7 +33,7 @@ tempfile = "3"
 tracing = {version = "0.1", features = ["max_level_trace", "release_max_level_debug"]}
 tracing-subscriber = {version = "0.3.20", features = ["env-filter", "json", "fmt"]}
 which = "8"
-time = {version = "0.3.36", features = ["formatting"]}
+time = {version = "0.3.47", features = ["formatting"]}
 tokio = { version = "1.40.0", features = ["io-util", "process", "rt", "time"] }
 chrono = { version = "0.4.41", default-features = false, features = [ "clock" ]}
 

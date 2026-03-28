@@ -6,7 +6,6 @@ description = "Documentation for the Kani Rust Verifier"
 authors = ["Kani Developers"]
 src = "src"
 language = "en"
-multilingual = false
 
 [output.html]
 site-url = "/kani/"

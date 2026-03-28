@@ -159,3 +159,19 @@ SUMMARY:
 
 VERIFICATION:- SUCCESSFUL
 ```
+
+## SARIF output
+
+Kani can emit SARIF (Static Analysis Results Interchange Format) for integration with tools such as GitHub Code Scanning.
+
+Generate a SARIF report:
+```bash
+cargo kani --sarif kani.sarif
+```
+
+In GitHub Actions, upload the SARIF file:
+```yaml
+- uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: kani.sarif
+```

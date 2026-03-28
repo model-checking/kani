@@ -124,7 +124,7 @@ pub fn build_ensures(data: &ExprClosure) -> (TokenStream2, Expr) {
 
     let remembers_stmts: TokenStream2 = remembers_exprs
         .iter()
-        .fold(quote!(), |collect, (ident, expr)| quote!(let #ident = #expr; #collect));
+        .fold(quote!(), |collect, (ident, expr)| quote!(let #ident = (#expr).clone(); #collect));
 
     let result: Ident = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
     (remembers_stmts, Expr::Verbatim(quote!(kani::internal::apply_closure(#expr, &#result))))
