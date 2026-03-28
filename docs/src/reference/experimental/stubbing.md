@@ -202,6 +202,16 @@ This also works with generic traits:
 When two traits define methods with the same name, the fully-qualified syntax
 disambiguates which implementation to stub.
 
+The following trait patterns are supported:
+
+- **Supertrait methods:** Stubbing a method defined in a supertrait (e.g., `<MyType as Base>::method`) works independently of subtrait methods.
+- **Overridden default methods:** If a type overrides a trait's default method, the override can be stubbed normally.
+- **Dynamic dispatch:** Stubs apply even when the method is called through a trait object (`&dyn Trait` or `Box<dyn Trait>`).
+
+**Known limitation:** Stubbing a trait's default method that is *not* overridden by the implementing type is not currently supported ([#4588](https://github.com/model-checking/kani/issues/4588)). The default method body uses `Self` as a placeholder type, which causes a type mismatch during stub validation. This applies only to default methods that are inherited as-is (i.e., the `impl` block does not provide its own definition).
+
+**Known limitation:** Traits with const generic parameters (e.g., `<Type as Buf<16>>::write`) or associated type constraints (e.g., `<Type as Iterator<Item = u32>>::next`) are not currently supported and will produce a resolution error.
+
 ### Usage restrictions
 
 Stub annotations (`#[kani::stub]`) are specified per-harness. When a crate contains multiple
@@ -215,7 +225,6 @@ Support for stubbing is currently **limited to functions and methods**. All othe
 The following are examples of items that could be good candidates for stubbing, but aren't supported:
 - Types
 - Macros
-- Traits
 - Intrinsics
 
 We acknowledge that support for method stubbing isn't as ergonomic as it could be.

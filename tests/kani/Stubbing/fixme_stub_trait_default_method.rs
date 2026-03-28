@@ -9,7 +9,7 @@
 //! doesn't match the concrete type in the stub. The validation compares
 //! the trait definition's body (with `&Self`) against the stub (with
 //! `&MyType`), causing a false type mismatch.
-//! Tracked in: https://github.com/model-checking/kani/issues/1997
+//! Tracked in: https://github.com/model-checking/kani/issues/4588
 
 trait HasDefault {
     fn default_method(&self) -> u32 {
@@ -20,7 +20,9 @@ trait HasDefault {
 struct MyType;
 impl HasDefault for MyType {}
 
-fn stub_default(_x: &MyType) -> u32 { 42 }
+fn stub_default(_x: &MyType) -> u32 {
+    42
+}
 
 #[kani::proof]
 #[kani::stub(<MyType as HasDefault>::default_method, stub_default)]

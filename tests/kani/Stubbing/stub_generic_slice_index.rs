@@ -1,12 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Zfunction-contracts
-//! Test function contracts on generic trait implementations based on SliceIndex,
-//! c.f. https://github.com/model-checking/kani/issues/4084
-//! This `proof_for_contract` should work,
-//! but we do not yet support stubbing/contracts on trait fns with generic arguments
-//! c.f. https://github.com/model-checking/kani/issues/1997#issuecomment-3134614734.
-//! So for now, test that we emit a nice error message.
+//! Test function contracts on generic trait implementations based on SliceIndex.
+//! Regression test for https://github.com/model-checking/kani/issues/1997
+//! and https://github.com/model-checking/kani/issues/4084.
 
 const INVALID_INDEX: usize = 10;
 

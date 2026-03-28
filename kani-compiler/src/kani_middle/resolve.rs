@@ -74,6 +74,9 @@ pub fn resolve_fn_path<'tcx>(
             let trait_fn_id = resolve_path(tcx, current_module, &path.path)?;
             validate_kind!(tcx, trait_fn_id, "function / method", DefKind::Fn | DefKind::AssocFn)?;
             // Extract generic args from the trait segment (e.g., <u32> from Convert<u32>).
+            // For `<Type as crate::mod::Trait<u32>>::method`, segments after `as` are
+            // [crate, mod, Trait<u32>, method]. The trait segment with generic args is
+            // always second-to-last (last is the method name).
             let trait_generic_args = path
                 .path
                 .segments
@@ -413,6 +416,9 @@ fn resolve_in_any_trait<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty, name: &str) -> Option<F
         .into_iter()
         .filter_map(|trait_def| {
             resolve_in_trait_def_stable(tcx, trait_def, name).ok().and_then(|item| {
+                // No current_module or trait_args needed: this path resolves
+                // unqualified method names (e.g., `x.foo()`), not user-specified
+                // `<Type as Trait<T>>::method` syntax.
                 resolve_in_trait_impl(
                     tcx,
                     None,
@@ -446,11 +452,30 @@ fn resolve_in_trait_impl<'tcx>(
     // Build generic args: Self type + any trait generic parameters (e.g., T in Convert<T>).
     let mut args = vec![GenericArgKind::Type(ty)];
     if let Some(syn_args) = trait_args {
-        let module = current_module.expect("current_module required for generic trait args");
+        let Some(module) = current_module else {
+            return Err(ResolveError::UnsupportedPath {
+                kind: "stub resolution requires generic trait arguments to have a known module context",
+            });
+        };
         for arg in &syn_args.args {
-            if let syn::GenericArgument::Type(syn_ty) = arg {
-                let resolved_ty = type_resolution::resolve_ty(tcx, module, syn_ty)?;
-                args.push(GenericArgKind::Type(resolved_ty));
+            match arg {
+                syn::GenericArgument::Type(syn_ty) => {
+                    let resolved_ty = type_resolution::resolve_ty(tcx, module, syn_ty)?;
+                    args.push(GenericArgKind::Type(resolved_ty));
+                }
+                syn::GenericArgument::Const(_) => {
+                    return Err(ResolveError::UnsupportedPath {
+                        kind: "const generic arguments in trait stubs",
+                    });
+                }
+                syn::GenericArgument::Lifetime(_) => {
+                    // Lifetimes are erased — safe to skip.
+                }
+                _ => {
+                    return Err(ResolveError::UnsupportedPath {
+                        kind: "associated type/const constraints in trait stubs",
+                    });
+                }
             }
         }
     }
