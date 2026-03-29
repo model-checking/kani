@@ -180,8 +180,9 @@ conditional compilation (`#[cfg(kani)]`) to provide an alternative implementatio
 
 ### Usage restrictions
 
-The usage of stubbing is limited to the verification of a single harness.
-Therefore, users are **required to pass the `--harness` option** when using the stubbing feature.
+Stub annotations (`#[kani::stub]`) are specified per-harness. When a crate contains multiple
+harnesses with different stub configurations, each harness is verified independently with its
+own set of stubs.
 
 ### Support
 

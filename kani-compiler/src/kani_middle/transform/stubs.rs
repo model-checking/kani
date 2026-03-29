@@ -224,7 +224,9 @@ impl MutMirVisitor for ExternFnStubVisitor<'_> {
 
 /// Read-only visitor that checks if a body contains any reference to a stubbed
 /// function. Used as a fast pre-scan to avoid allocating a MutableBody when no
-/// stubs apply (COW pattern for #2664).
+/// stubs apply (COW pattern).
+/// Mirrors the same `Operand::Constant` + `FnDef` check used by
+/// `ExternFnStubVisitor` in both `visit_terminator` and `visit_operand`.
 struct StubScanner<'a> {
     stubs: &'a Stubs,
     found: bool,
