@@ -367,7 +367,7 @@ impl Expr {
             size_of_annotation: ann.clone(),
         };
         let sub = |e: Expr| e.substitute_symbol(old_id, replacement);
-        let sub_vec = |v: Vec<Expr>| v.into_iter().map(|e| sub(e)).collect();
+        let sub_vec = |v: Vec<Expr>| v.into_iter().map(&sub).collect();
 
         match *self.value {
             ExprValue::Symbol { identifier } if identifier == *old_id => {
