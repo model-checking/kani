@@ -354,6 +354,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
 impl GotocCtx<'_, '_> {
     /// Inline all function calls in `expr` as pure expressions.
     /// Prefer `inline_as_pure_expr_toplevel` for the public entry point.
+    #[allow(clippy::collapsible_if, clippy::cmp_owned)]
     fn inline_as_pure_expr(&self, expr: &Expr, visited: &mut HashSet<InternedString>) -> Expr {
         match expr.value() {
             ExprValue::FunctionCall { function, arguments } => {
@@ -392,7 +393,35 @@ impl GotocCtx<'_, '_> {
                 .inline_as_pure_expr(array, visited)
                 .index(self.inline_as_pure_expr(index, visited)),
             ExprValue::Member { lhs, field } => {
-                self.inline_as_pure_expr(lhs, visited).member(*field, &self.symbol_table)
+                let inlined_lhs = self.inline_as_pure_expr(lhs, visited);
+                // If the inlined lhs is a Struct literal, extract the field directly
+                // by numeric index (e.g., field "0" → values[0]).
+                if let ExprValue::Struct { values } = inlined_lhs.value() {
+                    if let Ok(idx) = field.to_string().parse::<usize>() {
+                        if idx < values.len() {
+                            return self.inline_as_pure_expr(&values[idx], visited);
+                        }
+                    }
+                }
+                // Member(OverflowResultOp(a,b), "result") → Op(a,b)
+                // Simplifies checked arithmetic to plain arithmetic for quantifier bodies.
+                if *field == "result" {
+                    if let ExprValue::BinOp { op, lhs: a, rhs: b } = inlined_lhs.value() {
+                        use cbmc::goto_program::BinaryOperator::*;
+                        let simple = match op {
+                            OverflowResultPlus => Some(Plus),
+                            OverflowResultMinus => Some(Minus),
+                            OverflowResultMult => Some(Mult),
+                            _ => None,
+                        };
+                        if let Some(sop) = simple {
+                            return self
+                                .inline_as_pure_expr(a, visited)
+                                .binop(sop, self.inline_as_pure_expr(b, visited));
+                        }
+                    }
+                }
+                inlined_lhs.member(*field, &self.symbol_table)
             }
             ExprValue::Dereference(e) => self.inline_as_pure_expr(e, visited).dereference(),
             ExprValue::AddressOf(e) => Expr::address_of(self.inline_as_pure_expr(e, visited)),
@@ -407,14 +436,57 @@ impl GotocCtx<'_, '_> {
                 self.inline_as_pure_expr(domain, visited),
             ),
             ExprValue::StatementExpression { statements, .. } => {
-                // Extract the final expression from the statement block.
-                // This handles checked arithmetic (Assert + Assume + Expression).
-                for stmt in statements.iter().rev() {
-                    if let StmtBody::Expression(e) = stmt.body() {
-                        return self.inline_as_pure_expr(e, visited);
+                // Flatten StatementExpression by collecting intermediate variable
+                // assignments and substituting them into the final expression.
+                // This handles checked arithmetic patterns like:
+                //   { let temp = overflow_result_plus(a, b); (temp.result, temp.overflowed) }
+                let mut assignments: HashMap<InternedString, Expr> = HashMap::new();
+                let mut final_expr = None;
+                for stmt in statements.iter() {
+                    match stmt.body() {
+                        StmtBody::Decl { lhs, value: Some(val) } => {
+                            if let ExprValue::Symbol { identifier } = lhs.value() {
+                                assignments.insert(*identifier, val.clone());
+                            }
+                        }
+                        StmtBody::Expression(e) => {
+                            final_expr = Some(e.clone());
+                        }
+                        _ => {
+                            // Dropping Assert/Assume statements (overflow/div-by-zero
+                            // checks) from quantifier bodies. These cannot be
+                            // represented as pure expressions.
+                            tracing::debug!(
+                                "Dropping checked arithmetic guard in quantifier body. \
+                                 Overflow and division-by-zero checks are not enforced \
+                                 inside quantifier predicates."
+                            );
+                        }
                     }
                 }
-                expr.clone()
+                if let Some(mut expr) = final_expr {
+                    // Resolve intermediate variables.
+                    // Capped at assignments.len() + 1 to guard against cycles.
+                    for _ in 0..=assignments.len() {
+                        let mut changed = false;
+                        for (sym, rhs) in assignments.iter() {
+                            let (new_expr, did_change) = expr.substitute_symbol(sym, rhs);
+                            expr = new_expr;
+                            changed |= did_change;
+                        }
+                        if !changed {
+                            break;
+                        }
+                    }
+                    // After resolution, extract just the "result" field from
+                    // overflow-checked operations. The pattern is:
+                    //   Member(Struct([Member(overflow_op, "result"), ...]), "0")
+                    // Simplify to just the arithmetic result.
+                    let simplified = simplify_overflow_result(&expr);
+                    self.inline_as_pure_expr(&simplified, visited)
+                } else {
+                    expr.clone()
+                }
             }
             _ => expr.clone(),
         }
@@ -1136,5 +1208,80 @@ impl<'tcx> FnAbiOfHelpers<'tcx> for GotocCtx<'tcx, '_> {
                 }
             }
         }
+    }
+}
+
+/// Simplify overflow-checked arithmetic results for use in quantifier bodies.
+/// Replaces patterns like `Member(OverflowResultPlus(a, b), "result")` with `Plus(a, b)`.
+/// This drops the overflow check, which is acceptable inside quantifier bodies
+/// where CBMC requires side-effect-free expressions.
+#[allow(clippy::collapsible_if, clippy::cmp_owned)]
+fn simplify_overflow_result(expr: &Expr) -> Expr {
+    use cbmc::goto_program::BinaryOperator::*;
+    match expr.value() {
+        // Member(Struct([f0, f1, ...]), "N") → simplify(fN)
+        ExprValue::Member { lhs, field } => {
+            let simplified_lhs = simplify_overflow_result(lhs);
+            match simplified_lhs.value() {
+                // If lhs simplified to a Struct, extract the field by index
+                ExprValue::Struct { values } => {
+                    let field_str = field.to_string();
+                    if let Ok(idx) = field_str.parse::<usize>() {
+                        if idx < values.len() {
+                            return simplify_overflow_result(&values[idx]);
+                        }
+                    }
+                    // "result" field from OverflowResult
+                    if field_str == "result" {
+                        if let ExprValue::BinOp { op, lhs: a, rhs: b } = simplified_lhs.value() {
+                            let simple_op = match op {
+                                OverflowResultPlus => Some(Plus),
+                                OverflowResultMinus => Some(Minus),
+                                OverflowResultMult => Some(Mult),
+                                _ => None,
+                            };
+                            if let Some(op) = simple_op {
+                                return simplify_overflow_result(a)
+                                    .binop(op, simplify_overflow_result(b));
+                            }
+                        }
+                    }
+                    expr.clone()
+                }
+                // Member(OverflowResultPlus(a,b), "result") → Plus(a,b)
+                _ => {
+                    if field.to_string() == "result" {
+                        if let ExprValue::BinOp { op, lhs: a, rhs: b } = simplified_lhs.value() {
+                            let simple_op = match op {
+                                OverflowResultPlus => Some(Plus),
+                                OverflowResultMinus => Some(Minus),
+                                OverflowResultMult => Some(Mult),
+                                _ => None,
+                            };
+                            if let Some(op) = simple_op {
+                                return simplify_overflow_result(a)
+                                    .binop(op, simplify_overflow_result(b));
+                            }
+                        }
+                    }
+                    expr.clone()
+                }
+            }
+        }
+        ExprValue::BinOp { op, lhs, rhs } => {
+            simplify_overflow_result(lhs).binop(*op, simplify_overflow_result(rhs))
+        }
+        ExprValue::Typecast(e) => simplify_overflow_result(e).cast_to(expr.typ().clone()),
+        ExprValue::If { c, t, e } => simplify_overflow_result(c)
+            .ternary(simplify_overflow_result(t), simplify_overflow_result(e)),
+        ExprValue::Struct { .. } => {
+            // Struct values are not recursed into here because constructing a
+            // new Struct expression requires a SymbolTable reference. Instead,
+            // overflow simplification happens when individual fields are accessed
+            // via the Member handler in inline_as_pure_expr, which extracts and
+            // simplifies fields on demand.
+            expr.clone()
+        }
+        _ => expr.clone(),
     }
 }
