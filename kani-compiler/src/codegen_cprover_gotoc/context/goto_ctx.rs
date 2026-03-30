@@ -472,7 +472,7 @@ impl GotocCtx<'_, '_> {
         let result = if let Some(params) = self.symbol_table.lookup_parameters(*fn_id) {
             let mut expr = flattened;
             for (param, arg) in params.iter().zip(arguments.iter()) {
-                (expr, _) = expr.substitute_symbol(param, arg);
+                expr = expr.substitute_symbol(param, arg).0;
             }
             expr
         } else {

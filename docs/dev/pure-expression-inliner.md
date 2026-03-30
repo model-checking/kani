@@ -7,6 +7,29 @@ within expression trees as side-effect-free expressions. Unlike the existing
 `inline_function_calls_in_expr` which wraps inlined bodies in CBMC
 `StatementExpression` nodes, this produces pure expression trees.
 
+## How It Works
+
+For a function call `f(arg1, arg2)` where `f` is defined as:
+```c
+ret_type f(param1, param2) {
+    local1 = expr1(param1);
+    local2 = expr2(local1, param2);
+    return local2;
+}
+```
+
+The pure inliner:
+1. **Collects assignments**: `{local1 → expr1(param1), local2 → expr2(local1, param2)}`
+2. **Finds the return symbol**: `local2`
+3. **Resolves intermediates**: `local2` → `expr2(local1, param2)` → `expr2(expr1(param1), param2)`
+4. **Flattens StatementExpressions**: e.g., `({ assert(2!=0); assume(2!=0); i%2 })` → `i%2`
+5. **Substitutes parameters**: `expr2(expr1(arg1), arg2)`
+6. **Recursively inlines** any remaining function calls in the result
+
+The resolution step (3) uses `Expr::substitute_symbol` iteratively until a
+fixed point is reached. Change detection uses the `(Expr, bool)` return from
+`substitute_symbol` — no string comparison needed.
+
 ## Soundness Implications
 
 **Checked arithmetic in quantifier bodies**: When flattening `StatementExpression`
