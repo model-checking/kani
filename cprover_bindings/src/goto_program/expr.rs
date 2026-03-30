@@ -353,6 +353,74 @@ impl Expr {
 
 /// Predicates
 impl Expr {
+    /// Replace all occurrences of `Symbol { identifier: old_id }` with `replacement`.
+    /// Produces a new expression tree with all substitutions applied.
+    /// Used for quantifier codegen to inline function bodies as pure expressions.
+    pub fn substitute_symbol(self, old_id: &InternedString, replacement: &Expr) -> Expr {
+        let loc = self.location;
+        let typ = self.typ.clone();
+        let ann = self.size_of_annotation.clone();
+        let mk = |value: ExprValue| Expr {
+            value: Box::new(value),
+            typ: typ.clone(),
+            location: loc,
+            size_of_annotation: ann.clone(),
+        };
+        let sub = |e: Expr| e.substitute_symbol(old_id, replacement);
+        let sub_vec = |v: Vec<Expr>| v.into_iter().map(|e| sub(e)).collect();
+
+        match *self.value {
+            ExprValue::Symbol { identifier } if identifier == *old_id => {
+                replacement.clone().with_location(loc)
+            }
+            ExprValue::AddressOf(e) => mk(AddressOf(sub(e))),
+            ExprValue::Dereference(e) => mk(Dereference(sub(e))),
+            ExprValue::Typecast(e) => mk(Typecast(sub(e))),
+            ExprValue::UnOp { op, e } => mk(UnOp { op, e: sub(e) }),
+            ExprValue::BinOp { op, lhs, rhs } => mk(BinOp { op, lhs: sub(lhs), rhs: sub(rhs) }),
+            ExprValue::If { c, t, e } => mk(If { c: sub(c), t: sub(t), e: sub(e) }),
+            ExprValue::Index { array, index } => mk(Index { array: sub(array), index: sub(index) }),
+            ExprValue::Member { lhs, field } => mk(Member { lhs: sub(lhs), field }),
+            ExprValue::FunctionCall { function, arguments } => {
+                mk(FunctionCall { function: sub(function), arguments: sub_vec(arguments) })
+            }
+            ExprValue::Array { elems } => mk(Array { elems: sub_vec(elems) }),
+            ExprValue::Struct { values } => mk(Struct { values: sub_vec(values) }),
+            ExprValue::Assign { left, right } => mk(Assign { left: sub(left), right: sub(right) }),
+            ExprValue::ReadOk { ptr, size } => mk(ReadOk { ptr: sub(ptr), size: sub(size) }),
+            ExprValue::ArrayOf { elem } => mk(ArrayOf { elem: sub(elem) }),
+            ExprValue::ByteExtract { e, offset } => mk(ByteExtract { e: sub(e), offset }),
+            ExprValue::SelfOp { op, e } => mk(SelfOp { op, e: sub(e) }),
+            ExprValue::Union { value, field } => mk(Union { value: sub(value), field }),
+            ExprValue::Forall { variable, domain } => {
+                mk(Forall { variable: sub(variable), domain: sub(domain) })
+            }
+            ExprValue::Exists { variable, domain } => {
+                mk(Exists { variable: sub(variable), domain: sub(domain) })
+            }
+            ExprValue::Vector { elems } => mk(Vector { elems: sub_vec(elems) }),
+            ExprValue::ShuffleVector { vector1, vector2, indexes } => mk(ShuffleVector {
+                vector1: sub(vector1),
+                vector2: sub(vector2),
+                indexes: sub_vec(indexes),
+            }),
+            // Leaf nodes and statement expressions — no substitution
+            ExprValue::Symbol { .. }
+            | ExprValue::IntConstant(_)
+            | ExprValue::BoolConstant(_)
+            | ExprValue::CBoolConstant(_)
+            | ExprValue::DoubleConstant(_)
+            | ExprValue::FloatConstant(_)
+            | ExprValue::Float16Constant(_)
+            | ExprValue::Float128Constant(_)
+            | ExprValue::PointerConstant(_)
+            | ExprValue::StringConstant { .. }
+            | ExprValue::Nondet
+            | ExprValue::EmptyUnion
+            | ExprValue::StatementExpression { .. } => self,
+        }
+    }
+
     pub fn is_int_constant(&self) -> bool {
         match *self.value {
             IntConstant(_) => true,
@@ -1760,5 +1828,100 @@ impl Expr {
             }
         }
         exprs
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sym(name: &str) -> Expr {
+        Expr::symbol_expression(name, Type::signed_int(32))
+    }
+
+    fn int(val: i64) -> Expr {
+        Expr::int_constant(val, Type::signed_int(32))
+    }
+
+    #[test]
+    fn substitute_symbol_leaf_match() {
+        let old: InternedString = "x".into();
+        let replacement = int(42);
+        let result = sym("x").substitute_symbol(&old, &replacement);
+        assert!(matches!(result.value(), ExprValue::IntConstant(v) if *v == 42.into()));
+    }
+
+    #[test]
+    fn substitute_symbol_leaf_no_match() {
+        let old: InternedString = "x".into();
+        let replacement = int(42);
+        let result = sym("y").substitute_symbol(&old, &replacement);
+        assert!(
+            matches!(result.value(), ExprValue::Symbol { identifier } if identifier.to_string() == "y")
+        );
+    }
+
+    #[test]
+    fn substitute_symbol_in_binop() {
+        let old: InternedString = "x".into();
+        let replacement = int(10);
+        // x + 1 → 10 + 1
+        let expr = sym("x").plus(int(1));
+        let result = expr.substitute_symbol(&old, &replacement);
+        if let ExprValue::BinOp { lhs, rhs, .. } = result.value() {
+            assert!(matches!(lhs.value(), ExprValue::IntConstant(v) if *v == 10.into()));
+            assert!(matches!(rhs.value(), ExprValue::IntConstant(v) if *v == 1.into()));
+        } else {
+            panic!("Expected BinOp");
+        }
+    }
+
+    #[test]
+    fn substitute_symbol_nested() {
+        let old: InternedString = "x".into();
+        let replacement = int(5);
+        // (x + x) * 2 → (5 + 5) * 2
+        let expr = sym("x").plus(sym("x")).mul(int(2));
+        let result = expr.substitute_symbol(&old, &replacement);
+        if let ExprValue::BinOp { lhs, .. } = result.value() {
+            if let ExprValue::BinOp { lhs: ll, rhs: lr, .. } = lhs.value() {
+                assert!(matches!(ll.value(), ExprValue::IntConstant(v) if *v == 5.into()));
+                assert!(matches!(lr.value(), ExprValue::IntConstant(v) if *v == 5.into()));
+            } else {
+                panic!("Expected inner BinOp");
+            }
+        } else {
+            panic!("Expected outer BinOp");
+        }
+    }
+
+    #[test]
+    fn substitute_symbol_in_typecast() {
+        let old: InternedString = "x".into();
+        let replacement = int(7);
+        let expr = sym("x").cast_to(Type::signed_int(64));
+        let result = expr.substitute_symbol(&old, &replacement);
+        if let ExprValue::Typecast(inner) = result.value() {
+            assert!(matches!(inner.value(), ExprValue::IntConstant(v) if *v == 7.into()));
+        } else {
+            panic!("Expected Typecast");
+        }
+    }
+
+    #[test]
+    fn substitute_preserves_unrelated_symbols() {
+        let old: InternedString = "x".into();
+        let replacement = int(1);
+        // y + x → y + 1
+        let expr = sym("y").plus(sym("x"));
+        let result = expr.substitute_symbol(&old, &replacement);
+        if let ExprValue::BinOp { lhs, rhs, .. } = result.value() {
+            assert!(
+                matches!(lhs.value(), ExprValue::Symbol { identifier } if identifier.to_string() == "y")
+            );
+            assert!(matches!(rhs.value(), ExprValue::IntConstant(v) if *v == 1.into()));
+        } else {
+            panic!("Expected BinOp");
+        }
     }
 }
