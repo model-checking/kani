@@ -345,17 +345,16 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
 /// `StatementExpression` nodes, this produces expressions using only `If` (ternary),
 /// `BinOp`, `UnOp`, etc. — no statements, no gotos, no labels.
 ///
-/// This is intended for CBMC quantifier bodies which reject side effects, and will
-/// be used by the `quantifier-pure-expressions` branch to generate quantifier domains
-/// directly as pure expressions during codegen.
-///
 /// **Soundness note**: When flattening `StatementExpression` nodes (e.g., from checked
 /// arithmetic), runtime checks (Assert/Assume for overflow, division by zero) are dropped.
 /// Users must ensure arithmetic in quantifier predicates cannot overflow or divide by zero.
+///
+/// TODO(#4567): Remove `#[allow(dead_code)]` when used by quantifier-pure-expressions branch.
 #[allow(dead_code)]
 impl GotocCtx<'_, '_> {
     /// Inline all function calls in `expr` as pure expressions.
-    pub fn inline_as_pure_expr(&self, expr: &Expr, visited: &mut HashSet<InternedString>) -> Expr {
+    /// Prefer `inline_as_pure_expr_toplevel` for the public entry point.
+    fn inline_as_pure_expr(&self, expr: &Expr, visited: &mut HashSet<InternedString>) -> Expr {
         match expr.value() {
             ExprValue::FunctionCall { function, arguments } => {
                 if let ExprValue::Symbol { identifier } = function.value() {
@@ -373,7 +372,13 @@ impl GotocCtx<'_, '_> {
                     UnaryOperator::Not => inlined.not(),
                     UnaryOperator::Bitnot => inlined.bitnot(),
                     UnaryOperator::UnaryMinus => inlined.neg(),
-                    _ => expr.clone(),
+                    other => {
+                        tracing::warn!(
+                            ?other,
+                            "Unknown UnaryOperator in pure inliner, preserving original"
+                        );
+                        expr.clone()
+                    }
                 }
             }
             ExprValue::Typecast(e) => {
@@ -402,6 +407,8 @@ impl GotocCtx<'_, '_> {
                 self.inline_as_pure_expr(domain, visited),
             ),
             ExprValue::StatementExpression { statements, .. } => {
+                // Extract the final expression from the statement block.
+                // This handles checked arithmetic (Assert + Assume + Expression).
                 for stmt in statements.iter().rev() {
                     if let StmtBody::Expression(e) = stmt.body() {
                         return self.inline_as_pure_expr(e, visited);
@@ -413,6 +420,14 @@ impl GotocCtx<'_, '_> {
         }
     }
 
+    /// Public entry point for pure expression inlining.
+    pub fn inline_as_pure_expr_toplevel(&self, expr: &Expr) -> Expr {
+        self.inline_as_pure_expr(expr, &mut HashSet::new())
+    }
+
+    /// Inline a single function call as a pure expression.
+    /// Returns the original expression unchanged if the function cannot be inlined
+    /// (recursive, no body, non-symbol return).
     fn inline_call_as_pure_expr(
         &self,
         fn_id: &InternedString,
@@ -420,7 +435,10 @@ impl GotocCtx<'_, '_> {
         original_expr: &Expr,
         visited: &mut HashSet<InternedString>,
     ) -> Expr {
-        assert!(!visited.contains(fn_id), "Recursive function call in quantifier body: {fn_id}");
+        if visited.contains(fn_id) {
+            tracing::warn!(%fn_id, "Recursive function in quantifier body, cannot inline as pure expression");
+            return original_expr.clone();
+        }
 
         let function_body = self.symbol_table.lookup(*fn_id).and_then(|sym| match &sym.value {
             SymbolValues::Stmt(stmt) => Some(stmt.clone()),
@@ -438,6 +456,7 @@ impl GotocCtx<'_, '_> {
 
         let return_sym = Self::find_return_symbol_in_stmt(&body);
         let Some(ret_sym) = return_sym else {
+            tracing::debug!(%fn_id, "No return symbol found, cannot inline as pure expression");
             visited.remove(fn_id);
             return original_expr.clone();
         };
@@ -453,7 +472,7 @@ impl GotocCtx<'_, '_> {
         let result = if let Some(params) = self.symbol_table.lookup_parameters(*fn_id) {
             let mut expr = flattened;
             for (param, arg) in params.iter().zip(arguments.iter()) {
-                expr = expr.substitute_symbol(param, arg);
+                (expr, _) = expr.substitute_symbol(param, arg);
             }
             expr
         } else {
@@ -464,10 +483,22 @@ impl GotocCtx<'_, '_> {
         result
     }
 
+    /// Collect all assignments (symbol = expr) from a statement tree.
+    /// Note: for variables assigned multiple times (e.g., in if/else branches),
+    /// only the last assignment is kept. This is a known limitation — functions
+    /// with control-flow-dependent assignments cannot be fully inlined as pure
+    /// expressions.
     fn collect_assignments_from_stmt(stmt: &Stmt, map: &mut HashMap<InternedString, Expr>) {
         match stmt.body() {
             StmtBody::Assign { lhs, rhs } => {
                 if let ExprValue::Symbol { identifier } = lhs.value() {
+                    if map.contains_key(identifier) {
+                        tracing::debug!(
+                            %identifier,
+                            "Multiple assignments to same variable in function body; \
+                             last-write-wins may produce incorrect pure expression"
+                        );
+                    }
                     map.insert(*identifier, rhs.clone());
                 }
             }
@@ -481,12 +512,19 @@ impl GotocCtx<'_, '_> {
         }
     }
 
+    /// Find the symbol identifier returned by a Return statement.
+    /// Returns None (with a debug diagnostic) if the return is a direct expression
+    /// rather than a symbol reference.
     fn find_return_symbol_in_stmt(stmt: &Stmt) -> Option<InternedString> {
         match stmt.body() {
             StmtBody::Return(Some(expr)) => {
                 if let ExprValue::Symbol { identifier } = expr.value() {
                     Some(*identifier)
                 } else {
+                    tracing::debug!(
+                        ?expr,
+                        "Return expression is not a symbol, cannot inline as pure expression"
+                    );
                     None
                 }
             }
@@ -503,20 +541,20 @@ impl GotocCtx<'_, '_> {
         }
     }
 
+    /// Iteratively resolve intermediate variables in an expression.
+    /// Uses the `changed` flag from `substitute_symbol` for reliable change detection.
     fn resolve_intermediates_iterative(
         mut expr: Expr,
         assignments: &HashMap<InternedString, Expr>,
     ) -> Expr {
         for _ in 0..assignments.len() + 1 {
-            let mut changed = false;
+            let mut any_changed = false;
             for (sym, rhs) in assignments {
-                let new_expr = expr.clone().substitute_symbol(sym, rhs);
-                if format!("{new_expr:?}") != format!("{expr:?}") {
-                    expr = new_expr;
-                    changed = true;
-                }
+                let (new_expr, changed) = expr.substitute_symbol(sym, rhs);
+                expr = new_expr;
+                any_changed |= changed;
             }
-            if !changed {
+            if !any_changed {
                 break;
             }
         }

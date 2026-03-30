@@ -354,9 +354,11 @@ impl Expr {
 /// Predicates
 impl Expr {
     /// Replace all occurrences of `Symbol { identifier: old_id }` with `replacement`.
-    /// Produces a new expression tree with all substitutions applied.
-    /// Used for quantifier codegen to inline function bodies as pure expressions.
-    pub fn substitute_symbol(self, old_id: &InternedString, replacement: &Expr) -> Expr {
+    /// Returns `(new_expr, changed)` where `changed` indicates if any substitution occurred.
+    ///
+    /// Note: Does NOT recurse into `StatementExpression` nodes. These must be
+    /// flattened first via `inline_as_pure_expr` before substitution.
+    pub fn substitute_symbol(self, old_id: &InternedString, replacement: &Expr) -> (Expr, bool) {
         let loc = self.location;
         let typ = self.typ.clone();
         let ann = self.size_of_annotation.clone();
@@ -367,44 +369,119 @@ impl Expr {
             size_of_annotation: ann.clone(),
         };
         let sub = |e: Expr| e.substitute_symbol(old_id, replacement);
-        let sub_vec = |v: Vec<Expr>| v.into_iter().map(&sub).collect();
+        let sub_vec = |v: Vec<Expr>| -> (Vec<Expr>, bool) {
+            let mut changed = false;
+            let v: Vec<_> = v
+                .into_iter()
+                .map(|e| {
+                    let (e, c) = sub(e);
+                    changed |= c;
+                    e
+                })
+                .collect();
+            (v, changed)
+        };
 
         match *self.value {
             ExprValue::Symbol { identifier } if identifier == *old_id => {
-                replacement.clone().with_location(loc)
+                (replacement.clone().with_location(loc), true)
             }
-            ExprValue::AddressOf(e) => mk(AddressOf(sub(e))),
-            ExprValue::Dereference(e) => mk(Dereference(sub(e))),
-            ExprValue::Typecast(e) => mk(Typecast(sub(e))),
-            ExprValue::UnOp { op, e } => mk(UnOp { op, e: sub(e) }),
-            ExprValue::BinOp { op, lhs, rhs } => mk(BinOp { op, lhs: sub(lhs), rhs: sub(rhs) }),
-            ExprValue::If { c, t, e } => mk(If { c: sub(c), t: sub(t), e: sub(e) }),
-            ExprValue::Index { array, index } => mk(Index { array: sub(array), index: sub(index) }),
-            ExprValue::Member { lhs, field } => mk(Member { lhs: sub(lhs), field }),
+            ExprValue::AddressOf(e) => {
+                let (e, c) = sub(e);
+                (mk(AddressOf(e)), c)
+            }
+            ExprValue::Dereference(e) => {
+                let (e, c) = sub(e);
+                (mk(Dereference(e)), c)
+            }
+            ExprValue::Typecast(e) => {
+                let (e, c) = sub(e);
+                (mk(Typecast(e)), c)
+            }
+            ExprValue::UnOp { op, e } => {
+                let (e, c) = sub(e);
+                (mk(UnOp { op, e }), c)
+            }
+            ExprValue::BinOp { op, lhs, rhs } => {
+                let (l, c1) = sub(lhs);
+                let (r, c2) = sub(rhs);
+                (mk(BinOp { op, lhs: l, rhs: r }), c1 || c2)
+            }
+            ExprValue::If { c, t, e } => {
+                let (c, c1) = sub(c);
+                let (t, c2) = sub(t);
+                let (e, c3) = sub(e);
+                (mk(If { c, t, e }), c1 || c2 || c3)
+            }
+            ExprValue::Index { array, index } => {
+                let (a, c1) = sub(array);
+                let (i, c2) = sub(index);
+                (mk(Index { array: a, index: i }), c1 || c2)
+            }
+            ExprValue::Member { lhs, field } => {
+                let (l, c) = sub(lhs);
+                (mk(Member { lhs: l, field }), c)
+            }
             ExprValue::FunctionCall { function, arguments } => {
-                mk(FunctionCall { function: sub(function), arguments: sub_vec(arguments) })
+                let (f, c1) = sub(function);
+                let (a, c2) = sub_vec(arguments);
+                (mk(FunctionCall { function: f, arguments: a }), c1 || c2)
             }
-            ExprValue::Array { elems } => mk(Array { elems: sub_vec(elems) }),
-            ExprValue::Struct { values } => mk(Struct { values: sub_vec(values) }),
-            ExprValue::Assign { left, right } => mk(Assign { left: sub(left), right: sub(right) }),
-            ExprValue::ReadOk { ptr, size } => mk(ReadOk { ptr: sub(ptr), size: sub(size) }),
-            ExprValue::ArrayOf { elem } => mk(ArrayOf { elem: sub(elem) }),
-            ExprValue::ByteExtract { e, offset } => mk(ByteExtract { e: sub(e), offset }),
-            ExprValue::SelfOp { op, e } => mk(SelfOp { op, e: sub(e) }),
-            ExprValue::Union { value, field } => mk(Union { value: sub(value), field }),
+            ExprValue::Array { elems } => {
+                let (e, c) = sub_vec(elems);
+                (mk(Array { elems: e }), c)
+            }
+            ExprValue::Struct { values } => {
+                let (v, c) = sub_vec(values);
+                (mk(Struct { values: v }), c)
+            }
+            ExprValue::Assign { left, right } => {
+                let (l, c1) = sub(left);
+                let (r, c2) = sub(right);
+                (mk(Assign { left: l, right: r }), c1 || c2)
+            }
+            ExprValue::ReadOk { ptr, size } => {
+                let (p, c1) = sub(ptr);
+                let (s, c2) = sub(size);
+                (mk(ReadOk { ptr: p, size: s }), c1 || c2)
+            }
+            ExprValue::ArrayOf { elem } => {
+                let (e, c) = sub(elem);
+                (mk(ArrayOf { elem: e }), c)
+            }
+            ExprValue::ByteExtract { e, offset } => {
+                let (e, c) = sub(e);
+                (mk(ByteExtract { e, offset }), c)
+            }
+            ExprValue::SelfOp { op, e } => {
+                let (e, c) = sub(e);
+                (mk(SelfOp { op, e }), c)
+            }
+            ExprValue::Union { value, field } => {
+                let (v, c) = sub(value);
+                (mk(Union { value: v, field }), c)
+            }
             ExprValue::Forall { variable, domain } => {
-                mk(Forall { variable: sub(variable), domain: sub(domain) })
+                let (v, c1) = sub(variable);
+                let (d, c2) = sub(domain);
+                (mk(Forall { variable: v, domain: d }), c1 || c2)
             }
             ExprValue::Exists { variable, domain } => {
-                mk(Exists { variable: sub(variable), domain: sub(domain) })
+                let (v, c1) = sub(variable);
+                let (d, c2) = sub(domain);
+                (mk(Exists { variable: v, domain: d }), c1 || c2)
             }
-            ExprValue::Vector { elems } => mk(Vector { elems: sub_vec(elems) }),
-            ExprValue::ShuffleVector { vector1, vector2, indexes } => mk(ShuffleVector {
-                vector1: sub(vector1),
-                vector2: sub(vector2),
-                indexes: sub_vec(indexes),
-            }),
-            // Leaf nodes and statement expressions — no substitution
+            ExprValue::Vector { elems } => {
+                let (e, c) = sub_vec(elems);
+                (mk(Vector { elems: e }), c)
+            }
+            ExprValue::ShuffleVector { vector1, vector2, indexes } => {
+                let (v1, c1) = sub(vector1);
+                let (v2, c2) = sub(vector2);
+                let (ix, c3) = sub_vec(indexes);
+                (mk(ShuffleVector { vector1: v1, vector2: v2, indexes: ix }), c1 || c2 || c3)
+            }
+            // Leaf nodes — no substitution possible
             ExprValue::Symbol { .. }
             | ExprValue::IntConstant(_)
             | ExprValue::BoolConstant(_)
@@ -416,8 +493,10 @@ impl Expr {
             | ExprValue::PointerConstant(_)
             | ExprValue::StringConstant { .. }
             | ExprValue::Nondet
-            | ExprValue::EmptyUnion
-            | ExprValue::StatementExpression { .. } => self,
+            | ExprValue::EmptyUnion => (self, false),
+            // StatementExpression: not recursed into — must be flattened via
+            // inline_as_pure_expr before substitution.
+            ExprValue::StatementExpression { .. } => (self, false),
         }
     }
 
@@ -1847,7 +1926,7 @@ mod tests {
     fn substitute_symbol_leaf_match() {
         let old: InternedString = "x".into();
         let replacement = int(42);
-        let result = sym("x").substitute_symbol(&old, &replacement);
+        let (result, _changed) = sym("x").substitute_symbol(&old, &replacement);
         assert!(matches!(result.value(), ExprValue::IntConstant(v) if *v == 42.into()));
     }
 
@@ -1855,10 +1934,8 @@ mod tests {
     fn substitute_symbol_leaf_no_match() {
         let old: InternedString = "x".into();
         let replacement = int(42);
-        let result = sym("y").substitute_symbol(&old, &replacement);
-        assert!(
-            matches!(result.value(), ExprValue::Symbol { identifier } if identifier.to_string() == "y")
-        );
+        let (result, _changed) = sym("y").substitute_symbol(&old, &replacement);
+        assert!(matches!(result.value(), ExprValue::Symbol { identifier } if *identifier == "y"));
     }
 
     #[test]
@@ -1867,7 +1944,7 @@ mod tests {
         let replacement = int(10);
         // x + 1 → 10 + 1
         let expr = sym("x").plus(int(1));
-        let result = expr.substitute_symbol(&old, &replacement);
+        let (result, _changed) = expr.substitute_symbol(&old, &replacement);
         if let ExprValue::BinOp { lhs, rhs, .. } = result.value() {
             assert!(matches!(lhs.value(), ExprValue::IntConstant(v) if *v == 10.into()));
             assert!(matches!(rhs.value(), ExprValue::IntConstant(v) if *v == 1.into()));
@@ -1882,7 +1959,7 @@ mod tests {
         let replacement = int(5);
         // (x + x) * 2 → (5 + 5) * 2
         let expr = sym("x").plus(sym("x")).mul(int(2));
-        let result = expr.substitute_symbol(&old, &replacement);
+        let (result, _changed) = expr.substitute_symbol(&old, &replacement);
         if let ExprValue::BinOp { lhs, .. } = result.value() {
             if let ExprValue::BinOp { lhs: ll, rhs: lr, .. } = lhs.value() {
                 assert!(matches!(ll.value(), ExprValue::IntConstant(v) if *v == 5.into()));
@@ -1900,7 +1977,7 @@ mod tests {
         let old: InternedString = "x".into();
         let replacement = int(7);
         let expr = sym("x").cast_to(Type::signed_int(64));
-        let result = expr.substitute_symbol(&old, &replacement);
+        let (result, _changed) = expr.substitute_symbol(&old, &replacement);
         if let ExprValue::Typecast(inner) = result.value() {
             assert!(matches!(inner.value(), ExprValue::IntConstant(v) if *v == 7.into()));
         } else {
@@ -1914,11 +1991,9 @@ mod tests {
         let replacement = int(1);
         // y + x → y + 1
         let expr = sym("y").plus(sym("x"));
-        let result = expr.substitute_symbol(&old, &replacement);
+        let (result, _changed) = expr.substitute_symbol(&old, &replacement);
         if let ExprValue::BinOp { lhs, rhs, .. } = result.value() {
-            assert!(
-                matches!(lhs.value(), ExprValue::Symbol { identifier } if identifier.to_string() == "y")
-            );
+            assert!(matches!(lhs.value(), ExprValue::Symbol { identifier } if *identifier == "y"));
             assert!(matches!(rhs.value(), ExprValue::IntConstant(v) if *v == 1.into()));
         } else {
             panic!("Expected BinOp");
