@@ -18,6 +18,7 @@ on:
 jobs:
   perf-benchcomp:
     runs-on: ubuntu-24.04
+    timeout-minutes: 120
     steps:
       - name: Save push event HEAD and HEAD~ to environment variables
         if: ${{ github.event_name == 'push' }}
@@ -61,13 +62,17 @@ jobs:
         run: rm -rf ./old/tests/perf ; cp -r ./new/tests/perf ./old/tests/
 
       - name: Run benchcomp
-        run: |
-          new/tools/benchcomp/bin/benchcomp \
-            --config new/tools/benchcomp/configs/perf-regression.yaml \
-            run
-          new/tools/benchcomp/bin/benchcomp \
-            --config new/tools/benchcomp/configs/perf-regression.yaml \
-            collate
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 100
+          max_attempts: 2
+          command: |
+            new/tools/benchcomp/bin/benchcomp \
+              --config new/tools/benchcomp/configs/perf-regression.yaml \
+              run
+            new/tools/benchcomp/bin/benchcomp \
+              --config new/tools/benchcomp/configs/perf-regression.yaml \
+              collate
 
       - name: Perf Regression Results Table
         run: |
