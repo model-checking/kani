@@ -367,6 +367,28 @@ One possibility would be writing proofs about stubs (possibly relating their beh
 - Our proposed approach will not work with `--concrete-playback` (for now).
 - We are only able to apply abstractions to some dependencies if the user enables the MIR linker.
 
+### `stub_verified` and `Arbitrary` interaction
+
+When a type's `kani::Arbitrary` implementation calls a function targeted by
+`#[kani::stub_verified]`, the global contract replacement would normally apply
+inside `Arbitrary::any()` too, causing infinite recursion during test input
+generation.
+
+To prevent this, `kani::any()` tracks nesting depth via an internal counter
+(`ARBITRARY_NESTING_DEPTH`) managed by an RAII guard. The contract `REPLACE`
+match arm checks this counter — when inside an Arbitrary context (depth > 0),
+it executes the original function body instead of the contract replacement.
+
+This is sound because the real function produces a subset of valid outputs
+compared to the contract abstraction (which havocs all outputs). Using the real
+function during Arbitrary input generation gives tighter (more precise) inputs,
+not less sound verification.
+
+The counter (not a boolean) correctly handles nested `kani::any()` calls, e.g.,
+when `Arbitrary` for a struct calls `kani::any()` for each field. All entry
+points (`any()`, `bounded_any()`, `any_where()`, `write_any_slim()`,
+`write_any_slice()`) route through the guard.
+
 ## Future possibilities
 
 - It would increase the utility of stubbing if we supported stubs for types.

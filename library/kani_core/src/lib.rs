@@ -275,6 +275,7 @@ macro_rules! kani_intrinsics {
         #[kanitool::fn_marker = "AnyModel"]
         #[inline(always)]
         pub fn any<T: Arbitrary>() -> T {
+            let _guard = internal::ArbitraryContextGuard::enter();
             T::any()
         }
 
@@ -284,6 +285,7 @@ macro_rules! kani_intrinsics {
         /// *Note*: Any proof using a bounded symbolic value is only valid up to that bound.
         #[inline(always)]
         pub fn bounded_any<T: BoundedArbitrary, const N: usize>() -> T {
+            let _guard = internal::ArbitraryContextGuard::enter();
             T::bounded_any::<N>()
         }
 
@@ -325,7 +327,7 @@ macro_rules! kani_intrinsics {
         /// valid values for type `T`.
         #[inline(always)]
         pub fn any_where<T: Arbitrary, F: FnOnce(&T) -> bool>(f: F) -> T {
-            let result = T::any();
+            let result = any();
             assume(f(&result));
             result
         }
@@ -535,7 +537,7 @@ macro_rules! kani_intrinsics {
             #[kanitool::fn_marker = "WriteAnySliceModel"]
             #[inline(always)]
             pub unsafe fn write_any_slice<T: Arbitrary>(slice: *mut [T]) {
-                (*slice).fill_with(T::any)
+                (*slice).fill_with(|| super::any::<T>())
             }
 
             /// Fill in a pointer with kani::any.
@@ -543,7 +545,7 @@ macro_rules! kani_intrinsics {
             #[kanitool::fn_marker = "WriteAnySlimModel"]
             #[inline(always)]
             pub unsafe fn write_any_slim<T: Arbitrary>(pointer: *mut T) {
-                ptr::write(pointer, T::any())
+                ptr::write(pointer, super::any::<T>())
             }
 
             /// Fill in a str with kani::any.
@@ -600,6 +602,71 @@ macro_rules! kani_intrinsics {
 
             /// Insert the contract into the body of the function as assertion(s).
             pub const ASSERT: Mode = 4;
+
+            /// Nesting depth counter for `Arbitrary::any()` calls — see
+            /// `docs/dev/stub-verified-arbitrary.md` for design rationale.
+            /// Not public — only accessible via `in_arbitrary_context()` and
+            /// `ArbitraryContextGuard`.
+            ///
+            /// This static is guaranteed to be a single instance per compilation
+            /// unit: both `kani_lib!(kani)` and `kani_lib!(core)` expand
+            /// `kani_intrinsics!()` exactly once, producing one `kani::internal`
+            /// module with one copy of this static.
+            static mut ARBITRARY_NESTING_DEPTH: u32 = 0;
+
+            /// Increment the arbitrary nesting depth counter.
+            /// Note: `debug_assert!` guards are active in concrete playback
+            /// but compiled away during symbolic execution (release-like MIR).
+            #[inline(always)]
+            fn enter_arbitrary_context() {
+                unsafe {
+                    debug_assert!(
+                        ARBITRARY_NESTING_DEPTH < u32::MAX,
+                        "ArbitraryContextGuard: nesting depth overflow"
+                    );
+                    ARBITRARY_NESTING_DEPTH = ARBITRARY_NESTING_DEPTH.wrapping_add(1);
+                }
+            }
+
+            /// Decrement the arbitrary nesting depth counter.
+            #[inline(always)]
+            fn exit_arbitrary_context() {
+                unsafe {
+                    debug_assert!(
+                        ARBITRARY_NESTING_DEPTH > 0,
+                        "ArbitraryContextGuard: mismatched exit (underflow)"
+                    );
+                    ARBITRARY_NESTING_DEPTH = ARBITRARY_NESTING_DEPTH.wrapping_sub(1);
+                }
+            }
+
+            /// Returns true if we are inside a `kani::any()` call (i.e., during
+            /// `Arbitrary` input generation). Used by the contract `REPLACE` arm
+            /// to fall back to the original function body.
+            #[inline(always)]
+            pub fn in_arbitrary_context() -> bool {
+                unsafe { ARBITRARY_NESTING_DEPTH > 0 }
+            }
+
+            /// RAII guard that increments the arbitrary nesting depth on creation
+            /// and decrements it on drop. Ensures the counter is correctly
+            /// maintained even if `T::any()` panics (concrete playback mode).
+            pub struct ArbitraryContextGuard;
+
+            impl ArbitraryContextGuard {
+                #[inline(always)]
+                pub fn enter() -> Self {
+                    enter_arbitrary_context();
+                    ArbitraryContextGuard
+                }
+            }
+
+            impl Drop for ArbitraryContextGuard {
+                #[inline(always)]
+                fn drop(&mut self) {
+                    exit_arbitrary_context();
+                }
+            }
 
             /// Creates a non-fatal property with the specified condition and message.
             ///
