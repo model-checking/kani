@@ -1198,7 +1198,7 @@ impl GotocCtx<'_, '_> {
         // Note: We convert the integer bounds to float for comparison.
         // For very large integer types (i128, u128), the float conversion may lose precision,
         // but this is acceptable because:
-        // 1. Any float value that's truly larger than MAX_INT will still compare as > MAX_INT
+        // 1. Any float value that's truly larger than MAX_INT will still compare as >= MAX_INT
         // 2. Any float value that's truly smaller than MIN_INT will still compare as < MIN_INT
         let int_min_as_float = self.int_bounds_as_float(dst_ty, false, src_ty);
         let int_max_as_float = self.int_bounds_as_float(dst_ty, true, src_ty);
@@ -1208,11 +1208,11 @@ impl GotocCtx<'_, '_> {
 
         // Check for special cases:
         // 1. isnan(src) -> result is 0
-        // 2. src > int_max -> result is MAX
+        // 2. src >= int_max -> result is MAX
         // 3. src < int_min -> result is MIN (or 0 for unsigned)
         // 4. Otherwise -> truncate toward zero
         let is_nan = src_expr.clone().is_nan();
-        let above_max = src_expr.clone().gt(int_max_as_float.clone());
+        let above_max = src_expr.clone().ge(int_max_as_float.clone());
         let below_min = src_expr.clone().lt(int_min_as_float);
 
         // The truncated value (normal cast behavior for values in range)
