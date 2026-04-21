@@ -206,6 +206,11 @@ impl GotocCodegenBackend {
             None
         };
 
+        // Post-pass: inline remaining function calls in quantifier bodies.
+        // build_quantifier_predicate handles checked arithmetic (StatementExpression
+        // flattening, overflow simplification), but user-defined function calls
+        // (e.g., comp(x, y)) require this post-pass because the called functions
+        // may not be in the symbol table when the quantifier hook runs.
         gcx.handle_quantifiers();
 
         // Split ownership of the context so that the majority of fields can be saved to our results,
