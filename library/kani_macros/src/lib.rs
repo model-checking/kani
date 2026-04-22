@@ -444,6 +444,11 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn loop_modifies(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::loop_modifies(attr, item)
 }
+
+#[proc_macro_attribute]
+pub fn loop_decreases(attr: TokenStream, item: TokenStream) -> TokenStream {
+    attr_impl::loop_decreases(attr, item)
+}
 /// This module implements Kani attributes in a way that only Kani's compiler can understand.
 /// This code should only be activated when pre-building Kani's sysroot.
 #[cfg(kani_sysroot)]
@@ -454,7 +459,7 @@ mod sysroot {
     mod loop_contracts;
 
     pub use contracts::{ensures, modifies, proof_for_contract, requires, stub_verified};
-    pub use loop_contracts::{loop_invariant, loop_modifies};
+    pub use loop_contracts::{loop_decreases, loop_invariant, loop_modifies};
 
     use super::*;
 
@@ -634,4 +639,5 @@ mod regular {
     no_op!(stub_verified);
     no_op!(loop_invariant);
     no_op!(loop_modifies);
+    no_op!(loop_decreases);
 }

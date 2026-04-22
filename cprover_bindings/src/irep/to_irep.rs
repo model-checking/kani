@@ -556,7 +556,7 @@ impl ToIrep for StmtBody {
                     arguments_irep(arguments.iter(), mm),
                 ],
             ),
-            StmtBody::Goto { dest, loop_invariants, loop_modifies } => {
+            StmtBody::Goto { dest, loop_invariants, loop_modifies, loop_decreases } => {
                 let inv = loop_invariants
                     .clone()
                     .map(|inv| inv.clone().and(Expr::bool_true()).to_irep(mm));
@@ -565,10 +565,12 @@ impl ToIrep for StmtBody {
                         assigns.iter().map(|assign| assign.to_irep(mm)).collect(),
                     )])
                 });
+                let decreases = loop_decreases.clone().map(|dec| dec.to_irep(mm));
                 code_irep(IrepId::Goto, vec![])
                     .with_named_sub(IrepId::Destination, Irep::just_string_id(dest.to_string()))
                     .with_named_sub_option(IrepId::CSpecLoopInvariant, inv)
                     .with_named_sub_option(IrepId::CSpecAssigns, assigns.clone())
+                    .with_named_sub_option(IrepId::CSpecDecreases, decreases)
             }
             StmtBody::Ifthenelse { i, t, e } => code_irep(
                 IrepId::Ifthenelse,

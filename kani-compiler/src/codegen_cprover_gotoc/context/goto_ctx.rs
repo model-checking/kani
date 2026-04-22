@@ -96,6 +96,8 @@ pub struct GotocCtx<'tcx, 'r> {
     pub has_loop_contracts: bool,
     /// Track loop assign clause
     pub current_loop_modifies: Vec<Expr>,
+    /// Track loop decreases clause
+    pub current_loop_decreases: Option<Expr>,
 }
 
 /// Constructor
@@ -127,6 +129,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             transformer,
             has_loop_contracts: false,
             current_loop_modifies: Vec::new(),
+            current_loop_decreases: None,
         }
     }
 
