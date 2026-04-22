@@ -302,6 +302,9 @@ impl TransformPass for FunctionWithContractPass {
         match instance.ty().kind().rigid().unwrap() {
             RigidTy::FnDef(def, args) => {
                 if let Some(mode) = self.contract_mode(tcx, *def) {
+                    if mode == ContractMode::RecursiveCheck {
+                        check_mutual_recursion(tcx, *def, &body);
+                    }
                     self.mark_unused(tcx, *def, &body, mode);
                     let new_body = self.set_mode(tcx, body, mode);
                     (true, new_body)
@@ -551,4 +554,75 @@ fn find_closure(tcx: TyCtxt, fn_def: FnDef, body: &Body, name: &str) -> ClosureD
             tcx.sess.dcx().abort_if_errors();
             unreachable!()
         })
+}
+
+/// Check if a function with `#[kani::recursion]` is involved in mutual recursion.
+///
+/// Scans the function's MIR body for calls to other functions that also have
+/// `#[kani::recursion]`. For each such callee, checks if the callee's body calls
+/// back to the original function (one level of indirection). If so, emits a
+/// compilation error because the per-function REENTRY mechanism only handles
+/// direct recursion soundly.
+///
+/// We require both `has_contract()` and `has_recursion()` on the callee because
+/// if the callee has a contract but no `#[kani::recursion]`, Kani replaces the
+/// callee with its contract abstraction — no mutual recursion occurs.
+///
+/// Limitations:
+/// - Only detects one level of indirection (f→g→f), not deeper chains (f→g→h→f).
+///   TODO(#3316): Extend to detect deeper mutual recursion chains.
+fn check_mutual_recursion(tcx: TyCtxt, fn_def: FnDef, body: &Body) {
+    let fn_name = tcx.def_path_str(rustc_internal::internal(tcx, fn_def.def_id()));
+
+    for bb in body.blocks.iter() {
+        let TerminatorKind::Call { func, .. } = &bb.terminator.kind else { continue };
+        let Ok(func_ty) = func.ty(body.locals()) else { continue };
+        let TyKind::RigidTy(RigidTy::FnDef(callee_def, callee_args)) = func_ty.kind() else {
+            continue;
+        };
+
+        // Skip direct recursion (that's handled correctly by REENTRY).
+        if callee_def.def_id() == fn_def.def_id() {
+            continue;
+        }
+
+        // Only error when the callee also uses #[kani::recursion] with a contract.
+        // If the callee has a contract but no #[kani::recursion], Kani replaces
+        // the call with the contract abstraction, so no mutual recursion occurs.
+        let callee_attrs = KaniAttributes::for_def_id(tcx, callee_def.def_id());
+        if !callee_attrs.has_contract() || !callee_attrs.has_recursion() {
+            continue;
+        }
+
+        // Check if the callee calls back to us (one level deep).
+        let Ok(callee_instance) = Instance::resolve(callee_def, &callee_args) else { continue };
+        let Some(callee_body) = callee_instance.body() else { continue };
+
+        for callee_bb in callee_body.blocks.iter() {
+            let TerminatorKind::Call { func: callee_func, .. } = &callee_bb.terminator.kind else {
+                continue;
+            };
+            let Ok(callee_func_ty) = callee_func.ty(callee_body.locals()) else { continue };
+            let TyKind::RigidTy(RigidTy::FnDef(transitive_def, _)) = callee_func_ty.kind() else {
+                continue;
+            };
+
+            if transitive_def.def_id() == fn_def.def_id() {
+                let callee_name =
+                    tcx.def_path_str(rustc_internal::internal(tcx, callee_def.def_id()));
+                let span = rustc_internal::internal(tcx, bb.terminator.span);
+                tcx.dcx().span_err(
+                    span,
+                    format!(
+                        "`#[kani::recursion]` is used on `{fn_name}`, which calls \
+                         `{callee_name}` that calls back to `{fn_name}`. \
+                         Mutual recursion is not supported by contract verification \
+                         and produces unsound results. Only direct recursion \
+                         (a function calling itself) is handled correctly."
+                    ),
+                );
+                break; // One error per callee is enough; continue checking other callees.
+            }
+        }
+    }
 }
