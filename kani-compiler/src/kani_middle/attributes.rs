@@ -799,7 +799,8 @@ impl<'tcx> KaniAttributes<'tcx> {
                         if o_bad || r_bad {
                             let mut err = self.tcx.dcx().struct_span_err(
                                 attr.span(),
-                                "invalid stub: function does not have a body, but is not an extern function",
+                                "invalid stub: function does not have a body. \
+                                 This typically means a trait method without a default implementation was specified.",
                             );
                             if o_bad {
                                 err = err.with_span_note(

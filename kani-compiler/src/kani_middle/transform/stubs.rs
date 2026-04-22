@@ -97,13 +97,21 @@ impl TransformPass for ExternFnStubPass {
     /// Search for calls to extern functions that should be stubbed.
     ///
     /// We need to find function calls and function pointers.
-    /// We should replace this with a visitor once rustc_public includes a mutable one.
+    /// Only allocate a mutable copy of the body if stubs actually apply (#2664).
     fn transform(&mut self, _tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
+        // Scan the body for any reference to a stubbed function before allocating
+        // a mutable copy (COW pattern). This uses the read-only MirVisitor to
+        // check all operands (calls, function pointers, constants) without
+        // heap-allocating a MutableBody.
+        let mut scanner = StubScanner { stubs: &self.stubs, found: false };
+        scanner.visit_body(&body);
+        if !scanner.found {
+            return (false, body);
+        }
         let mut new_body = MutableBody::from(body);
-        let changed = false;
         let locals = new_body.locals().to_vec();
-        let mut visitor = ExternFnStubVisitor { changed, locals, stubs: &self.stubs };
+        let mut visitor = ExternFnStubVisitor { changed: false, locals, stubs: &self.stubs };
         visitor.visit_body(&mut new_body);
         (visitor.changed, new_body.into())
     }
@@ -162,15 +170,11 @@ impl MirVisitor for FnStubValidator<'_, '_> {
             self.tcx.dcx().span_err(
                 rustc_internal::internal(self.tcx, loc.span()),
                 format!(
-                    "`{}` doesn't implement \
-                                        `{}`. The function `{}` \
-                                        cannot be stubbed by `{}` due to \
-                                        generic bounds not being met. Callee: {}",
-                    receiver_ty,
-                    trait_,
+                    "type `{receiver_ty}` doesn't implement trait `{trait_}`, \
+                     so `{}` cannot be stubbed by `{}`. \
+                     All trait bounds of the stub must be satisfied by the original's call sites.",
                     self.stub.0.name(),
                     self.stub.1.name(),
-                    callee,
                 ),
             );
         }
@@ -214,6 +218,28 @@ impl MutMirVisitor for ExternFnStubVisitor<'_> {
             let new_func = ConstOperand { span: *span, user_ty: None, const_: literal };
             *operand = Operand::Constant(new_func);
             self.changed = true;
+        }
+    }
+}
+
+/// Read-only visitor that checks if a body contains any reference to a stubbed
+/// function. Used as a fast pre-scan to avoid allocating a MutableBody when no
+/// stubs apply (COW pattern).
+/// Mirrors the same `Operand::Constant` + `FnDef` check used by
+/// `ExternFnStubVisitor` in both `visit_terminator` and `visit_operand`.
+struct StubScanner<'a> {
+    stubs: &'a Stubs,
+    found: bool,
+}
+
+impl MirVisitor for StubScanner<'_> {
+    fn visit_operand(&mut self, op: &Operand, _loc: Location) {
+        if !self.found
+            && let Operand::Constant(c) = op
+            && let TyKind::RigidTy(RigidTy::FnDef(def, _)) = c.const_.ty().kind()
+            && self.stubs.contains_key(&def)
+        {
+            self.found = true;
         }
     }
 }
