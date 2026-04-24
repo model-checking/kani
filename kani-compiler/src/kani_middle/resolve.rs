@@ -73,7 +73,24 @@ pub fn resolve_fn_path<'tcx>(
             let ty = type_resolution::resolve_ty(tcx, current_module, syn_ty)?;
             let trait_fn_id = resolve_path(tcx, current_module, &path.path)?;
             validate_kind!(tcx, trait_fn_id, "function / method", DefKind::Fn | DefKind::AssocFn)?;
-            resolve_in_trait_impl(tcx, ty, trait_fn_id)
+            // Extract generic args from the trait segment (e.g., <u32> from Convert<u32>).
+            // For `<Type as crate::mod::Trait<u32>>::method`, segments after `as` are
+            // [crate, mod, Trait<u32>, method]. The trait segment with generic args is
+            // always second-to-last (last is the method name).
+            let trait_generic_args = path
+                .path
+                .segments
+                .iter()
+                .rev()
+                .nth(1) // The trait segment is second-to-last (last is the method name)
+                .and_then(|seg| {
+                    if let syn::PathArguments::AngleBracketed(args) = &seg.arguments {
+                        Some(args)
+                    } else {
+                        None
+                    }
+                });
+            resolve_in_trait_impl(tcx, Some(current_module), ty, trait_fn_id, trait_generic_args)
         }
         // Qualified path for a primitive type, such as `<[u8]::sort>`.
         Some(QSelf { ty: syn_ty, .. }) if type_resolution::is_type_primitive(syn_ty) => {
@@ -399,8 +416,17 @@ fn resolve_in_any_trait<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty, name: &str) -> Option<F
         .into_iter()
         .filter_map(|trait_def| {
             resolve_in_trait_def_stable(tcx, trait_def, name).ok().and_then(|item| {
-                resolve_in_trait_impl(tcx, ty, rustc_internal::internal(tcx, item.def_id.def_id()))
-                    .ok()
+                // No current_module or trait_args needed: this path resolves
+                // unqualified method names (e.g., `x.foo()`), not user-specified
+                // `<Type as Trait<T>>::method` syntax.
+                resolve_in_trait_impl(
+                    tcx,
+                    None,
+                    ty,
+                    rustc_internal::internal(tcx, item.def_id.def_id()),
+                    None,
+                )
+                .ok()
             })
         })
         .collect();
@@ -411,16 +437,49 @@ fn resolve_in_any_trait<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty, name: &str) -> Option<F
 /// Resolves a trait method implementation by checking if there exists an Instance of the trait method for `ty`.
 /// This is distinct from `resolve_in_trait_def`: that function checks if the associated function is defined for the trait,
 /// while this function checks if it's implemented for `ty`.
-fn resolve_in_trait_impl(
-    tcx: TyCtxt<'_>,
+fn resolve_in_trait_impl<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    current_module: Option<LocalDefId>,
     ty: Ty,
     trait_fn_id: DefId,
-) -> Result<FnResolution, ResolveError<'_>> {
-    debug!(?ty, "resolve_in_trait_impl");
+    trait_args: Option<&syn::AngleBracketedGenericArguments>,
+) -> Result<FnResolution, ResolveError<'tcx>> {
+    debug!(?ty, ?trait_args, "resolve_in_trait_impl");
     // Given the `FnDef` of the *definition* of the trait method, see if there exists an Instance
     // that implements that method for `ty`.
     let trait_fn_fn_def = stable_fn_def(tcx, trait_fn_id).unwrap();
-    let desired_generic_args = GenericArgs(vec![GenericArgKind::Type(ty)]);
+
+    // Build generic args: Self type + any trait generic parameters (e.g., T in Convert<T>).
+    let mut args = vec![GenericArgKind::Type(ty)];
+    if let Some(syn_args) = trait_args {
+        let Some(module) = current_module else {
+            return Err(ResolveError::UnsupportedPath {
+                kind: "stub resolution requires generic trait arguments to have a known module context",
+            });
+        };
+        for arg in &syn_args.args {
+            match arg {
+                syn::GenericArgument::Type(syn_ty) => {
+                    let resolved_ty = type_resolution::resolve_ty(tcx, module, syn_ty)?;
+                    args.push(GenericArgKind::Type(resolved_ty));
+                }
+                syn::GenericArgument::Const(_) => {
+                    return Err(ResolveError::UnsupportedPath {
+                        kind: "const generic arguments in trait stubs",
+                    });
+                }
+                syn::GenericArgument::Lifetime(_) => {
+                    // Lifetimes are erased — safe to skip.
+                }
+                _ => {
+                    return Err(ResolveError::UnsupportedPath {
+                        kind: "associated type/const constraints in trait stubs",
+                    });
+                }
+            }
+        }
+    }
+    let desired_generic_args = GenericArgs(args);
     let exists = Instance::resolve(trait_fn_fn_def, &desired_generic_args);
 
     // If such an Instance exists, return *its* FnDef (i.e., the FnDef inside the impl block for this `ty`)

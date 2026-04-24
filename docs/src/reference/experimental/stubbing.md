@@ -170,13 +170,47 @@ In the following, we describe the known limitations of the stubbing feature.
 
 ### Trait method stubbing
 
-Stubbing trait method implementations (e.g., `<MyType as MyTrait>::method`) is **not supported**.
-Only free functions and inherent methods can be stubbed. Rust's attribute path syntax does not
-support the fully-qualified `<Type as Trait>::method` form, and the resolution algorithm does not
-search through trait implementations.
+Kani supports stubbing trait method implementations using fully-qualified syntax:
 
-If you need to stub a trait method, consider stubbing the calling function instead, or using
-conditional compilation (`#[cfg(kani)]`) to provide an alternative implementation.
+```rust
+trait MyTrait {
+    fn method(&self) -> u32;
+}
+
+struct MyType;
+
+impl MyTrait for MyType {
+    fn method(&self) -> u32 { 0 }
+}
+
+fn stub_method(_x: &MyType) -> u32 { 42 }
+
+#[kani::proof]
+#[kani::stub(<MyType as MyTrait>::method, stub_method)]
+fn check_trait_stub() {
+    let x = MyType;
+    assert_eq!(x.method(), 42);
+}
+```
+
+This also works with generic traits:
+
+```rust
+#[kani::stub(<MyType as Convert<u32>>::convert, stub_convert)]
+```
+
+When two traits define methods with the same name, the fully-qualified syntax
+disambiguates which implementation to stub.
+
+The following trait patterns are supported:
+
+- **Supertrait methods:** Stubbing a method defined in a supertrait (e.g., `<MyType as Base>::method`) works independently of subtrait methods.
+- **Overridden default methods:** If a type overrides a trait's default method, the override can be stubbed normally.
+- **Dynamic dispatch:** Stubs apply even when the method is called through a trait object (`&dyn Trait` or `Box<dyn Trait>`).
+
+**Known limitation:** Stubbing a trait's default method that is *not* overridden by the implementing type is not currently supported ([#4588](https://github.com/model-checking/kani/issues/4588)). The default method body uses `Self` as a placeholder type, which causes a type mismatch during stub validation. This applies only to default methods that are inherited as-is (i.e., the `impl` block does not provide its own definition).
+
+**Known limitation:** Traits with const generic parameters (e.g., `<Type as Buf<16>>::write`) or associated type constraints (e.g., `<Type as Iterator<Item = u32>>::next`) are not currently supported and will produce a resolution error.
 
 ### Usage restrictions
 
@@ -191,7 +225,6 @@ Support for stubbing is currently **limited to functions and methods**. All othe
 The following are examples of items that could be good candidates for stubbing, but aren't supported:
 - Types
 - Macros
-- Traits
 - Intrinsics
 
 We acknowledge that support for method stubbing isn't as ergonomic as it could be.
