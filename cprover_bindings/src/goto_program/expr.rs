@@ -203,6 +203,7 @@ pub enum BinaryOperator {
     Bitxor,
     Div,
     Equal,
+    FloatbvMod,
     FloatbvRoundToIntegral,
     Ge,
     Gt,
@@ -1180,7 +1181,8 @@ impl Expr {
                     || (lhs.typ.is_pointer() && rhs.typ.is_integer())
             }
             // Arithmetic
-            Div | Mod | Mult => lhs.typ == rhs.typ && (lhs.typ.is_numeric() || lhs.typ.is_vector()),
+            Div | Mult => lhs.typ == rhs.typ && (lhs.typ.is_numeric() || lhs.typ.is_vector()),
+            Mod => lhs.typ == rhs.typ && (lhs.typ.is_integer() || lhs.typ.is_vector()),
             // Bitshifts
             Ashr | Lshr | Shl => {
                 lhs.typ.is_integer() && rhs.typ.is_integer()
@@ -1222,6 +1224,7 @@ impl Expr {
                     "vector comparison operators must be typechecked by `typecheck_vector_cmp_expr`"
                 )
             }
+            FloatbvMod => lhs.typ == rhs.typ && lhs.typ.is_floating_point(),
             FloatbvRoundToIntegral => lhs.typ.is_floating_point() && rhs.typ.is_integer(),
         }
     }
@@ -1237,7 +1240,7 @@ impl Expr {
                 }
             }
             // Arithmetic
-            Div | Mod | Mult | Plus => lhs.typ.clone(),
+            Div | FloatbvMod | Mod | Mult | Plus => lhs.typ.clone(),
             // Bitshifts
             Ashr | Lshr | Rol | Ror | Shl => lhs.typ.clone(),
             // Boolean ops
@@ -1333,8 +1336,12 @@ impl Expr {
     }
 
     /// `self % e`
+    /// `self % e`. For floating-point types, emits CBMC's `floatbv_mod` which
+    /// implements C `fmod` semantics (matching Rust's `%` on floats via LLVM `frem`).
+    /// Unlike other `floatbv_*` ops, `floatbv_mod` does not take a rounding mode
+    /// parameter — the result is exact per IEEE 754.
     pub fn rem(self, e: Expr) -> Expr {
-        self.binop(Mod, e)
+        if self.typ().is_floating_point() { self.binop(FloatbvMod, e) } else { self.binop(Mod, e) }
     }
 
     /// `self && e`
