@@ -34,6 +34,7 @@ tracing-tree = "0.4.0"
 default = ['cprover']
 llbc = ['charon']
 cprover = ['cbmc', 'num', 'serde']
+strata = []
 
 [package.metadata.rust-analyzer]
 # This package uses rustc crates.
