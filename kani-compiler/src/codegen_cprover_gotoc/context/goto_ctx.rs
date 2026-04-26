@@ -515,6 +515,23 @@ impl GotocCtx<'_, '_> {
             return original_expr.clone();
         }
 
+        // Lower known pointer arithmetic intrinsics directly to CBMC expressions.
+        // These intrinsics have no GOTO body to inline, so we handle them specially.
+        // We check that the function name contains a pointer-type path segment to
+        // avoid false-positives on user-defined functions with similar names.
+        // TODO: Replace name-based heuristic with a proper intrinsic registry
+        // (e.g., matching on DefId or a dedicated KaniIntrinsic enum) for
+        // robustness against mangling variations.
+        let fn_name = fn_id.to_string();
+        let is_ptr_fn = fn_name.contains("::ptr::") || fn_name.contains("const_ptr");
+        let is_ptr_arith = is_ptr_fn
+            && (fn_name.contains("wrapping_add") || fn_name.contains("wrapping_byte_offset"));
+        if is_ptr_arith && arguments.len() >= 2 && arguments[0].typ().is_pointer() {
+            let ptr = self.inline_as_pure_expr(&arguments[0], visited);
+            let offset = self.inline_as_pure_expr(&arguments[1], visited);
+            return ptr.plus(offset);
+        }
+
         let function_body = self.symbol_table.lookup(*fn_id).and_then(|sym| match &sym.value {
             SymbolValues::Stmt(stmt) => Some(stmt.clone()),
             _ => None,
