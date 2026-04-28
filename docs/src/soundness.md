@@ -6,7 +6,9 @@ This page documents Kani's soundness guarantees and known limitations.
 
 Kani automatically checks for the following classes of issues:
 
-### Always enabled
+### Enabled by default
+These checks are on by default but can be individually disabled with `--no-XXX-checks` flags.
+
 - **Arithmetic overflow**: Addition, subtraction, multiplication, division,
   remainder, shift, and negation on integer types.
 - **Division by zero**: Integer and floating-point division and remainder.
@@ -78,8 +80,10 @@ limitation tracked in [#1150](https://github.com/model-checking/kani/issues/1150
 By default, unresolved function pointers are modeled as nondeterministic calls
 to any function with a compatible signature. This is sound but may be imprecise
 (reporting spurious failures). An unstable `--restrict-vtable` flag limits
-dispatch targets based on vtable analysis, but this feature is experimental and
-may be imprecise in the other direction (missing valid targets).
+dispatch targets based on vtable analysis, but **this is a known soundness
+issue**: the analysis may exclude valid targets, causing Kani to miss real
+failures (false negatives). See
+[#3134](https://github.com/model-checking/kani/issues/3134) for details.
 
 ## Reporting Soundness Issues
 

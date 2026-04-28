@@ -1335,7 +1335,6 @@ impl Expr {
         self.binop(Div, e)
     }
 
-    /// `self % e`
     /// `self % e`. For floating-point types, emits CBMC's `floatbv_mod` which
     /// implements C `fmod` semantics (matching Rust's `%` on floats via LLVM `frem`).
     /// Unlike other `floatbv_*` ops, `floatbv_mod` does not take a rounding mode
