@@ -202,6 +202,23 @@ impl KaniSession {
             }
 
             println!("{msg}");
+
+            // Print stubs applied to this harness so users know which
+            // assumptions are in effect.
+            let multi = rayon::current_num_threads() > 1;
+            let print_line = |line: String| {
+                if multi {
+                    println!("Thread {thread_index}: {line}");
+                } else {
+                    println!("{line}");
+                }
+            };
+            for stub in &harness.attributes.stubs {
+                print_line(format!("  - Stub: {} -> {}", stub.original, stub.replacement));
+            }
+            for verified in &harness.attributes.verified_stubs {
+                print_line(format!("  - Verified stub: {verified}"));
+            }
         }
 
         let mut result = self.with_timer(|| self.run_cbmc(binary, harness), "run_cbmc")?;

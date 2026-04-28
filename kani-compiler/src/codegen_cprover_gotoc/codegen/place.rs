@@ -627,15 +627,13 @@ impl GotocCtx<'_, '_> {
                     self,
                 )
             }
-            ProjectionElem::OpaqueCast(ty) | ProjectionElem::Subtype(ty) => {
-                ProjectedPlace::try_new(
-                    before.goto_expr.cast_to(self.codegen_ty_stable(*ty)),
-                    TypeOrVariant::Type(*ty),
-                    before.fat_ptr_goto_expr,
-                    before.fat_ptr_mir_typ,
-                    self,
-                )
-            }
+            ProjectionElem::OpaqueCast(ty) => ProjectedPlace::try_new(
+                before.goto_expr.cast_to(self.codegen_ty_stable(*ty)),
+                TypeOrVariant::Type(*ty),
+                before.fat_ptr_goto_expr,
+                before.fat_ptr_mir_typ,
+                self,
+            ),
         }
     }
 

@@ -7,6 +7,8 @@
 #  - Changes are pushed to 'main'.
 #  - Triggered by another workflow
 name: Kani End-To-End Performance Benchmarks
+permissions:
+  contents: read
 on:
   push:
     branches:
@@ -30,14 +32,14 @@ jobs:
           echo "NEW_REF=${{ github.event.pull_request.head.sha }}" | tee -a "$GITHUB_ENV"
 
       - name: Check out Kani (old variant)
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           path: ./old
           ref: ${{ env.OLD_REF }}
           fetch-depth: 2
 
       - name: Check out Kani (new variant)
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           path: ./new
           ref: ${{ env.NEW_REF }}

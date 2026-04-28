@@ -117,6 +117,8 @@ impl ToIrepId for UnaryOperator {
             UnaryOperator::CountTrailingZeros { .. } => IrepId::CountTrailingZeros,
             UnaryOperator::IsDynamicObject => IrepId::IsDynamicObject,
             UnaryOperator::IsFinite => IrepId::IsFinite,
+            UnaryOperator::IsInf => IrepId::Isinf,
+            UnaryOperator::IsNan => IrepId::Isnan,
             UnaryOperator::Not => IrepId::Not,
             UnaryOperator::ObjectSize => IrepId::ObjectSize,
             UnaryOperator::PointerObject => IrepId::PointerObject,
@@ -541,13 +543,6 @@ impl ToIrep for StmtBody {
                     code_irep(IrepId::Decl, vec![lhs.to_irep(mm)])
                 }
             }
-            StmtBody::Deinit(place) => {
-                // CBMC doesn't yet have a notion of poison (https://github.com/diffblue/cbmc/issues/7014)
-                // So we translate identically to `nondet` here, but add a comment noting we wish it were poison
-                // potentially for other backends to pick up and treat specially.
-                code_irep(IrepId::Assign, vec![place.to_irep(mm), place.typ().nondet().to_irep(mm)])
-                    .with_comment("deinit")
-            }
             StmtBody::Expression(e) => code_irep(IrepId::Expression, vec![e.to_irep(mm)]),
             StmtBody::For { init, cond, update, body } => code_irep(
                 IrepId::For,
@@ -561,7 +556,7 @@ impl ToIrep for StmtBody {
                     arguments_irep(arguments.iter(), mm),
                 ],
             ),
-            StmtBody::Goto { dest, loop_invariants, loop_modifies } => {
+            StmtBody::Goto { dest, loop_invariants, loop_modifies, loop_decreases } => {
                 let inv = loop_invariants
                     .clone()
                     .map(|inv| inv.clone().and(Expr::bool_true()).to_irep(mm));
@@ -570,10 +565,12 @@ impl ToIrep for StmtBody {
                         assigns.iter().map(|assign| assign.to_irep(mm)).collect(),
                     )])
                 });
+                let decreases = loop_decreases.clone().map(|dec| dec.to_irep(mm));
                 code_irep(IrepId::Goto, vec![])
                     .with_named_sub(IrepId::Destination, Irep::just_string_id(dest.to_string()))
                     .with_named_sub_option(IrepId::CSpecLoopInvariant, inv)
                     .with_named_sub_option(IrepId::CSpecAssigns, assigns.clone())
+                    .with_named_sub_option(IrepId::CSpecDecreases, decreases)
             }
             StmtBody::Ifthenelse { i, t, e } => code_irep(
                 IrepId::Ifthenelse,

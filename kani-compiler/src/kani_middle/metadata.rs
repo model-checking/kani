@@ -14,6 +14,8 @@ use rustc_middle::ty::TyCtxt;
 use rustc_public::mir::mono::Instance;
 use rustc_public::{CrateDef, CrateItems, DefId};
 
+use sha1_checked::Sha1;
+
 /// Create the harness metadata for a proof harness for a given function.
 pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> HarnessMetadata {
     let def = instance.def;
@@ -122,8 +124,13 @@ pub fn gen_automatic_proof_metadata(
 
     // Leave the concrete playback instrumentation for now, but this feature does not actually support concrete playback.
     let loc = SourceLocation::new(fn_to_verify.body().unwrap().span);
-    let file_stem =
-        format!("{}_{mangled_name}_autoharness", base_name.file_stem().unwrap().to_str().unwrap());
+    let sha1_result = Sha1::try_digest(mangled_name);
+    assert!(!sha1_result.has_collision());
+    let file_stem = format!(
+        "{}_{:x}_autoharness",
+        base_name.file_stem().unwrap().to_str().unwrap(),
+        sha1_result.hash()
+    );
     let model_file = base_name.with_file_name(file_stem).with_extension(ArtifactType::SymTabGoto);
 
     let kani_attributes = KaniAttributes::for_instance(tcx, *fn_to_verify);

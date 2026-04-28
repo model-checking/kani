@@ -5,6 +5,8 @@
 # 2. Checks Rust-Sec registry for security advisories.
 
 name: Cargo Deny
+permissions:
+  contents: read
 on:
   pull_request:
   merge_group:
@@ -17,12 +19,12 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
-      - name: Install rustup
-        run: ./scripts/setup/install_rustup.sh
       - uses: EmbarkStudios/cargo-deny-action@v2
+        env:
+          RUSTUP_TOOLCHAIN: stable
         with:
           arguments: --all-features --workspace
           command-arguments: -s

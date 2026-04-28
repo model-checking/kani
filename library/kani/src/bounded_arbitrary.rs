@@ -5,6 +5,22 @@
 
 use kani::{Arbitrary, BoundedArbitrary};
 
+impl<T: Arbitrary> BoundedArbitrary for Box<[T]> {
+    fn bounded_any<const N: usize>() -> Self {
+        let len: usize = kani::any_where(|l| *l <= N);
+        // The following is equivalent to:
+        // ```
+        // (0..len).map(|_| T::any()).collect()
+        // ```
+        // but leads to more efficient verification
+        let mut b = Box::<[T]>::new_uninit_slice(len);
+        for i in 0..len {
+            b[i] = std::mem::MaybeUninit::new(T::any());
+        }
+        unsafe { b.assume_init() }
+    }
+}
+
 // This implementation overlaps with `kani::any_vec` in `kani/library/kani/src/vec.rs`.
 // This issue `https://github.com/model-checking/kani/issues/4027` tracks deprecating
 // `kani::any_vec` in favor of this implementation.

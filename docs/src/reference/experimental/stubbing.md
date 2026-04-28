@@ -106,16 +106,117 @@ VERIFICATION:- SUCCESSFUL
 
 Kani shows that the assertion is successful, avoiding any issues that appear if we attempt to verify the code without stubbing.
 
+## Stub visibility in verification output
+
+When stubs are applied to a harness, Kani prints them before verification begins:
+
+```
+Checking harness encrypt_then_decrypt_is_identity...
+  - Stub: rand::random -> mock_random
+```
+
+This helps you confirm which stubs are active and makes the assumptions introduced by
+stubbing visible in the verification output.
+
+## Stubbing foreign functions
+
+Kani supports stubbing foreign functions declared in `extern` blocks. This is useful for
+replacing system calls, C library functions, or other FFI functions with verification-friendly
+implementations:
+
+```rust
+extern "C" {
+    fn my_c_function(input: u32) -> u32;
+}
+
+fn my_c_function_stub(input: u32) -> u32 {
+    input + 1
+}
+
+#[kani::proof]
+#[kani::stub(my_c_function, my_c_function_stub)]
+fn check_with_ffi_stub() {
+    let result = unsafe { my_c_function(42) };
+    assert_eq!(result, 43);
+}
+```
+
+## Stub compatibility and lifetime considerations
+
+When validating stub compatibility, Kani compares parameter and return types after erasing
+lifetime information. This means that a stub with different lifetime annotations than the
+original will be accepted. For example, a stub returning `&'static i32` will be accepted as
+a replacement for a function returning `&'a i32`.
+
+**Warning:** While Kani accepts such stubs, lifetime mismatches can cause subtle verification
+failures (e.g., "dereference failure: dead object"). If you encounter unexpected failures with
+stubs, check whether the lifetime annotations match.
+
 ## Limitations
 
-In the following, we describe all the limitations of the stubbing feature.
+In the following, we describe the known limitations of the stubbing feature.
+
+### Feature interactions
+
+- **Function contracts:** Stubbing works with function contracts. Use `#[kani::stub_verified(fn)]`
+  to replace a function with its verified contract abstraction. This requires a
+  `#[kani::proof_for_contract(fn)]` harness to exist. Regular `#[kani::stub]` can also be
+  combined with `-Z function-contracts` in the same harness.
+- **Loop contracts:** Stubbing and loop contracts (`-Z loop-contracts`) can be used together
+  in the same harness without issues.
+- **Concrete playback:** Stubbing is compatible with `--concrete-playback`. When a stubbed
+  harness fails, Kani can generate a concrete test case that reproduces the failure using
+  the stub's behavior.
+
+### Trait method stubbing
+
+Kani supports stubbing trait method implementations using fully-qualified syntax:
+
+```rust
+trait MyTrait {
+    fn method(&self) -> u32;
+}
+
+struct MyType;
+
+impl MyTrait for MyType {
+    fn method(&self) -> u32 { 0 }
+}
+
+fn stub_method(_x: &MyType) -> u32 { 42 }
+
+#[kani::proof]
+#[kani::stub(<MyType as MyTrait>::method, stub_method)]
+fn check_trait_stub() {
+    let x = MyType;
+    assert_eq!(x.method(), 42);
+}
+```
+
+This also works with generic traits:
+
+```rust
+#[kani::stub(<MyType as Convert<u32>>::convert, stub_convert)]
+```
+
+When two traits define methods with the same name, the fully-qualified syntax
+disambiguates which implementation to stub.
+
+The following trait patterns are supported:
+
+- **Supertrait methods:** Stubbing a method defined in a supertrait (e.g., `<MyType as Base>::method`) works independently of subtrait methods.
+- **Overridden default methods:** If a type overrides a trait's default method, the override can be stubbed normally.
+- **Dynamic dispatch:** Stubs apply even when the method is called through a trait object (`&dyn Trait` or `Box<dyn Trait>`).
+
+**Known limitation:** Stubbing a trait's default method that is *not* overridden by the implementing type is not currently supported ([#4588](https://github.com/model-checking/kani/issues/4588)). The default method body uses `Self` as a placeholder type, which causes a type mismatch during stub validation. This applies only to default methods that are inherited as-is (i.e., the `impl` block does not provide its own definition).
+
+**Known limitation:** Traits with const generic parameters (e.g., `<Type as Buf<16>>::write`) or associated type constraints (e.g., `<Type as Iterator<Item = u32>>::next`) are not currently supported and will produce a resolution error.
 
 ### Usage restrictions
 
-The usage of stubbing is limited to the verification of a single harness.
-Therefore, users are **required to pass the `--harness` option** when using the stubbing feature.
-
-In addition, this feature **isn't compatible with [concrete playback](./concrete-playback.md)**.
+Stub annotations (`#[kani::stub]`) are specified per-harness. When a crate contains multiple
+harnesses with different stub configurations, each harness is verified independently with its
+own set of stubs.
 
 ### Support
 
@@ -124,7 +225,6 @@ Support for stubbing is currently **limited to functions and methods**. All othe
 The following are examples of items that could be good candidates for stubbing, but aren't supported:
 - Types
 - Macros
-- Traits
 - Intrinsics
 
 We acknowledge that support for method stubbing isn't as ergonomic as it could be.

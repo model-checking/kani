@@ -199,17 +199,61 @@ The usage of quantifiers should be valid in any part of the Rust code analysed b
 
 Kani should have the same support that CBMC has for quantifiers. For more details, see [Quantifiers](https://github.com/diffblue/cbmc/blob/0a69a64e4481473d62496f9975730d24f194884a/doc/cprover-manual/contracts-quantifiers.md).
 
-The implementation of quantifiers in Kani will be based on the following principle:
+### CBMC constraint: side-effect-free expressions
 
-- **Single expression without function calls**: CBMC's quantifiers only support
-  single expressions without function calls. This means that the CBMC expressions generated
-  from the quantifiers in Kani should be limited to a single expression without any
-  function calls.
+CBMC's quantifiers only support single expressions without function calls or side
+effects. However, even simple Rust expressions like `i + 1` or `i % 2` compile to
+checked arithmetic operations (`OverflowResultPlus`, `checked_rem`) that produce
+`StatementExpression` nodes in the GOTO program — which CBMC rejects as side effects.
 
-To achieve this, we will need to implement the function inlining pass in Kani. This
-  pass will inline all function calls in quantifiers before they are codegened to CBMC
-  expressions. This will ensure that the generated expressions are compliant with CBMC's
-  quantifier support.
+### Pure expression codegen
+
+To solve this, Kani generates **pure expression trees** for quantifier bodies:
+
+1. **Closure body extraction**: `build_quantifier_predicate` in `hooks.rs` extracts
+   the closure's codegen'd body from the symbol table, resolves intermediate variable
+   assignments into a single expression, and substitutes the closure parameter with
+   the quantified variable.
+
+2. **Pure expression inlining**: Before symbol substitution, `inline_as_pure_expr_toplevel`
+   (from `goto_ctx.rs`) flattens all `StatementExpression` nodes by:
+   - Collecting `Decl` assignments from the statement block
+   - Resolving intermediate variables via iterative `substitute_symbol`
+   - Extracting the final expression value
+
+3. **Overflow simplification**: The `Member` handler in the inliner simplifies
+   overflow-checked arithmetic patterns:
+   - `Member(Struct([result, overflowed, padding]), "0")` → extracts `result` directly
+   - `Member(OverflowResultPlus(a, b), "result")` → `Plus(a, b)`
+   - Same for `OverflowResultMinus` → `Minus` and `OverflowResultMult` → `Mult`
+
+   This drops the overflow check, which is acceptable inside quantifier bodies
+   because CBMC evaluates them symbolically.
+
+4. **Function call inlining**: Remaining function calls (e.g., `checked_rem` for `%`)
+   are inlined by looking up the function body in the symbol table, resolving its
+   return expression, and substituting parameters — producing a pure expression.
+
+### Typed quantifier variables
+
+The `forall!` and `exists!` macros support an optional type annotation:
+
+```rust
+kani::forall!(|d: u64 in (1, n)| x % d == 0)
+```
+
+The type is captured as `$t:tt` (not `$t:ty`, since `ty` fragments cannot be
+followed by `in` in macro rules). The internal `kani_forall<T, F>` function is
+already generic over `T`, so the macro simply passes the typed bounds and closure.
+
+### Soundness notes
+
+- **Checked arithmetic dropped**: Overflow checks inside quantifier bodies are
+  silently removed. Division by zero inside quantifier bodies is also not detected.
+  Users must ensure their predicates don't overflow or divide by zero.
+- **Recursive functions**: Recursive function calls in quantifier bodies are detected
+  via a `visited` set and the original expression is returned unchanged (CBMC will
+  reject it as a side effect).
 
 ## Open questions
 

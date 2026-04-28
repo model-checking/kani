@@ -46,6 +46,8 @@ pub enum FailedProperties {
     PanicsOnly,
     // One or more failures that aren't panic-related
     Other,
+    // One or more properties resulted in an ERROR rather than a failing/successful verification
+    Error,
 }
 
 /// The possible CBMC exit statuses
@@ -145,27 +147,24 @@ impl KaniSession {
             .await)
         };
 
-        let verification_results = if res.is_err() {
+        if let Ok(output) = res {
+            // The timeout wasn't reached
+            Ok(VerificationResult::from(output?, harness.attributes.should_panic, start_time))
+        } else {
             // An error occurs if the timeout was reached
 
             // Kill the process
             cbmc_process.kill().await?;
 
-            VerificationResult {
+            Ok(VerificationResult {
                 status: VerificationStatus::Failure,
                 failed_properties: FailedProperties::None,
                 results: Err(ExitStatus::Timeout),
                 runtime: start_time.elapsed(),
                 generated_concrete_test: false,
                 coverage_results: None,
-            }
-        } else {
-            // The timeout wasn't reached
-            let output = res.unwrap()?;
-            VerificationResult::from(output, harness.attributes.should_panic, start_time)
-        };
-
-        Ok(verification_results)
+            })
+        }
     }
 
     /// "Internal," but also used by call_cbmc_viewer
@@ -443,11 +442,13 @@ fn verification_outcome_from_properties(
     let failed_properties = determine_failed_properties(properties);
     let status = if should_panic {
         match failed_properties {
+            FailedProperties::Error => VerificationStatus::Failure,
             FailedProperties::None | FailedProperties::Other => VerificationStatus::Failure,
             FailedProperties::PanicsOnly => VerificationStatus::Success,
         }
     } else {
         match failed_properties {
+            FailedProperties::Error => VerificationStatus::Failure,
             FailedProperties::None => VerificationStatus::Success,
             FailedProperties::PanicsOnly | FailedProperties::Other => VerificationStatus::Failure,
         }
@@ -457,6 +458,9 @@ fn verification_outcome_from_properties(
 
 /// Determines the `FailedProperties` variant that corresponds to an array of properties
 fn determine_failed_properties(properties: &[Property]) -> FailedProperties {
+    if properties.iter().any(|prop| prop.status == CheckStatus::Error) {
+        return FailedProperties::Error;
+    };
     let failed_properties: Vec<&Property> =
         properties.iter().filter(|prop| prop.status == CheckStatus::Failure).collect();
     // Return `FAILURE` if there isn't at least one failed property

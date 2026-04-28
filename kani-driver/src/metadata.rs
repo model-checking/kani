@@ -177,7 +177,7 @@ pub mod tests {
 
     #[test]
     fn check_find_proof_harness_without_exact() {
-        let harnesses = vec![
+        let harnesses = [
             mock_proof_harness("check_one", None, None, None),
             mock_proof_harness("module::check_two", None, None, None),
             mock_proof_harness("module::not_check_three", None, None, None),
@@ -222,7 +222,7 @@ pub mod tests {
     fn check_find_proof_harness_with_exact() {
         // Check with exact match
 
-        let harnesses = vec![
+        let harnesses = [
             mock_proof_harness("check_one", None, None, None),
             mock_proof_harness("module::check_two", None, None, None),
             mock_proof_harness("module::not_check_three", None, None, None),

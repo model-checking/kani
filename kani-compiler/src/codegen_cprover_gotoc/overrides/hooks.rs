@@ -11,11 +11,12 @@
 use crate::codegen_cprover_gotoc::codegen::{PropertyClass, bb_label};
 use crate::codegen_cprover_gotoc::{GotocCtx, utils};
 use crate::kani_middle::attributes;
-use crate::kani_middle::kani_functions::{KaniFunction, KaniHook};
+use crate::kani_middle::kani_functions::{KaniFunction, KaniHook, try_get_kani_function};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::CIntType;
 use cbmc::goto_program::Symbol as GotoSymbol;
-use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, Type};
+use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, StmtBody, SymbolValues, Type};
+use cbmc::{InternedString, goto_program::ExprValue};
 use rustc_hir::LangItem;
 use rustc_middle::ty::TyCtxt;
 use rustc_public::mir::mono::Instance;
@@ -30,7 +31,13 @@ use tracing::debug;
 
 pub trait GotocHook {
     /// if the hook applies, it means the codegen would do something special to it
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool;
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool;
     /// the handler for codegen
     fn handle(
         &self,
@@ -56,7 +63,13 @@ struct Cover;
 const UNEXPECTED_CALL: &str = "Hooks from kani library handled as a map";
 
 impl GotocHook for Cover {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -91,7 +104,13 @@ impl GotocHook for Cover {
 
 struct Assume;
 impl GotocHook for Assume {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -115,7 +134,13 @@ impl GotocHook for Assume {
 
 struct Assert;
 impl GotocHook for Assert {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -150,7 +175,13 @@ impl GotocHook for Assert {
 
 struct UnsupportedCheck;
 impl GotocHook for UnsupportedCheck {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -187,7 +218,13 @@ impl GotocHook for UnsupportedCheck {
 
 struct SafetyCheck;
 impl GotocHook for SafetyCheck {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -218,7 +255,13 @@ impl GotocHook for SafetyCheck {
 
 struct SafetyCheckNoAssume;
 impl GotocHook for SafetyCheckNoAssume {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -250,7 +293,13 @@ impl GotocHook for SafetyCheckNoAssume {
 // TODO: Remove this and replace occurrences with `SanityCheck`.
 struct Check;
 impl GotocHook for Check {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -286,7 +335,13 @@ impl GotocHook for Check {
 struct Nondet;
 
 impl GotocHook for Nondet {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -325,9 +380,14 @@ impl GotocHook for Nondet {
 struct Panic;
 
 impl GotocHook for Panic {
-    fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        tcx: TyCtxt,
+        instance: Instance,
+        _instance_name: &str,
+        kani_tool_attr: Option<&String>,
+    ) -> bool {
         let def_id = rustc_internal::internal(tcx, instance.def.def_id());
-        let kani_tool_attr = attributes::fn_marker(instance.def);
 
         // we check the attributes to make sure this hook applies to
         // panic functions we've stubbed too
@@ -354,7 +414,13 @@ impl GotocHook for Panic {
 /// Encodes __CPROVER_r_ok(ptr, size)
 struct IsAllocated;
 impl GotocHook for IsAllocated {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -393,7 +459,13 @@ impl GotocHook for IsAllocated {
 /// independent of the backend
 struct FloatToIntInRange;
 impl GotocHook for FloatToIntInRange {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -438,7 +510,13 @@ impl GotocHook for FloatToIntInRange {
 /// Encodes __CPROVER_pointer_object(ptr)
 struct PointerObject;
 impl GotocHook for PointerObject {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -474,7 +552,13 @@ impl GotocHook for PointerObject {
 /// Encodes __CPROVER_pointer_offset(ptr)
 struct PointerOffset;
 impl GotocHook for PointerOffset {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -511,9 +595,14 @@ struct RustAlloc;
 // Removing this hook causes regression failures.
 // https://github.com/model-checking/kani/issues/1170
 impl GotocHook for RustAlloc {
-    fn hook_applies(&self, _tcx: TyCtxt, instance: Instance) -> bool {
-        let full_name = instance.name();
-        full_name == "alloc::alloc::exchange_malloc"
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
+        instance_name == "alloc::alloc::exchange_malloc"
     }
 
     fn handle(
@@ -562,9 +651,14 @@ impl GotocHook for RustAlloc {
 pub struct MemCmp;
 
 impl GotocHook for MemCmp {
-    fn hook_applies(&self, _tcx: TyCtxt, instance: Instance) -> bool {
-        let name = instance.name();
-        name == "core::slice::cmp::memcmp" || name == "std::slice::cmp::memcmp"
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
+        instance_name == "core::slice::cmp::memcmp" || instance_name == "std::slice::cmp::memcmp"
     }
 
     fn handle(
@@ -620,7 +714,13 @@ impl GotocHook for MemCmp {
 struct UntrackedDeref;
 
 impl GotocHook for UntrackedDeref {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -668,7 +768,13 @@ struct InitContracts;
 /// free(NULL);
 /// ```
 impl GotocHook for InitContracts {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -710,9 +816,14 @@ impl GotocHook for InitContracts {
 pub struct LoopInvariantRegister;
 
 impl GotocHook for LoopInvariantRegister {
-    fn hook_applies(&self, _tcx: TyCtxt, instance: Instance) -> bool {
-        attributes::fn_marker(instance.def)
-            .is_some_and(|marker| marker == "kani_register_loop_contract")
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        kani_tool_attr: Option<&String>,
+    ) -> bool {
+        kani_tool_attr.is_some_and(|marker| marker == "kani_register_loop_contract")
     }
 
     fn handle(
@@ -741,6 +852,9 @@ impl GotocHook for LoopInvariantRegister {
                 stmt = stmt.with_loop_modifies(assigns.clone());
                 gcx.current_loop_modifies.clear();
             }
+            if let Some(decreases) = gcx.current_loop_decreases.take() {
+                stmt = stmt.with_loop_decreases(decreases);
+            }
 
             // Add `free(0)` to make sure the body of `free` won't be dropped to
             // satisfy the requirement of DFCC.
@@ -757,6 +871,9 @@ impl GotocHook for LoopInvariantRegister {
             // When loop-contracts is not enabled, codegen
             // assign_to = true
             // goto target
+            // Discard any decreases clause since it won't be checked without
+            // the loop-contracts flag.
+            gcx.current_loop_decreases = None;
             Stmt::block(
                 vec![
                     unwrap_or_return_codegen_unimplemented_stmt!(
@@ -785,7 +902,13 @@ enum QuantifierKind {
 }
 
 impl GotocHook for Forall {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -803,7 +926,13 @@ impl GotocHook for Forall {
 }
 
 impl GotocHook for Exists {
-    fn hook_applies(&self, _tcx: TyCtxt, _instance: Instance) -> bool {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
         unreachable!("{UNEXPECTED_CALL}")
     }
 
@@ -833,21 +962,17 @@ fn handle_quantifier(
     let target = target.unwrap();
     let lower_bound = &fargs[0];
     let upper_bound = &fargs[1];
-    let closure_call_expr = find_closure_call_expr(&instance, gcx, loc)
-        .unwrap_or_else(|| unreachable!("Failed to find closure call expression"));
-    let closure_arg = fargs[2].clone();
-    let predicate = if closure_arg.is_symbol() {
-        Expr::address_of(closure_arg)
-    } else {
-        let predicate_ty = fargs[2].typ().clone().to_pointer();
-        Expr::nondet(predicate_ty)
-    };
 
-    // Quantified variable.
+    // Warn when quantifier range is large or unbounded, since SAT solvers
+    // (the default backend) expand quantifiers into conjunctions/disjunctions
+    // over every value in the range. For unbounded quantifiers over usize,
+    // this means 2^64 terms, which will exhaust memory or diverge silently.
+    warn_large_quantifier_range(gcx, lower_bound, upper_bound, span, &quantifier_kind);
+
+    // Create a fresh quantified variable.
     let base_name = "kani_quantified_var".to_string();
     let mut counter = 0;
     let mut unique_name = format!("{base_name}_{counter}");
-    // Ensure the name is not already in the symbol table
     while gcx.symbol_table.lookup(&unique_name).is_some() {
         counter += 1;
         unique_name = format!("{base_name}_{counter}");
@@ -859,23 +984,40 @@ fn handle_quantifier(
         new_symbol.to_expr()
     };
 
+    // Build the predicate as a pure expression by substituting the closure
+    // parameter with the quantified variable. This avoids generating function
+    // calls inside the quantifier body, which CBMC rejects as side effects.
+    // Falls back to a closure function call (resolved by the handle_quantifiers
+    // post-pass) when the predicate contains StatementExpression nodes that
+    // substitute_symbol cannot recurse into.
+    let predicate_expr =
+        match build_quantifier_predicate(gcx, &instance, &fargs[2], &new_variable_expr) {
+            Some(expr) => expr,
+            None => {
+                // Fallback: emit a closure function call for the post-pass to inline.
+                let closure_call_expr = find_closure_call_expr(&instance, gcx, loc)
+                    .unwrap_or_else(|| unreachable!("Failed to find closure call expression"));
+                let predicate = if fargs[2].is_symbol() {
+                    Expr::address_of(fargs[2].clone())
+                } else {
+                    let predicate_ty = fargs[2].typ().clone().to_pointer();
+                    Expr::nondet(predicate_ty)
+                };
+                closure_call_expr.call(vec![predicate, new_variable_expr.clone()])
+            }
+        };
+
     let lower_bound_comparison = lower_bound.clone().le(new_variable_expr.clone());
     let upper_bound_comparison = new_variable_expr.clone().lt(upper_bound.clone());
     let range = lower_bound_comparison.and(upper_bound_comparison);
 
     let quantifier_expr = match quantifier_kind {
         QuantifierKind::ForAll => {
-            let domain = range
-                .clone()
-                .implies(closure_call_expr.call(vec![predicate.clone(), new_variable_expr.clone()]))
-                .and(range.not().implies(Expr::bool_true()));
+            let domain = range.implies(predicate_expr);
             Expr::forall_expr(Type::Bool, new_variable_expr, domain)
         }
         QuantifierKind::Exists => {
-            let domain = range
-                .clone()
-                .and(closure_call_expr.call(vec![predicate.clone(), new_variable_expr.clone()]))
-                .and(range.not().implies(Expr::bool_false()));
+            let domain = range.and(predicate_expr);
             Expr::exists_expr(Type::Bool, new_variable_expr, domain)
         }
     };
@@ -894,6 +1036,183 @@ fn handle_quantifier(
     )
 }
 
+/// Build a pure expression for the quantifier predicate by looking up the
+/// closure's codegen'd body and substituting its parameter with the quantified
+/// variable. This produces a side-effect-free expression that CBMC can handle
+/// directly, including in nested quantifier contexts.
+///
+/// Returns `None` if the substituted expression still contains side effects
+/// (e.g., `StatementExpression` from checked arithmetic or function calls),
+/// signaling the caller to fall back to the closure function call approach.
+fn build_quantifier_predicate(
+    gcx: &mut GotocCtx,
+    instance: &Instance,
+    closure_arg: &Expr,
+    quantified_var: &Expr,
+) -> Option<Expr> {
+    // Find the closure instance from the generic args.
+    let closure_instance = find_closure_instance(instance)
+        .unwrap_or_else(|| unreachable!("Failed to find closure instance for quantifier"));
+
+    // Look up the closure's codegen'd function body in the symbol table.
+    let closure_name = closure_instance.mangled_name();
+    let closure_body = gcx
+        .symbol_table
+        .lookup(&closure_name)
+        .and_then(|sym| match &sym.value {
+            SymbolValues::Stmt(stmt) => Some(stmt.clone()),
+            _ => None,
+        })
+        .or_else(|| {
+            // If the closure hasn't been codegen'd yet, codegen it now.
+            // SAFETY: We save and restore `current_fn` because `codegen_function`
+            // sets it internally. Without this, the outer function's context would
+            // be lost. This is safe because `codegen_function` only reads/writes
+            // the symbol table and `current_fn` — no other GotocCtx state is
+            // affected by the temporary `None` value during the inner codegen.
+            let saved_fn = gcx.current_fn.take();
+            gcx.codegen_function(closure_instance);
+            gcx.current_fn = saved_fn;
+            gcx.symbol_table.lookup(&closure_name).and_then(|sym| match &sym.value {
+                SymbolValues::Stmt(stmt) => Some(stmt.clone()),
+                _ => None,
+            })
+        })
+        .unwrap_or_else(|| unreachable!("Failed to codegen closure for quantifier"));
+
+    // Get the closure's parameter symbols.
+    let parameters = gcx
+        .symbol_table
+        .lookup_parameters(&closure_name)
+        .unwrap_or_else(|| unreachable!("Failed to find closure parameters"));
+
+    // The closure signature is (closure_env_ref, param) -> bool.
+    // parameters[0] = closure environment reference (&self)
+    // parameters[1] = the quantified variable parameter
+    if parameters.len() != 2 {
+        let msg = format!(
+            "Quantifier closure has {} parameters (expected 2). \
+             The quantifier predicate will evaluate to false.",
+            parameters.len()
+        );
+        gcx.tcx.dcx().warn(msg);
+        return None;
+    }
+    let env_param = parameters[0];
+    let var_param = parameters[1];
+
+    // Extract the return expression from the closure body.
+    let return_expr = extract_return_expr(&closure_body)
+        .unwrap_or_else(|| unreachable!("Failed to extract return expression from closure body"));
+
+    debug!(?env_param, ?var_param, ?return_expr, "quantifier predicate substitution");
+
+    // Build the closure environment expression (address of the closure arg).
+    let env_expr = if closure_arg.is_symbol() {
+        Expr::address_of(closure_arg.clone())
+    } else {
+        let predicate_ty = closure_arg.typ().clone().to_pointer();
+        Expr::nondet(predicate_ty)
+    };
+
+    // Substitute: replace the var parameter with the quantified variable,
+    // and the env parameter with the closure environment.
+    // substitute_symbol does NOT recurse into StatementExpression nodes,
+    // so if the closure body contains checked arithmetic or function calls
+    // that produce StatementExpression, the result will still have side effects.
+    // In that case, return None to signal the caller to use the fallback path.
+    let result = return_expr
+        .substitute_symbol(&var_param, quantified_var)
+        .0
+        .substitute_symbol(&env_param, &env_expr)
+        .0;
+
+    if result.is_side_effect() { None } else { Some(result) }
+}
+
+/// Get the closure's function pointer expression for use in a function call.
+/// This is the fallback path when direct substitution cannot produce a
+/// side-effect-free predicate expression.
+/// Threshold above which a quantifier range is considered too large for SAT
+/// solvers. SAT-based backends expand quantifiers into one term per value in
+/// the range, so anything beyond this is likely to cause memory exhaustion or
+/// silent divergence. The value 1000 is chosen as a conservative default that
+/// covers most practical quantifier ranges while catching accidental unbounded
+/// or excessively large ranges.
+const QUANTIFIER_RANGE_WARN_THRESHOLD: u64 = 1000;
+
+/// Emit a compile-time warning when a quantifier's range is statically known
+/// to be large or unbounded. This catches the common mistake of writing
+/// `forall!(|i| ...)` (which expands over all 2^64 usize values) without
+/// selecting an SMT solver.
+///
+/// Only fires when **both** bounds resolve to compile-time integer constants.
+/// Bounded quantifiers (`forall!(|i in (lo, hi)| ...)`) use `let` bindings
+/// for type coercion, which hides the constants from codegen — so this
+/// currently only detects unbounded quantifiers in practice.
+fn warn_large_quantifier_range(
+    gcx: &GotocCtx,
+    lower_bound: &Expr,
+    upper_bound: &Expr,
+    span: Span,
+    quantifier_kind: &QuantifierKind,
+) {
+    let lo = unwrap_to_constant(gcx, lower_bound, 0);
+    let hi = unwrap_to_constant(gcx, upper_bound, 0);
+    if let (Some(lo), Some(hi)) = (lo, hi)
+        // If hi <= lo the range is empty/inverted; no expansion happens, so no warning needed.
+        && hi > lo
+    {
+        let range_size = &hi - &lo;
+        let threshold = num::BigInt::from(QUANTIFIER_RANGE_WARN_THRESHOLD);
+        if range_size > threshold {
+            let kind = match quantifier_kind {
+                QuantifierKind::ForAll => "forall",
+                QuantifierKind::Exists => "exists",
+            };
+            // usize::MAX - usize::MIN = u64::MAX - 1 on 64-bit targets; treat
+            // anything in this ballpark as effectively unbounded.
+            let near_max = num::BigInt::from(u64::MAX) - num::BigInt::from(1u64);
+            let size_str = if range_size >= near_max {
+                "unbounded (~2^64)".to_string()
+            } else {
+                format!("{range_size}")
+            };
+            let internal_span = rustc_internal::internal(gcx.tcx, span);
+            gcx.tcx.dcx().span_warn(
+                internal_span,
+                format!(
+                    "`kani::{kind}` has an {size_str} range; \
+                     SAT solvers (the default backend) expand quantifiers \
+                     over every value and may exhaust memory or diverge. \
+                     Consider adding tighter bounds or using an SMT solver \
+                     (`#[kani::solver(z3)]` or `--solver z3`)."
+                ),
+            );
+        }
+    }
+}
+
+/// Maximum recursion depth for `unwrap_to_constant` to guard against cycles.
+const MAX_UNWRAP_DEPTH: u8 = 5;
+
+/// Unwrap typecasts and symbol references to extract an integer constant.
+fn unwrap_to_constant(gcx: &GotocCtx, expr: &Expr, depth: u8) -> Option<num::BigInt> {
+    if depth > MAX_UNWRAP_DEPTH {
+        return None;
+    }
+    expr.int_constant_value().or_else(|| match expr.value() {
+        cbmc::goto_program::ExprValue::Typecast(inner) => unwrap_to_constant(gcx, inner, depth + 1),
+        cbmc::goto_program::ExprValue::Symbol { identifier } => {
+            gcx.symbol_table.lookup(*identifier).and_then(|sym| match &sym.value {
+                SymbolValues::Expr(init) => unwrap_to_constant(gcx, init, depth + 1),
+                _ => None,
+            })
+        }
+        _ => None,
+    })
+}
+
 fn find_closure_call_expr(instance: &Instance, gcx: &mut GotocCtx, loc: Location) -> Option<Expr> {
     for arg in instance.args().0.iter() {
         let arg_ty = arg.ty()?;
@@ -907,6 +1226,106 @@ fn find_closure_call_expr(instance: &Instance, gcx: &mut GotocCtx, loc: Location
         }
     }
     None
+}
+
+/// Find the closure Instance from the quantifier function's generic args.
+fn find_closure_instance(instance: &Instance) -> Option<Instance> {
+    for arg in instance.args().0.iter() {
+        let arg_ty = arg.ty()?;
+        let kind = arg_ty.kind();
+        let arg_kind = kind.rigid()?;
+        if let RigidTy::Closure(def_id, args) = arg_kind {
+            return Instance::resolve_closure(*def_id, args, ClosureKind::Fn).ok();
+        }
+    }
+    None
+}
+
+/// Extract the return expression from a function body, fully resolving all
+/// intermediate variable assignments to produce a self-contained expression
+/// that only references the function parameters.
+fn extract_return_expr(stmt: &Stmt) -> Option<Expr> {
+    // Collect all assignments: symbol -> rhs
+    let mut assignments: HashMap<InternedString, Expr> = HashMap::new();
+    collect_assignments(stmt, &mut assignments);
+
+    // Find the return expression — either a symbol (resolved via assignments)
+    // or a direct expression.
+    let mut expr = match find_return_expr(stmt) {
+        Some(ReturnExpr::Symbol(sym)) => assignments.remove(&sym)?,
+        Some(ReturnExpr::Direct(e)) => e,
+        None => return None,
+    };
+
+    // Iteratively resolve intermediate variables until no more can be resolved.
+    // Capped at assignments.len() + 1 passes to guard against cyclic assignments.
+    for _ in 0..=assignments.len() {
+        let mut changed = false;
+        for (sym, rhs) in assignments.iter() {
+            let (new_expr, did_change) = expr.clone().substitute_symbol(sym, rhs);
+            if did_change {
+                expr = new_expr;
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    Some(expr)
+}
+
+enum ReturnExpr {
+    Symbol(InternedString),
+    Direct(Expr),
+}
+
+/// Find the return expression from a function body.
+/// Returns either a symbol identifier (to be resolved via assignments) or
+/// a direct expression (for closures that return complex expressions).
+fn find_return_expr(stmt: &Stmt) -> Option<ReturnExpr> {
+    match stmt.body() {
+        StmtBody::Return(Some(expr)) => {
+            if let ExprValue::Symbol { identifier } = expr.value() {
+                Some(ReturnExpr::Symbol(*identifier))
+            } else {
+                Some(ReturnExpr::Direct(expr.clone()))
+            }
+        }
+        StmtBody::Block(stmts) => {
+            for s in stmts {
+                if let Some(r) = find_return_expr(s) {
+                    return Some(r);
+                }
+            }
+            None
+        }
+        StmtBody::Label { body, .. } => find_return_expr(body),
+        _ => None,
+    }
+}
+
+/// Collect all assignments (symbol = expr) from a statement tree.
+fn collect_assignments(stmt: &Stmt, map: &mut HashMap<InternedString, Expr>) {
+    match stmt.body() {
+        StmtBody::Assign { lhs, rhs } => {
+            if let ExprValue::Symbol { identifier } = lhs.value() {
+                map.insert(*identifier, rhs.clone());
+            }
+        }
+        StmtBody::Decl { lhs, value: Some(val) } => {
+            if let ExprValue::Symbol { identifier } = lhs.value() {
+                map.insert(*identifier, val.clone());
+            }
+        }
+        StmtBody::Block(stmts) => {
+            for s in stmts {
+                collect_assignments(s, map);
+            }
+        }
+        StmtBody::Label { body, .. } => collect_assignments(body, map),
+        _ => {}
+    }
 }
 
 pub fn fn_hooks() -> GotocHooks {
@@ -951,15 +1370,21 @@ pub struct GotocHooks {
 
 impl GotocHooks {
     pub fn hook_applies(&self, tcx: TyCtxt, instance: Instance) -> Option<Rc<dyn GotocHook>> {
-        if let Ok(KaniFunction::Hook(hook)) = KaniFunction::try_from(instance) {
-            Some(self.kani_lib_hooks[&hook].clone())
-        } else {
-            for h in &self.other_hooks {
-                if h.hook_applies(tcx, instance) {
-                    return Some(h.clone());
-                }
-            }
-            None
+        let fn_attr = attributes::fn_marker(instance.def);
+        if let Some(ref fn_attr) = fn_attr
+            && let Some(KaniFunction::Hook(hook)) = try_get_kani_function(fn_attr)
+        {
+            return Some(self.kani_lib_hooks[&hook].clone());
         }
+
+        let instance_name = instance.name();
+        let kani_tool_attr = fn_attr.as_ref();
+
+        for h in &self.other_hooks {
+            if h.hook_applies(tcx, instance, &instance_name, kani_tool_attr) {
+                return Some(h.clone());
+            }
+        }
+        None
     }
 }

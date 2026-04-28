@@ -272,6 +272,14 @@ impl GotocCtx<'_, '_> {
             Intrinsic::AddWithOverflow => {
                 self.codegen_op_with_overflow(BinaryOperator::OverflowResultPlus, fargs, place, loc)
             }
+            Intrinsic::AlignOf => {
+                let genarg = instance.args();
+                let tys = genarg.0.clone();
+                let t = tys.first().unwrap().ty().unwrap();
+                let layout = self.layout_of_stable(*t);
+                let expr = Expr::int_constant(layout.align.abi.bytes(), Type::size_t());
+                self.codegen_expr_to_place_stable(place, expr, loc)
+            }
             Intrinsic::ArithOffset => self.codegen_arith_offset(fargs, place, loc),
             Intrinsic::AssertInhabited => {
                 self.codegen_assert_intrinsic(instance, intrinsic_str, span)
@@ -481,6 +489,15 @@ impl GotocCtx<'_, '_> {
                 loc,
             ),
             Intrinsic::SimdXor => codegen_intrinsic_binop!(bitxor),
+            Intrinsic::SizeOf => {
+                let genarg = instance.args();
+                let tys = genarg.0.clone();
+                let t = tys.first().unwrap().ty().unwrap();
+                let layout = self.layout_of_stable(*t);
+                let expr = Expr::int_constant(layout.size.bytes_usize(), Type::size_t())
+                    .with_size_of_annotation(self.codegen_ty_stable(*t));
+                self.codegen_expr_to_place_stable(place, expr, loc)
+            }
             Intrinsic::SqrtF32 => codegen_simple_intrinsic!(Sqrtf),
             Intrinsic::SqrtF64 => codegen_simple_intrinsic!(Sqrt),
             Intrinsic::SubWithOverflow => self.codegen_op_with_overflow(
@@ -788,16 +805,15 @@ impl GotocCtx<'_, '_> {
     /// its primary argument and returns a tuple that contains:
     ///  * the previous value
     ///  * a boolean value indicating whether the operation was successful or not
-    ///
-    /// In a sequential context, the update is always sucessful so we assume the
-    /// second value to be true.
     /// -------------------------
     /// var = atomic_cxchg(var1, var2, var3)
     /// -------------------------
     /// unsigned char tmp;
+    /// bool success;
     /// tmp = *var1;
-    /// if (*var1 == var2) *var1 = var3;
-    /// var = (tmp, true);
+    /// success = (*var1 == var2);
+    /// if (success) *var1 = var3;
+    /// var = (tmp, success);
     /// -------------------------
     fn codegen_atomic_cxchg(
         &mut self,
@@ -813,16 +829,21 @@ impl GotocCtx<'_, '_> {
             self.decl_temp_variable(var1.typ().clone(), Some(var1.to_owned()), loc);
         let var2 = fargs.remove(0).with_location(loc);
         let var3 = fargs.remove(0).with_location(loc);
-        let eq_expr = (var1.clone()).eq(var2);
+        let eq_expr = var1.clone().eq(var2);
+        // Store the comparison result so we can use it both for the condition and the return value
+        let (success, success_decl) = self.decl_temp_variable(Type::bool(), Some(eq_expr), loc);
         let assign_stmt = var1.assign(var3, loc);
-        let cond_update_stmt = Stmt::if_then_else(eq_expr, assign_stmt, None, loc);
+        let cond_update_stmt = Stmt::if_then_else(success.clone(), assign_stmt, None, loc);
         let place_type = self.place_ty_stable(p);
         let res_type = self.codegen_ty_stable(place_type);
-        let tuple_expr =
-            Expr::struct_expr_from_values(res_type, vec![tmp, Expr::c_true()], &self.symbol_table)
-                .with_location(loc);
+        let tuple_expr = Expr::struct_expr_from_values(
+            res_type,
+            vec![tmp, success.cast_to(Type::c_bool())],
+            &self.symbol_table,
+        )
+        .with_location(loc);
         let res_stmt = self.codegen_expr_to_place_stable(p, tuple_expr, loc);
-        Stmt::atomic_block(vec![decl_stmt, cond_update_stmt, res_stmt], loc)
+        Stmt::atomic_block(vec![decl_stmt, success_decl, cond_update_stmt, res_stmt], loc)
     }
 
     /// An atomic store updates the value referenced in

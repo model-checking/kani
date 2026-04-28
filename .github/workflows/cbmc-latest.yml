@@ -5,6 +5,9 @@
 name: >-
   Nightly: CBMC Latest
 
+permissions:
+  contents: read
+
 on:
   schedule:
     - cron: "0 9 * * *" # Run this every day at 9 AM UTC (4 AM ET/1 AM PT)
@@ -19,10 +22,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-13, ubuntu-22.04, ubuntu-24.04]
+        os: [macos-15-intel, ubuntu-22.04, ubuntu-24.04]
     steps:
       - name: Checkout Kani under "kani"
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           path: kani
 
@@ -33,7 +36,7 @@ jobs:
           kani_dir: 'kani'
 
       - name: Checkout CBMC under "cbmc"
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: diffblue/cbmc
           path: cbmc
@@ -64,7 +67,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout Kani under "kani"
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           path: kani
 
@@ -79,7 +82,7 @@ jobs:
         run: cargo build-dev -- --release
 
       - name: Checkout CBMC under "cbmc"
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: diffblue/cbmc
           path: cbmc

@@ -6,6 +6,8 @@
 # The release will create a draft release and upload the bundles to it, and it will only run when we push a new
 # release tag (i.e.: tag named `kani-*`).
 name: Release Bundle
+permissions:
+  contents: read
 on:
   pull_request:
   merge_group:
@@ -22,7 +24,7 @@ env:
 jobs:
   build_bundle_macos_x86_64:
     name: BuildBundle-MacOs-x86_64
-    runs-on: macos-13
+    runs-on: macos-15-intel
     outputs:
       version: ${{ steps.bundle.outputs.version }}
       bundle: ${{ steps.bundle.outputs.bundle }}
@@ -30,12 +32,12 @@ jobs:
       crate_version: ${{ steps.bundle.outputs.crate_version }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
         with:
-          os: macos-13
+          os: macos-15-intel
 
       - name: Build bundle
         id: bundle
@@ -53,7 +55,7 @@ jobs:
       crate_version: ${{ steps.bundle.outputs.crate_version }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
@@ -76,7 +78,7 @@ jobs:
       crate_version: ${{ steps.bundle.outputs.crate_version }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
@@ -99,7 +101,7 @@ jobs:
       crate_version: ${{ steps.bundle.outputs.crate_version }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
@@ -117,9 +119,9 @@ jobs:
     needs: [build_bundle_macos_x86_64, build_bundle_macos_aarch64, build_bundle_linux_x86_64, build_bundle_linux_aarch64]
     strategy:
       matrix:
-        os: [macos-13, macos-14, ubuntu-22.04, ubuntu-24.04, ubuntu-24.04-arm]
+        os: [macos-15-intel, macos-14, ubuntu-22.04, ubuntu-24.04, ubuntu-24.04-arm]
         include:
-        - os: macos-13
+        - os: macos-15-intel
           rust_target: x86_64-apple-darwin
           prev_job: ${{ needs.build_bundle_macos_x86_64.outputs }}
         - os: macos-14
@@ -137,12 +139,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Download bundle
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: ${{ matrix.prev_job.bundle }}
 
       - name: Download kani-verifier crate
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: ${{ matrix.prev_job.package }}
 
@@ -186,7 +188,7 @@ jobs:
           fi
 
       - name: Checkout tests
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Move rust-toolchain file to outside kani
         run: |
@@ -223,11 +225,11 @@ jobs:
     needs: [build_bundle_macos_x86_64, build_bundle_macos_aarch64, build_bundle_linux_x86_64, build_bundle_linux_aarch64]
     strategy:
       matrix:
-        os: [macos-13, macos-14, ubuntu-22.04, ubuntu-24.04, ubuntu-24.04-arm]
+        os: [macos-15-intel, macos-14, ubuntu-22.04, ubuntu-24.04, ubuntu-24.04-arm]
         include:
           # Stores the output of the previous job conditional to the OS
           - prev_job: ${{ needs.build_bundle_linux_x86_64.outputs }}
-          - os: macos-13
+          - os: macos-15-intel
             prev_job: ${{ needs.build_bundle_macos_x86_64.outputs }}
           - os: macos-14
             prev_job: ${{ needs.build_bundle_macos_aarch64.outputs }}
@@ -236,12 +238,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Download bundle
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: ${{ matrix.prev_job.bundle }}
 
       - name: Download kani-verifier crate
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: ${{ matrix.prev_job.package }}
 
@@ -256,7 +258,7 @@ jobs:
           cargo kani setup --use-local-bundle ./${{ matrix.prev_job.bundle }}
 
       - name: Checkout tests
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Run tests
         # TODO: Customize compiletest to run custom kani. For now, just run a few cargo kani tests.
@@ -272,13 +274,15 @@ jobs:
     if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/kani-') }}
     name: Release
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     needs: [build_bundle_macos_x86_64, build_bundle_macos_aarch64, build_bundle_linux_x86_64, build_bundle_linux_aarch64, test_bundle]
     outputs:
       version: ${{ steps.versioning.outputs.version }}
       upload_url: ${{ steps.create_release.outputs.upload_url }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Get version
         run: |
@@ -298,28 +302,28 @@ jobs:
           echo "version=${{ env.TAG_VERSION }}" >> $GITHUB_OUTPUT
 
       - name: Download MacOS bundle
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.build_bundle_macos_x86_64.outputs.bundle }}
 
       - name: Download MacOS ARM bundle
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.build_bundle_macos_aarch64.outputs.bundle }}
 
       - name: Download Linux bundle
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.build_bundle_linux_x86_64.outputs.bundle }}
 
       - name: Download Linux Arm bundle
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.build_bundle_linux_aarch64.outputs.bundle }}
 
       - name: Create release
         id: create_release
-        uses: ncipollo/release-action@v1.19.1
+        uses: ncipollo/release-action@v1.21.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -342,7 +346,7 @@ jobs:
       target: x86_64-unknown-linux-gnu
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
@@ -355,7 +359,7 @@ jobs:
           cargo package -p kani-verifier
 
       - name: 'Login to GitHub Container Registry'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -368,7 +372,7 @@ jobs:
           OWNER: '${{ github.repository_owner }}'
 
       - name: Build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: scripts/ci/Dockerfile.bundle-release-24-04

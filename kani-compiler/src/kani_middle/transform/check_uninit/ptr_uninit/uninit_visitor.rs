@@ -220,14 +220,6 @@ impl MirVisitor for CheckUninitVisitor {
                     }
                 }
             }
-            StatementKind::Deinit(place) => {
-                self.super_statement(stmt, location);
-                self.push_target(MemoryInitOp::Set {
-                    operand: Operand::Copy(place.clone()),
-                    value: false,
-                    position: InsertPosition::After,
-                });
-            }
             StatementKind::FakeRead(_, _)
             | StatementKind::SetDiscriminant { .. }
             | StatementKind::StorageLive(_)
@@ -418,7 +410,7 @@ impl MirVisitor for CheckUninitVisitor {
                     .rigid()
                     .expect("should be working with monomorphized code")
                 {
-                    RigidTy::Adt(..) | RigidTy::Dynamic(_, _, _) => {
+                    RigidTy::Adt(..) | RigidTy::Dynamic(_, _) => {
                         self.push_target(MemoryInitOp::SetRef {
                             operand: Operand::Copy(place.clone()),
                             value: true,
@@ -488,7 +480,6 @@ impl MirVisitor for CheckUninitVisitor {
                 }
                 ProjectionElem::Downcast(_) => {}
                 ProjectionElem::OpaqueCast(_) => {}
-                ProjectionElem::Subtype(_) => {}
             }
         }
         self.super_place(place, ptx, location)

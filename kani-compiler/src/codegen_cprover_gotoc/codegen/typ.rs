@@ -25,7 +25,7 @@ use rustc_public::mir::Body;
 use rustc_public::mir::mono::Instance as InstanceStable;
 use rustc_public::rustc_internal;
 use rustc_public::ty::{
-    Binder, DynKind, ExistentialPredicate, ExistentialProjection, Region, RegionKind, RigidTy,
+    Binder, ExistentialPredicate, ExistentialProjection, Region, RegionKind, RigidTy,
     Ty as StableTy,
 };
 use rustc_span::def_id::DefId;
@@ -301,8 +301,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
         predictates.extend(
             projections.into_iter().map(|proj| proj.map_bound(ExistentialPredicate::Projection)),
         );
-        let rigid =
-            RigidTy::Dynamic(predictates, Region { kind: RegionKind::ReErased }, DynKind::Dyn);
+        let rigid = RigidTy::Dynamic(predictates, Region { kind: RegionKind::ReErased });
 
         rustc_public::ty::Ty::from_rigid_kind(rigid)
     }
@@ -419,12 +418,12 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     /// We follow the order from the `TyCtxt::COMMON_VTABLE_ENTRIES`.
     fn trait_vtable_field_types(&mut self, t: ty::Ty<'tcx>) -> Vec<DatatypeComponent> {
         let mut vtable_base = common_vtable_fields(self.trait_vtable_drop_type(t));
-        if let ty::Dynamic(binder, _, _) = t.kind() {
+        if let ty::Dynamic(binder, _) = t.kind() {
             // The virtual methods on the trait ref. Some auto traits have no methods.
             if let Some(principal) = binder.principal() {
                 let poly = principal.with_self_ty(self.tcx, t);
                 let poly = self.tcx.instantiate_bound_regions_with_erased(poly);
-                let poly = self.tcx.erase_regions(poly);
+                let poly = self.tcx.erase_and_anonymize_regions(poly);
                 let mut flds = self
                     .tcx
                     .vtable_entries(poly)
@@ -809,7 +808,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
         let flds: Vec<_> =
             tys.iter().enumerate().map(|(i, t)| (GotocCtx::tuple_fld_name(i), *t)).collect();
         // tuple cannot have other initial offset
-        self.codegen_struct_fields(flds, &layout.layout.0, Size::ZERO)
+        self.codegen_struct_fields(flds, &layout.layout, Size::ZERO)
     }
 
     /// A closure is a struct of all its environments. That is, a closure is
@@ -981,7 +980,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             }
             fields.extend(ctx.codegen_alignment_padding(
                 offset,
-                &type_and_layout.layout.0,
+                &type_and_layout.layout,
                 fields.len(),
             ));
             fields
@@ -1176,7 +1175,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
         self.ensure_struct(self.ty_mangled_name(ty), self.ty_pretty_name(ty), |ctx, _| {
             let variant = &def.variants().raw[0];
             let layout = ctx.layout_of(ty);
-            ctx.codegen_variant_struct_fields(variant, subst, &layout.layout.0, Size::ZERO)
+            ctx.codegen_variant_struct_fields(variant, subst, &layout.layout, Size::ZERO)
         })
     }
 
@@ -1294,7 +1293,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                         Some(variant) => {
                             // a single enum is pretty much like a struct
                             let layout = gcx.layout_of(ty).layout;
-                            gcx.codegen_variant_struct_fields(variant, subst, &layout.0, Size::ZERO)
+                            gcx.codegen_variant_struct_fields(variant, subst, &layout, Size::ZERO)
                         }
                     }
                 })

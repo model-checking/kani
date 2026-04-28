@@ -1,0 +1,1 @@
+error: failed to resolve `<Counter as MyIterator < Item = u32 >>::next`: Kani currently cannot resolve associated type/const constraints in trait stubs

@@ -5,6 +5,9 @@
 name: >-
   Nightly: Slow tests
 
+permissions:
+  contents: read
+
 on:
   schedule:
     - cron: "30 5 * * *" # Run this every day at 05:30 UTC
@@ -18,10 +21,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-13, ubuntu-22.04, ubuntu-24.04]
+        os: [macos-15-intel, ubuntu-22.04, ubuntu-24.04]
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup

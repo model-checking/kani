@@ -3,7 +3,7 @@
 
 [package]
 name = "kani-compiler"
-version = "0.65.0"
+version = "0.67.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 publish = false
@@ -12,6 +12,7 @@ publish = false
 cbmc = { path = "../cprover_bindings", package = "cprover_bindings", optional = true }
 charon = { path = "../charon/charon", optional = true, default-features = false } 
 clap = { version = "4.4.11", features = ["derive", "cargo"] }
+indexmap = { version = "2.7.1", features = ["serde"] }
 itertools = "0.14"
 kani_metadata = { path = "../kani_metadata" }
 lazy_static = "1.5.0"
@@ -20,6 +21,7 @@ quote = "1.0.36"
 regex = "1.11.1"
 serde = { version = "1", optional = true }
 serde_json = "1"
+sha1-checked = "0.10.0"
 strum = "0.27.1"
 strum_macros = "0.27.1"
 syn = { version = "2.0.72", features = ["parsing", "extra-traits"] }
