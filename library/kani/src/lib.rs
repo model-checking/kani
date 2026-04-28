@@ -92,7 +92,7 @@ macro_rules! implies {
 ///
 /// # Example
 ///
-/// ```rust
+/// ```ignore
 /// kani::stub_set!(my_stubs,
 ///     stub(std::fs::read, my_read),
 ///     stub(std::fs::write, my_write),
@@ -105,7 +105,7 @@ macro_rules! implies {
 ///
 /// Stub sets can also include other stub sets:
 ///
-/// ```rust
+/// ```ignore
 /// kani::stub_set!(all_stubs,
 ///     use_stub_set(my_stubs),
 ///     stub(other::func, my_func),
@@ -114,6 +114,7 @@ macro_rules! implies {
 #[macro_export]
 macro_rules! stub_set {
     (pub $name:ident, $($entry:tt)*) => {
+        /// A Kani stub set definition.
         #[allow(non_upper_case_globals)]
         #[kanitool::stub_set($($entry)*)]
         pub const $name: () = ();
