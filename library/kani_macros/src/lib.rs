@@ -84,6 +84,18 @@ pub fn stub(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::stub(attr, item)
 }
 
+/// Apply a named stub set to a proof harness.
+///
+/// The attribute `#[kani::use_stub_set(name)]` can only be used alongside `#[kani::proof]`.
+/// The stub set must be defined using the `kani::stub_set!` macro.
+///
+/// # Arguments
+/// * `name` - The path to the stub set, resolved using Rust's standard name resolution rules.
+#[proc_macro_attribute]
+pub fn use_stub_set(attr: TokenStream, item: TokenStream) -> TokenStream {
+    attr_impl::use_stub_set(attr, item)
+}
+
 /// Select the SAT solver to use with CBMC for this harness
 ///
 /// The attribute `#[kani::solver(arg)]` can only be used alongside `#[kani::proof]`.
@@ -599,6 +611,7 @@ mod sysroot {
     kani_attribute!(stub);
     kani_attribute!(unstable);
     kani_attribute!(unwind);
+    kani_attribute!(use_stub_set);
 }
 
 /// This module provides dummy implementations of Kani attributes which cannot be interpreted by
@@ -637,6 +650,7 @@ mod regular {
     no_op!(modifies);
     no_op!(proof_for_contract);
     no_op!(stub_verified);
+    no_op!(use_stub_set);
     no_op!(loop_invariant);
     no_op!(loop_modifies);
     no_op!(loop_decreases);
