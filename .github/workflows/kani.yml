@@ -60,6 +60,7 @@ jobs:
 
   perf:
     runs-on: ubuntu-24.04
+    timeout-minutes: 90
     permissions:
       contents: read
     steps:
@@ -72,7 +73,14 @@ jobs:
           os: ubuntu-24.04
 
       - name: Execute Kani performance tests
-        run: ./scripts/kani-perf.sh
+        # Retry on infra-driven failures (spot preemption / runner shutdown).
+        # The script itself bounds per-test wall time, so functional regressions
+        # surface as normal test failures and are not retried indefinitely.
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 80
+          max_attempts: 2
+          command: ./scripts/kani-perf.sh
         env:
           RUST_TEST_THREADS: 1
 
