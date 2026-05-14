@@ -1,5 +1,16 @@
-// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
-// SPDX-License-Identifier: Apache-2.0
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+//
+// Derived from `quic/s2n-quic-core/src/inet/checksum.rs` in
+// https://github.com/aws/s2n-quic, originally authored by Amazon.com, Inc.
+// and its affiliates under SPDX-License-Identifier: Apache-2.0.
+//
+// This file is a Kani-only overlay that gets copied over the s2n-quic
+// submodule by `scripts/kani-perf.sh` before the perf suite runs (see
+// `tests/perf/overlays/README.md`). Compared to upstream, the only
+// changes are the verification-time `LEN` and `kani::unwind` constants
+// in the `tests` module, to keep peak RSS within the GitHub-hosted
+// runner ceiling on `nightly-2025-12-04` (rust-lang/rust#146436).
 
 use core::{fmt, hash::Hasher, num::Wrapping};
 
