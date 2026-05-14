@@ -26,8 +26,12 @@ done
 
 suite="perf"
 mode="cargo-kani-test"
-echo "Check compiletest suite=$suite mode=$mode"
-cargo run -p compiletest -- --suite $suite --mode $mode --no-fail-fast
+# Bound each test's wall time so a runaway case (e.g. an OOM-prone harness)
+# fails as a normal test failure with output, instead of triggering an
+# unattributable runner OOM-kill / shutdown signal in CI.
+timeout_secs="${KANI_PERF_TEST_TIMEOUT:-1800}"
+echo "Check compiletest suite=$suite mode=$mode timeout=${timeout_secs}s"
+cargo run -p compiletest -- --suite $suite --mode $mode --no-fail-fast --timeout "$timeout_secs"
 exit_code=$?
 
 echo "Cleaning up..."
