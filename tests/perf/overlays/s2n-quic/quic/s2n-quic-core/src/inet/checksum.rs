@@ -412,8 +412,11 @@ mod tests {
 
     /// * Compares the implementation to a port of the C code defined in the RFC
     /// * Ensures partial writes are correctly handled, even if they're not at a 16 bit boundary
+    // The unwind value is set to LEN+1 (9) rather than the upstream 17. With LEN=8,
+    // unwind=9 is sufficient to fully unroll all loops touching the input slice;
+    // the upstream value of 17 was sized for LEN=16 and is now overkill.
     #[test]
-    #[cfg_attr(kani, kani::proof, kani::unwind(17), kani::solver(cadical))]
+    #[cfg_attr(kani, kani::proof, kani::unwind(9), kani::solver(cadical))]
     fn differential() {
         #[cfg(any(kani, miri))]
         type Bytes = crate::testing::InlineVec<u8, LEN>;
