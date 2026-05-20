@@ -119,6 +119,15 @@ fn standalone_main() -> Result<()> {
             let project = project::std_project(&args.std_path, &session)?;
             (session, project)
         }
+        Some(StandaloneSubcommand::VerifyArtifacts(args)) => {
+            let session = KaniSession::new(args.verify_opts)?;
+            if !session.args.common_args.quiet {
+                print_kani_version(InvocationType::Standalone);
+            }
+
+            let project = project::prebuilt_project(&args.artifact_dirs, &session)?;
+            (session, project)
+        }
         None => {
             let session = KaniSession::new(args.verify_opts)?;
             if !session.args.common_args.quiet {
