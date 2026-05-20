@@ -7,11 +7,12 @@
 use crate::metadata::from_json;
 use crate::session::KaniSession;
 use crate::util::{crate_name, info_operation};
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use kani_metadata::{
     ArtifactType, ArtifactType::*, HarnessMetadata, KaniMetadata, artifact::convert_type,
 };
 use std::env::current_dir;
+use std::ffi::OsStr;
 use std::fs;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -303,4 +304,173 @@ pub(crate) fn std_project(std_path: &Path, session: &KaniSession) -> Result<Proj
     // Get the metadata and return a Kani project.
     let metadata = outputs.iter().map(|md_file| from_json(md_file)).collect::<Result<Vec<_>>>()?;
     Project::try_new(session, outdir, None, metadata, None)
+}
+
+/// Parse all `*.kani-metadata.json` files under the given directories, rewriting
+/// each harness's `goto_file` to be relative to the directory the metadata was
+/// found in.
+///
+/// kani-compiler records `goto_file` as the absolute path it was emitted to —
+/// which is the build machine's `OUT_DIR` and is wrong after the artifacts are
+/// relocated (a CI cache, an archive, a build-system store). The artifacts are
+/// always co-located with the metadata file (kani-compiler emits them to the
+/// same directory), so resolving by basename next to the metadata is correct.
+fn read_prebuilt_metadata(artifact_dirs: &[PathBuf]) -> Result<Vec<KaniMetadata>> {
+    let mut metadata = vec![];
+    for dir in artifact_dirs {
+        let dir = dir.canonicalize().with_context(|| {
+            format!("Failed to canonicalize artifact directory `{}`", dir.display())
+        })?;
+        let mut found_any = false;
+        for entry in fs::read_dir(&dir)
+            .with_context(|| format!("Failed to read artifact directory `{}`", dir.display()))?
+        {
+            let path = entry?.path();
+            let is_metadata = path
+                .file_name()
+                .and_then(OsStr::to_str)
+                .is_some_and(|n| n.ends_with(".kani-metadata.json"));
+            if !is_metadata {
+                continue;
+            }
+            found_any = true;
+            let mut md: KaniMetadata = from_json(&path)?;
+            for h in md.proof_harnesses.iter_mut().chain(md.test_harnesses.iter_mut()) {
+                if let Some(gf) = &h.goto_file {
+                    // Take only the basename; resolve against the directory
+                    // the metadata file was found in.
+                    let basename = gf.file_name().with_context(|| {
+                        format!(
+                            "Harness `{}` has a goto_file with no file name component",
+                            h.pretty_name
+                        )
+                    })?;
+                    h.goto_file = Some(dir.join(basename));
+                }
+            }
+            metadata.push(md);
+        }
+        if !found_any {
+            bail!(
+                "No `*.kani-metadata.json` files found in `{}`. \
+                 Was this directory produced by a `kani-compiler` build?",
+                dir.display()
+            );
+        }
+    }
+    Ok(metadata)
+}
+
+/// Generate a project from pre-built artifacts in the given directories.
+///
+/// Each directory is scanned for `*.kani-metadata.json` files. For each
+/// harness, `goto_file` is resolved relative to the directory the metadata was
+/// found in. Artifacts must be co-located with the metadata file — this is
+/// kani-compiler's emit layout, which `read_prebuilt_metadata()` documents.
+///
+/// Note: `Project::try_new()` writes the linked `.out` file next to each
+/// `.symtab.out`, so `artifact_dirs` must be writable. Callers reading from a
+/// read-only artifact source (build cache, archive) should copy to a scratch
+/// directory first.
+pub fn prebuilt_project(artifact_dirs: &[PathBuf], session: &KaniSession) -> Result<Project> {
+    let outdir = if let Some(target_dir) = &session.args.target_dir {
+        std::fs::create_dir_all(target_dir)?;
+        target_dir.canonicalize()?
+    } else {
+        current_dir()?.canonicalize()?
+    };
+    let metadata = read_prebuilt_metadata(artifact_dirs)?;
+    Project::try_new(session, outdir, None, metadata, None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kani_metadata::{HarnessAttributes, HarnessKind};
+    use std::fs;
+
+    /// Build a minimal `KaniMetadata` with one proof harness whose `goto_file`
+    /// is the given path. Only `goto_file` matters; everything else is filler.
+    fn metadata_with_goto_file(goto_file: Option<PathBuf>) -> KaniMetadata {
+        KaniMetadata {
+            crate_name: "fixture".to_string(),
+            proof_harnesses: vec![HarnessMetadata {
+                pretty_name: "fixture::check".to_string(),
+                mangled_name: "_RNvNtCsfixture_5check".to_string(),
+                crate_name: "fixture".to_string(),
+                original_file: "src/lib.rs".to_string(),
+                original_start_line: 1,
+                original_end_line: 5,
+                goto_file,
+                attributes: HarnessAttributes::new(HarnessKind::Proof),
+                contract: None,
+                has_loop_contracts: false,
+                is_automatically_generated: false,
+            }],
+            unsupported_features: vec![],
+            test_harnesses: vec![],
+            contracted_functions: vec![],
+            autoharness_md: None,
+        }
+    }
+
+    /// `read_prebuilt_metadata()` rewrites each harness's `goto_file` to live
+    /// next to the metadata file it was found in — the recorded build-machine
+    /// path is meaningless after relocation.
+    #[test]
+    fn prebuilt_project_relocates_goto_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        // The recorded path is an absolute path from a different machine.
+        let recorded = PathBuf::from("/build/some-other-machine/fixture__hash.symtab.out");
+        let basename = "fixture__hash.symtab.out";
+        // Co-located artifact, documenting the layout the function assumes.
+        // `read_prebuilt_metadata()` does not validate existence — it rewrites
+        // unconditionally; the symtab is only read later by `Project::try_new()`.
+        fs::write(dir.join(basename), b"").unwrap();
+        fs::write(
+            dir.join("fixture.kani-metadata.json"),
+            serde_json::to_string(&metadata_with_goto_file(Some(recorded))).unwrap(),
+        )
+        .unwrap();
+
+        let parsed = read_prebuilt_metadata(&[dir.to_path_buf()]).unwrap();
+        assert_eq!(parsed.len(), 1);
+        // The rewritten path must point inside the temp dir, not /build/....
+        // Compare against the canonicalized dir — read_prebuilt_metadata()
+        // canonicalizes the input dir before joining, and on macOS /tmp is a
+        // symlink so a non-canonicalized comparison would spuriously fail.
+        let h = &parsed[0].proof_harnesses[0];
+        assert_eq!(
+            h.goto_file.as_deref(),
+            Some(dir.canonicalize().unwrap().join(basename).as_path())
+        );
+    }
+
+    /// A harness with no `goto_file` (reachability=none deps) must not panic;
+    /// `read_prebuilt_metadata()` leaves `None` alone.
+    #[test]
+    fn prebuilt_project_skips_none_goto_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        fs::write(
+            dir.join("fixture.kani-metadata.json"),
+            serde_json::to_string(&metadata_with_goto_file(None)).unwrap(),
+        )
+        .unwrap();
+
+        let parsed = read_prebuilt_metadata(&[dir.to_path_buf()]).unwrap();
+        assert_eq!(parsed[0].proof_harnesses[0].goto_file, None);
+    }
+
+    /// An empty directory (no `*.kani-metadata.json`) is an error, not a vacuous
+    /// success — silence here would look like a verification that found nothing
+    /// to verify.
+    #[test]
+    fn prebuilt_project_errors_on_empty_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let result = read_prebuilt_metadata(&[tmp.path().to_path_buf()]);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("No `*.kani-metadata.json`"));
+    }
 }
