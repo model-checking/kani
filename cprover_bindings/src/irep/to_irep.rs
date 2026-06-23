@@ -700,11 +700,44 @@ impl goto_program::Symbol {
     }
 }
 
+impl goto_program::Symbol {
+    /// Build the dedicated `contract::<name>` symbol that CBMC's contract
+    /// instrumentation expects to exist for any function that carries a
+    /// contract.
+    ///
+    /// When CBMC processes C inputs, its ANSI-C typechecker creates this
+    /// symbol (see `c_typecheck_baset` in CBMC) and moves the contract clauses
+    /// (e.g. `c_spec_assigns`) onto it. Kani builds goto-programs directly and
+    /// thus never goes through that typechecker, so we synthesize the symbol
+    /// here. The symbol shares the function's (contract-bearing) type, has no
+    /// body, and is marked as a property.
+    ///
+    /// Historically CBMC would derive this symbol on the fly when it was
+    /// missing, but that fallback was removed for soundness in
+    /// <https://github.com/diffblue/cbmc/pull/8739>, turning the missing
+    /// symbol into a hard error during `--enforce-contract` /
+    /// `--replace-call-with-contract`.
+    fn to_contract_irep(&self, mm: &MachineModel) -> super::Symbol {
+        let mut contract_symbol = self.to_irep(mm);
+        contract_symbol.name = format!("contract::{}", self.name).into();
+        contract_symbol.is_property = true;
+        // The contract symbol is a pure specification and carries no body.
+        contract_symbol.value = Irep::nil();
+        contract_symbol
+    }
+}
+
 impl goto_program::SymbolTable {
     pub fn to_irep(&self) -> super::SymbolTable {
         let mm = self.machine_model();
         let mut st = super::SymbolTable::new();
         for (_key, value) in self.iter() {
+            // Functions carrying a contract need a companion `contract::<name>`
+            // symbol so that CBMC's DFCC contract instrumentation can find it.
+            // See `goto_program::Symbol::to_contract_irep` for details.
+            if value.contract.is_some() {
+                st.insert(value.to_contract_irep(mm));
+            }
             st.insert(value.to_irep(mm))
         }
         st
