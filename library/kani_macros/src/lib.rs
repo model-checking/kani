@@ -507,28 +507,52 @@ mod sysroot {
         schedule: Option<syn::Expr>,
     }
 
-    impl Parse for ProofOptions {
+    /// The syntactic parse of the arguments to `#[kani::proof(...)]`.
+    ///
+    /// Parsing is kept separate from validation so that a semantic error (an
+    /// unrecognized option) can be reported as a rich [`Diagnostic`] -- with
+    /// structured `help`/`note` sub-diagnostics -- at the proc-macro entry
+    /// point, rather than being flattened into a `syn::Error`.
+    enum RawProofOptions {
+        /// No arguments, e.g. `#[kani::proof]`.
+        Empty,
+        /// `#[kani::proof(schedule = <expr>)]`.
+        Schedule(syn::Expr),
+        /// An unrecognized leading option, e.g. `#[kani::proof(foo)]`.
+        Unknown(syn::Ident),
+    }
+
+    impl Parse for RawProofOptions {
         fn parse(input: ParseStream) -> syn::Result<Self> {
             if input.is_empty() {
-                Ok(ProofOptions { schedule: None })
-            } else {
-                let ident = input.parse::<syn::Ident>()?;
-                if ident != "schedule" {
-                    return Err(Diagnostic::spanned(
-                        proc_macro2::Span::call_site(),
-                        Level::Error,
-                        format!("`{ident}` is not a valid option for `#[kani::proof]`."),
-                    )
-                    .help("did you mean `schedule`?".to_string())
-                    .note(
-                        "for now, `schedule` is the only option for `#[kani::proof]`.".to_string(),
-                    )
-                    .into());
-                }
-                let _ = input.parse::<syn::Token![=]>()?;
-                let schedule = Some(input.parse::<syn::Expr>()?);
-                Ok(ProofOptions { schedule })
+                return Ok(RawProofOptions::Empty);
             }
+            let ident = input.parse::<syn::Ident>()?;
+            if ident != "schedule" {
+                // Consume the remaining tokens so that `syn::parse` does not
+                // also report trailing input; the unknown option is reported
+                // by `parse_proof_options`.
+                input.parse::<proc_macro2::TokenStream>()?;
+                return Ok(RawProofOptions::Unknown(ident));
+            }
+            input.parse::<syn::Token![=]>()?;
+            Ok(RawProofOptions::Schedule(input.parse::<syn::Expr>()?))
+        }
+    }
+
+    /// Parse and validate the arguments to `#[kani::proof(...)]`, reporting any
+    /// problem as a [`Diagnostic`].
+    fn parse_proof_options(attr: TokenStream) -> Result<ProofOptions, Diagnostic> {
+        match syn::parse::<RawProofOptions>(attr).map_err(Diagnostic::from)? {
+            RawProofOptions::Empty => Ok(ProofOptions { schedule: None }),
+            RawProofOptions::Schedule(schedule) => Ok(ProofOptions { schedule: Some(schedule) }),
+            RawProofOptions::Unknown(ident) => Err(Diagnostic::spanned(
+                ident.span(),
+                Level::Error,
+                format!("`{ident}` is not a valid option for `#[kani::proof]`."),
+            )
+            .help("did you mean `schedule`?".to_string())
+            .note("for now, `schedule` is the only option for `#[kani::proof]`.".to_string())),
         }
     }
 
@@ -541,7 +565,7 @@ mod sysroot {
     }
 
     fn proof_impl(attr: TokenStream, fn_item: ItemFn) -> Result<TokenStream, Diagnostic> {
-        let proof_options = syn::parse::<ProofOptions>(attr)?;
+        let proof_options = parse_proof_options(attr)?;
         let attrs = fn_item.attrs;
         let vis = fn_item.vis;
         let sig = fn_item.sig;
