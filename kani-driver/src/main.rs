@@ -153,7 +153,9 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
         // users in a proof debugging session, who are usually interested in the
         // most recent results.
         let time_now = OffsetDateTime::now_utc();
-        let format = format_description::parse("[year]-[month]-[day]_[hour]-[minute]").unwrap();
+        let format =
+            format_description::parse_borrowed::<3>("[year]-[month]-[day]_[hour]-[minute]")
+                .unwrap();
         let timestamp = time_now.format(&format).unwrap();
 
         session.save_coverage_metadata(&project, &timestamp)?;
