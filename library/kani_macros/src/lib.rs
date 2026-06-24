@@ -14,7 +14,6 @@ mod derive_bounded;
 
 // proc_macro::quote is nightly-only, so we'll cobble things together instead
 use proc_macro::TokenStream;
-use proc_macro_error2::proc_macro_error;
 
 #[cfg(kani_sysroot)]
 use sysroot as attr_impl;
@@ -30,7 +29,6 @@ use regular as attr_impl;
 /// e.g. `#[kani::proof(schedule = kani::RoundRobin::default())]`.
 ///
 /// This will wrap the async function in a call to [`block_on_with_spawn`](https://model-checking.github.io/kani/crates/doc/kani/futures/fn.block_on_with_spawn.html) (see its documentation for more information).
-#[proc_macro_error]
 #[proc_macro_attribute]
 pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::proof(attr, item)
@@ -214,7 +212,6 @@ pub fn unstable_feature(attr: TokenStream, item: TokenStream) -> TokenStream {
 ///     y: i32,
 /// }
 /// ```
-#[proc_macro_error]
 #[proc_macro_derive(Arbitrary, attributes(safety_constraint))]
 pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
     derive::expand_derive_arbitrary(item)
@@ -246,7 +243,6 @@ pub fn derive_arbitrary(item: TokenStream) -> TokenStream {
 ///
 /// Using `BoundedArbitrary` makes proofs incomplete. It is useful for increasing
 /// confidence that some code is correct, but does not prove that absolutely.
-#[proc_macro_error]
 #[proc_macro_derive(BoundedArbitrary, attributes(bounded))]
 pub fn derive_bounded_arbitrary(item: TokenStream) -> TokenStream {
     derive_bounded::expand_derive_bounded_arbitrary(item)
@@ -343,7 +339,6 @@ pub fn derive_bounded_arbitrary(item: TokenStream) -> TokenStream {
 ///     y: i32,
 /// }
 /// ```
-#[proc_macro_error]
 #[proc_macro_derive(Invariant, attributes(safety_constraint))]
 pub fn derive_invariant(item: TokenStream) -> TokenStream {
     derive::expand_derive_invariant(item)
@@ -465,7 +460,7 @@ pub fn loop_decreases(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// This code should only be activated when pre-building Kani's sysroot.
 #[cfg(kani_sysroot)]
 mod sysroot {
-    use proc_macro_error2::{abort, abort_call_site};
+    use proc_macro2_diagnostics::{Diagnostic, Level};
 
     mod contracts;
     mod loop_contracts;
@@ -478,6 +473,7 @@ mod sysroot {
     use {
         quote::{format_ident, quote},
         syn::parse::{Parse, ParseStream},
+        syn::spanned::Spanned,
         syn::{ItemFn, parse_macro_input},
     };
 
@@ -518,10 +514,16 @@ mod sysroot {
             } else {
                 let ident = input.parse::<syn::Ident>()?;
                 if ident != "schedule" {
-                    abort_call_site!("`{}` is not a valid option for `#[kani::proof]`.", ident;
-                        help = "did you mean `schedule`?";
-                        note = "for now, `schedule` is the only option for `#[kani::proof]`.";
-                    );
+                    return Err(Diagnostic::spanned(
+                        proc_macro2::Span::call_site(),
+                        Level::Error,
+                        format!("`{ident}` is not a valid option for `#[kani::proof]`."),
+                    )
+                    .help("did you mean `schedule`?".to_string())
+                    .note(
+                        "for now, `schedule` is the only option for `#[kani::proof]`.".to_string(),
+                    )
+                    .into());
                 }
                 let _ = input.parse::<syn::Token![=]>()?;
                 let schedule = Some(input.parse::<syn::Expr>()?);
@@ -531,8 +533,15 @@ mod sysroot {
     }
 
     pub fn proof(attr: TokenStream, item: TokenStream) -> TokenStream {
-        let proof_options = parse_macro_input!(attr as ProofOptions);
         let fn_item = parse_macro_input!(item as ItemFn);
+        match proof_impl(attr, fn_item) {
+            Ok(tokens) => tokens,
+            Err(diagnostic) => diagnostic.emit_as_item_tokens().into(),
+        }
+    }
+
+    fn proof_impl(attr: TokenStream, fn_item: ItemFn) -> Result<TokenStream, Diagnostic> {
+        let proof_options = syn::parse::<ProofOptions>(attr)?;
         let attrs = fn_item.attrs;
         let vis = fn_item.vis;
         let sig = fn_item.sig;
@@ -545,18 +554,21 @@ mod sysroot {
 
         if sig.asyncness.is_none() {
             if proof_options.schedule.is_some() {
-                abort_call_site!(
-                    "`#[kani::proof(schedule = ...)]` can only be used with `async` functions.";
-                    help = "did you mean to make this function `async`?";
-                );
+                return Err(Diagnostic::spanned(
+                    proc_macro2::Span::call_site(),
+                    Level::Error,
+                    "`#[kani::proof(schedule = ...)]` can only be used with `async` functions."
+                        .to_string(),
+                )
+                .help("did you mean to make this function `async`?".to_string()));
             }
             // Adds `#[kanitool::proof]` and other attributes
-            quote!(
+            Ok(quote!(
                 #kani_attributes
                 #(#attrs)*
                 #vis #sig #body
             )
-            .into()
+            .into())
         } else {
             // For async functions, it translates to a synchronous function that calls `kani::block_on`.
             // Specifically, it translates
@@ -578,11 +590,13 @@ mod sysroot {
             // }
             // ```
             if !sig.inputs.is_empty() {
-                abort!(
-                    sig.inputs,
-                    "`#[kani::proof]` cannot be applied to async functions that take arguments for now";
-                    help = "try removing the arguments";
-                );
+                return Err(Diagnostic::spanned(
+                    sig.inputs.span(),
+                    Level::Error,
+                    "`#[kani::proof]` cannot be applied to async functions that take arguments for now"
+                        .to_string(),
+                )
+                .help("try removing the arguments".to_string()));
             }
             let mut modified_sig = sig.clone();
             modified_sig.asyncness = None;
@@ -593,7 +607,7 @@ mod sysroot {
             } else {
                 quote!(kani::block_on(#fn_name()))
             };
-            quote!(
+            Ok(quote!(
                 #kani_attributes
                 #(#attrs)*
                 #vis #modified_sig {
@@ -601,7 +615,7 @@ mod sysroot {
                     #block_on_call
                 }
             )
-            .into()
+            .into())
         }
     }
 
