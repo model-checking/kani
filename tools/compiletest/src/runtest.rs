@@ -269,11 +269,23 @@ impl TestCx<'_> {
         let parent_dir = self.testpaths.file.parent().unwrap();
         // The name of the function to test is the same as the stem of `*.expected` file
         let function_name = self.testpaths.file.file_stem().unwrap().to_str().unwrap();
-        cargo
-            .arg("kani")
-            .arg("--target-dir")
-            .arg(self.output_base_dir().join("target"))
-            .current_dir(parent_dir);
+        // Start each run from a clean target directory. The target directory is
+        // persistent across regression runs and is reused whenever the test is
+        // re-run (e.g., after `kani-compiler` or the libraries change, which
+        // invalidates the test stamp). A target directory left in a stale or
+        // partially-built state -- for instance from a regression run that was
+        // interrupted or OOM-killed mid-build -- can make cargo treat a
+        // path-dependency crate as up-to-date while its compiled artifact is
+        // missing, producing spurious `can't find crate` (E0463) errors that
+        // don't match the expected output. This mostly affects multi-crate
+        // tests (those with path dependencies). Removing the directory first
+        // guarantees a clean, reproducible build regardless of any leftover
+        // state. This adds no meaningful cost: the test is only ever re-run
+        // when its inputs changed, in which case cargo would rebuild these
+        // crates anyway.
+        let target_dir = self.output_base_dir().join("target");
+        let _ = fs::remove_dir_all(&target_dir);
+        cargo.arg("kani").arg("--target-dir").arg(&target_dir).current_dir(parent_dir);
         if test {
             cargo.arg("--tests");
         }
