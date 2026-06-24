@@ -258,6 +258,41 @@ impl TestCx<'_> {
         }
     }
 
+    /// Returns the per-test cargo target directory, after removing any leftover
+    /// contents so the build starts from a clean, reproducible state.
+    ///
+    /// The target directory is persistent across regression runs and is reused
+    /// whenever a test is re-run (the compiletest stamp is derived from
+    /// `kani-compiler` and the library/compiler/driver source trees, so any
+    /// kani rebuild forces a re-run). A target directory left in a stale or
+    /// partially-built state -- for instance from a regression run that was
+    /// interrupted or OOM-killed mid-build, or built by an older
+    /// `kani-compiler` -- can make cargo treat a path-dependency crate as up to
+    /// date while its compiled artifact is missing or incompatible, producing
+    /// spurious `can't find crate` (E0463) errors that don't match the expected
+    /// output. This mostly affects multi-crate tests (those with path
+    /// dependencies). Removing the directory first guarantees a clean build
+    /// regardless of any leftover state, at no meaningful cost: a test is only
+    /// re-run when its inputs changed, in which case cargo would rebuild these
+    /// crates anyway.
+    ///
+    /// A missing directory is fine (e.g. on the first run), but any other
+    /// removal failure (permissions, a held lock, ...) would leave the stale
+    /// state in place and reintroduce the non-determinism this guards against,
+    /// so we fail the test loudly instead of ignoring it.
+    fn clean_cargo_target_dir(&self) -> PathBuf {
+        let target_dir = self.output_base_dir().join("target");
+        match fs::remove_dir_all(&target_dir) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => fatal_error(&format!(
+                "failed to remove stale target directory `{}`: {error}",
+                target_dir.display()
+            )),
+        }
+        target_dir
+    }
+
     /// Runs cargo-kani on the function specified by the stem of `self.testpaths.file`.
     /// The `test` parameter controls whether to specify `--tests` to `cargo kani`.
     /// An error message is printed to stdout if verification output does not
@@ -269,22 +304,8 @@ impl TestCx<'_> {
         let parent_dir = self.testpaths.file.parent().unwrap();
         // The name of the function to test is the same as the stem of `*.expected` file
         let function_name = self.testpaths.file.file_stem().unwrap().to_str().unwrap();
-        // Start each run from a clean target directory. The target directory is
-        // persistent across regression runs and is reused whenever the test is
-        // re-run (e.g., after `kani-compiler` or the libraries change, which
-        // invalidates the test stamp). A target directory left in a stale or
-        // partially-built state -- for instance from a regression run that was
-        // interrupted or OOM-killed mid-build -- can make cargo treat a
-        // path-dependency crate as up-to-date while its compiled artifact is
-        // missing, producing spurious `can't find crate` (E0463) errors that
-        // don't match the expected output. This mostly affects multi-crate
-        // tests (those with path dependencies). Removing the directory first
-        // guarantees a clean, reproducible build regardless of any leftover
-        // state. This adds no meaningful cost: the test is only ever re-run
-        // when its inputs changed, in which case cargo would rebuild these
-        // crates anyway.
-        let target_dir = self.output_base_dir().join("target");
-        let _ = fs::remove_dir_all(&target_dir);
+        // Start each run from a clean target directory (see `clean_cargo_target_dir`).
+        let target_dir = self.clean_cargo_target_dir();
         cargo.arg("kani").arg("--target-dir").arg(&target_dir).current_dir(parent_dir);
         if test {
             cargo.arg("--tests");
@@ -350,12 +371,14 @@ impl TestCx<'_> {
         let parent_dir = self.testpaths.file.parent().unwrap();
         // The name of the function to test is the same as the stem of `*.expected` file
         let function_name = self.testpaths.file.file_stem().unwrap().to_str().unwrap();
+        // Start each run from a clean target directory (see `clean_cargo_target_dir`).
+        let target_dir = self.clean_cargo_target_dir();
         cargo
             .arg("kani")
             .arg("--coverage")
             .arg("-Zsource-coverage")
             .arg("--target-dir")
-            .arg(self.output_base_dir().join("target"))
+            .arg(&target_dir)
             .current_dir(parent_dir);
 
         if "expected" != self.testpaths.file.file_name().unwrap() {
