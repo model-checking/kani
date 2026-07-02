@@ -717,13 +717,40 @@ impl goto_program::Symbol {
     /// <https://github.com/diffblue/cbmc/pull/8739>, turning the missing
     /// symbol into a hard error during `--enforce-contract` /
     /// `--replace-call-with-contract`.
-    fn to_contract_irep(&self, mm: &MachineModel) -> super::Symbol {
-        let mut contract_symbol = self.to_irep(mm);
-        contract_symbol.name = format!("contract::{}", self.name).into();
-        contract_symbol.is_property = true;
-        // The contract symbol is a pure specification and carries no body.
-        contract_symbol.value = Irep::nil();
-        contract_symbol
+    ///
+    /// `function_irep` is this symbol already lowered to its `irep` form. We
+    /// reuse its (contract-bearing) type and metadata so the function body is
+    /// not serialized a second time — the contract symbol drops it anyway.
+    fn to_contract_irep(&self, function_irep: &super::Symbol) -> super::Symbol {
+        super::Symbol {
+            // Share the function's contract-bearing type; the contract symbol
+            // is a pure specification with no body.
+            typ: function_irep.typ.clone(),
+            value: Irep::nil(),
+            location: function_irep.location.clone(),
+            name: format!("contract::{}", self.name).into(),
+            is_property: true,
+            // Everything else is copied verbatim from the function symbol.
+            module: function_irep.module,
+            base_name: function_irep.base_name,
+            pretty_name: function_irep.pretty_name,
+            mode: function_irep.mode,
+            is_type: function_irep.is_type,
+            is_macro: function_irep.is_macro,
+            is_exported: function_irep.is_exported,
+            is_input: function_irep.is_input,
+            is_output: function_irep.is_output,
+            is_state_var: function_irep.is_state_var,
+            is_static_lifetime: function_irep.is_static_lifetime,
+            is_thread_local: function_irep.is_thread_local,
+            is_lvalue: function_irep.is_lvalue,
+            is_file_local: function_irep.is_file_local,
+            is_extern: function_irep.is_extern,
+            is_volatile: function_irep.is_volatile,
+            is_parameter: function_irep.is_parameter,
+            is_auxiliary: function_irep.is_auxiliary,
+            is_weak: function_irep.is_weak,
+        }
     }
 }
 
@@ -732,13 +759,14 @@ impl goto_program::SymbolTable {
         let mm = self.machine_model();
         let mut st = super::SymbolTable::new();
         for (_key, value) in self.iter() {
+            let symbol_irep = value.to_irep(mm);
             // Functions carrying a contract need a companion `contract::<name>`
             // symbol so that CBMC's DFCC contract instrumentation can find it.
             // See `goto_program::Symbol::to_contract_irep` for details.
             if value.contract.is_some() {
-                st.insert(value.to_contract_irep(mm));
+                st.insert(value.to_contract_irep(&symbol_irep));
             }
-            st.insert(value.to_irep(mm))
+            st.insert(symbol_irep);
         }
         st
     }
