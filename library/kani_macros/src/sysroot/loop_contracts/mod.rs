@@ -5,7 +5,7 @@
 //!
 
 use proc_macro::TokenStream;
-use proc_macro_error2::abort_call_site;
+use proc_macro2_diagnostics::{Diagnostic, Level};
 use quote::{format_ident, quote, quote_spanned};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
@@ -566,14 +566,26 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
                 el.body.stmts = new_stmts.clone();
             }
             _ => {
-                abort_call_site!("`#[kani::loop_invariant]` is now only supported for while-loops.";
-                    note = "for now, loop contracts is only supported for while-loops.";
+                return Diagnostic::spanned(
+                    proc_macro2::Span::call_site(),
+                    Level::Error,
+                    "`#[kani::loop_invariant]` is now only supported for while-loops.".to_string(),
                 )
+                .note("for now, loop contracts is only supported for while-loops.".to_string())
+                .emit_as_item_tokens()
+                .into();
             }
         },
-        _ => abort_call_site!("`#[kani::loop_invariant]` is now only supported for while-loops.";
-            note = "for now, loop contracts is only supported for while-loops.";
-        ),
+        _ => {
+            return Diagnostic::spanned(
+                proc_macro2::Span::call_site(),
+                Level::Error,
+                "`#[kani::loop_invariant]` is now only supported for while-loops.".to_string(),
+            )
+            .note("for now, loop contracts is only supported for while-loops.".to_string())
+            .emit_as_item_tokens()
+            .into();
+        }
     }
     let ret: TokenStream = if let Some(ForLoopExtraStmts {
         init_iter_stmt,
