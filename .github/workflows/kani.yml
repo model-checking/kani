@@ -60,10 +60,11 @@ jobs:
 
   perf:
     runs-on: ubuntu-24.04
-    # The full perf suite baseline runs in ~45 min; with the per-test --timeout
-    # in scripts/kani-perf.sh as a guardrail, the worst-case suite duration is
-    # 15 x 600s = 150 min. A retry doubles that ceiling, so the job timeout
-    # has to sit above (step timeout) x (max_attempts) to let the retry land.
+    # The full perf suite runs in ~45-60 min: most cases finish in seconds and
+    # only the two whole-crate s2n-quic tests approach the per-test guardrail in
+    # scripts/kani-perf.sh (1200s each). The 180-min step timeout leaves ample
+    # headroom over that realistic runtime, and the job timeout sits above
+    # (step timeout) x (max_attempts) so a retry can still land.
     timeout-minutes: 380
     permissions:
       contents: read
