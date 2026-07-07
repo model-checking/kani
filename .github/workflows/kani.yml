@@ -60,11 +60,12 @@ jobs:
 
   perf:
     runs-on: ubuntu-24.04
-    # The full perf suite runs in ~45-60 min: most cases finish in seconds and
-    # only the two whole-crate s2n-quic tests approach the per-test guardrail in
-    # scripts/kani-perf.sh (1200s each). The 180-min step timeout leaves ample
-    # headroom over that realistic runtime, and the job timeout sits above
-    # (step timeout) x (max_attempts) so a retry can still land.
+    # The full perf suite runs in ~45 min (matching main): most cases finish in
+    # seconds; the heaviest, s2n-quic-core, runs 34 harnesses in ~1500s. The
+    # per-test guardrail in scripts/kani-perf.sh (2400s) sits above that. The
+    # 180-min step timeout leaves ample headroom over that realistic runtime,
+    # and the job timeout sits above (step timeout) x (max_attempts) so a retry
+    # can still land.
     timeout-minutes: 380
     permissions:
       contents: read
