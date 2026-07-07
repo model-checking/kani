@@ -32,13 +32,14 @@ use rustc_public::mir::{
 use rustc_public::rustc_internal;
 use rustc_public::ty::{Allocation, ClosureKind, ConstantKind, RigidTy, Ty, TyKind};
 use rustc_public::{CrateDef, ItemKind};
+#[cfg(debug_assertions)]
 use rustc_session::config::OutputType;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
-use std::{
-    collections::{HashMap, HashSet},
-    fs::File,
-    io::{BufWriter, Write},
-};
+#[cfg(debug_assertions)]
+use std::fs::File;
+#[cfg(debug_assertions)]
+use std::io::{BufWriter, Write};
 
 use crate::kani_middle::coercion;
 use crate::kani_middle::coercion::CoercionBase;
@@ -580,6 +581,7 @@ impl CallGraph {
 
     /// Print the graph in DOT format to a file.
     /// See <https://graphviz.org/doc/info/lang.html> for more information.
+    #[cfg(debug_assertions)]
     fn dump_dot(&self, tcx: TyCtxt, initial: Option<MonoItem>) -> std::io::Result<()> {
         if let Ok(target) = std::env::var("KANI_REACH_DEBUG") {
             debug!(?target, "dump_dot");
@@ -608,6 +610,7 @@ impl CallGraph {
     }
 
     /// Write all notes to the given writer.
+    #[cfg(debug_assertions)]
     fn dump_all<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
         tracing::info!(nodes=?self.nodes.len(), edges=?self.edges.len(), "dump_all");
         for node in &self.nodes {
@@ -621,6 +624,7 @@ impl CallGraph {
     }
 
     /// Write all notes that may have led to the discovery of the given target.
+    #[cfg(debug_assertions)]
     fn dump_reason<W: Write>(&self, writer: &mut W, target: &str) -> std::io::Result<()> {
         let mut queue: Vec<Node> =
             self.nodes.iter().filter(|item| item.to_string().contains(target)).cloned().collect();
