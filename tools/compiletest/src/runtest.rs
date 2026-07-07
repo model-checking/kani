@@ -12,15 +12,16 @@ use crate::common::{
 use crate::common::{Config, TestPaths};
 use crate::common::{output_base_dir, output_base_name};
 use crate::header::TestProps;
-use crate::read2::read2;
 use crate::util::logv;
 use crate::{fatal_error, json};
 
 use std::env;
 use std::fs::{self, create_dir_all};
+use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus, Output, Stdio};
+use std::process::{Command, ExitStatus, Stdio};
 use std::str;
+use std::thread;
 
 use serde::{Deserialize, Serialize};
 use tracing::*;
@@ -103,18 +104,40 @@ impl TestCx<'_> {
         let mut child = disable_error_reporting(|| command.spawn())
             .unwrap_or_else(|_| panic!("failed to exec `{:?}`", &command));
 
-        if let Some(timeout) = self.config.timeout {
+        // Drain stdout and stderr on dedicated threads so the child can never
+        // block writing to a full pipe buffer while we wait for it to exit.
+        // Without concurrent draining, the `--timeout` wait below deadlocks
+        // against any child that emits more output than the pipe buffer holds
+        // before exiting (e.g. Kani/CBMC on the perf suite): the child blocks
+        // on write, never exits, and every test hangs until the timeout fires.
+        drop(child.stdin.take());
+        let mut stdout_pipe = child.stdout.take().unwrap();
+        let mut stderr_pipe = child.stderr.take().unwrap();
+        let stdout_reader = thread::spawn(move || {
+            let mut buf = Vec::new();
+            stdout_pipe.read_to_end(&mut buf).map(|_| buf)
+        });
+        let stderr_reader = thread::spawn(move || {
+            let mut buf = Vec::new();
+            stderr_pipe.read_to_end(&mut buf).map(|_| buf)
+        });
+
+        let status = if let Some(timeout) = self.config.timeout {
             match child.wait_timeout(timeout).unwrap() {
-                Some(_status) => {} // No timeout.
+                Some(status) => status, // No timeout.
                 None => {
                     // Timeout. Kill process and print error.
                     println!("Process timed out after {timeout:?}s: {cmdline}");
                     child.kill().unwrap();
+                    child.wait().unwrap()
                 }
-            };
-        }
+            }
+        } else {
+            child.wait().unwrap()
+        };
 
-        let Output { status, stdout, stderr } = read2(child).expect("failed to read output");
+        let stdout = stdout_reader.join().unwrap().expect("failed to read stdout");
+        let stderr = stderr_reader.join().unwrap().expect("failed to read stderr");
 
         let result = ProcRes {
             status,
