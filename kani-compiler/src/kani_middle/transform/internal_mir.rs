@@ -101,8 +101,8 @@ impl RustcInternalMir for PointerCoercion {
 
     fn internal_mir<'tcx>(&self, tcx: TyCtxt<'tcx>) -> Self::T<'tcx> {
         match self {
-            PointerCoercion::ReifyFnPointer => {
-                rustc_middle::ty::adjustment::PointerCoercion::ReifyFnPointer
+            PointerCoercion::ReifyFnPointer(safety) => {
+                rustc_middle::ty::adjustment::PointerCoercion::ReifyFnPointer(internal(tcx, safety))
             }
             PointerCoercion::UnsafeFnPointer => {
                 rustc_middle::ty::adjustment::PointerCoercion::UnsafeFnPointer

@@ -349,7 +349,7 @@ impl MirVisitor for MonoItemsFnCollector<'_, '_> {
                 }
             }
             Rvalue::Cast(
-                CastKind::PointerCoercion(PointerCoercion::ReifyFnPointer),
+                CastKind::PointerCoercion(PointerCoercion::ReifyFnPointer(_)),
                 ref operand,
                 _,
             ) => {

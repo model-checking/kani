@@ -1321,7 +1321,7 @@ impl GotocCtx<'_, '_> {
     ) -> Expr {
         debug!(cast=?coercion, op=?operand, ?loc, "codegen_pointer_cast");
         match coercion {
-            PointerCoercion::ReifyFnPointer => match self.operand_ty_stable(operand).kind() {
+            PointerCoercion::ReifyFnPointer(_) => match self.operand_ty_stable(operand).kind() {
                 TyKind::RigidTy(RigidTy::FnDef(def, args)) => {
                     let instance = Instance::resolve(def, &args).unwrap();
                     // We need to handle this case in a special way because `codegen_operand_stable` compiles FnDefs to dummy structs.
