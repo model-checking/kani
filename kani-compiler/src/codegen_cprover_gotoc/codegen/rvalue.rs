@@ -23,7 +23,7 @@ use rustc_middle::ty::{TyCtxt, VtblEntry};
 use rustc_public::abi::{Primitive, Scalar, ValueAbi};
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::{
-    AggregateKind, BinOp, CastKind, NullOp, Operand, Place, PointerCoercion, Rvalue, UnOp,
+    AggregateKind, BinOp, CastKind, Operand, Place, PointerCoercion, Rvalue, UnOp,
 };
 use rustc_public::rustc_internal;
 use rustc_public::ty::{
@@ -824,7 +824,6 @@ impl GotocCtx<'_, '_> {
             Rvalue::CheckedBinaryOp(op, e1, e2) => {
                 self.codegen_rvalue_checked_binary_op(op, e1, e2, res_ty)
             }
-            Rvalue::NullaryOp(NullOp::RuntimeChecks(_)) => Expr::c_false(),
             Rvalue::ShallowInitBox(operand, content_ty) => {
                 // The behaviour of ShallowInitBox is simply transmuting *mut u8 to Box<T>.
                 // See https://github.com/rust-lang/compiler-team/issues/460 for more details.

@@ -56,6 +56,11 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             Operand::Constant(constant) => {
                 self.codegen_const(&constant.const_, self.codegen_span_stable(constant.span))
             }
+            // Runtime checks (`ub_checks()`, `contract_checks()`, `overflow_checks()`) were
+            // moved from `Rvalue::NullaryOp(NullOp::RuntimeChecks(..))` to `Operand::RuntimeChecks`
+            // by rust-lang/rust#148766. Kani does not enable these source-level checks (it inserts
+            // its own), so evaluate them to `false` as before.
+            Operand::RuntimeChecks(_) => Expr::c_false(),
         }
     }
 

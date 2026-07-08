@@ -771,9 +771,9 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
         initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
         match &layout.fields {
-            FieldsShape::Arbitrary { offsets, memory_index } => {
+            FieldsShape::Arbitrary { offsets, in_memory_order } => {
                 assert_eq!(flds.len(), offsets.len());
-                assert_eq!(offsets.len(), memory_index.len());
+                assert_eq!(offsets.len(), in_memory_order.len());
                 let mut final_fields = Vec::with_capacity(flds.len());
                 let mut offset = initial_offset;
                 for idx in layout.fields.index_by_increasing_offset() {

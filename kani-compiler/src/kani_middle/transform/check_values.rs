@@ -214,6 +214,7 @@ impl ValidValueReq {
                 ValueAbi::Scalar(_)
                 | ValueAbi::ScalarPair(_, _)
                 | ValueAbi::Vector { .. }
+                | ValueAbi::ScalableVector { .. }
                 | ValueAbi::Aggregate { .. } => None,
             }
         }
@@ -699,7 +700,6 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
             | Rvalue::Ref(_, _, _)
             | Rvalue::Repeat(_, _)
             | Rvalue::ThreadLocalRef(_)
-            | Rvalue::NullaryOp(_)
             | Rvalue::UnaryOp(_, _)
             | Rvalue::Use(_) => {}
         }
