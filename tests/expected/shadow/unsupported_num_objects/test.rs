@@ -9,7 +9,7 @@ static mut SM: kani::shadow::ShadowMem<bool> = kani::shadow::ShadowMem::new(fals
 
 fn check_max_objects<const N: usize>() {
     let mut i = 0;
-    // A dummy loop that creates `N`` objects.
+    // A dummy loop that creates `N` objects.
     // After the loop, CBMC's object ID counter should be at `N` + 2:
     // - `N` created in the loop +
     // - the NULL pointer whose object ID is 0, and
