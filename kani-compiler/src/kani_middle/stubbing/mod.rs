@@ -208,8 +208,8 @@ pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Resul
     if !diff.is_empty() {
         Err(format!(
             "Cannot stub `{}` by `{}`.\n - {}",
-            old_def.name(),
-            new_def.name(),
+            crate::kani_middle::strip_local_crate_prefix(old_def.name()),
+            crate::kani_middle::strip_local_crate_prefix(new_def.name()),
             diff.iter().join("\n - ")
         ))
     } else {
@@ -291,7 +291,7 @@ impl MirVisitor for StubConstChecker<'_> {
         This is likely because `{}` is used as a stub but its \
         generic bounds are not being met.",
                         tcx.def_path_str(trait_),
-                        self.source.name()
+                        crate::kani_middle::strip_local_crate_prefix(self.source.name())
                     );
                     tcx.dcx().span_err(rustc_internal::internal(self.tcx, location.span()), msg);
                     self.is_valid = false;

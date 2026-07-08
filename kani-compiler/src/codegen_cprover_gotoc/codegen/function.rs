@@ -5,6 +5,7 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::codegen_cprover_gotoc::codegen::block::reverse_postorder;
+use crate::kani_middle::readable_name;
 use cbmc::InternString;
 use cbmc::InternedString;
 use cbmc::goto_program::{Expr, Stmt, Symbol};
@@ -220,7 +221,7 @@ impl GotocCtx<'_, '_> {
             &fname,
             self.fn_typ(instance, &body),
             None,
-            instance.name(),
+            readable_name(instance),
             self.codegen_span_stable(instance.def.span()),
         );
         if !self.symbol_table.contains((&fname).into()) {

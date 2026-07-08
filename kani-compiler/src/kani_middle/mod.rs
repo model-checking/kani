@@ -16,10 +16,67 @@ use rustc_public::ty::{
     AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, RigidTy, Span as SpanStable, Ty, TyKind,
 };
 use rustc_public::visitor::{Visitable, Visitor as TyVisitor};
-use rustc_public::{CrateDef, DefId};
+use rustc_public::{CrateDef, DefId, local_crate};
 use std::ops::ControlFlow;
 
 use self::attributes::KaniAttributes;
+
+/// Return an item's name for user-facing output and CBMC symbol pretty-names.
+///
+/// [`Instance::name`] returns the item's absolute path. As of
+/// rust-lang/rust#149401 that path includes the crate name for *local* items
+/// too (e.g. `my_crate::my_fn` instead of `my_fn`). Kani's user-facing output
+/// ("Checking harness ...", "Verification failed for - ...") and the CBMC
+/// symbol pretty-names ("in function ...") historically used the crate-relative
+/// form, and tests and users rely on it, so strip the local crate prefix.
+/// Non-local items (e.g. `std::...`) keep their fully-qualified names.
+pub fn readable_name(instance: Instance) -> String {
+    strip_local_crate_prefix(instance.name())
+}
+
+/// Strip the local crate name from an absolute item path, restoring the
+/// crate-relative form Kani used before rust-lang/rust#149401. That change made
+/// `def_path_str` prefix the local crate name at *every* local path component,
+/// so it appears not just at the start (`my_crate::f`) but also inside
+/// qualifiers and generic args (`<my_crate::T as my_crate::Tr>::m`,
+/// `f::<my_crate::T>`). Remove `<crate>::` at each path-component boundary
+/// (start of string or after a non-identifier char) so these become `f`,
+/// `<T as Tr>::m`, `f::<T>`. Non-local paths (which begin with a different
+/// crate name) are unaffected.
+pub fn strip_local_crate_prefix(name: String) -> String {
+    let needle = format!("{}::", local_crate().name);
+    if !name.contains(&needle) {
+        return name;
+    }
+    let mut out = String::with_capacity(name.len());
+    let mut rest = name.as_str();
+    // The previous char in the input, used to decide whether a `<crate>::` here
+    // is a crate-root *qualifier* (droppable) or a path *continuation* segment
+    // (a module/item that happens to share the crate's name, which must be
+    // kept). A qualifier appears at the start or after a type/path delimiter
+    // (`<`, `,`, ` `, `&`, `*`, `(`, `[`, ...); a continuation appears after
+    // `::`. So drop `<crate>::` only when the previous char is neither part of
+    // an identifier nor `:`. After dropping, pretend the previous char is `:`
+    // so an immediately following same-named segment is treated as a
+    // continuation (e.g. `main::main::{closure#0}` -> `main::{closure#0}`).
+    let mut prev: Option<char> = None;
+    loop {
+        let at_qualifier = match prev {
+            None => true,
+            Some(c) => !c.is_alphanumeric() && c != '_' && c != ':',
+        };
+        if at_qualifier && rest.starts_with(&needle) {
+            rest = &rest[needle.len()..];
+            prev = Some(':');
+            continue;
+        }
+        let Some(ch) = rest.chars().next() else { break };
+        out.push(ch);
+        prev = Some(ch);
+        rest = &rest[ch.len_utf8()..];
+    }
+    out
+}
 
 pub mod abi;
 pub mod analysis;

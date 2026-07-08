@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::kani_middle::codegen_units::Harness;
-use crate::kani_middle::{KaniAttributes, SourceLocation};
+use crate::kani_middle::{KaniAttributes, SourceLocation, readable_name};
 use kani_metadata::ContractedFunction;
 use kani_metadata::{ArtifactType, HarnessAttributes, HarnessKind, HarnessMetadata};
 use rustc_middle::ty::TyCtxt;
@@ -20,7 +20,7 @@ use sha1_checked::Sha1;
 pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> HarnessMetadata {
     let def = instance.def;
     let kani_attributes = KaniAttributes::for_instance(tcx, instance);
-    let pretty_name = instance.name();
+    let pretty_name = readable_name(instance);
     let mangled_name = instance.mangled_name();
 
     // We get the body span to include the entire function definition.
@@ -119,7 +119,7 @@ pub fn gen_automatic_proof_metadata(
     harness_mangled_name: String,
 ) -> HarnessMetadata {
     let def = fn_to_verify.def;
-    let pretty_name = fn_to_verify.name();
+    let pretty_name = readable_name(*fn_to_verify);
     let mangled_name = fn_to_verify.mangled_name();
 
     // Leave the concrete playback instrumentation for now, but this feature does not actually support concrete playback.
