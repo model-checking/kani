@@ -301,7 +301,7 @@ fn apply_transitivity(tcx: TyCtxt, harness: Harness, stubs: Stubs) -> Stubs {
                     format!(
                         "Cannot stub `{}`. Stub configuration for harness `{}` has a cycle",
                         orig.name(),
-                        harness.def.name(),
+                        crate::kani_middle::strip_local_crate_prefix(harness.def.name()),
                     ),
                 );
                 break;
