@@ -84,9 +84,9 @@ pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Resul
     if old_body.arg_locals().len() != new_body.arg_locals().len() {
         let msg = format!(
             "arity mismatch: original function/method `{}` takes {} argument(s), stub `{}` takes {}",
-            old_def.name(),
+            crate::kani_middle::strip_local_crate_prefix(old_def.name()),
             old_body.arg_locals().len(),
-            new_def.name(),
+            crate::kani_middle::strip_local_crate_prefix(new_def.name()),
             new_body.arg_locals().len(),
         );
         return Err(msg);
@@ -110,9 +110,9 @@ pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Resul
     if old_args_len != new_args_len {
         let msg = format!(
             "mismatch in the number of generic parameters: original function/method `{}` takes {} generic parameters(s), stub `{}` takes {}",
-            old_def.name(),
+            crate::kani_middle::strip_local_crate_prefix(old_def.name()),
             old_args_len,
-            new_def.name(),
+            crate::kani_middle::strip_local_crate_prefix(new_def.name()),
             new_args_len,
         );
         return Err(msg);

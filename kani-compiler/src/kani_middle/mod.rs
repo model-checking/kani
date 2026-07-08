@@ -131,7 +131,7 @@ pub fn check_crate_items(tcx: TyCtxt, ignore_asm: bool) {
                 span,
                 format!(
                     "stub verified target `{}` does not have a corresponding `#[proof_for_contract]` harness",
-                    stub_verified_target.name()
+                    strip_local_crate_prefix(stub_verified_target.name())
                 ),
             ).with_help("verified stubs are meant to be sound abstractions for a function's behavior, so Kani enforces that proofs exist for the stub's contract")
             .emit();
