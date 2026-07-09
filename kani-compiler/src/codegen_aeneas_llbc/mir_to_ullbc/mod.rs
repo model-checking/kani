@@ -1708,6 +1708,9 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             Operand::Constant(constant) => CharonOperand::Const(self.translate_constant(constant)),
             Operand::Copy(place) => CharonOperand::Copy(self.translate_place(&place)),
             Operand::Move(place) => CharonOperand::Move(self.translate_place(&place)),
+            // `Operand::RuntimeChecks` (rust-lang/rust#148766) is not yet modeled by the
+            // experimental LLBC backend.
+            Operand::RuntimeChecks(_) => todo!(),
         }
     }
 

@@ -70,7 +70,14 @@ impl GotocCtx<'_, '_> {
                 Some(format!(
                     "{}:{}",
                     loc.filename().expect("recursion location wrapper should have a file name"),
-                    static_item.name(),
+                    // The `--nondet-static-exclude` value must match the static's
+                    // pretty name in the goto model. Since rust-lang/rust#149401,
+                    // `name()` is crate-qualified for local items, but the pretty
+                    // name is kept crate-relative (see `readable_name`), so strip
+                    // the crate prefix here too; otherwise the recursion tracker
+                    // `REENTRY` is not excluded from `--nondet-static` and gets
+                    // havocked, breaking contract-recursion checking.
+                    crate::kani_middle::strip_local_crate_prefix(static_item.name()),
                 ))
             } else {
                 None

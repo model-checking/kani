@@ -833,7 +833,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                                     rustc_internal::internal(self.tcx, original_res.span()),
                                     format!(
                                     "`{}` does not have a body",
-                                    original_res.name()
+                                    crate::kani_middle::strip_local_crate_prefix(original_res.name())
                                 ));
                             }
                             if r_bad {
@@ -841,7 +841,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                                     rustc_internal::internal(self.tcx, replace_res.span()),
                                     format!(
                                     "`{}` does not have a body",
-                                    replace_res.name()
+                                    crate::kani_middle::strip_local_crate_prefix(replace_res.name())
                                 ));
                             }
                             err = err.with_help(

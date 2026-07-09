@@ -84,9 +84,9 @@ pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Resul
     if old_body.arg_locals().len() != new_body.arg_locals().len() {
         let msg = format!(
             "arity mismatch: original function/method `{}` takes {} argument(s), stub `{}` takes {}",
-            old_def.name(),
+            crate::kani_middle::strip_local_crate_prefix(old_def.name()),
             old_body.arg_locals().len(),
-            new_def.name(),
+            crate::kani_middle::strip_local_crate_prefix(new_def.name()),
             new_body.arg_locals().len(),
         );
         return Err(msg);
@@ -110,9 +110,9 @@ pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Resul
     if old_args_len != new_args_len {
         let msg = format!(
             "mismatch in the number of generic parameters: original function/method `{}` takes {} generic parameters(s), stub `{}` takes {}",
-            old_def.name(),
+            crate::kani_middle::strip_local_crate_prefix(old_def.name()),
             old_args_len,
-            new_def.name(),
+            crate::kani_middle::strip_local_crate_prefix(new_def.name()),
             new_args_len,
         );
         return Err(msg);
@@ -208,8 +208,8 @@ pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Resul
     if !diff.is_empty() {
         Err(format!(
             "Cannot stub `{}` by `{}`.\n - {}",
-            old_def.name(),
-            new_def.name(),
+            crate::kani_middle::strip_local_crate_prefix(old_def.name()),
+            crate::kani_middle::strip_local_crate_prefix(new_def.name()),
             diff.iter().join("\n - ")
         ))
     } else {
@@ -291,7 +291,7 @@ impl MirVisitor for StubConstChecker<'_> {
         This is likely because `{}` is used as a stub but its \
         generic bounds are not being met.",
                         tcx.def_path_str(trait_),
-                        self.source.name()
+                        crate::kani_middle::strip_local_crate_prefix(self.source.name())
                     );
                     tcx.dcx().span_err(rustc_internal::internal(self.tcx, location.span()), msg);
                     self.is_valid = false;
