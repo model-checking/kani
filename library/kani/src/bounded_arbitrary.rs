@@ -76,3 +76,34 @@ where
         hash_set
     }
 }
+
+impl<K, V> BoundedArbitrary for std::collections::BTreeMap<K, V>
+where
+    K: Arbitrary + std::cmp::Ord,
+    V: Arbitrary,
+{
+    fn bounded_any<const N: usize>() -> Self {
+        let mut btree_map = std::collections::BTreeMap::new();
+        for _ in 0..N {
+            if bool::any() {
+                btree_map.insert(K::any(), V::any());
+            }
+        }
+        btree_map
+    }
+}
+
+impl<V> BoundedArbitrary for std::collections::BTreeSet<V>
+where
+    V: Arbitrary + std::cmp::Ord,
+{
+    fn bounded_any<const N: usize>() -> Self {
+        let mut btree_set = std::collections::BTreeSet::new();
+        for _ in 0..N {
+            if bool::any() {
+                btree_set.insert(V::any());
+            }
+        }
+        btree_set
+    }
+}
