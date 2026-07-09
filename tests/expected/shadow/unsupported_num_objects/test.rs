@@ -9,11 +9,14 @@ static mut SM: kani::shadow::ShadowMem<bool> = kani::shadow::ShadowMem::new(fals
 
 fn check_max_objects<const N: usize>() {
     let mut i = 0;
-    // A dummy loop that creates `N`` objects.
-    // After the loop, CBMC's object ID counter should be at `N` + 3:
+    // A dummy loop that creates `N` objects.
+    // After the loop, CBMC's object ID counter should be at `N` + 2:
     // - `N` created in the loop +
     // - the NULL pointer whose object ID is 0, and
     // - objects for i, have_42
+    // Note: the exact object count depends on CBMC's internal object
+    // numbering, so the `N` thresholds below may need to be adjusted when
+    // upgrading CBMC.
     let mut have_42 = false;
     while i < N {
         let x: Box<usize> = Box::new(kani::any());
@@ -23,7 +26,7 @@ fn check_max_objects<const N: usize>() {
         i += 1;
     }
 
-    // create a new object whose ID is `N` + 4
+    // create a new object whose ID is `N` + 3
     let x: i32 = have_42 as i32;
     assert_eq!(x, have_42 as i32);
     // the following call to `set` would fail if the object ID for `x` exceeds
@@ -35,10 +38,10 @@ fn check_max_objects<const N: usize>() {
 
 #[kani::proof]
 fn check_max_objects_pass() {
-    check_max_objects::<1019>();
+    check_max_objects::<1020>();
 }
 
 #[kani::proof]
 fn check_max_objects_fail() {
-    check_max_objects::<1020>();
+    check_max_objects::<1021>();
 }
