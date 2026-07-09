@@ -43,13 +43,13 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                     self,
                     self.codegen_place_stable(place, Location::none())
                 );
-                // If the operand itself is a Dynamic (like when passing a boxed closure),
-                // we need to pull off the fat pointer. In that case, the rustc kind() on
-                // both the operand and the inner type are Dynamic.
-                // Consider moving this check elsewhere in:
-                // https://github.com/model-checking/kani/issues/277
+                // If the operand is itself an unsized value passed by value (a `Dynamic` boxed
+                // closure, or a slice/`str` via `unsized_fn_params`), the value is the fat
+                // pointer, so pull it off the projection rather than the (pointee) goto_expr.
                 match self.operand_ty_stable(operand).kind() {
-                    TyKind::RigidTy(RigidTy::Dynamic(..)) => projection.fat_ptr_goto_expr.unwrap(),
+                    TyKind::RigidTy(RigidTy::Dynamic(..))
+                    | TyKind::RigidTy(RigidTy::Slice(..))
+                    | TyKind::RigidTy(RigidTy::Str) => projection.fat_ptr_goto_expr.unwrap(),
                     _ => projection.goto_expr,
                 }
             }

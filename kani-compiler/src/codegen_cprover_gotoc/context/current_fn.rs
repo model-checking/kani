@@ -24,6 +24,8 @@ pub struct CurrentFnCtx<'tcx> {
     instance_internal: InstanceInternal<'tcx>,
     /// A list of local declarations used to retrieve MIR component types.
     locals: Vec<LocalDecl>,
+    /// The number of formal arguments of the current function (locals `1..=arg_count`).
+    arg_count: usize,
     /// A list of pretty names for locals that corrspond to user variables.
     local_names: HashMap<Local, InternedString>,
     /// Collection of variables that are used in a reference or address-of expression.
@@ -61,6 +63,7 @@ impl<'tcx> CurrentFnCtx<'tcx> {
         let readable_name = crate::kani_middle::readable_name(instance);
         let name = instance.mangled_name();
         let locals = body.locals().to_vec();
+        let arg_count = body.arg_locals().len();
         let local_names = body
             .var_debug_info
             .iter()
@@ -74,6 +77,7 @@ impl<'tcx> CurrentFnCtx<'tcx> {
             instance_internal,
             krate: instance.def.krate().name,
             locals,
+            arg_count,
             local_names,
             address_taken_locals: visitor.address_taken_locals,
             name,
@@ -124,6 +128,12 @@ impl<'tcx> CurrentFnCtx<'tcx> {
 
     pub fn locals(&self) -> &[LocalDecl] {
         &self.locals
+    }
+
+    /// The number of formal arguments of the current function; locals `1..=arg_count()`
+    /// are the arguments.
+    pub fn arg_count(&self) -> usize {
+        self.arg_count
     }
 
     pub fn local_name(&self, local: Local) -> Option<InternedString> {

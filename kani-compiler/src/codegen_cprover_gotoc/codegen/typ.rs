@@ -1591,10 +1591,16 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                         let (name, _) = self.codegen_spread_arg_name(&lc);
                         ident = name;
                     }
-                    Some(
+                    // Unsized-by-value arguments (`unsized_fn_params`, e.g. `fn f(self: [T])`)
+                    // cannot be a parameter of their (incomplete) unsized type, and the length /
+                    // vtable metadata must be carried somewhere, so represent them as fat pointers.
+                    // `codegen_local` / `codegen_place_stable` recover the pointee accordingly.
+                    let param_ty = if self.is_unsized(rustc_internal::internal(self.tcx, ty)) {
+                        self.codegen_ty_ref_stable(ty)
+                    } else {
                         self.codegen_ty_stable(ty)
-                            .as_parameter(Some(ident.clone().into()), Some(ident.into())),
-                    )
+                    };
+                    Some(param_ty.as_parameter(Some(ident.clone().into()), Some(ident.into())))
                 }
             })
             .collect();
