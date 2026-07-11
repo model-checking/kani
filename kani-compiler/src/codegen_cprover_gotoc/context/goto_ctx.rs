@@ -23,7 +23,7 @@ use crate::kani_middle::transform::BodyTransformation;
 use crate::kani_queries::QueryDb;
 use cbmc::goto_program::{
     CIntType, DatatypeComponent, Expr, ExprValue, Location, Stmt, StmtBody, SwitchCase, Symbol,
-    SymbolTable, SymbolValues, Type,
+    SymbolTable, SymbolValues, Type, UnaryOperator,
 };
 use cbmc::utils::aggr_tag;
 use cbmc::{InternedString, MachineModel};
@@ -41,7 +41,7 @@ use rustc_public::ty::Allocation;
 use rustc_span::Span;
 use rustc_span::source_map::respan;
 use rustc_target::callconv::FnAbi;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Debug;
 
 /// A minimal context needed for recording our results. This allows us to move ownership of the
@@ -56,13 +56,11 @@ pub struct MinimalGotocCtx {
     /// We collect them and print one warning at the end if not empty instead of printing one
     /// warning at each occurrence.
     pub concurrent_constructs: UnsupportedConstructs,
-    /// The body transformation agent.
-    pub transformer: BodyTransformation,
     /// If there exist some usage of loop contracts int context.
     pub has_loop_contracts: bool,
 }
 
-pub struct GotocCtx<'tcx> {
+pub struct GotocCtx<'tcx, 'r> {
     /// the typing context
     pub tcx: TyCtxt<'tcx>,
     /// a snapshot of the query values. The queries shouldn't change at this point,
@@ -93,21 +91,23 @@ pub struct GotocCtx<'tcx> {
     /// warning at each occurrence.
     pub concurrent_constructs: UnsupportedConstructs,
     /// The body transformation agent.
-    pub transformer: BodyTransformation,
+    pub transformer: &'r mut BodyTransformation,
     /// If there exist some usage of loop contracts int context.
     pub has_loop_contracts: bool,
     /// Track loop assign clause
     pub current_loop_modifies: Vec<Expr>,
+    /// Track loop decreases clause
+    pub current_loop_decreases: Option<Expr>,
 }
 
 /// Constructor
-impl<'tcx> GotocCtx<'tcx> {
+impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     pub fn new(
         tcx: TyCtxt<'tcx>,
         queries: QueryDb,
         machine_model: &MachineModel,
-        transformer: BodyTransformation,
-    ) -> GotocCtx<'tcx> {
+        transformer: &'r mut BodyTransformation,
+    ) -> GotocCtx<'tcx, 'r> {
         let fhks = fn_hooks();
         let symbol_table = SymbolTable::new(machine_model.clone());
         let emit_vtable_restrictions = queries.args().emit_vtable_restrictions;
@@ -129,6 +129,7 @@ impl<'tcx> GotocCtx<'tcx> {
             transformer,
             has_loop_contracts: false,
             current_loop_modifies: Vec::new(),
+            current_loop_decreases: None,
         }
     }
 
@@ -139,7 +140,6 @@ impl<'tcx> GotocCtx<'tcx> {
             MinimalGotocCtx {
                 unsupported_constructs: self.unsupported_constructs,
                 concurrent_constructs: self.concurrent_constructs,
-                transformer: self.transformer,
                 has_loop_contracts: self.has_loop_contracts,
             },
             self.symbol_table,
@@ -148,7 +148,7 @@ impl<'tcx> GotocCtx<'tcx> {
 }
 
 /// Getters
-impl<'tcx> GotocCtx<'tcx> {
+impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     pub fn current_fn(&self) -> &CurrentFnCtx<'tcx> {
         self.current_fn.as_ref().unwrap()
     }
@@ -159,7 +159,7 @@ impl<'tcx> GotocCtx<'tcx> {
 }
 
 /// Generate variables
-impl GotocCtx<'_> {
+impl GotocCtx<'_, '_> {
     /// Declare a local variable.
     /// Handles the bookkeeping of:
     /// - creating the symbol
@@ -213,11 +213,11 @@ impl GotocCtx<'_> {
 }
 
 /// Symbol table related
-impl<'tcx> GotocCtx<'tcx> {
+impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     /// Ensures that the `name` appears in the Symbol table.
     /// If it doesn't, inserts it using `f`.
     pub fn ensure<
-        F: FnOnce(&mut GotocCtx<'tcx>, InternedString) -> Symbol,
+        F: FnOnce(&mut GotocCtx<'tcx, 'r>, InternedString) -> Symbol,
         T: Into<InternedString>,
     >(
         &mut self,
@@ -292,7 +292,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn ensure_struct<
         T: Into<InternedString>,
         U: Into<InternedString>,
-        F: FnOnce(&mut GotocCtx<'tcx>, InternedString) -> Vec<DatatypeComponent>,
+        F: FnOnce(&mut GotocCtx<'tcx, 'r>, InternedString) -> Vec<DatatypeComponent>,
     >(
         &mut self,
         struct_name: T,
@@ -320,7 +320,7 @@ impl<'tcx> GotocCtx<'tcx> {
     pub fn ensure_union<
         T: Into<InternedString>,
         U: Into<InternedString>,
-        F: FnOnce(&mut GotocCtx<'tcx>, InternedString) -> Vec<DatatypeComponent>,
+        F: FnOnce(&mut GotocCtx<'tcx, 'r>, InternedString) -> Vec<DatatypeComponent>,
     >(
         &mut self,
         union_name: T,
@@ -341,8 +341,354 @@ impl<'tcx> GotocCtx<'tcx> {
     }
 }
 
+/// Pure Expression Inlining
+///
+/// Inline function calls within an expression tree, producing a pure (side-effect-free)
+/// expression. Unlike `inline_function_calls_in_expr` which wraps inlined bodies in
+/// `StatementExpression` nodes, this produces expressions using only `If` (ternary),
+/// `BinOp`, `UnOp`, etc. — no statements, no gotos, no labels.
+///
+/// **Soundness note**: When flattening `StatementExpression` nodes (e.g., from checked
+/// arithmetic), runtime checks (Assert/Assume for overflow, division by zero) are dropped.
+/// Users must ensure arithmetic in quantifier predicates cannot overflow or divide by zero.
+///
+/// TODO(#4567): Remove `#[allow(dead_code)]` when used by quantifier-pure-expressions branch.
+#[allow(dead_code)]
+impl GotocCtx<'_, '_> {
+    /// Inline all function calls in `expr` as pure expressions.
+    /// Prefer `inline_as_pure_expr_toplevel` for the public entry point.
+    #[allow(clippy::collapsible_if, clippy::cmp_owned)]
+    fn inline_as_pure_expr(&self, expr: &Expr, visited: &mut HashSet<InternedString>) -> Expr {
+        match expr.value() {
+            ExprValue::FunctionCall { function, arguments } => {
+                if let ExprValue::Symbol { identifier } = function.value() {
+                    self.inline_call_as_pure_expr(identifier, arguments, expr, visited)
+                } else {
+                    expr.clone()
+                }
+            }
+            ExprValue::BinOp { op, lhs, rhs } => self
+                .inline_as_pure_expr(lhs, visited)
+                .binop(*op, self.inline_as_pure_expr(rhs, visited)),
+            ExprValue::UnOp { op, e } => {
+                let inlined = self.inline_as_pure_expr(e, visited);
+                match op {
+                    UnaryOperator::Not => inlined.not(),
+                    UnaryOperator::Bitnot => inlined.bitnot(),
+                    UnaryOperator::UnaryMinus => inlined.neg(),
+                    other => {
+                        tracing::warn!(
+                            ?other,
+                            "Unknown UnaryOperator in pure inliner, preserving original"
+                        );
+                        expr.clone()
+                    }
+                }
+            }
+            ExprValue::Typecast(e) => {
+                self.inline_as_pure_expr(e, visited).cast_to(expr.typ().clone())
+            }
+            ExprValue::If { c, t, e } => self.inline_as_pure_expr(c, visited).ternary(
+                self.inline_as_pure_expr(t, visited),
+                self.inline_as_pure_expr(e, visited),
+            ),
+            ExprValue::Index { array, index } => self
+                .inline_as_pure_expr(array, visited)
+                .index(self.inline_as_pure_expr(index, visited)),
+            ExprValue::Member { lhs, field } => {
+                let inlined_lhs = self.inline_as_pure_expr(lhs, visited);
+                // If the inlined lhs is a Struct literal, extract the field directly
+                // by numeric index (e.g., field "0" → values[0]).
+                if let ExprValue::Struct { values } = inlined_lhs.value() {
+                    if let Ok(idx) = field.to_string().parse::<usize>() {
+                        if idx < values.len() {
+                            return self.inline_as_pure_expr(&values[idx], visited);
+                        }
+                    }
+                }
+                // Member(OverflowResultOp(a,b), "result") → Op(a,b)
+                // Simplifies checked arithmetic to plain arithmetic for quantifier bodies.
+                if *field == "result" {
+                    if let ExprValue::BinOp { op, lhs: a, rhs: b } = inlined_lhs.value() {
+                        use cbmc::goto_program::BinaryOperator::*;
+                        let simple = match op {
+                            OverflowResultPlus => Some(Plus),
+                            OverflowResultMinus => Some(Minus),
+                            OverflowResultMult => Some(Mult),
+                            _ => None,
+                        };
+                        if let Some(sop) = simple {
+                            return self
+                                .inline_as_pure_expr(a, visited)
+                                .binop(sop, self.inline_as_pure_expr(b, visited));
+                        }
+                    }
+                }
+                inlined_lhs.member(*field, &self.symbol_table)
+            }
+            ExprValue::Dereference(e) => self.inline_as_pure_expr(e, visited).dereference(),
+            ExprValue::AddressOf(e) => Expr::address_of(self.inline_as_pure_expr(e, visited)),
+            ExprValue::Forall { variable, domain } => Expr::forall_expr(
+                Type::Bool,
+                variable.clone(),
+                self.inline_as_pure_expr(domain, visited),
+            ),
+            ExprValue::Exists { variable, domain } => Expr::exists_expr(
+                Type::Bool,
+                variable.clone(),
+                self.inline_as_pure_expr(domain, visited),
+            ),
+            ExprValue::StatementExpression { statements, .. } => {
+                // Flatten StatementExpression by collecting intermediate variable
+                // assignments and substituting them into the final expression.
+                // This handles checked arithmetic patterns like:
+                //   { let temp = overflow_result_plus(a, b); (temp.result, temp.overflowed) }
+                let mut assignments: HashMap<InternedString, Expr> = HashMap::new();
+                let mut final_expr = None;
+                for stmt in statements.iter() {
+                    match stmt.body() {
+                        StmtBody::Decl { lhs, value: Some(val) } => {
+                            if let ExprValue::Symbol { identifier } = lhs.value() {
+                                assignments.insert(*identifier, val.clone());
+                            }
+                        }
+                        StmtBody::Expression(e) => {
+                            final_expr = Some(e.clone());
+                        }
+                        _ => {
+                            // Dropping Assert/Assume statements (overflow/div-by-zero
+                            // checks) from quantifier bodies. These cannot be
+                            // represented as pure expressions.
+                            tracing::debug!(
+                                "Dropping checked arithmetic guard in quantifier body. \
+                                 Overflow and division-by-zero checks are not enforced \
+                                 inside quantifier predicates."
+                            );
+                        }
+                    }
+                }
+                if let Some(mut expr) = final_expr {
+                    // Resolve intermediate variables.
+                    // Capped at assignments.len() + 1 to guard against cycles.
+                    for _ in 0..=assignments.len() {
+                        let mut changed = false;
+                        for (sym, rhs) in assignments.iter() {
+                            let (new_expr, did_change) = expr.substitute_symbol(sym, rhs);
+                            expr = new_expr;
+                            changed |= did_change;
+                        }
+                        if !changed {
+                            break;
+                        }
+                    }
+                    // After resolution, extract just the "result" field from
+                    // overflow-checked operations. The pattern is:
+                    //   Member(Struct([Member(overflow_op, "result"), ...]), "0")
+                    // Simplify to just the arithmetic result.
+                    let simplified = simplify_overflow_result(&expr);
+                    self.inline_as_pure_expr(&simplified, visited)
+                } else {
+                    expr.clone()
+                }
+            }
+            _ => expr.clone(),
+        }
+    }
+
+    /// Public entry point for pure expression inlining.
+    pub fn inline_as_pure_expr_toplevel(&self, expr: &Expr) -> Expr {
+        self.inline_as_pure_expr(expr, &mut HashSet::new())
+    }
+
+    /// Inline a single function call as a pure expression.
+    /// Returns the original expression unchanged if the function cannot be inlined
+    /// (recursive, no body, non-symbol return).
+    fn inline_call_as_pure_expr(
+        &self,
+        fn_id: &InternedString,
+        arguments: &[Expr],
+        original_expr: &Expr,
+        visited: &mut HashSet<InternedString>,
+    ) -> Expr {
+        if visited.contains(fn_id) {
+            tracing::warn!(%fn_id, "Recursive function in quantifier body, cannot inline as pure expression");
+            return original_expr.clone();
+        }
+
+        // Lower known pointer arithmetic intrinsics directly to CBMC expressions.
+        // These intrinsics have no GOTO body to inline, so we handle them specially.
+        // We check that the function name contains a pointer-type path segment to
+        // avoid false-positives on user-defined functions with similar names.
+        //
+        // CBMC's pointer Plus scales the offset by the pointee size. So:
+        // - For element-offset variants (wrapping_add, wrapping_sub, wrapping_offset),
+        //   we apply Plus directly on the original pointer type (count is in elements of T).
+        // - For byte-offset variants (wrapping_byte_offset, wrapping_byte_add,
+        //   wrapping_byte_sub), we first cast the pointer to `*u8` so Plus scales by 1.
+        // - Sub variants negate the offset before adding.
+        //
+        // TODO: Replace name-based heuristic with a proper intrinsic registry
+        // (e.g., matching on DefId or a dedicated KaniIntrinsic enum) for
+        // robustness against mangling variations.
+        let fn_name = fn_id.to_string();
+        let is_ptr_fn = fn_name.contains("::ptr::") || fn_name.contains("const_ptr");
+        let ptr_op = if is_ptr_fn {
+            if fn_name.contains("wrapping_byte_offset") || fn_name.contains("wrapping_byte_add") {
+                Some((/*is_byte*/ true, /*is_sub*/ false))
+            } else if fn_name.contains("wrapping_byte_sub") {
+                Some((true, true))
+            } else if fn_name.contains("wrapping_add") || fn_name.contains("wrapping_offset") {
+                Some((false, false))
+            } else if fn_name.contains("wrapping_sub") {
+                Some((false, true))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        if let Some((is_byte, is_sub)) = ptr_op
+            && arguments.len() >= 2
+            && arguments[0].typ().is_pointer()
+        {
+            let original_ptr_typ = arguments[0].typ().clone();
+            let ptr = self.inline_as_pure_expr(&arguments[0], visited);
+            let offset = self.inline_as_pure_expr(&arguments[1], visited);
+            let offset = if is_sub { offset.neg() } else { offset };
+            // For byte-offset variants, cast the pointer to `*u8` so CBMC's Plus
+            // scales the offset by 1 byte (matching the Rust semantics that
+            // first casts `self.cast::<u8>()`), then cast the result back to the
+            // original pointer type so the surrounding expression sees the
+            // expected type.
+            let base = if is_byte { ptr.cast_to(Type::unsigned_int(8).to_pointer()) } else { ptr };
+            let result = base.plus(offset);
+            return if is_byte { result.cast_to(original_ptr_typ) } else { result };
+        }
+
+        let function_body = self.symbol_table.lookup(*fn_id).and_then(|sym| match &sym.value {
+            SymbolValues::Stmt(stmt) => Some(stmt.clone()),
+            _ => None,
+        });
+
+        let Some(body) = function_body else {
+            return original_expr.clone();
+        };
+
+        visited.insert(*fn_id);
+
+        let mut assignments: HashMap<InternedString, Expr> = HashMap::new();
+        Self::collect_assignments_from_stmt(&body, &mut assignments);
+
+        let return_sym = Self::find_return_symbol_in_stmt(&body);
+        let Some(ret_sym) = return_sym else {
+            tracing::debug!(%fn_id, "No return symbol found, cannot inline as pure expression");
+            visited.remove(fn_id);
+            return original_expr.clone();
+        };
+
+        let Some(ret_expr) = assignments.remove(&ret_sym) else {
+            visited.remove(fn_id);
+            return original_expr.clone();
+        };
+
+        let resolved = Self::resolve_intermediates_iterative(ret_expr, &assignments);
+        let flattened = self.inline_as_pure_expr(&resolved, visited);
+
+        let result = if let Some(params) = self.symbol_table.lookup_parameters(*fn_id) {
+            let mut expr = flattened;
+            for (param, arg) in params.iter().zip(arguments.iter()) {
+                expr = expr.substitute_symbol(param, arg).0;
+            }
+            expr
+        } else {
+            flattened
+        };
+
+        visited.remove(fn_id);
+        result
+    }
+
+    /// Collect all assignments (symbol = expr) from a statement tree.
+    /// Note: for variables assigned multiple times (e.g., in if/else branches),
+    /// only the last assignment is kept. This is a known limitation — functions
+    /// with control-flow-dependent assignments cannot be fully inlined as pure
+    /// expressions.
+    fn collect_assignments_from_stmt(stmt: &Stmt, map: &mut HashMap<InternedString, Expr>) {
+        match stmt.body() {
+            StmtBody::Assign { lhs, rhs } => {
+                if let ExprValue::Symbol { identifier } = lhs.value() {
+                    if map.contains_key(identifier) {
+                        tracing::debug!(
+                            %identifier,
+                            "Multiple assignments to same variable in function body; \
+                             last-write-wins may produce incorrect pure expression"
+                        );
+                    }
+                    map.insert(*identifier, rhs.clone());
+                }
+            }
+            StmtBody::Block(stmts) => {
+                for s in stmts {
+                    Self::collect_assignments_from_stmt(s, map);
+                }
+            }
+            StmtBody::Label { body, .. } => Self::collect_assignments_from_stmt(body, map),
+            _ => {}
+        }
+    }
+
+    /// Find the symbol identifier returned by a Return statement.
+    /// Returns None (with a debug diagnostic) if the return is a direct expression
+    /// rather than a symbol reference.
+    fn find_return_symbol_in_stmt(stmt: &Stmt) -> Option<InternedString> {
+        match stmt.body() {
+            StmtBody::Return(Some(expr)) => {
+                if let ExprValue::Symbol { identifier } = expr.value() {
+                    Some(*identifier)
+                } else {
+                    tracing::debug!(
+                        ?expr,
+                        "Return expression is not a symbol, cannot inline as pure expression"
+                    );
+                    None
+                }
+            }
+            StmtBody::Block(stmts) => {
+                for s in stmts {
+                    if let Some(sym) = Self::find_return_symbol_in_stmt(s) {
+                        return Some(sym);
+                    }
+                }
+                None
+            }
+            StmtBody::Label { body, .. } => Self::find_return_symbol_in_stmt(body),
+            _ => None,
+        }
+    }
+
+    /// Iteratively resolve intermediate variables in an expression.
+    /// Uses the `changed` flag from `substitute_symbol` for reliable change detection.
+    fn resolve_intermediates_iterative(
+        mut expr: Expr,
+        assignments: &HashMap<InternedString, Expr>,
+    ) -> Expr {
+        for _ in 0..assignments.len() + 1 {
+            let mut any_changed = false;
+            for (sym, rhs) in assignments {
+                let (new_expr, changed) = expr.substitute_symbol(sym, rhs);
+                expr = new_expr;
+                any_changed |= changed;
+            }
+            if !any_changed {
+                break;
+            }
+        }
+        expr
+    }
+}
+
 /// Quantifiers Related
-impl GotocCtx<'_> {
+impl GotocCtx<'_, '_> {
     /// Find all quantifier expressions and recursively inline functions in the quantifier bodies.
     /// We inline all the function calls in quantifier expressions because CBMC accept only
     /// statement expressiont without function calls in quantifier expressions:
@@ -352,10 +698,10 @@ impl GotocCtx<'_> {
         let mut to_modify: BTreeMap<InternedString, SymbolValues> = BTreeMap::new();
         let mut suffix_count: u16 = 0;
         for (key, symbol) in self.symbol_table.iter() {
-            if let SymbolValues::Stmt(stmt) = &symbol.value {
-                let new_stmt_val =
-                    SymbolValues::Stmt(self.handle_quantifiers_in_stmt(stmt, &mut suffix_count));
-                to_modify.insert(*key, new_stmt_val);
+            if let SymbolValues::Stmt(stmt) = &symbol.value
+                && let Some(new_stmt) = self.handle_quantifiers_in_stmt(stmt, &mut suffix_count)
+            {
+                to_modify.insert(*key, SymbolValues::Stmt(new_stmt));
             }
         }
 
@@ -366,7 +712,8 @@ impl GotocCtx<'_> {
     }
 
     /// Find all quantifier expressions in `stmt` and recursively inline functions.
-    fn handle_quantifiers_in_stmt(&self, stmt: &Stmt, suffix_count: &mut u16) -> Stmt {
+    /// Returns a new [Stmt] if something has been changed (e.g. by inlining), or [None] if it should remain the same.
+    fn handle_quantifiers_in_stmt(&self, stmt: &Stmt, suffix_count: &mut u16) -> Option<Stmt> {
         match &stmt.body() {
             // According to the hook handling for quantifiers, quantifier expressions must be of form
             // lhs = typecast(qex, c_bool)
@@ -432,24 +779,44 @@ impl GotocCtx<'_> {
                             );
                             res.cast_to(Type::CInteger(CIntType::Bool))
                         }
-                        _ => rhs.clone(),
+                        _ => return None,
                     },
-                    _ => rhs.clone(),
+                    _ => return None,
                 };
-                Stmt::assign(lhs.clone(), new_rhs, *stmt.location())
+                Some(Stmt::assign(lhs.clone(), new_rhs, *stmt.location()))
             }
             // Recursively find quantifier expressions.
-            StmtBody::Block(stmts) => Stmt::block(
-                stmts
-                    .iter()
-                    .map(|stmt| self.handle_quantifiers_in_stmt(stmt, suffix_count))
-                    .collect(),
-                *stmt.location(),
-            ),
-            StmtBody::Label { label, body } => {
-                self.handle_quantifiers_in_stmt(body, suffix_count).with_label(*label)
+            StmtBody::Block(old_stmts) => {
+                let mut replaced_sub_stmts: FxHashMap<usize, Stmt> = FxHashMap::default();
+
+                // For each block, add it and its index to the map if it should be replaced.
+                for (i, stmt) in old_stmts.iter().enumerate() {
+                    if let Some(new_stmt) = self.handle_quantifiers_in_stmt(stmt, suffix_count) {
+                        replaced_sub_stmts.insert(i, new_stmt);
+                    }
+                }
+
+                if replaced_sub_stmts.is_empty() {
+                    // We can skip doing anything if none of the blocks have to be replaced.
+                    None
+                } else {
+                    // Take the replacement block if replaced, otherwise just clone the old value.
+                    Some(Stmt::block(
+                        old_stmts
+                            .iter()
+                            .enumerate()
+                            .map(|(i, old_stmt)| {
+                                replaced_sub_stmts.remove(&i).unwrap_or_else(|| old_stmt.clone())
+                            })
+                            .collect(),
+                        *stmt.location(),
+                    ))
+                }
             }
-            _ => stmt.clone(),
+            StmtBody::Label { label, body } => {
+                Some(self.handle_quantifiers_in_stmt(body, suffix_count)?.with_label(*label))
+            }
+            _ => None,
         }
     }
 
@@ -802,7 +1169,7 @@ impl GotocCtx<'_> {
 }
 
 /// Mutators
-impl GotocCtx<'_> {
+impl GotocCtx<'_, '_> {
     pub fn set_current_fn(&mut self, instance: Instance, body: &Body) {
         self.current_fn = Some(CurrentFnCtx::new(instance, self, body));
     }
@@ -825,35 +1192,48 @@ impl GotocCtx<'_> {
     }
 }
 
-impl<'tcx> LayoutOfHelpers<'tcx> for GotocCtx<'tcx> {
+impl<'tcx> LayoutOfHelpers<'tcx> for GotocCtx<'tcx, '_> {
     type LayoutOfResult = TyAndLayout<'tcx>;
 
     #[inline]
     fn handle_layout_err(&self, err: LayoutError<'tcx>, span: Span, ty: Ty<'tcx>) -> ! {
-        span_bug!(span, "failed to get layout for `{}`: {}", ty, err)
+        // Handle SizeOverflow errors gracefully instead of causing an ICE
+        if let LayoutError::SizeOverflow(_) = err {
+            self.tcx
+                .dcx()
+                .struct_span_err(
+                    span,
+                    format!("values of the type `{}` are too big for the target architecture", ty),
+                )
+                .emit();
+            self.tcx.dcx().abort_if_errors();
+            unreachable!()
+        } else {
+            span_bug!(span, "failed to get layout for `{}`: {}", ty, err)
+        }
     }
 }
 
-impl<'tcx> HasTypingEnv<'tcx> for GotocCtx<'tcx> {
+impl<'tcx> HasTypingEnv<'tcx> for GotocCtx<'tcx, '_> {
     fn typing_env(&self) -> ty::TypingEnv<'tcx> {
         ty::TypingEnv::fully_monomorphized()
     }
 }
 
-impl<'tcx> HasTyCtxt<'tcx> for GotocCtx<'tcx> {
+impl<'tcx> HasTyCtxt<'tcx> for GotocCtx<'tcx, '_> {
     fn tcx(&self) -> TyCtxt<'tcx> {
         self.tcx
     }
 }
 
-impl HasDataLayout for GotocCtx<'_> {
+impl HasDataLayout for GotocCtx<'_, '_> {
     fn data_layout(&self) -> &TargetDataLayout {
         self.tcx.data_layout()
     }
 }
 
 /// Implement error handling for extracting function ABI information.
-impl<'tcx> FnAbiOfHelpers<'tcx> for GotocCtx<'tcx> {
+impl<'tcx> FnAbiOfHelpers<'tcx> for GotocCtx<'tcx, '_> {
     type FnAbiOfResult = &'tcx FnAbi<'tcx, Ty<'tcx>>;
 
     #[inline]
@@ -881,5 +1261,80 @@ impl<'tcx> FnAbiOfHelpers<'tcx> for GotocCtx<'tcx> {
                 }
             }
         }
+    }
+}
+
+/// Simplify overflow-checked arithmetic results for use in quantifier bodies.
+/// Replaces patterns like `Member(OverflowResultPlus(a, b), "result")` with `Plus(a, b)`.
+/// This drops the overflow check, which is acceptable inside quantifier bodies
+/// where CBMC requires side-effect-free expressions.
+#[allow(clippy::collapsible_if, clippy::cmp_owned)]
+fn simplify_overflow_result(expr: &Expr) -> Expr {
+    use cbmc::goto_program::BinaryOperator::*;
+    match expr.value() {
+        // Member(Struct([f0, f1, ...]), "N") → simplify(fN)
+        ExprValue::Member { lhs, field } => {
+            let simplified_lhs = simplify_overflow_result(lhs);
+            match simplified_lhs.value() {
+                // If lhs simplified to a Struct, extract the field by index
+                ExprValue::Struct { values } => {
+                    let field_str = field.to_string();
+                    if let Ok(idx) = field_str.parse::<usize>() {
+                        if idx < values.len() {
+                            return simplify_overflow_result(&values[idx]);
+                        }
+                    }
+                    // "result" field from OverflowResult
+                    if field_str == "result" {
+                        if let ExprValue::BinOp { op, lhs: a, rhs: b } = simplified_lhs.value() {
+                            let simple_op = match op {
+                                OverflowResultPlus => Some(Plus),
+                                OverflowResultMinus => Some(Minus),
+                                OverflowResultMult => Some(Mult),
+                                _ => None,
+                            };
+                            if let Some(op) = simple_op {
+                                return simplify_overflow_result(a)
+                                    .binop(op, simplify_overflow_result(b));
+                            }
+                        }
+                    }
+                    expr.clone()
+                }
+                // Member(OverflowResultPlus(a,b), "result") → Plus(a,b)
+                _ => {
+                    if field.to_string() == "result" {
+                        if let ExprValue::BinOp { op, lhs: a, rhs: b } = simplified_lhs.value() {
+                            let simple_op = match op {
+                                OverflowResultPlus => Some(Plus),
+                                OverflowResultMinus => Some(Minus),
+                                OverflowResultMult => Some(Mult),
+                                _ => None,
+                            };
+                            if let Some(op) = simple_op {
+                                return simplify_overflow_result(a)
+                                    .binop(op, simplify_overflow_result(b));
+                            }
+                        }
+                    }
+                    expr.clone()
+                }
+            }
+        }
+        ExprValue::BinOp { op, lhs, rhs } => {
+            simplify_overflow_result(lhs).binop(*op, simplify_overflow_result(rhs))
+        }
+        ExprValue::Typecast(e) => simplify_overflow_result(e).cast_to(expr.typ().clone()),
+        ExprValue::If { c, t, e } => simplify_overflow_result(c)
+            .ternary(simplify_overflow_result(t), simplify_overflow_result(e)),
+        ExprValue::Struct { .. } => {
+            // Struct values are not recursed into here because constructing a
+            // new Struct expression requires a SymbolTable reference. Instead,
+            // overflow simplification happens when individual fields are accessed
+            // via the Member handler in inline_as_pure_expr, which extracts and
+            // simplifies fields on demand.
+            expr.clone()
+        }
+        _ => expr.clone(),
     }
 }

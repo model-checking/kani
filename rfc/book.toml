@@ -5,7 +5,6 @@ title = "Kani RFC Book"
 description = "Design documents for Kani Rust Verifier"
 authors = ["Kani Developers"]
 language = "en"
-multilingual = false
 src = "src"
 
 [output.html]

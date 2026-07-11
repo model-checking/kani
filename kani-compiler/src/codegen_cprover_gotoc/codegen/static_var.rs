@@ -4,12 +4,12 @@
 //! This file contains functions related to codegenning MIR static variables into gotoc
 
 use crate::codegen_cprover_gotoc::GotocCtx;
-use crate::kani_middle::is_interior_mut;
+use crate::kani_middle::{is_interior_mut, readable_name};
 use rustc_public::CrateDef;
 use rustc_public::mir::mono::{Instance, StaticDef};
 use tracing::debug;
 
-impl GotocCtx<'_> {
+impl GotocCtx<'_, '_> {
     /// Ensures a static variable is initialized.
     ///
     /// Note that each static variable have their own location in memory. Per Rust documentation:
@@ -24,6 +24,7 @@ impl GotocCtx<'_> {
             symbol_name,
             self.codegen_span_stable(def.span()),
             is_interior_mut(self.tcx, def.ty()),
+            false,
         );
     }
 
@@ -33,7 +34,7 @@ impl GotocCtx<'_> {
         // Unique mangled monomorphized name.
         let symbol_name = instance.mangled_name();
         // Pretty name which may include function name.
-        let pretty_name = instance.name();
+        let pretty_name = readable_name(instance);
         debug!(?def, ?symbol_name, ?pretty_name, "declare_static");
 
         let typ = self.codegen_ty_stable(instance.ty());

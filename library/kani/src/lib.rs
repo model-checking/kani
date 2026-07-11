@@ -32,6 +32,7 @@ pub mod bounded_arbitrary;
 mod concrete_playback;
 pub mod futures;
 pub mod invariant;
+pub mod iter;
 pub mod shadow;
 pub mod vec;
 
@@ -84,6 +85,45 @@ macro_rules! cover {
 macro_rules! implies {
     ($premise:expr => $conclusion:expr) => {
         !($premise) || ($conclusion)
+    };
+}
+
+/// Define a reusable set of function stubs that can be applied to multiple proof harnesses.
+///
+/// # Example
+///
+/// ```ignore
+/// kani::stub_set!(my_stubs,
+///     stub(std::fs::read, my_read),
+///     stub(std::fs::write, my_write),
+/// );
+///
+/// #[kani::proof]
+/// #[kani::use_stub_set(my_stubs)]
+/// fn my_harness() { /* ... */ }
+/// ```
+///
+/// Stub sets can also include other stub sets:
+///
+/// ```ignore
+/// kani::stub_set!(all_stubs,
+///     use_stub_set(my_stubs),
+///     stub(other::func, my_func),
+/// );
+/// ```
+#[macro_export]
+macro_rules! stub_set {
+    (pub $name:ident, $($entry:tt)*) => {
+        /// A Kani stub set definition.
+        #[allow(non_upper_case_globals)]
+        #[kanitool::stub_set($($entry)*)]
+        pub const $name: () = ();
+    };
+    ($vis:vis $name:ident, $($entry:tt)*) => {
+        #[doc(hidden)]
+        #[allow(non_upper_case_globals)]
+        #[kanitool::stub_set($($entry)*)]
+        $vis const $name: () = ();
     };
 }
 

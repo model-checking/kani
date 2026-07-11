@@ -37,7 +37,7 @@ use std::str::FromStr;
 use tracing::{debug, trace};
 
 /// Generate the body for a few Kani intrinsics.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct IntrinsicGeneratorPass {
     unsupported_check_type: CheckType,
     /// Used to cache FnDef lookups for models and Kani intrinsics.

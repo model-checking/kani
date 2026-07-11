@@ -7,18 +7,20 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::kani_middle::codegen_units::Harness;
-use crate::kani_middle::{KaniAttributes, SourceLocation};
+use crate::kani_middle::{KaniAttributes, SourceLocation, readable_name, strip_local_crate_prefix};
 use kani_metadata::ContractedFunction;
 use kani_metadata::{ArtifactType, HarnessAttributes, HarnessKind, HarnessMetadata};
 use rustc_middle::ty::TyCtxt;
 use rustc_public::mir::mono::Instance;
 use rustc_public::{CrateDef, CrateItems, DefId};
 
+use sha1_checked::Sha1;
+
 /// Create the harness metadata for a proof harness for a given function.
 pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> HarnessMetadata {
     let def = instance.def;
     let kani_attributes = KaniAttributes::for_instance(tcx, instance);
-    let pretty_name = instance.name();
+    let pretty_name = readable_name(instance);
     let mangled_name = instance.mangled_name();
 
     // We get the body span to include the entire function definition.
@@ -57,7 +59,10 @@ pub fn gen_contracts_metadata(
     let mut fn_to_data: HashMap<DefId, ContractedFunction> = HashMap::new();
 
     for item in crate_items {
-        let function = item.name();
+        // Use crate-relative names (rust-lang/rust#149401 made `name()` crate-qualified for
+        // local items); the list output and the automatic-contract-harness lookup below both
+        // compare/display these names in crate-relative form.
+        let function = strip_local_crate_prefix(item.name());
         let file = SourceLocation::new(item.span()).filename;
         let attributes = KaniAttributes::for_def_id(tcx, item.def_id());
 
@@ -73,9 +78,10 @@ pub fn gen_contracts_metadata(
                 fn_to_data.insert(
                     target_def_id,
                     ContractedFunction {
-                        // Note that we use the item's fully qualified-name, rather than the target name specified in the attribute.
+                        // Note that we use the item's (crate-relative) name, rather than the
+                        // target name specified in the attribute.
                         // This is necessary for the automatic contract harness lookup, see below.
-                        function: item.name(),
+                        function: strip_local_crate_prefix(item.name()),
                         file,
                         harnesses: vec![function],
                     },
@@ -92,13 +98,13 @@ pub fn gen_contracts_metadata(
         if let HarnessKind::ProofForContract { target_fn } = &metadata.attributes.kind {
             // FIXME: This is a bit hacky. We can't resolve the target_fn to a DefId because we need somewhere to start the name resolution from.
             // For a manual harness, we could just start from the harness, but since automatic harnesses are Kani intrinsics, we can't resolve the target starting from them.
-            // Instead, we rely on the fact that the ContractedFunction objects store the function's fully qualified name,
-            // and that `gen_automatic_proof_metadata` uses the fully qualified name as well.
+            // Instead, we rely on the fact that the ContractedFunction objects store the function's crate-relative name,
+            // and that `gen_automatic_proof_metadata` uses the crate-relative name as well.
             // Once we implement multiple automatic harnesses for a single function, we will have to revise the HarnessMetadata anyway,
             // and then we can revisit the idea of storing the target_fn's DefId somewhere.
             let (_, target_cf) =
                 fn_to_data.iter_mut().find(|(_, cf)| &cf.function == target_fn).unwrap();
-            target_cf.harnesses.push(harness.name());
+            target_cf.harnesses.push(strip_local_crate_prefix(harness.name()));
         }
     }
 
@@ -117,13 +123,18 @@ pub fn gen_automatic_proof_metadata(
     harness_mangled_name: String,
 ) -> HarnessMetadata {
     let def = fn_to_verify.def;
-    let pretty_name = fn_to_verify.name();
+    let pretty_name = readable_name(*fn_to_verify);
     let mangled_name = fn_to_verify.mangled_name();
 
     // Leave the concrete playback instrumentation for now, but this feature does not actually support concrete playback.
     let loc = SourceLocation::new(fn_to_verify.body().unwrap().span);
-    let file_stem =
-        format!("{}_{mangled_name}_autoharness", base_name.file_stem().unwrap().to_str().unwrap());
+    let sha1_result = Sha1::try_digest(mangled_name);
+    assert!(!sha1_result.has_collision());
+    let file_stem = format!(
+        "{}_{:x}_autoharness",
+        base_name.file_stem().unwrap().to_str().unwrap(),
+        sha1_result.hash()
+    );
     let model_file = base_name.with_file_name(file_stem).with_extension(ArtifactType::SymTabGoto);
 
     let kani_attributes = KaniAttributes::for_instance(tcx, *fn_to_verify);

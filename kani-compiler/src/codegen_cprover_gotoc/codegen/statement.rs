@@ -23,7 +23,7 @@ use rustc_public::rustc_internal;
 use rustc_public::ty::{Abi, RigidTy, Span, Ty, TyKind, VariantIdx};
 use tracing::{debug, debug_span, trace};
 
-impl GotocCtx<'_> {
+impl GotocCtx<'_, '_> {
     pub fn ty_to_assign_target(&self, ty: Ty, expr: &Expr) -> Expr {
         match ty.kind() {
             TyKind::RigidTy(RigidTy::Ref(_, unref_ty, _))
@@ -97,6 +97,24 @@ impl GotocCtx<'_> {
                     self.current_loop_modifies = assigns.clone();
                     return Stmt::skip(location);
                 }
+                if localname.contains("kani_loop_decreases") {
+                    if !self
+                        .queries
+                        .args()
+                        .unstable_features
+                        .contains(&"loop-contracts".to_string())
+                    {
+                        let msg = "found `#[kani::loop_decreases]` without \
+                                   `-Z loop-contracts`. The decreases clause \
+                                   will be ignored.";
+                        let internal_span = rustc_internal::internal(self.tcx, stmt.span);
+                        self.tcx.dcx().span_warn(internal_span, msg);
+                        return Stmt::skip(location);
+                    }
+                    let decreases_expr = self.codegen_rvalue_stable(rhs, location);
+                    self.current_loop_decreases = Some(decreases_expr);
+                    return Stmt::skip(location);
+                }
                 // we ignore assignment for all zero size types
                 if self.is_zst_stable(lty) {
                     Stmt::skip(location)
@@ -129,7 +147,6 @@ impl GotocCtx<'_> {
                     .assign(self.codegen_rvalue_stable(rhs, location), location)
                 }
             }
-            StatementKind::Deinit(place) => self.codegen_deinit(place, location),
             StatementKind::SetDiscriminant { place, variant_index } => {
                 let dest_ty = self.place_ty_stable(place);
                 let dest_expr = unwrap_or_return_codegen_unimplemented_stmt!(
@@ -444,27 +461,6 @@ impl GotocCtx<'_> {
         }
     }
 
-    /// From rustc doc: "This writes `uninit` bytes to the entire place."
-    /// Our model of GotoC has a similar statement, which is later lowered
-    /// to assigning a Nondet in CBMC, with a comment specifying that it
-    /// corresponds to a Deinit.
-    fn codegen_deinit(&mut self, place: &Place, loc: Location) -> Stmt {
-        let dst_mir_ty = self.place_ty_stable(place);
-        let dst_type = self.codegen_ty_stable(dst_mir_ty);
-        let layout = self.layout_of_stable(dst_mir_ty);
-        if layout.is_zst() || dst_type.sizeof_in_bits(&self.symbol_table) == 0 {
-            // We ignore assignment for all zero size types
-            Stmt::skip(loc)
-        } else {
-            unwrap_or_return_codegen_unimplemented_stmt!(
-                self,
-                self.codegen_place_stable(place, loc)
-            )
-            .goto_expr
-            .deinit(loc)
-        }
-    }
-
     /// A special case handler to codegen `return ();`
     fn codegen_ret_unit(&mut self, loc: Location) -> Stmt {
         let is_file_local = false;
@@ -728,8 +724,9 @@ impl GotocCtx<'_> {
                 let mut fargs = if args.is_empty()
                     || fn_def.fn_sig().unwrap().value.abi != Abi::RustCall
                 {
-                    if instance.def.name() == "kani::internal::kani_forall"
-                        || (instance.def.name() == "kani::internal::kani_exists")
+                    let fn_def_name = instance.def.name();
+                    if fn_def_name == "kani::internal::kani_forall"
+                        || (fn_def_name == "kani::internal::kani_exists")
                     {
                         self.codegen_funcall_args_for_quantifiers(&fn_abi, args)
                     } else {

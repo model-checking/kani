@@ -3,7 +3,7 @@
 
 [package]
 name = "kani_macros"
-version = "0.64.0"
+version = "0.67.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 publish = false
@@ -13,11 +13,11 @@ proc-macro = true
 
 [dependencies]
 proc-macro2 = "1.0"
-proc-macro-error2 = { version = "2.0.0", features = ["nightly"] }
+proc-macro2-diagnostics = { version = "0.10", default-features = false }
 quote = "1.0.20"
 syn = { version = "2.0.18", features = ["full", "visit-mut", "visit", "extra-traits"] }
-strum = "0.27.1"
-strum_macros = "0.27.1"
+strum = "0.28"
+strum_macros = "0.28"
 
 [package.metadata.rust-analyzer]
 # This package uses rustc crates.

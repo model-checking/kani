@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
-// kani-flags: --harness main -Z stubbing
+// kani-flags: -Z stubbing
 //
 //! This tests stubbing for public local functions.
 
@@ -23,12 +23,14 @@ mod local_mod {
     }
 }
 
-// TODO: Split up these assertions into separate harnesses, once stubbing is able to support that.
-// <https://github.com/model-checking/kani/issues/1861>
 #[kani::proof]
 #[kani::stub(local_fn, the_answer)]
-#[kani::stub(local_mod::pub_fn, the_answer)]
-fn main() {
+fn check_local_fn_stub() {
     assert_eq!(local_fn(), 42);
+}
+
+#[kani::proof]
+#[kani::stub(local_mod::pub_fn, the_answer)]
+fn check_pub_fn_in_module_stub() {
     assert_eq!(local_mod::pub_fn(), 42);
 }

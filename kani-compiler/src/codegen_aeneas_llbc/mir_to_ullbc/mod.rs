@@ -52,8 +52,9 @@ use charon_lib::ullbc_ast::{
     RawTerminator as CharonRawTerminator, Statement as CharonStatement,
     SwitchTargets as CharonSwitchTargets, Terminator as CharonTerminator,
 };
-use charon_lib::{error_assert, error_or_panic};
+use charon_lib::{error_assert, raise_error, register_error};
 use core::panic;
+use indexmap::IndexMap;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::ty::{TyCtxt, TypingEnv};
 use rustc_public::mir::mono::{Instance, InstanceDef};
@@ -69,6 +70,7 @@ use rustc_public::ty::{
     Ty, TyConst, TyConstKind, TyKind, UintTy,
 };
 use rustc_public::{CrateDef, CrateDefType, DefId};
+use rustc_public_bridge::IndexedVal;
 use std::collections::HashMap;
 use std::iter::zip;
 use std::path::PathBuf;
@@ -113,12 +115,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         self.tcx
     }
 
-    fn span_err(&mut self, span: CharonSpan, msg: &str) {
-        self.errors.span_err(self.translated, span, msg);
-    }
-
-    fn continue_on_failure(&self) -> bool {
-        self.errors.continue_on_failure()
+    fn span_err(&mut self, span: CharonSpan, msg: &str) -> CharonError {
+        self.errors.span_err(self.translated, span, msg)
     }
 
     fn translate_traitdecl(&mut self, trait_def: TraitDef) -> CharonTraitDeclId {
@@ -128,10 +126,10 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             None => {
                 let trait_decl = TraitDef::declaration(&trait_def);
                 let consts = Vec::new();
-                let const_defaults = HashMap::new();
+                let const_defaults = IndexMap::new();
                 let types = Vec::new();
                 let type_clauses = Vec::new();
-                let type_defaults = HashMap::new();
+                let type_defaults = IndexMap::new();
                 let required_methods = Vec::new();
                 let provided_methods = Vec::new();
                 let parent_clauses = CharonVector::new();
@@ -441,7 +439,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             trait_clauses: CharonVector::new(),
             regions_outlive: Vec::new(),
             types_outlive: Vec::new(),
-            trait_type_constraints: Vec::new(),
+            trait_type_constraints: CharonVector::new(),
         }
     }
 
@@ -522,7 +520,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             trait_clauses,
             regions_outlive: Vec::new(),
             types_outlive: Vec::new(),
-            trait_type_constraints: Vec::new(),
+            trait_type_constraints: CharonVector::new(),
         }
     }
 
@@ -594,7 +592,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             trait_clauses,
             regions_outlive: Vec::new(),
             types_outlive: Vec::new(),
-            trait_type_constraints: Vec::new(),
+            trait_type_constraints: CharonVector::new(),
         }
     }
 
@@ -856,7 +854,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     // block.
                 }
                 _ => {
-                    error_or_panic!(self, span, format!("Unexpected DefPathData: {:?}", data));
+                    raise_error!(self, span, "Unexpected DefPathData: {:?}", data);
                 }
             }
         }
@@ -999,7 +997,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     // block.
                 }
                 _ => {
-                    error_or_panic!(self, span, format!("Unexpected DefPathData: {:?}", data));
+                    raise_error!(self, span, "Unexpected DefPathData: {:?}", data);
                 }
             }
         }
@@ -1009,11 +1007,10 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             name.push(CharonPathElem::Ident(crate_name, CharonDisambiguator::new(0)));
         }
 
-        if let Some(impl_defid_internal) = self.tcx.impl_of_method(def_id) {
+        if let Some(impl_defid_internal) = self.tcx.impl_of_assoc(def_id) {
             let traitref = self
                 .tcx
                 .impl_trait_ref(impl_defid_internal)
-                .unwrap()
                 .skip_binder()
                 .args
                 .first()
@@ -1106,7 +1103,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     // block.
                 }
                 _ => {
-                    error_or_panic!(self, span, format!("Unexpected DefPathData: {:?}", data));
+                    raise_error!(self, span, "Unexpected DefPathData: {:?}", data);
                 }
             }
         }
@@ -1253,7 +1250,11 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 },
             };
             let subs_traitref = CharonTraitRef {
-                kind: CharonTraitRefKind::BuiltinOrAuto(subs_traitdeclref.clone()),
+                kind: CharonTraitRefKind::BuiltinOrAuto {
+                    trait_decl_ref: subs_traitdeclref.clone(),
+                    parent_trait_refs: CharonVector::new(),
+                    types: Vec::new(),
+                },
                 trait_decl_ref: subs_traitdeclref,
             };
             trait_refs.push(subs_traitref);
@@ -1436,7 +1437,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 };
                 CharonTy::new(CharonTyKind::Arrow(rb))
             }
-            RigidTy::Dynamic(_, _, _) => {
+            RigidTy::Dynamic(_, _) => {
                 CharonTy::new(CharonTyKind::DynTrait(CharonExistentialPredicate))
             }
             _ => todo!("Not yet implemented RigidTy: {:?}", rigid_ty),
@@ -1488,7 +1489,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         };
         if let Some(content) = content {
             let span = self.translate_span(stmt.span);
-            return Some(CharonStatement { span, content });
+            return Some(CharonStatement { span, content, comments_before: Vec::new() });
         };
         None
     }
@@ -1559,8 +1560,12 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             _ => todo!(),
         };
         (
-            statement.map(|statement| CharonStatement { span, content: statement }),
-            CharonTerminator { span, content: terminator },
+            statement.map(|statement| CharonStatement {
+                span,
+                content: statement,
+                comments_before: Vec::new(),
+            }),
+            CharonTerminator { span, content: terminator, comments_before: Vec::new() },
         )
     }
 
@@ -1703,6 +1708,9 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             Operand::Constant(constant) => CharonOperand::Const(self.translate_constant(constant)),
             Operand::Copy(place) => CharonOperand::Copy(self.translate_place(&place)),
             Operand::Move(place) => CharonOperand::Move(self.translate_place(&place)),
+            // `Operand::RuntimeChecks` (rust-lang/rust#148766) is not yet modeled by the
+            // experimental LLBC backend.
+            Operand::RuntimeChecks(_) => todo!(),
         }
     }
 

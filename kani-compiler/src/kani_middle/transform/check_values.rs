@@ -38,7 +38,7 @@ use strum_macros::AsRefStr;
 use tracing::{debug, trace};
 
 /// Instrument the code with checks for invalid values.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ValidValuePass {
     pub safety_check_type: CheckType,
     pub unsupported_check_type: CheckType,
@@ -214,6 +214,7 @@ impl ValidValueReq {
                 ValueAbi::Scalar(_)
                 | ValueAbi::ScalarPair(_, _)
                 | ValueAbi::Vector { .. }
+                | ValueAbi::ScalableVector { .. }
                 | ValueAbi::Aggregate { .. } => None,
             }
         }
@@ -411,7 +412,6 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                 }
                 StatementKind::FakeRead(_, _)
                 | StatementKind::SetDiscriminant { .. }
-                | StatementKind::Deinit(_)
                 | StatementKind::StorageLive(_)
                 | StatementKind::StorageDead(_)
                 | StatementKind::Retag(_, _)
@@ -549,7 +549,6 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                 }
                 ProjectionElem::Downcast(_) => {}
                 ProjectionElem::OpaqueCast(_) => {}
-                ProjectionElem::Subtype(_) => {}
                 ProjectionElem::Index(_)
                 | ProjectionElem::ConstantIndex { .. }
                 | ProjectionElem::Subslice { .. } => { /* safe */ }
@@ -619,7 +618,7 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                         })
                     }
                 }
-                CastKind::Transmute => {
+                CastKind::Transmute | CastKind::Subtype => {
                     debug!(?dest_ty, "transmute");
                     // For transmute, we care about the destination type only.
                     // This could be optimized to only add a check if the requirements of the
@@ -701,7 +700,6 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
             | Rvalue::Ref(_, _, _)
             | Rvalue::Repeat(_, _)
             | Rvalue::ThreadLocalRef(_)
-            | Rvalue::NullaryOp(_, _)
             | Rvalue::UnaryOp(_, _)
             | Rvalue::Use(_) => {}
         }
@@ -777,8 +775,7 @@ fn assignment_check_points(
             | ProjectionElem::ConstantIndex { .. }
             | ProjectionElem::Subslice { .. }
             | ProjectionElem::Downcast(_)
-            | ProjectionElem::OpaqueCast(_)
-            | ProjectionElem::Subtype(_) => ty = proj.ty(ty).unwrap(),
+            | ProjectionElem::OpaqueCast(_) => ty = proj.ty(ty).unwrap(),
         };
     }
     invalid_ranges
@@ -1061,7 +1058,7 @@ pub fn ty_validity_per_offset(
                 | RigidTy::CoroutineClosure(_, _)
                 | RigidTy::CoroutineWitness(_, _)
                 | RigidTy::Foreign(_)
-                | RigidTy::Dynamic(_, _, _) => Err(format!("Unsupported {ty:?}")),
+                | RigidTy::Dynamic(_, _) => Err(format!("Unsupported {ty:?}")),
             }
         }
         FieldsShape::Union(_) | FieldsShape::Array { .. } => {

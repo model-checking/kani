@@ -25,7 +25,7 @@ use rustc_public::mir::Body;
 use rustc_public::mir::mono::Instance as InstanceStable;
 use rustc_public::rustc_internal;
 use rustc_public::ty::{
-    Binder, DynKind, ExistentialPredicate, ExistentialProjection, Region, RegionKind, RigidTy,
+    Binder, ExistentialPredicate, ExistentialProjection, Region, RegionKind, RigidTy,
     Ty as StableTy,
 };
 use rustc_span::def_id::DefId;
@@ -96,7 +96,7 @@ impl TypeExt for Type {
 }
 
 /// Function signatures
-impl GotocCtx<'_> {
+impl GotocCtx<'_, '_> {
     /// This method prints the details of a GotoC type, for debugging purposes.
     #[allow(unused)]
     pub(crate) fn debug_print_type_recursively(&self, ty: &Type) -> String {
@@ -235,7 +235,7 @@ impl GotocCtx<'_> {
     }
 }
 
-impl<'tcx> GotocCtx<'tcx> {
+impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     pub fn monomorphize<T>(&self, value: T) -> T
     where
         T: TypeFoldable<TyCtxt<'tcx>>,
@@ -301,8 +301,7 @@ impl<'tcx> GotocCtx<'tcx> {
         predictates.extend(
             projections.into_iter().map(|proj| proj.map_bound(ExistentialPredicate::Projection)),
         );
-        let rigid =
-            RigidTy::Dynamic(predictates, Region { kind: RegionKind::ReErased }, DynKind::Dyn);
+        let rigid = RigidTy::Dynamic(predictates, Region { kind: RegionKind::ReErased });
 
         rustc_public::ty::Ty::from_rigid_kind(rigid)
     }
@@ -419,12 +418,12 @@ impl<'tcx> GotocCtx<'tcx> {
     /// We follow the order from the `TyCtxt::COMMON_VTABLE_ENTRIES`.
     fn trait_vtable_field_types(&mut self, t: ty::Ty<'tcx>) -> Vec<DatatypeComponent> {
         let mut vtable_base = common_vtable_fields(self.trait_vtable_drop_type(t));
-        if let ty::Dynamic(binder, _, _) = t.kind() {
+        if let ty::Dynamic(binder, _) = t.kind() {
             // The virtual methods on the trait ref. Some auto traits have no methods.
             if let Some(principal) = binder.principal() {
                 let poly = principal.with_self_ty(self.tcx, t);
                 let poly = self.tcx.instantiate_bound_regions_with_erased(poly);
-                let poly = self.tcx.erase_regions(poly);
+                let poly = self.tcx.erase_and_anonymize_regions(poly);
                 let mut flds = self
                     .tcx
                     .vtable_entries(poly)
@@ -772,9 +771,9 @@ impl<'tcx> GotocCtx<'tcx> {
         initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
         match &layout.fields {
-            FieldsShape::Arbitrary { offsets, memory_index } => {
+            FieldsShape::Arbitrary { offsets, in_memory_order } => {
                 assert_eq!(flds.len(), offsets.len());
-                assert_eq!(offsets.len(), memory_index.len());
+                assert_eq!(offsets.len(), in_memory_order.len());
                 let mut final_fields = Vec::with_capacity(flds.len());
                 let mut offset = initial_offset;
                 for idx in layout.fields.index_by_increasing_offset() {
@@ -809,7 +808,7 @@ impl<'tcx> GotocCtx<'tcx> {
         let flds: Vec<_> =
             tys.iter().enumerate().map(|(i, t)| (GotocCtx::tuple_fld_name(i), *t)).collect();
         // tuple cannot have other initial offset
-        self.codegen_struct_fields(flds, &layout.layout.0, Size::ZERO)
+        self.codegen_struct_fields(flds, &layout.layout, Size::ZERO)
     }
 
     /// A closure is a struct of all its environments. That is, a closure is
@@ -981,7 +980,7 @@ impl<'tcx> GotocCtx<'tcx> {
             }
             fields.extend(ctx.codegen_alignment_padding(
                 offset,
-                &type_and_layout.layout.0,
+                &type_and_layout.layout,
                 fields.len(),
             ));
             fields
@@ -1176,7 +1175,7 @@ impl<'tcx> GotocCtx<'tcx> {
         self.ensure_struct(self.ty_mangled_name(ty), self.ty_pretty_name(ty), |ctx, _| {
             let variant = &def.variants().raw[0];
             let layout = ctx.layout_of(ty);
-            ctx.codegen_variant_struct_fields(variant, subst, &layout.layout.0, Size::ZERO)
+            ctx.codegen_variant_struct_fields(variant, subst, &layout.layout, Size::ZERO)
         })
     }
 
@@ -1294,7 +1293,7 @@ impl<'tcx> GotocCtx<'tcx> {
                         Some(variant) => {
                             // a single enum is pretty much like a struct
                             let layout = gcx.layout_of(ty).layout;
-                            gcx.codegen_variant_struct_fields(variant, subst, &layout.0, Size::ZERO)
+                            gcx.codegen_variant_struct_fields(variant, subst, &layout, Size::ZERO)
                         }
                     }
                 })
@@ -1592,10 +1591,16 @@ impl<'tcx> GotocCtx<'tcx> {
                         let (name, _) = self.codegen_spread_arg_name(&lc);
                         ident = name;
                     }
-                    Some(
+                    // Unsized-by-value arguments (`unsized_fn_params`, e.g. `fn f(self: [T])`)
+                    // cannot be a parameter of their (incomplete) unsized type, and the length /
+                    // vtable metadata must be carried somewhere, so represent them as fat pointers.
+                    // `codegen_local` / `codegen_place_stable` recover the pointee accordingly.
+                    let param_ty = if self.is_unsized(rustc_internal::internal(self.tcx, ty)) {
+                        self.codegen_ty_ref_stable(ty)
+                    } else {
                         self.codegen_ty_stable(ty)
-                            .as_parameter(Some(ident.clone().into()), Some(ident.into())),
-                    )
+                    };
+                    Some(param_ty.as_parameter(Some(ident.clone().into()), Some(ident.into())))
                 }
             })
             .collect();
@@ -1659,7 +1664,7 @@ impl<'tcx> GotocCtx<'tcx> {
 }
 
 /// Use maps instead of lists to manage mir struct components.
-impl<'tcx> GotocCtx<'tcx> {
+impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     /// Extract a trait type from a `Struct<dyn T>`.
     /// Note that `T` must be the last element of the struct.
     /// This also handles nested cases: `Struct<Struct<dyn T>>` returns `dyn T`
@@ -1705,12 +1710,12 @@ impl<'tcx> GotocCtx<'tcx> {
         &'a self,
         typ: Ty<'tcx>,
     ) -> impl Iterator<Item = (String, Ty<'tcx>)> + 'a {
-        struct ReceiverIter<'tcx, 'a> {
+        struct ReceiverIter<'tcx, 'a, 'r> {
             pub curr: Ty<'tcx>,
-            pub ctx: &'a GotocCtx<'tcx>,
+            pub ctx: &'a GotocCtx<'tcx, 'r>,
         }
 
-        impl<'tcx> Iterator for ReceiverIter<'tcx, '_> {
+        impl<'tcx> Iterator for ReceiverIter<'tcx, '_, '_> {
             type Item = (String, Ty<'tcx>);
 
             fn next(&mut self) -> Option<Self::Item> {
@@ -1804,7 +1809,7 @@ fn normalize_type(ty: Ty) -> Ty {
     ty
 }
 
-impl<'tcx> GotocCtx<'tcx> {
+impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     /// A pointer to the mir type should be a thin pointer.
     /// Use thin pointer if the type is sized or if the resulting pointer has no metadata.
     /// Note: Foreign items are unsized but it codegen as a thin pointer since there is no

@@ -17,7 +17,7 @@ use crate::kani_middle::reachability::{
     ReachabilityInfo, collect_reachable_items, filter_crate_items,
 };
 use crate::kani_middle::transform::{BodyTransformation, GlobalPasses};
-use crate::kani_queries::QueryDb;
+use crate::kani_queries::QUERY_DB;
 use cbmc::goto_program::Location;
 use cbmc::{InternedString, MachineModel};
 use cbmc::{RoundingMode, WithInterner};
@@ -46,7 +46,7 @@ use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
 use rustc_span::{Symbol, sym};
-use rustc_target::spec::PanicStrategy;
+use rustc_target::spec::{Arch, Os, PanicStrategy};
 use std::any::Any;
 use std::cmp::min;
 use std::collections::BTreeMap;
@@ -55,7 +55,6 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::num::NonZero;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 use std::thread::available_parallelism;
 use std::time::Instant;
 use tracing::{debug, info};
@@ -69,17 +68,11 @@ const MAX_SENSIBLE_FILE_EXPORT_THREADS: usize = 4;
 
 pub type UnsupportedConstructs = FxHashMap<InternedString, Vec<Location>>;
 
-pub struct GotocCodegenBackend {
-    /// The query is shared with `KaniCompiler` and it is initialized as part of `rustc`
-    /// initialization, which may happen after this object is created.
-    /// Since we don't have any guarantees on when the compiler creates the Backend object, neither
-    /// in which thread it will be used, we prefer to explicitly synchronize any query access.
-    queries: Arc<Mutex<QueryDb>>,
-}
+pub struct GotocCodegenBackend {}
 
 impl GotocCodegenBackend {
-    pub fn new(queries: Arc<Mutex<QueryDb>>) -> Self {
-        GotocCodegenBackend { queries }
+    pub fn new() -> Self {
+        GotocCodegenBackend {}
     }
 
     /// Generate code that is reachable from the given starting points.
@@ -93,9 +86,15 @@ impl GotocCodegenBackend {
         symtab_goto: &Path,
         machine_model: &MachineModel,
         check_contract: Option<InternalDefId>,
-        mut transformer: BodyTransformation,
+        mut global_passes: GlobalPasses,
+        transformer: &mut BodyTransformation,
         thread_pool: &ThreadPool,
     ) -> (MinimalGotocCtx, Vec<MonoItem>, Option<AssignsContract>) {
+        // We already ran initial reachability before calling `codegen_items`.
+        // Reuse that result and only recompute after global passes if needed.
+        let mut items = reachability.reachable.clone();
+        let call_graph = reachability.call_graph.clone();
+
         // Retrieve all instances from the currently codegened items.
         let instances = reachability
             .reachable
@@ -111,28 +110,38 @@ impl GotocCodegenBackend {
             .collect();
 
         // Apply all transformation passes, including global passes.
-        let mut global_passes = GlobalPasses::new(&self.queries.lock().unwrap(), tcx);
         let any_pass_modified = global_passes.run_global_passes(
-            &mut transformer,
+            transformer,
             tcx,
             &reachability.starting,
-            instances,
-            reachability.call_graph,
+            items
+                .iter()
+                .filter_map(|item| match item {
+                    MonoItem::Fn(instance) => Some(*instance),
+                    MonoItem::Static(static_def) => {
+                        let instance: Instance = (*static_def).into();
+                        instance.has_body().then_some(instance)
+                    }
+                    MonoItem::GlobalAsm(_) => None,
+                })
+                .collect(),
+            call_graph,
         );
 
         // Re-collect reachable items after global transformations were applied. This is necessary
         // since global pass could add extra calls to instrumentation.
         if any_pass_modified {
             (reachability.reachable, _) = with_timer(
-                || collect_reachable_items(tcx, &mut transformer, &reachability.starting),
+                || collect_reachable_items(tcx, transformer, &reachability.starting),
                 "codegen reachability analysis (second pass)",
             );
+            items = reachability.reachable.clone();
         }
 
         // Follow rustc naming convention (cx is abbrev for context).
         // https://rustc-dev-guide.rust-lang.org/conventions.html#naming-conventions
         let mut gcx =
-            GotocCtx::new(tcx, (*self.queries.lock().unwrap()).clone(), machine_model, transformer);
+            QUERY_DB.with(|db| GotocCtx::new(tcx, db.borrow().clone(), machine_model, transformer));
         check_reachable_items(gcx.tcx, &gcx.queries, &reachability.reachable);
 
         let contract_info = with_timer(
@@ -143,14 +152,14 @@ impl GotocCodegenBackend {
                         MonoItem::Fn(instance) => {
                             gcx.call_with_panic_debug_info(
                                 |ctx| ctx.declare_function(instance),
-                                format!("declare_function: {}", instance.name()),
+                                move || format!("declare_function: {}", instance.name()),
                                 instance.def,
                             );
                         }
                         MonoItem::Static(def) => {
                             gcx.call_with_panic_debug_info(
                                 |ctx| ctx.declare_static(def),
-                                format!("declare_static: {}", def.name()),
+                                move || format!("declare_static: {}", def.name()),
                                 def,
                             );
                         }
@@ -164,18 +173,20 @@ impl GotocCodegenBackend {
                         MonoItem::Fn(instance) => {
                             gcx.call_with_panic_debug_info(
                                 |ctx| ctx.codegen_function(instance),
-                                format!(
-                                    "codegen_function: {}\n{}",
-                                    instance.name(),
-                                    instance.mangled_name()
-                                ),
+                                move || {
+                                    format!(
+                                        "codegen_function: {}\n{}",
+                                        instance.name(),
+                                        instance.mangled_name()
+                                    )
+                                },
                                 instance.def,
                             );
                         }
                         MonoItem::Static(def) => {
                             gcx.call_with_panic_debug_info(
                                 |ctx| ctx.codegen_static(def),
-                                format!("codegen_static: {}", def.name()),
+                                move || format!("codegen_static: {}", def.name()),
                                 def,
                             );
                         }
@@ -204,6 +215,11 @@ impl GotocCodegenBackend {
             None
         };
 
+        // Post-pass: inline remaining function calls in quantifier bodies.
+        // build_quantifier_predicate handles checked arithmetic (StatementExpression
+        // flattening, overflow simplification), but user-defined function calls
+        // (e.g., comp(x, y)) require this post-pass because the called functions
+        // may not be in the symbol table when the quantifier hook runs.
         gcx.handle_quantifiers();
 
         // Split ownership of the context so that the majority of fields can be saved to our results,
@@ -212,7 +228,7 @@ impl GotocCodegenBackend {
 
         // No output should be generated if user selected no_codegen.
         if !tcx.sess.opts.unstable_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
-            let pretty = self.queries.lock().unwrap().args().output_pretty_json;
+            let pretty = QUERY_DB.with(|db| db.borrow().args().output_pretty_json);
 
             // Save all the data needed to write this goto file
             // so another thread can handle it in parallel.
@@ -298,11 +314,15 @@ fn reachability_analysis_fn_for_harness<'a>(
 
 impl CodegenBackend for GotocCodegenBackend {
     fn provide(&self, providers: &mut Providers) {
-        provide::provide(providers, &self.queries.lock().unwrap());
+        QUERY_DB.with(|db| provide::provide(providers, &db.borrow()));
     }
 
     fn print_version(&self) {
         println!("Kani-goto version: {}", env!("CARGO_PKG_VERSION"));
+    }
+
+    fn name(&self) -> &'static str {
+        "kani-cprover"
     }
 
     fn locale_resource(&self) -> &'static str {
@@ -313,15 +333,15 @@ impl CodegenBackend for GotocCodegenBackend {
     fn target_config(&self, sess: &Session) -> TargetConfig {
         // This code is adapted from the cranelift backend:
         // https://github.com/rust-lang/rust/blob/a124fb3cb7291d75872934f411d81fe298379ace/compiler/rustc_codegen_cranelift/src/lib.rs#L184
-        let target_features = if sess.target.arch == "x86_64" && sess.target.os != "none" {
+        let target_features = if sess.target.arch == Arch::X86_64 && sess.target.os != Os::None {
             // x86_64 mandates SSE2 support and rustc requires the x87 feature to be enabled
             vec![sym::sse, sym::sse2, Symbol::intern("x87")]
-        } else if sess.target.arch == "aarch64" {
-            match &*sess.target.os {
-                "none" => vec![],
+        } else if sess.target.arch == Arch::AArch64 {
+            match sess.target.os {
+                Os::None => vec![],
                 // On macOS the aes, sha2 and sha3 features are enabled by default and ring
                 // fails to compile on macOS when they are not present.
-                "macos" => vec![sym::neon, sym::aes, sym::sha2, sym::sha3],
+                Os::MacOs => vec![sym::neon, sym::aes, sym::sha2, sym::sha3],
                 // AArch64 mandates Neon support
                 _ => vec![sym::neon],
             }
@@ -352,7 +372,7 @@ impl CodegenBackend for GotocCodegenBackend {
             // needed for generating code to the given crate.
             // The cached information must not outlive the stable-mir `run` scope.
             // See [QueryDb::kani_functions] for more information.
-            let queries = self.queries.lock().unwrap().clone();
+            let queries = QUERY_DB.with(|db| db.borrow().clone());
 
             check_target(tcx.sess);
             check_options(tcx.sess);
@@ -408,49 +428,38 @@ impl CodegenBackend for GotocCodegenBackend {
                     let num_harnesses: usize = units.iter().map(|unit| unit.harnesses.len()).sum();
                     export_thread_pool.add_workers(Self::thread_pool_size(Some(num_harnesses)));
 
-                    // First, do cross-crate collection of all items that are reachable from each harness. The resulting
-                    // iterator has the reachability result for each harness, but also the transformer that harness used so
-                    // we can reuse it during codegen.
-                    let ordered_harnesses = units.iter().map(|unit| {
-                        unit.harnesses
-                            .iter()
-                            .map(reachability_analysis_fn_for_harness(unit, &queries, tcx))
-                            .collect::<Vec<_>>()
-                    })
-                    .apply_ordering_heuristic::<crate::kani_middle::codegen_order::MostReachableItems>()
-                    .flatten();
+                    let template_passes = GlobalPasses::new(&queries, tcx);
 
-                    // This runs reachability analysis before global passes are applied in `codegen_items`.
-                    //
-                    // Alternatively, we could run reachability only once after the global passes are applied
-                    // and resolve the necessary dependencies inside the passes on the fly. This, however, has a
-                    // disadvantage of not having a precomputed call graph for the global passes to use. The
-                    // call graph could be used, for example, in resolving function pointer or vtable calls for
-                    // global passes that need this.
+                    // Cross-crate collecting of all items that are reachable from the crate harnesses.
+                    for ((harness, reachability), mut transformer) in ordered_harnesses {
+                        // Generate a new transformer that will be shared for all harnesses within the codegen unit.
+                        // We reset the body cache between units for now because each codegen unit has different
+                        // configurations that affect how we transform the instance body.
+                        let mut shared_unit_transformer =
+                            BodyTransformation::new(&queries, tcx, unit);
 
-                    // Then, actually codegen those reachable items for each.
-                    for ((harness, reachability), transformer) in ordered_harnesses {
-                        let model_path = units.harness_model_path(*harness).unwrap();
-                        let is_automatic_harness = units.is_automatic_harness(harness);
-                        let contract_metadata =
-                            self.target_if_contract_harness(tcx, harness, is_automatic_harness);
-
-                        let (min_gcx, items, contract_info) = self.codegen_items(
-                            tcx,
-                            reachability,
-                            model_path,
-                            &results.machine_model,
-                            contract_metadata
-                                .map(|def| rustc_internal::internal(tcx, def.def_id())),
-                            transformer,
-                            &export_thread_pool,
-                        );
-                        if min_gcx.has_loop_contracts {
-                            loop_contracts_instances.push(*harness);
-                        }
-                        results.extend(min_gcx, items, None);
-                        if let Some(assigns_contract) = contract_info {
-                            modifies_instances.push((*harness, assigns_contract));
+                        for harness in &unit.harnesses {
+                            let model_path = units.harness_model_path(*harness).unwrap();
+                            let is_automatic_harness = units.is_automatic_harness(harness);
+                            let contract_metadata =
+                                self.target_if_contract_harness(tcx, harness, is_automatic_harness);
+                            let (min_gcx, items, contract_info) = self.codegen_items(
+                                tcx,
+                                reachability,
+                                model_path,
+                                &results.machine_model,
+                                contract_metadata.map(|def| rustc_internal::internal(tcx, def.def_id())),
+                                template_passes.clone(),
+                                &mut transformer,
+                                &export_thread_pool,
+                            );
+                            if min_gcx.has_loop_contracts {
+                                loop_contracts_instances.push(*harness);
+                            }
+                            results.extend(min_gcx, items, None);
+                            if let Some(assigns_contract) = contract_info {
+                                modifies_instances.push((*harness, assigns_contract));
+                            }
                         }
                     }
 
@@ -465,7 +474,6 @@ impl CodegenBackend for GotocCodegenBackend {
                     export_thread_pool.add_workers(Self::thread_pool_size(None));
 
                     let mut transformer = BodyTransformation::new(&queries, tcx, &unit);
-
                     let main_instance = rustc_public::entry_fn()
                         .map(|main_fn| Instance::try_from(main_fn).unwrap());
                     let local_reachable = filter_crate_items(tcx, |_, instance| {
@@ -483,11 +491,12 @@ impl CodegenBackend for GotocCodegenBackend {
                         &model_path,
                         &results.machine_model,
                         Default::default(),
-                        transformer,
+                        GlobalPasses::new(&queries, tcx),
+                        &mut transformer,
                         &export_thread_pool,
                     );
                     assert!(contract_info.is_none());
-                    let _ = results.extend(gcx, items, None);
+                    results.extend(gcx, items, None);
                 }
             }
 
@@ -551,7 +560,14 @@ impl CodegenBackend for GotocCodegenBackend {
         let local_crate_name = codegen_results.crate_info.local_crate_name;
         // Create the rlib if one was requested.
         if requested_crate_types.contains(&CrateType::Rlib) {
-            link_binary(sess, &ArArchiveBuilderBuilder, codegen_results, rustc_metadata, outputs);
+            link_binary(
+                sess,
+                &ArArchiveBuilderBuilder,
+                codegen_results,
+                rustc_metadata,
+                outputs,
+                self.name(),
+            );
         }
 
         // But override all the other outputs.
@@ -742,13 +758,12 @@ impl GotoCodegenResults {
         min_gcx: context::MinimalGotocCtx,
         items: Vec<MonoItem>,
         metadata: Option<HarnessMetadata>,
-    ) -> BodyTransformation {
+    ) {
         let mut items = items;
         self.harnesses.extend(metadata);
         self.concurrent_constructs.extend(min_gcx.concurrent_constructs);
         self.unsupported_constructs.extend(min_gcx.unsupported_constructs);
         self.items.append(&mut items);
-        min_gcx.transformer
     }
 
     /// Prints a report at the end of the compilation.
@@ -817,8 +832,8 @@ fn new_machine_model(sess: &Session) -> MachineModel {
     // see /tools/sizeofs/main.cpp.
     // For reference, the definition in CBMC:
     //https://github.com/diffblue/cbmc/blob/develop/src/util/config.cpp
-    match architecture.as_ref() {
-        "x86_64" => {
+    match architecture {
+        Arch::X86_64 => {
             let bool_width = 8;
             let char_is_unsigned = false;
             let char_width = 8;
@@ -834,7 +849,11 @@ fn new_machine_model(sess: &Session) -> MachineModel {
             let wchar_t_width = 32;
 
             MachineModel {
-                architecture: architecture.to_string(),
+                architecture: match architecture {
+                    Arch::X86_64 => "x86_64".to_string(),
+                    Arch::AArch64 => "aarch64".to_string(),
+                    _ => panic!("Unsupported architecture: {:?}", architecture),
+                },
                 alignment,
                 bool_width,
                 char_is_unsigned,
@@ -857,15 +876,15 @@ fn new_machine_model(sess: &Session) -> MachineModel {
                 word_size: int_width,
             }
         }
-        "aarch64" => {
+        Arch::AArch64 => {
             let bool_width = 8;
             let char_is_unsigned = true;
             let char_width = 8;
             let double_width = 64;
             let float_width = 32;
             let int_width = 32;
-            let long_double_width = match os.as_ref() {
-                "linux" => 128,
+            let long_double_width = match os {
+                Os::Linux => 128,
                 _ => 64,
             };
             let long_int_width = 64;
@@ -875,7 +894,7 @@ fn new_machine_model(sess: &Session) -> MachineModel {
             // https://developer.arm.com/documentation/dui0491/i/Compiler-Command-line-Options/--signed-chars----unsigned-chars
             // https://www.arm.linux.org.uk/docs/faqs/signedchar.php
             // https://developer.apple.com/documentation/xcode/writing-arm64-code-for-apple-platforms
-            let wchar_t_is_unsigned = matches!(os.as_ref(), "linux");
+            let wchar_t_is_unsigned = matches!(os, Os::Linux);
             let wchar_t_width = 32;
 
             MachineModel {

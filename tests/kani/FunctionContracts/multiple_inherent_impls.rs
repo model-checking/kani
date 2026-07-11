@@ -49,14 +49,47 @@ pub mod num {
             }
         }
     }
+
+    pub mod even {
+        pub struct EvenNumber<T>(pub T);
+
+        impl EvenNumber<i32> {
+            #[kani::requires(self.0.checked_mul(x).is_some())]
+            pub fn unchecked_mul(self, x: i32) -> i32 {
+                self.0 * x
+            }
+        }
+    }
+
+    pub struct AnyNumber<T>(pub T);
+
+    impl AnyNumber<negative::NegativeNumber<i32>> {
+        #[kani::requires(self.0.0.checked_mul(x).is_some())]
+        pub fn unchecked_mul(self, x: i32) -> i32 {
+            self.0.0 * x
+        }
+    }
+
+    impl AnyNumber<even::EvenNumber<i32>> {
+        #[kani::requires(self.0.0.checked_mul(x).is_some())]
+        pub fn unchecked_mul(self, x: i32) -> i32 {
+            self.0.0 * x
+        }
+    }
 }
 
 mod verify {
-    use crate::num::negative::*;
+    use crate::num::{AnyNumber, even::*, negative::*};
 
     #[kani::proof_for_contract(NegativeNumber::<i32>::unchecked_mul)]
     fn verify_unchecked_mul_ambiguous_path() {
         let x: NegativeNumber<i32> = NegativeNumber(-1);
         x.unchecked_mul(-2);
+    }
+
+    #[kani::proof_for_contract(AnyNumber::<num::even::EvenNumber<i32>>::unchecked_mul)]
+    fn verify_unchecked_mul_resolution_with_segmented_args() {
+        let x: AnyNumber<EvenNumber<i32>> = AnyNumber(EvenNumber(2));
+        x.unchecked_mul(3);
     }
 }

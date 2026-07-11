@@ -217,7 +217,7 @@ impl TypeOrVariant {
     }
 }
 
-impl GotocCtx<'_> {
+impl GotocCtx<'_, '_> {
     /// Codegen field access for types that allow direct field projection.
     ///
     /// I.e.: Algebraic data types, closures, and coroutines.
@@ -397,7 +397,27 @@ impl GotocCtx<'_> {
 
         // Otherwise, simply look up the local by the var name.
         let vname = self.codegen_var_name(&l);
-        Expr::symbol_expression(vname, self.codegen_ty_stable(local_ty))
+        // Unsized-by-value arguments (`unsized_fn_params`, e.g. `fn f(self: [T])`) are
+        // represented as fat pointers rather than as the (incomplete) unsized type itself.
+        // See `fn_typ` and `codegen_declare_variables`.
+        let typ = if self.is_unsized_by_value_arg(l) {
+            self.codegen_ty_ref_stable(local_ty)
+        } else {
+            self.codegen_ty_stable(local_ty)
+        };
+        Expr::symbol_expression(vname, typ)
+    }
+
+    /// Returns true if `local` is a by-value function argument of an unsized type
+    /// (via the `unsized_fn_params` feature, e.g. `fn f(self: [T])` or `fn f(self: str)`).
+    ///
+    /// Such arguments cannot be represented directly (the unsized type codegens to an
+    /// incomplete `FlexibleArray`, which cannot be a function parameter or carry the
+    /// length/vtable metadata), so Kani represents them as fat pointers.
+    pub fn is_unsized_by_value_arg(&self, local: Local) -> bool {
+        local >= 1
+            && local <= self.current_fn().arg_count()
+            && self.is_unsized(rustc_internal::internal(self.tcx, self.local_ty_stable(local)))
     }
 
     /// A projection is an operation that translates an lvalue to another lvalue.
@@ -627,15 +647,13 @@ impl GotocCtx<'_> {
                     self,
                 )
             }
-            ProjectionElem::OpaqueCast(ty) | ProjectionElem::Subtype(ty) => {
-                ProjectedPlace::try_new(
-                    before.goto_expr.cast_to(self.codegen_ty_stable(*ty)),
-                    TypeOrVariant::Type(*ty),
-                    before.fat_ptr_goto_expr,
-                    before.fat_ptr_mir_typ,
-                    self,
-                )
-            }
+            ProjectionElem::OpaqueCast(ty) => ProjectedPlace::try_new(
+                before.goto_expr.cast_to(self.codegen_ty_stable(*ty)),
+                TypeOrVariant::Type(*ty),
+                before.fat_ptr_goto_expr,
+                before.fat_ptr_mir_typ,
+                self,
+            ),
         }
     }
 
@@ -686,7 +704,11 @@ impl GotocCtx<'_> {
                 // Just return the address of the place dereferenced.
                 address_of
             }
-        } else if place_ty == pointee_type(self.local_ty_stable(place.local)).unwrap() {
+        } else if self.is_unsized_by_value_arg(place.local) && place.projection.is_empty() {
+            // `&self` where `self` is an unsized-by-value argument: the reference is the
+            // fat pointer that the argument is represented by (see `codegen_place_stable`).
+            projection.fat_ptr_goto_expr.unwrap()
+        } else if pointee_type(self.local_ty_stable(place.local)).is_some_and(|p| place_ty == p) {
             // Just return the fat pointer if this is a simple &(*local).
             projection.fat_ptr_goto_expr.unwrap()
         } else {
@@ -718,10 +740,21 @@ impl GotocCtx<'_> {
     ) -> Result<ProjectedPlace, Box<UnimplementedData>> {
         debug!(?place, "codegen_place");
         let initial_expr = self.codegen_local(place.local, loc);
-        let initial_typ = TypeOrVariant::Type(self.local_ty_stable(place.local));
-        debug!(?initial_typ, ?initial_expr, "codegen_place");
-        let initial_projection =
-            ProjectedPlace::try_new(initial_expr, initial_typ, None, None, self);
+        let local_ty = self.local_ty_stable(place.local);
+        let initial_projection = if self.is_unsized_by_value_arg(place.local) {
+            // The local holds a fat pointer to the unsized value (see `codegen_local`).
+            // Model the place as the pointee of that fat pointer, i.e. `*(&local)`, by
+            // treating the local as a value of pointer type and applying a `Deref`
+            // projection. This reuses the existing fat-pointer projection logic so that
+            // reads, indexing, and `&self` recover the data pointer and length/vtable.
+            let ptr_ty = Ty::new_ptr(local_ty, Mutability::Not);
+            let base = ProjectedPlace::try_from_ty(initial_expr, ptr_ty, self);
+            self.codegen_projection(base, &ProjectionElem::Deref, loc)
+        } else {
+            let initial_typ = TypeOrVariant::Type(local_ty);
+            ProjectedPlace::try_new(initial_expr, initial_typ, None, None, self)
+        };
+        debug!(?local_ty, ?initial_projection, "codegen_place");
         let result = place
             .projection
             .iter()

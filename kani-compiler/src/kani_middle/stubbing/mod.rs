@@ -59,7 +59,9 @@ fn generic_args_len_without_self(args: &GenericArgs) -> usize {
         return len;
     }
     let has_self = args.0.iter().any(|arg| {
-        if let TyKind::Param(param_ty) = arg.expect_ty().kind() {
+        if let Some(ty) = arg.ty()
+            && let TyKind::Param(param_ty) = ty.kind()
+        {
             param_ty.name == "Self"
         } else {
             false
@@ -82,9 +84,9 @@ pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Resul
     if old_body.arg_locals().len() != new_body.arg_locals().len() {
         let msg = format!(
             "arity mismatch: original function/method `{}` takes {} argument(s), stub `{}` takes {}",
-            old_def.name(),
+            crate::kani_middle::strip_local_crate_prefix(old_def.name()),
             old_body.arg_locals().len(),
-            new_def.name(),
+            crate::kani_middle::strip_local_crate_prefix(new_def.name()),
             new_body.arg_locals().len(),
         );
         return Err(msg);
@@ -108,30 +110,93 @@ pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Resul
     if old_args_len != new_args_len {
         let msg = format!(
             "mismatch in the number of generic parameters: original function/method `{}` takes {} generic parameters(s), stub `{}` takes {}",
-            old_def.name(),
+            crate::kani_middle::strip_local_crate_prefix(old_def.name()),
             old_args_len,
-            new_def.name(),
+            crate::kani_middle::strip_local_crate_prefix(new_def.name()),
             new_args_len,
         );
         return Err(msg);
     }
     // Check whether the types match. Index 0 refers to the returned value,
     // indices [1, `arg_count`] refer to the parameters.
-    // TODO: We currently force generic parameters in the stub to have exactly
-    // the same names as their counterparts in the original function/method;
-    // instead, we should be checking for the equivalence of types up to the
-    // renaming of generic parameters.
-    // <https://github.com/model-checking/kani/issues/1953>
+    // We compare types up to renaming of generic parameters (fixes #1953).
+    // Build a substitution from new generic params to old generic params by position.
+    // We need to handle both the function's own params AND parent type params.
+    let old_generics = tcx.generics_of(old_def_id);
+    let new_generics = tcx.generics_of(new_def_id);
+
+    let old_all_params: Vec<_> = old_generics.own_params.iter().collect();
+    let new_all_params: Vec<_> = new_generics.own_params.iter().collect();
+
+    // Build identity substitution for the new function, then override with
+    // old param names where positions match. Using identity_for_item ensures
+    // parent type params (e.g., T in `impl<T> MyStruct<T>`) are included.
+    let new_identity = ty::GenericArgs::identity_for_item(tcx, new_def_id);
+    let mut rename_args: Vec<ty::GenericArg<'_>> = new_identity.iter().collect();
+
+    for (i, new_param) in new_all_params.iter().enumerate() {
+        if i < old_all_params.len() {
+            let old_param = old_all_params[i];
+            let idx = new_param.index as usize;
+            if idx < rename_args.len() {
+                match (&old_param.kind, &new_param.kind) {
+                    (
+                        ty::GenericParamDefKind::Type { .. },
+                        ty::GenericParamDefKind::Type { .. },
+                    ) => {
+                        rename_args[idx] = ty::GenericArg::from(ty::Ty::new_param(
+                            tcx,
+                            old_param.index,
+                            old_param.name,
+                        ));
+                    }
+                    (ty::GenericParamDefKind::Lifetime, ty::GenericParamDefKind::Lifetime) => {
+                        rename_args[idx] = ty::GenericArg::from(ty::Region::new_early_param(
+                            tcx,
+                            ty::EarlyParamRegion { index: old_param.index, name: old_param.name },
+                        ));
+                    }
+                    (
+                        ty::GenericParamDefKind::Const { .. },
+                        ty::GenericParamDefKind::Const { .. },
+                    ) => {
+                        rename_args[idx] = ty::GenericArg::from(ty::Const::new_param(
+                            tcx,
+                            ty::ParamConst { index: old_param.index, name: old_param.name },
+                        ));
+                    }
+                    _ => {} // Keep identity for mismatched kinds; type comparison will catch it
+                }
+            }
+        }
+    }
+
+    // Compare types from the MIR bodies with generic parameter renaming applied.
+    // MIR body types already have regions erased, so lifetime differences
+    // (e.g., &'a self vs &char) don't cause false mismatches.
+    // The renaming substitution ensures different generic parameter names
+    // (e.g., T vs S) don't cause false mismatches either (fixes #1953).
+    // Note: Lifetime mismatches may still cause verification failures (#2007).
+    let rename_args = tcx.mk_args(&rename_args);
+
     let old_ret_ty = old_body.ret_local().ty;
     let new_ret_ty = new_body.ret_local().ty;
+    let old_ret_internal = rustc_internal::internal(tcx, old_ret_ty);
+    let new_ret_internal = rustc_internal::internal(tcx, new_ret_ty);
+    let new_ret_renamed = EarlyBinder::bind(new_ret_internal).instantiate(tcx, rename_args);
+
     let mut diff = vec![];
-    if old_ret_ty != new_ret_ty {
+    // Error messages show the user's original types (before renaming) for clarity.
+    if old_ret_internal != new_ret_renamed {
         diff.push(format!("Expected return type `{old_ret_ty}`, but found `{new_ret_ty}`"));
     }
     for (i, (old_arg, new_arg)) in
         old_body.arg_locals().iter().zip(new_body.arg_locals().iter()).enumerate()
     {
-        if old_arg.ty != new_arg.ty {
+        let old_ty_internal = rustc_internal::internal(tcx, old_arg.ty);
+        let new_ty_internal = rustc_internal::internal(tcx, new_arg.ty);
+        let new_renamed = EarlyBinder::bind(new_ty_internal).instantiate(tcx, rename_args);
+        if old_ty_internal != new_renamed {
             diff.push(format!(
                 "Expected type `{}` for parameter {}, but found `{}`",
                 old_arg.ty,
@@ -143,11 +208,14 @@ pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Resul
     if !diff.is_empty() {
         Err(format!(
             "Cannot stub `{}` by `{}`.\n - {}",
-            old_def.name(),
-            new_def.name(),
+            crate::kani_middle::strip_local_crate_prefix(old_def.name()),
+            crate::kani_middle::strip_local_crate_prefix(new_def.name()),
             diff.iter().join("\n - ")
         ))
     } else {
+        // Note: Lifetime mismatches between the original and stub are not currently
+        // detected (#2007). Differing lifetimes (e.g., `-> &'static T` vs `-> &'a T`)
+        // can cause subtle verification failures such as "dereference failure: dead object".
         Ok(())
     }
 }
@@ -223,7 +291,7 @@ impl MirVisitor for StubConstChecker<'_> {
         This is likely because `{}` is used as a stub but its \
         generic bounds are not being met.",
                         tcx.def_path_str(trait_),
-                        self.source.name()
+                        crate::kani_middle::strip_local_crate_prefix(self.source.name())
                     );
                     tcx.dcx().span_err(rustc_internal::internal(self.tcx, location.span()), msg);
                     self.is_valid = false;

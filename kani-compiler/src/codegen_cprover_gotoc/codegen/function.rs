@@ -5,6 +5,7 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::codegen_cprover_gotoc::codegen::block::reverse_postorder;
+use crate::kani_middle::readable_name;
 use cbmc::InternString;
 use cbmc::InternedString;
 use cbmc::goto_program::{Expr, Stmt, Symbol};
@@ -16,7 +17,7 @@ use std::collections::BTreeMap;
 use tracing::{debug, debug_span};
 
 /// Codegen MIR functions into gotoc
-impl GotocCtx<'_> {
+impl GotocCtx<'_, '_> {
     /// Declare variables according to their index.
     /// - Index 0 represents the return value.
     /// - Indices [1, N] represent the function parameters where N is the number of parameters.
@@ -32,7 +33,13 @@ impl GotocCtx<'_> {
             }
             let base_name = self.codegen_var_base_name(&lc);
             let name = self.codegen_var_name(&lc);
-            let var_type = self.codegen_ty_stable(ldata.ty);
+            // Unsized-by-value arguments (`unsized_fn_params`) are represented as fat pointers,
+            // consistent with `fn_typ` and `codegen_local`.
+            let var_type = if self.is_unsized_by_value_arg(lc) {
+                self.codegen_ty_ref_stable(ldata.ty)
+            } else {
+                self.codegen_ty_stable(ldata.ty)
+            };
             let loc = self.codegen_span_stable(ldata.span);
             // Indices [1, N] represent the function parameters where N is the number of parameters.
             // Except that ZST fields are not included as parameters.
@@ -220,7 +227,7 @@ impl GotocCtx<'_> {
             &fname,
             self.fn_typ(instance, &body),
             None,
-            instance.name(),
+            readable_name(instance),
             self.codegen_span_stable(instance.def.span()),
         );
         if !self.symbol_table.contains((&fname).into()) {

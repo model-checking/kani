@@ -137,7 +137,7 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
     /// Update current dataflow state based on the information we can infer from the given
     /// statement.
     fn apply_primary_statement_effect(
-        &mut self,
+        &self,
         state: &mut Self::Domain,
         statement: &Statement<'tcx>,
         _location: Location,
@@ -171,7 +171,6 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
             }
             StatementKind::FakeRead(..)
             | StatementKind::SetDiscriminant { .. }
-            | StatementKind::Deinit(..)
             | StatementKind::StorageLive(..)
             | StatementKind::StorageDead(..)
             | StatementKind::Retag(..)
@@ -185,7 +184,7 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
     }
 
     fn apply_primary_terminator_effect<'mir>(
-        &mut self,
+        &self,
         state: &mut Self::Domain,
         terminator: &'mir Terminator<'tcx>,
         location: Location,
@@ -338,7 +337,7 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
 
     /// We don't care about this and just need to implement this to implement the trait.
     fn apply_call_return_effect(
-        &mut self,
+        &self,
         _state: &mut Self::Domain,
         _block: BasicBlock,
         _return_places: CallReturnPlaces<'_, 'tcx>,
@@ -403,6 +402,8 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
                     HashSet::new()
                 }
             }
+            // Runtime-check operands (rust-lang/rust#148766) reference no place or static.
+            Operand::RuntimeChecks(..) => HashSet::new(),
         }
     }
 
@@ -425,12 +426,14 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
                     HashSet::new()
                 }
             }
+            // Runtime-check operands (rust-lang/rust#148766) reference no place or static.
+            Operand::RuntimeChecks(..) => HashSet::new(),
         }
     }
 
     /// Update the analysis state according to the regular function call.
     fn apply_regular_call_effect(
-        &mut self,
+        &self,
         state: &mut PointsToGraph<'tcx>,
         instance: Instance<'tcx>,
         args: &[Spanned<Operand<'tcx>>],
@@ -453,6 +456,7 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
                         .join(&state.transitive_closure(state.resolve_place(place, self.instance)));
                 }
                 Operand::Constant(_) => {}
+                Operand::RuntimeChecks(_) => {}
             }
         }
 
@@ -582,7 +586,7 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
                 // The same story from BinOp applies here, too. Need to track those things.
                 self.successors_for_operand(state, operand)
             }
-            Rvalue::NullaryOp(..) | Rvalue::Discriminant(..) | Rvalue::Len(_) => {
+            Rvalue::Discriminant(..) => {
                 // All of those should yield a constant.
                 HashSet::new()
             }

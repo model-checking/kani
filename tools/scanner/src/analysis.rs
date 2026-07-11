@@ -528,7 +528,6 @@ impl MirVisitor for BodyVisitor<'_> {
             }
             ProjectionElem::Downcast(_) => {}
             ProjectionElem::OpaqueCast(_) => {}
-            ProjectionElem::Subtype(_) => {}
             ProjectionElem::Index(_)
             | ProjectionElem::ConstantIndex { .. }
             | ProjectionElem::Subslice { .. } => { /* safe */ }

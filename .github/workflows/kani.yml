@@ -16,19 +16,14 @@ env:
 jobs:
   regression:
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     strategy:
       matrix:
-        os: [macos-13, ubuntu-22.04, ubuntu-24.04, macos-14, ubuntu-24.04-arm]
+        os: [macos-15-intel, ubuntu-22.04, ubuntu-24.04, macos-14, ubuntu-24.04-arm]
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v4
-
-      - name: Cache Kani build artifacts
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-          shared-key: "kani-rust-cache-dev"
-          cache-directories: "~/.rustup"
+        uses: actions/checkout@v6
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
@@ -40,22 +35,17 @@ jobs:
 
   benchcomp-tests:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install benchcomp dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y python3-pip
           pushd tools/benchcomp && pip3 install -r requirements.txt
-
-      - name: Cache Kani build artifacts
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-          shared-key: "kani-rust-cache-release"
-          cache-directories: "~/.rustup"
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
@@ -70,16 +60,18 @@ jobs:
 
   perf:
     runs-on: ubuntu-24.04
+    # The full perf suite runs in ~45 min (matching main): most cases finish in
+    # seconds; the heaviest, s2n-quic-core, runs 34 harnesses in ~1500s. The
+    # per-test guardrail in scripts/kani-perf.sh (2400s) sits above that. The
+    # 180-min step timeout leaves ample headroom over that realistic runtime,
+    # and the job timeout sits above (step timeout) x (max_attempts) so a retry
+    # can still land.
+    timeout-minutes: 380
+    permissions:
+      contents: read
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v4
-
-      - name: Cache Kani build artifacts
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-          shared-key: "kani-rust-cache-release"
-          cache-directories: "~/.rustup"
+        uses: actions/checkout@v6
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
@@ -87,26 +79,36 @@ jobs:
           os: ubuntu-24.04
 
       - name: Execute Kani performance tests
-        run: ./scripts/kani-perf.sh
+        # Retry on infra-driven failures (spot preemption / runner shutdown).
+        # The script itself bounds per-test wall time, so functional regressions
+        # surface as normal test failures and are not retried indefinitely.
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 180
+          max_attempts: 2
+          command: ./scripts/kani-perf.sh
         env:
           RUST_TEST_THREADS: 1
 
   llbc-regression:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v4
-
-      - name: Cache Kani build artifacts
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-          cache-directories: "~/.rustup"
+        uses: actions/checkout@v6
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
         with:
           os: ubuntu-24.04
+
+      # Patch Charon so that it compiles. This is temporary until we're able to
+      # upgrade the pinned commit which requires fixing
+      # https://github.com/AeneasVerif/charon/issues/806 and updating the
+      # mir-to-ullbc code
+      - name: Patch Charon
+        run: cd charon && git apply ../scripts/charon-patch.diff
 
       - name: Build Kani with Charon
         run: cargo build-dev -- --features cprover --features llbc
@@ -120,7 +122,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 

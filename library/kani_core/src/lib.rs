@@ -23,6 +23,7 @@
 mod arbitrary;
 mod bounded_arbitrary;
 mod float;
+mod iter;
 mod mem;
 mod mem_init;
 mod models;
@@ -49,6 +50,7 @@ macro_rules! kani_lib {
             kani_core::generate_arbitrary!();
             kani_core::generate_bounded_arbitrary!();
             kani_core::generate_models!();
+            kani_core::generate_iter!();
 
             pub mod float {
                 kani_core::generate_float!(core);
@@ -72,6 +74,7 @@ macro_rules! kani_lib {
         kani_core::generate_arbitrary!();
         kani_core::generate_bounded_arbitrary!();
         kani_core::generate_models!();
+        kani_core::generate_iter!();
 
         pub mod float {
             //! This module contains functions useful for float-related checks
@@ -196,6 +199,17 @@ macro_rules! kani_intrinsics {
 
         #[macro_export]
         macro_rules! forall {
+            // Typed variable: |d: u64 in (lo, hi)| predicate
+            // Uses $t:tt instead of $t:ty because Rust macro rules do not allow
+            // `ty` fragments to be followed by `in`. This means the type must be
+            // a single token (e.g., u64, usize, i32) — path types like
+            // std::num::NonZeroU64 are not supported in this position.
+            (|$i:ident : $t:tt in ($lower_bound:expr, $upper_bound:expr)| $predicate:expr) => {{
+                let lower_bound: $t = $lower_bound;
+                let upper_bound: $t = $upper_bound;
+                let predicate = |$i: $t| $predicate;
+                kani::internal::kani_forall(lower_bound, upper_bound, predicate)
+            }};
             (|$i:ident in ($lower_bound:expr, $upper_bound:expr)| $predicate:expr) => {{
                 let lower_bound: usize = $lower_bound;
                 let upper_bound: usize = $upper_bound;
@@ -210,6 +224,12 @@ macro_rules! kani_intrinsics {
 
         #[macro_export]
         macro_rules! exists {
+            (|$i:ident : $t:tt in ($lower_bound:expr, $upper_bound:expr)| $predicate:expr) => {{
+                let lower_bound: $t = $lower_bound;
+                let upper_bound: $t = $upper_bound;
+                let predicate = |$i: $t| $predicate;
+                kani::internal::kani_exists(lower_bound, upper_bound, predicate)
+            }};
             (|$i:ident in ($lower_bound:expr, $upper_bound:expr)| $predicate:expr) => {{
                 let lower_bound: usize = $lower_bound;
                 let upper_bound: usize = $upper_bound;

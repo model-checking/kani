@@ -214,6 +214,104 @@ the name of its `kani::any()` function, and add the map to the loop latch too.
 On the CBMC site, `goto-instrument` will extract the map and instrument the customized
 havocing functions for the modifies targets.
 
+### For-loop rewrite 
+
+When there is a loop invariant for a `for` loop, the `loop_invariant` procedural macro
+will rewrite `for-loop` into a `while-loop`, but not exactly the same way as 
+https://doc.rust-lang.org/reference/expressions/loop-expr.html#iterator-loops. 
+Let's use the following example to demonstrate the disadvantages of rewriting 
+using the original Rust `into_iter` function:
+
+```Rust
+let a: [u8; 10] = kani::any();
+#[kani::loop_invariant(...)]
+for i in a {
+  ... //loop body
+}
+```
+
+is rewritten into:
+
+```Rust
+let a: [u8; 10] = kani::any();
+let mut kani_iter = a.into_iter();
+#[kani::loop_invariant(...)]
+loop {
+  match kani_iter.next() {
+    Some(i) => { 
+      ...  //loop body
+      }
+    None => { break; }
+  }
+}
+```
+
+The returned type of `into_iter` depends on the type of the caller that implements the `IntoIter` trait.
+In this case, it is:
+
+```Rust
+pub struct IntoIter<T, const N: usize> {
+    inner: InnerSized<T, N>,
+}
+```
+
+where the dependencies are:
+
+```Rust
+type InnerSized<T, const N: usize> = iter_inner::PolymorphicIter<[MaybeUninit<T>; N]>;
+
+pub(super) struct PolymorphicIter<DATA: ?Sized>
+where
+    DATA: PartialDrop,
+{
+    alive: IndexRange,
+    data: DATA,
+}
+// and so on ...
+```
+
+In order to contract the loop, the user must provide the loop-invariant for the variable `kani_iter`, which is modified and 
+will be havocked. 
+The loop-invariant should include some propositions such as `kani_iter.inner.alive.start <= kani_iter.inner.alive.end`,
+`kani_iter.inner.data.as_ptr() == a.as_ptr()`, ... until the loop-invariant is successfully verified.
+The obvious three disadvantages are:
+1. All the fields `inner`, `alive`, `start`, `end`, ... are private, so those propositions are not allowed by the Rust compiler.
+2. The users must know about all the implementation designs and related internal types that the Rust standard library uses 
+to implement the `into_iter` function, and everything are different for the types that implements the `IntoIter` trait. 
+Even then, it is so complicated and tedious to write the loop-invariant. 
+3. The long call stack will slow down the performance.
+
+To avoid those disadvantages, we override the `into_iter` function and `IntoIter` trait by our own version (`kani_into_iter()` and `KaniIntoIter`) 
+with a simplified implementation but keeping the same semantics.
+Our rewritten version for the `for-loop` is as follows:
+
+```Rust
+let a: [u8; 10] = kani::any();
+let kani_iter_xxxx = kani::kani_into_iter(a);
+let kani_iter_len = kani_iter_xxxx.len();
+let mut i = kani_iter_xxxx.first()
+let mut kani_index = 0;
+#[kani::loop_invariant(...)]
+while kani_index < kani_iter_len {
+  i = kani_iter_xxxx.nth(kani_index);
+  kani_index += 1;
+}
+```
+
+The advantages of our rewrite method are: 
+1. Better user experience: the users can specify loop-invariants for `for-loop` based on their intuitive understanding of the code,
+not the Rust standard library implementation.
+2. Lower proof maintainence cost: the loop-invariant does not depend on Rust standard library implementation of Iterators,
+so they are less likely to be broken by toolchain updates. 
+3. Faster verification performance because of shorter call stack.
+
+The disadvantages are: 
+1. Kani can only support loop-invariants for `for-loop` for collections that implement `KaniIntoIter` trait.
+We have to gradually implement them on-demand to extend the number of collection types that Kani supports.
+2. We build `KaniIntoIter` implementations according the semantic of Rust `IntoIter` implementations, 
+so the soundness of our verification result depends on the correctness of Rust standard library implementations, 
+which should be verified separately.
+
 ## Rationale and alternatives
 
 

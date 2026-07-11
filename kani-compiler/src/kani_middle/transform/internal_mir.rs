@@ -12,8 +12,8 @@ use rustc_middle::ty::{self as rustc_ty, TyCtxt};
 use rustc_public::mir::{
     AggregateKind, AssertMessage, Body, BorrowKind, CastKind, ConstOperand, CopyNonOverlapping,
     CoroutineDesugaring, CoroutineKind, CoroutineSource, FakeBorrowKind, FakeReadCause, LocalDecl,
-    MutBorrowKind, NonDivergingIntrinsic, NullOp, Operand, PointerCoercion, RetagKind, Rvalue,
-    Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, UnwindAction,
+    MutBorrowKind, NonDivergingIntrinsic, Operand, PointerCoercion, RetagKind, RuntimeChecks,
+    Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, UnwindAction,
     UserTypeProjection, Variance,
 };
 use rustc_public::rustc_internal::internal;
@@ -92,6 +92,9 @@ impl RustcInternalMir for Operand {
             Operand::Constant(const_operand) => {
                 rustc_middle::mir::Operand::Constant(Box::new(const_operand.internal_mir(tcx)))
             }
+            Operand::RuntimeChecks(runtime_checks) => {
+                rustc_middle::mir::Operand::RuntimeChecks(runtime_checks.internal_mir(tcx))
+            }
         }
     }
 }
@@ -101,8 +104,8 @@ impl RustcInternalMir for PointerCoercion {
 
     fn internal_mir<'tcx>(&self, tcx: TyCtxt<'tcx>) -> Self::T<'tcx> {
         match self {
-            PointerCoercion::ReifyFnPointer => {
-                rustc_middle::ty::adjustment::PointerCoercion::ReifyFnPointer
+            PointerCoercion::ReifyFnPointer(safety) => {
+                rustc_middle::ty::adjustment::PointerCoercion::ReifyFnPointer(internal(tcx, safety))
             }
             PointerCoercion::UnsafeFnPointer => {
                 rustc_middle::ty::adjustment::PointerCoercion::UnsafeFnPointer
@@ -146,6 +149,7 @@ impl RustcInternalMir for CastKind {
             CastKind::PtrToPtr => rustc_middle::mir::CastKind::PtrToPtr,
             CastKind::FnPtrToPtr => rustc_middle::mir::CastKind::FnPtrToPtr,
             CastKind::Transmute => rustc_middle::mir::CastKind::Transmute,
+            CastKind::Subtype => rustc_middle::mir::CastKind::Subtype,
         }
     }
 }
@@ -189,29 +193,14 @@ impl RustcInternalMir for BorrowKind {
     }
 }
 
-impl RustcInternalMir for NullOp {
-    type T<'tcx> = rustc_middle::mir::NullOp<'tcx>;
+impl RustcInternalMir for RuntimeChecks {
+    type T<'tcx> = rustc_middle::mir::RuntimeChecks;
 
-    fn internal_mir<'tcx>(&self, tcx: TyCtxt<'tcx>) -> Self::T<'tcx> {
+    fn internal_mir<'tcx>(&self, _tcx: TyCtxt<'tcx>) -> Self::T<'tcx> {
         match self {
-            NullOp::SizeOf => rustc_middle::mir::NullOp::SizeOf,
-            NullOp::AlignOf => rustc_middle::mir::NullOp::AlignOf,
-            NullOp::OffsetOf(offsets) => rustc_middle::mir::NullOp::OffsetOf(
-                tcx.mk_offset_of(
-                    offsets
-                        .iter()
-                        .map(|(variant_idx, field_idx)| {
-                            (
-                                internal(tcx, variant_idx),
-                                rustc_abi::FieldIdx::from_usize(*field_idx),
-                            )
-                        })
-                        .collect::<Vec<_>>()
-                        .as_slice(),
-                ),
-            ),
-            NullOp::UbChecks => rustc_middle::mir::NullOp::UbChecks,
-            NullOp::ContractChecks => rustc_middle::mir::NullOp::ContractChecks,
+            RuntimeChecks::UbChecks => rustc_middle::mir::RuntimeChecks::UbChecks,
+            RuntimeChecks::ContractChecks => rustc_middle::mir::RuntimeChecks::ContractChecks,
+            RuntimeChecks::OverflowChecks => rustc_middle::mir::RuntimeChecks::OverflowChecks,
         }
     }
 }
@@ -267,9 +256,6 @@ impl RustcInternalMir for Rvalue {
             ),
             Rvalue::ThreadLocalRef(crate_item) => {
                 rustc_middle::mir::Rvalue::ThreadLocalRef(internal(tcx, crate_item.0))
-            }
-            Rvalue::NullaryOp(null_op, ty) => {
-                rustc_middle::mir::Rvalue::NullaryOp(null_op.internal_mir(tcx), internal(tcx, ty))
             }
             Rvalue::UnaryOp(un_op, operand) => {
                 rustc_middle::mir::Rvalue::UnaryOp(internal(tcx, un_op), operand.internal_mir(tcx))
@@ -379,9 +365,6 @@ impl RustcInternalMir for StatementKind {
                     place: internal(tcx, place).into(),
                     variant_index: internal(tcx, variant_index),
                 }
-            }
-            StatementKind::Deinit(place) => {
-                rustc_middle::mir::StatementKind::Deinit(internal(tcx, place).into())
             }
             StatementKind::StorageLive(local) => rustc_middle::mir::StatementKind::StorageLive(
                 rustc_middle::mir::Local::from_usize(*local),

@@ -41,8 +41,27 @@ The action takes the following optional parameters:
   See `cargo kani --help` for a full list of options.
   Useful options include:
   - `--output-format=terse` to generate terse output.
+  - `--sarif <path>` to write a SARIF report that can be uploaded to GitHub Code Scanning.
   - `--tests` to run on proofs inside the `test` module (needed for running Bolero).
   - `--workspace` to run on all crates within your repository.
+
+### Uploading SARIF to GitHub Code Scanning
+
+If you run Kani with `--sarif`, you can upload the report so results show up as Code Scanning alerts.
+
+```yaml
+      - name: 'Run Kani on your code.'
+        uses: model-checking/kani-github-action@v<MAJOR>.<MINOR>
+        with:
+          args: --sarif kani.sarif
+
+      - name: 'Upload SARIF'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: kani.sarif
+```
+
+Your workflow must grant `security-events: write` permissions to upload SARIF results.
 
 ## FAQ
 - **Kani takes too long for my CI**: Try running Kani on a

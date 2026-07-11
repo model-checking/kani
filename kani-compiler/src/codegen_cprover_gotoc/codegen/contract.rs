@@ -12,7 +12,7 @@ use rustc_public::mir::{Local, VarDebugInfoContents};
 use rustc_public::rustc_internal;
 use rustc_public::ty::{FnDef, RigidTy, TyKind};
 
-impl GotocCtx<'_> {
+impl GotocCtx<'_, '_> {
     /// Given the `proof_for_contract` target `function_under_contract` and the reachable `items`,
     /// find or create the `AssignsContract` that needs to be enforced and attach it to the symbol
     /// for which it needs to be enforced.
@@ -70,7 +70,14 @@ impl GotocCtx<'_> {
                 Some(format!(
                     "{}:{}",
                     loc.filename().expect("recursion location wrapper should have a file name"),
-                    static_item.name(),
+                    // The `--nondet-static-exclude` value must match the static's
+                    // pretty name in the goto model. Since rust-lang/rust#149401,
+                    // `name()` is crate-qualified for local items, but the pretty
+                    // name is kept crate-relative (see `readable_name`), so strip
+                    // the crate prefix here too; otherwise the recursion tracker
+                    // `REENTRY` is not excluded from `--nondet-static` and gets
+                    // havocked, breaking contract-recursion checking.
+                    crate::kani_middle::strip_local_crate_prefix(static_item.name()),
                 ))
             } else {
                 None
@@ -91,7 +98,7 @@ impl GotocCtx<'_> {
         let contract_attrs =
             KaniAttributes::for_instance(self.tcx, instance).contract_attributes()?;
         let mut find_closure = |inside: Instance, name: &str| {
-            let body = self.transformer.body(self.tcx, inside);
+            let body = self.transformer.body_ref(self.tcx, inside);
             body.var_debug_info.iter().find_map(|var_info| {
                 if var_info.name.as_str() == name {
                     let ty = match &var_info.value {

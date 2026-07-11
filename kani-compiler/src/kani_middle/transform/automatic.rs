@@ -14,7 +14,7 @@ use crate::kani_middle::kani_functions::{KaniHook, KaniIntrinsic, KaniModel};
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
-use fxhash::FxHashMap;
+use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::ty::TyCtxt;
 use rustc_public::CrateDef;
 use rustc_public::mir::mono::Instance;
@@ -30,7 +30,7 @@ use tracing::debug;
 
 /// Generate `T::any()` implementations for `T`s that do not implement Arbitrary in source code.
 /// Currently limited to structs and enums.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AutomaticArbitraryPass {
     /// The FnDef of KaniModel::Any
     kani_any: FnDef,
@@ -282,7 +282,7 @@ impl AutomaticArbitraryPass {
     }
 }
 /// Transform the dummy body of an automatic_harness Kani intrinsic to be a proof harness for a given function.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AutomaticHarnessPass {
     kani_any: FnDef,
     init_contracts_hook: Instance,
