@@ -82,7 +82,7 @@ jobs:
         # Retry on infra-driven failures (spot preemption / runner shutdown).
         # The script itself bounds per-test wall time, so functional regressions
         # surface as normal test failures and are not retried indefinitely.
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@v4
         with:
           timeout_minutes: 180
           max_attempts: 2
