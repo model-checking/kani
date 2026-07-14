@@ -71,13 +71,29 @@ echo "-----------------------------"
 cargo build -p kani-cov
 
 # Extract testing suite information and run compiletest
+# Bound each test's wall time so a hanging test (e.g. one whose verification
+# fails to terminate under a new toolchain) fails as a normal test failure with
+# output, instead of stalling the whole run until the CI job is killed hours
+# later. The nightly toolchain-upgrade automation relies on this: a clean
+# regression failure lets it open a tracking issue, whereas an unbounded hang
+# produces an unattributable job timeout. The cap is a guardrail against hangs,
+# not a tight performance bound, so it sits well above the slowest legitimate
+# test. The slowest single test is expected/shadow/unsupported_num_objects,
+# whose ~1020-object loops can take ~15 min on the slowest CI runners, so the
+# default is set with comfortable margin above that. Override via
+# KANI_REGRESSION_TEST_TIMEOUT (a positive integer number of seconds).
+timeout_secs="${KANI_REGRESSION_TEST_TIMEOUT:-2400}"
+if ! [[ "$timeout_secs" =~ ^[1-9][0-9]*$ ]]; then
+  echo "error: KANI_REGRESSION_TEST_TIMEOUT must be a positive integer (seconds), got '$timeout_secs'" >&2
+  exit 1
+fi
 for testp in "${TESTS[@]}"; do
   testl=($testp)
   suite=${testl[0]}
   mode=${testl[1]}
-  echo "Check compiletest suite=$suite mode=$mode"
+  echo "Check compiletest suite=$suite mode=$mode timeout=${timeout_secs}s"
   cargo run -p compiletest --quiet -- --suite $suite --mode $mode \
-      --quiet --no-fail-fast
+      --quiet --no-fail-fast --timeout "$timeout_secs"
 done
 
 # We rarely benefit from re-using build artifacts in the firecracker test,
