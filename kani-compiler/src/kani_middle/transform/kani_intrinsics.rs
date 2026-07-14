@@ -73,7 +73,7 @@ impl TransformPass for IntrinsicGeneratorPass {
                 KaniIntrinsic::CheckedAlignOf => (true, self.checked_align_of(body, instance)),
                 KaniIntrinsic::CheckedSizeOf => (true, self.checked_size_of(body, instance)),
                 KaniIntrinsic::IsInitialized => (true, self.is_initialized_body(body)),
-                KaniIntrinsic::ValidValue => (true, self.valid_value_body(body)),
+                KaniIntrinsic::ValidValue => (true, self.valid_value_body(tcx, body)),
                 // The former two are handled in contracts pass for now, while the latter is handled in the the automatic harness pass.
                 KaniIntrinsic::WriteAny
                 | KaniIntrinsic::AnyModifies
@@ -105,7 +105,7 @@ impl IntrinsicGeneratorPass {
     ///     ret
     /// }
     /// ```
-    fn valid_value_body(&self, body: Body) -> Body {
+    fn valid_value_body(&self, tcx: TyCtxt, body: Body) -> Body {
         let mut new_body = MutableBody::from(body);
         new_body.clear_body(TerminatorKind::Return);
 
@@ -128,7 +128,7 @@ impl IntrinsicGeneratorPass {
         // The first and only argument type.
         let arg_ty = new_body.locals()[1].ty;
         let TyKind::RigidTy(RigidTy::RawPtr(target_ty, _)) = arg_ty.kind() else { unreachable!() };
-        let validity = ty_validity_per_offset(&machine_info, target_ty, 0);
+        let validity = ty_validity_per_offset(tcx, &machine_info, target_ty, 0);
         match validity {
             Ok(ranges) if ranges.is_empty() => {
                 // Nothing to check
