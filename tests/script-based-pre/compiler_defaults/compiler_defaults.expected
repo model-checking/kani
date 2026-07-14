@@ -1,2 +1,4 @@
 [TEST] kani-compiler exited 0
 [TEST] proof_harnesses: 1
+[TEST] unexpected_cfgs fired for undeclared cfg
+[TEST] no unexpected_cfgs warning for cfg(kani)

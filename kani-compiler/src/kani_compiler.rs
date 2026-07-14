@@ -49,6 +49,12 @@ use tracing::debug;
 /// Appended (not prepended): rustc is last-flag-wins for scalar `-C`/`-Z`
 /// options, so appending after the caller's args makes these non-overridable.
 ///
+/// Single-token `--flag=value` encoding: rustc's getopts-based CLI parses
+/// `--cfg=kani` and `--cfg kani` identically, and this is the same encoding
+/// kani-driver has always passed (`base_rustc_flags()`). The integration test
+/// at `tests/script-based-pre/compiler_defaults/` pins that both cfg flags
+/// are parsed and applied in this exact form.
+///
 /// Deliberately NOT included:
 /// - `-Clinker=echo` — would clobber a real linker a build system provides
 ///   for rlib output (last-flag-wins).

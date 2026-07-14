@@ -11,6 +11,16 @@
 # harness appears in the metadata. Without the defaults, --cfg=kani would be
 # unset, the harness module would be invisible, and the metadata would have
 # 0 proof_harnesses: a vacuous "verification" with nothing verified.
+#
+# Also prove the single-token `--flag=value` encoding of the cfg defaults is
+# parsed AND applied, not just accepted:
+# - --cfg=kani: proof_harnesses is 1, which requires cfg(kani) to be set.
+# - --check-cfg=cfg(kani): fixture.rs also carries a deliberately undeclared
+#   cfg. rustc only checks cfg names when at least one --check-cfg argument
+#   is present, and none is passed below — so that cfg drawing an
+#   unexpected_cfgs warning proves the default was parsed as a check-cfg
+#   spec, and #[cfg(kani)] drawing none proves `kani` is the name it
+#   registered.
 
 set -eu
 
@@ -54,7 +64,10 @@ KANI_LIB="${KANI_HOME}/lib"
     -Z crate-attr="feature(register_tool)" \
     -Z crate-attr="register_tool(kanitool)" \
     -Cllvm-args=--reachability=harnesses \
-    fixture.rs
+    fixture.rs 2> "${OUTDIR}/fixture.stderr" || {
+    cat "${OUTDIR}/fixture.stderr"
+    exit 1
+}
 
 echo "[TEST] kani-compiler exited 0"
 
@@ -63,5 +76,26 @@ echo "[TEST] kani-compiler exited 0"
 META=$(ls "${OUTDIR}"/*.kani-metadata.json)
 HARNESSES=$(jq '.proof_harnesses | length' "${META}")
 echo "[TEST] proof_harnesses: ${HARNESSES}"
+
+# Negative control: fixture.rs's undeclared cfg must draw unexpected_cfgs.
+# Should rustc ever start checking cfg names without any --check-cfg being
+# passed, this leg turns vacuous — but the absence leg below still catches a
+# dropped or mis-encoded default, because #[cfg(kani)] would then warn.
+WARN='unexpected `cfg` condition name'
+if ! grep -q "${WARN}: \`not_a_kani_cfg\`" "${OUTDIR}/fixture.stderr"; then
+    echo 'ERROR: undeclared cfg drew no unexpected_cfgs warning — cfg checking is not active'
+    cat "${OUTDIR}/fixture.stderr"
+    exit 1
+fi
+echo "[TEST] unexpected_cfgs fired for undeclared cfg"
+
+# ...and `kani` must be the name --check-cfg=cfg(kani) registered: with cfg
+# checking proven active, #[cfg(kani)] must not warn.
+if grep -q "${WARN}: \`kani\`" "${OUTDIR}/fixture.stderr"; then
+    echo 'ERROR: unexpected_cfgs fired for cfg(kani) — --check-cfg=cfg(kani) did not register `kani`'
+    cat "${OUTDIR}/fixture.stderr"
+    exit 1
+fi
+echo "[TEST] no unexpected_cfgs warning for cfg(kani)"
 
 rm -rf "${OUTDIR}"
