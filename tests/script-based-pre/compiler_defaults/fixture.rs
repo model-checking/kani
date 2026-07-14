@@ -1,8 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! A `#[cfg(kani)]`-gated harness. If kani-compiler sets `--cfg=kani` as a
-//! default, the harness compiles; if not, the module is invisible and 0
+//! `#[cfg(kani)]`-gated harnesses. If kani-compiler sets `--cfg=kani` as a
+//! default, the harnesses compile; if not, the module is invisible and 0
 //! harnesses appear in the metadata — a vacuous "verification" with nothing
 //! verified.
 //!
@@ -15,6 +15,17 @@
 mod verify {
     #[kani::proof]
     fn check_with_defaults() {
+        let x: u8 = kani::any();
+        assert_eq!(x.wrapping_mul(1), x);
+    }
+
+    /// rustc derives `cfg(panic = "abort")` from the RESOLVED panic
+    /// strategy, so this harness is in the metadata count only if
+    /// `-Cpanic=abort` won the session — a backstop for the conflict case
+    /// alongside kani-compiler's own abort-strategy gate.
+    #[cfg(panic = "abort")]
+    #[kani::proof]
+    fn check_panic_abort_wins() {
         let x: u8 = kani::any();
         assert_eq!(x.wrapping_mul(1), x);
     }

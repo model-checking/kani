@@ -1,4 +1,8 @@
-[TEST] kani-compiler exited 0
-[TEST] proof_harnesses: 1
+[TEST] minimal: kani-compiler exited 0
+[TEST] minimal proof_harnesses: 2
+[TEST] minimal mangled names are v0
 [TEST] unexpected_cfgs fired for undeclared cfg
 [TEST] no unexpected_cfgs warning for cfg(kani)
+[TEST] conflict: kani-compiler exited 0
+[TEST] conflict proof_harnesses: 2
+[TEST] conflict mangled names are v0
