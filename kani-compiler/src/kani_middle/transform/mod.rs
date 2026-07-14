@@ -29,14 +29,41 @@ use crate::kani_middle::transform::stubs::{ExternFnStubPass, FnStubPass};
 use crate::kani_queries::QueryDb;
 use automatic::{AutomaticArbitraryPass, AutomaticHarnessPass};
 use dump_mir_pass::DumpMirPass;
-use rustc_middle::ty::TyCtxt;
+use rustc_hir::def::DefKind;
+use rustc_middle::ty::{EarlyBinder, TyCtxt, TypingEnv};
 use rustc_public::mir::Body;
 use rustc_public::mir::mono::{Instance, MonoItem};
+use rustc_public::rustc_internal;
 use std::collections::HashMap;
 use std::fmt::Debug;
 
 use crate::kani_middle::transform::rustc_intrinsics::RustcIntrinsicsPass;
 pub use internal_mir::RustcInternalMir;
+
+/// Build the `Body` for an instance whose body `rustc_public` does not surface.
+///
+/// This currently only handles ADT constructors: rust-lang/rust stopped encoding
+/// *optimized* MIR for constructors (`instance_mir` uses `mir_for_ctfe` for them),
+/// which makes `rustc_public::Instance::body()` return `None` for constructors
+/// imported from other crates even though rustc can still build their (trivial)
+/// shim body. We reconstruct it here the same way `rustc_public`'s `BodyBuilder`
+/// would: fetch the instance MIR and monomorphize it, then convert to the stable
+/// representation. Any other bodyless instance is a genuine error and panics.
+fn build_missing_body(tcx: TyCtxt, instance: Instance) -> Body {
+    let internal_instance = rustc_internal::internal(tcx, instance);
+    assert!(
+        matches!(tcx.def_kind(internal_instance.def_id()), DefKind::Ctor(..)),
+        "expected a body for instance `{}`",
+        instance.name()
+    );
+    let internal_body = tcx.instance_mir(internal_instance.def).clone();
+    let mono_body = internal_instance.instantiate_mir_and_normalize_erasing_regions(
+        tcx,
+        TypingEnv::fully_monomorphized(),
+        EarlyBinder::bind(internal_body),
+    );
+    rustc_internal::stable(&mono_body)
+}
 
 mod automatic;
 pub(crate) mod body;
@@ -118,7 +145,7 @@ impl BodyTransformation {
             .entry(instance)
             .or_insert_with(|| {
                 // Transform and add to the cache if there's no existing entry.
-                let mut body = instance.body().unwrap();
+                let mut body = instance.body().unwrap_or_else(|| build_missing_body(tcx, instance));
 
                 let mut modified = false;
                 for pass in self.stub_passes.iter_mut().chain(self.inst_passes.iter_mut()) {
