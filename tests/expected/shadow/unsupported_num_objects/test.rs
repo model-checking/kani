@@ -18,13 +18,21 @@ fn check_max_objects<const N: usize>() {
     // numbering, so the `N` thresholds below may need to be adjusted when
     // upgrading CBMC.
     let mut have_42 = false;
+    // Push the boxes into a leaked `Vec` so that they are real heap allocations
+    // (escaping the loop body prevents stack promotion, which would otherwise let the
+    // compiler elide them) while avoiding the cost of symbolically executing a
+    // per-iteration deallocation. This keeps the test well under the per-test timeout
+    // on slower CI runners.
+    let mut boxes: Vec<Box<usize>> = Vec::with_capacity(N);
     while i < N {
         let x: Box<usize> = Box::new(kani::any());
         if *x == 42 {
             have_42 = true;
         }
+        boxes.push(x);
         i += 1;
     }
+    std::mem::forget(boxes);
 
     // create a new object whose ID is `N` + 3
     let x: i32 = have_42 as i32;

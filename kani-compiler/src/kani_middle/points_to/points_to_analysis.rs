@@ -643,6 +643,8 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::Exp2F64
         | Intrinsic::ExpF32
         | Intrinsic::ExpF64
+        | Intrinsic::FabsF128
+        | Intrinsic::FabsF16
         | Intrinsic::FabsF32
         | Intrinsic::FabsF64
         | Intrinsic::FaddFast

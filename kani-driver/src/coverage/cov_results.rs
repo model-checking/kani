@@ -31,7 +31,7 @@ impl fmt::Display for CoverageResults {
             for (function, checks) in checks_by_function {
                 writeln!(f, "{file} ({function})")?;
                 let mut sorted_checks: Vec<CoverageCheck> = checks.to_vec();
-                sorted_checks.sort_by(|a, b| a.region.start.cmp(&b.region.start));
+                sorted_checks.sort_by_key(|a| a.region.start);
                 for check in sorted_checks.iter() {
                     writeln!(f, " * {} {}", check.region, check.status)?;
                 }

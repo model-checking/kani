@@ -32,7 +32,7 @@ use rustc_interface::interface::Compiler;
 use rustc_middle::ty::TyCtxt;
 use rustc_parse::lexer::StripTokens;
 use rustc_parse::new_parser_from_source_str;
-use rustc_parse::parser::ForceCollect;
+use rustc_parse::parser::{AllowConstBlockItems, ForceCollect};
 use rustc_public::rustc_internal;
 use rustc_session::config::ErrorOutputType;
 use rustc_span::{FileName, sym};
@@ -220,7 +220,7 @@ fn inject_kani_macro_overrides(compiler: &Compiler, krate: &mut ast::Crate) {
             return;
         }
     };
-    match parser.parse_item(ForceCollect::No) {
+    match parser.parse_item(ForceCollect::No, AllowConstBlockItems::No) {
         Ok(Some(item)) => krate.items.insert(0, item),
         Ok(None) => unreachable!("failed to parse Kani's macro-override injection"),
         Err(error) => {

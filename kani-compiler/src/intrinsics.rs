@@ -61,6 +61,8 @@ pub enum Intrinsic {
     Exp2F64,
     ExpF32,
     ExpF64,
+    FabsF128,
+    FabsF16,
     FabsF32,
     FabsF64,
     FaddFast,
@@ -653,6 +655,10 @@ fn try_match_f32(intrinsic_instance: &Instance) -> Option<Intrinsic> {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
             Some(Intrinsic::ExpF32)
         }
+        "fabsf16" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F16) => RigidTy::Float(FloatTy::F16));
+            Some(Intrinsic::FabsF16)
+        }
         "fabsf32" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
             Some(Intrinsic::FabsF32)
@@ -746,6 +752,10 @@ fn try_match_f64(intrinsic_instance: &Instance) -> Option<Intrinsic> {
         "fabsf64" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
             Some(Intrinsic::FabsF64)
+        }
+        "fabsf128" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F128) => RigidTy::Float(FloatTy::F128));
+            Some(Intrinsic::FabsF128)
         }
         "floorf64" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
