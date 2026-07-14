@@ -461,6 +461,24 @@ impl GotocCtx<'_, '_> {
             Intrinsic::SimdEq => {
                 self.codegen_simd_cmp(Expr::vector_eq, fargs, place, span, farg_types, ret_ty)
             }
+            Intrinsic::SimdReduceAll => {
+                // Boolean AND-reduction: returns whether every lane is "true". The
+                // argument is a mask-like integer vector (lanes are 0 or all-ones),
+                // so a lane is true iff it is non-zero.
+                let vec = fargs.remove(0);
+                let (size, _) = self.simd_size_and_type(farg_types[0]);
+                let lane =
+                    |v: &Expr, i: u64| v.clone().index_array(Expr::int_constant(i, Type::size_t()));
+                let lane_true = |l: Expr| {
+                    let zero = Expr::int_constant(0, l.typ().clone());
+                    l.neq(zero)
+                };
+                let mut acc = lane_true(lane(&vec, 0));
+                for i in 1..size {
+                    acc = acc.and(lane_true(lane(&vec, i)));
+                }
+                self.codegen_expr_to_place_stable(place, acc.cast_to(cbmc_ret_ty), loc)
+            }
             Intrinsic::SimdExtract => {
                 self.codegen_intrinsic_simd_extract(fargs, place, farg_types, ret_ty, span)
             }
