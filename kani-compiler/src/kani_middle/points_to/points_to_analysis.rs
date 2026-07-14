@@ -724,6 +724,7 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::SimdShl
         | Intrinsic::SimdShr
         | Intrinsic::SimdShuffle(_)
+        | Intrinsic::SimdSplat
         | Intrinsic::SimdSub
         | Intrinsic::SimdXor => {
             /* SIMD operations */

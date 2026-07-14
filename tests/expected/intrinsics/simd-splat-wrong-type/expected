@@ -1,0 +1,2 @@
+expected argument type `i64` (element of output `i64x2`), found `i32`
+error: aborting due to 1 previous error
