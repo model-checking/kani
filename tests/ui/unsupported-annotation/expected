@@ -1,1 +1,1 @@
-error[E0433]: failed to resolve: could not find `test_annotation` in `kani`
+error[E0433]: cannot find `test_annotation` in `kani`
