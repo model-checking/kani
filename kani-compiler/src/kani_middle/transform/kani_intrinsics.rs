@@ -27,6 +27,7 @@ use rustc_public::mir::{
     AggregateKind, BasicBlock, BinOp, Body, ConstOperand, Local, Mutability, Operand, Place,
     RETURN_LOCAL, Rvalue, Statement, StatementKind, Terminator, TerminatorKind, UnOp, UnwindAction,
 };
+use rustc_public::rustc_internal;
 use rustc_public::target::MachineInfo;
 use rustc_public::ty::{
     AdtDef, FnDef, GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyKind, UintTy,
@@ -70,6 +71,24 @@ impl TransformPass for IntrinsicGeneratorPass {
             attributes.fn_marker().and_then(|name| KaniIntrinsic::from_str(name.as_str()).ok())
         {
             match kani_intrinsic {
+                // `fn_marker` is an internal attribute, but nothing prevents user code from
+                // attaching it to a function with an incompatible signature. The size/align
+                // generators below assume a raw pointer argument and an `Option<usize>` return;
+                // reject anything else with a diagnostic rather than panicking while building the
+                // `Some`/`None` return value (see issue #4589).
+                KaniIntrinsic::CheckedAlignOf | KaniIntrinsic::CheckedSizeOf
+                    if !has_checked_intrinsic_sig(&body) =>
+                {
+                    let name: &str = kani_intrinsic.into();
+                    tcx.dcx().span_err(
+                        rustc_internal::internal(tcx, body.span),
+                        format!(
+                            "the `{name}` intrinsic marker can only be applied to a function \
+                             with a raw pointer argument that returns `Option<usize>`"
+                        ),
+                    );
+                    (false, body)
+                }
                 KaniIntrinsic::CheckedAlignOf => (true, self.checked_align_of(body, instance)),
                 KaniIntrinsic::CheckedSizeOf => (true, self.checked_size_of(body, instance)),
                 KaniIntrinsic::IsInitialized => (true, self.is_initialized_body(body)),
@@ -580,6 +599,25 @@ impl IntrinsicGeneratorPass {
             Place::from(RETURN_LOCAL),
         );
     }
+}
+
+/// Whether `body` has the signature that the `checked_size_of` and `checked_align_of`
+/// generators require: a raw pointer argument and an `Option`-shaped return type (a variant
+/// with a field for `Some`, and one without for `None`). The internal `fn_marker` attribute can
+/// be attached to an arbitrary function, so this guards `build_some`/`build_none` against a
+/// mismatched return type instead of unwrapping a missing variant.
+fn has_checked_intrinsic_sig(body: &Body) -> bool {
+    let arg_is_ptr = matches!(
+        body.arg_locals().first().map(|arg| arg.ty.kind()),
+        Some(TyKind::RigidTy(RigidTy::RawPtr(..)))
+    );
+    let ret_is_option = matches!(
+        body.ret_local().ty.kind(),
+        TyKind::RigidTy(RigidTy::Adt(def, _))
+            if def.variants_iter().any(|var| !var.fields().is_empty())
+                && def.variants_iter().any(|var| var.fields().is_empty())
+    );
+    arg_is_ptr && ret_is_option
 }
 
 /// Build an Rvalue `Some(val)`.
