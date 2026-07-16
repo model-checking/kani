@@ -1,0 +1,1 @@
+error: the `CheckedSizeOfIntrinsic` intrinsic marker can only be applied to a function with a raw pointer argument that returns `Option<usize>`
