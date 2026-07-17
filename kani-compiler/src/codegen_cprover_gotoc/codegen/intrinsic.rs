@@ -354,6 +354,24 @@ impl GotocCtx<'_, '_> {
             Intrinsic::Exp2F64 => codegen_simple_intrinsic!(Exp2),
             Intrinsic::ExpF32 => codegen_simple_intrinsic!(Expf),
             Intrinsic::ExpF64 => codegen_simple_intrinsic!(Exp),
+            // CBMC models neither `fabsf16` nor `fabsf128`, so compute the absolute
+            // value by clearing the IEEE sign bit. This is exactly `fabs` for every
+            // input (NaN, +/-0, and +/-inf included).
+            Intrinsic::FabsF16 => {
+                let arg = fargs.remove(0);
+                let bits = arg.transmute_to(Type::unsigned_int(16), &self.symbol_table);
+                let abs_bits = bits.bitand(Expr::int_constant(0x7fff, Type::unsigned_int(16)));
+                let result = abs_bits.transmute_to(Type::float16(), &self.symbol_table);
+                self.codegen_expr_to_place_stable(place, result, loc)
+            }
+            Intrinsic::FabsF128 => {
+                let arg = fargs.remove(0);
+                let bits = arg.transmute_to(Type::unsigned_int(128), &self.symbol_table);
+                // `i128::MAX` (== `u128::MAX >> 1`) clears only the sign bit (bit 127).
+                let abs_bits = bits.bitand(Expr::int_constant(i128::MAX, Type::unsigned_int(128)));
+                let result = abs_bits.transmute_to(Type::float128(), &self.symbol_table);
+                self.codegen_expr_to_place_stable(place, result, loc)
+            }
             Intrinsic::FabsF32 => codegen_simple_intrinsic!(Fabsf),
             Intrinsic::FabsF64 => codegen_simple_intrinsic!(Fabs),
             Intrinsic::FaddFast => {
