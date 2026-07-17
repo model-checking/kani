@@ -124,6 +124,7 @@ pub enum Intrinsic {
     SimdShl,
     SimdShr,
     SimdShuffle(String),
+    SimdSplat,
     SimdSub,
     SimdXor,
     SizeOf,
@@ -609,6 +610,10 @@ fn try_match_simd(intrinsic_instance: &Instance) -> Option<Intrinsic> {
         "simd_shr" => {
             assert_sig_matches!(sig, _, _ => _);
             Some(Intrinsic::SimdShr)
+        }
+        "simd_splat" => {
+            assert_sig_matches!(sig, _ => _);
+            Some(Intrinsic::SimdSplat)
         }
         "simd_sub" => {
             assert_sig_matches!(sig, _, _ => _);

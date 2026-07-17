@@ -978,8 +978,8 @@ pub fn ty_validity_per_offset(
                                     let mut fields_validity = vec![];
                                     for (index, variant) in variants.iter().enumerate() {
                                         let fields = ty_variants[index].fields();
-                                        for field_idx in variant.fields.fields_by_offset_order() {
-                                            let field_offset = offsets[field_idx].bytes();
+                                        for field_idx in variant.fields_by_offset_order() {
+                                            let field_offset = variant.offsets[field_idx].bytes();
                                             let field_ty = fields[field_idx].ty_with_args(args);
                                             fields_validity.append(&mut ty_validity_per_offset(
                                                 machine_info,

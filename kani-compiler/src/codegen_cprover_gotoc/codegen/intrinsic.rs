@@ -498,6 +498,26 @@ impl GotocCtx<'_, '_> {
                 let n: u64 = self.simd_shuffle_length(stripped.as_str(), farg_types, span);
                 self.codegen_intrinsic_simd_shuffle(fargs, place, farg_types, ret_ty, n, span)
             }
+            Intrinsic::SimdSplat => {
+                // Broadcast the scalar argument to every lane of the result vector.
+                let val = fargs.remove(0);
+                let (size, ret_base_type) = self.simd_size_and_type(ret_ty);
+                // `simd_splat<T, U>(value: U) -> T` has independent generic parameters,
+                // so a monomorphization where `U` is not `T`'s element type can reach
+                // codegen. Emit an error like rustc's backends (and like `simd_extract`
+                // and `simd_insert` above) rather than silently casting the value.
+                if farg_types[0] != ret_base_type {
+                    let err_msg = format!(
+                        "expected argument type `{ret_base_type}` (element of output `{ret_ty}`), found `{}`",
+                        farg_types[0]
+                    );
+                    utils::span_err(self.tcx, span, err_msg);
+                }
+                self.tcx.dcx().abort_if_errors();
+                let elem_ty = cbmc_ret_ty.base_type().unwrap().clone();
+                let elems = vec![val.cast_to(elem_ty); size as usize];
+                self.codegen_expr_to_place_stable(place, Expr::vector_expr(cbmc_ret_ty, elems), loc)
+            }
             Intrinsic::SimdSub => self.codegen_simd_op_with_overflow(
                 Expr::sub,
                 Expr::sub_overflow_p,
