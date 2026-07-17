@@ -82,6 +82,8 @@ where
     K: Arbitrary + std::cmp::Ord,
     V: Arbitrary,
 {
+    // duplicate `K::any()` values overwrite earlier entries, so the reachable
+    // map sizes are `0..=N` rather than always equal to the number of insert branches taken
     fn bounded_any<const N: usize>() -> Self {
         let mut btree_map = std::collections::BTreeMap::new();
         for _ in 0..N {
@@ -97,6 +99,8 @@ impl<V> BoundedArbitrary for std::collections::BTreeSet<V>
 where
     V: Arbitrary + std::cmp::Ord,
 {
+    // duplicate `V::any()` values collapse into one entry, so the reachable
+    // set sizes are `0..=N` rather than always equal to the number of insert branches taken
     fn bounded_any<const N: usize>() -> Self {
         let mut btree_set = std::collections::BTreeSet::new();
         for _ in 0..N {

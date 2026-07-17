@@ -8,6 +8,7 @@
 fn check_btreemap() {
     const BOUND: usize = 2;
     let btree_map: std::collections::BTreeMap<u8, bool> = kani::bounded_any::<_, BOUND>();
+    assert!(btree_map.len() <= BOUND);
     kani::cover!(btree_map.len() == 0);
     kani::cover!(btree_map.len() == 1);
     kani::cover!(btree_map.len() == 2);
@@ -18,6 +19,7 @@ fn check_btreemap() {
 fn check_btreeset() {
     const BOUND: usize = 2;
     let btree_set: std::collections::BTreeSet<u8> = kani::bounded_any::<_, BOUND>();
+    assert!(btree_set.len() <= BOUND);
     kani::cover!(btree_set.len() == 0);
     kani::cover!(btree_set.len() == 1);
     kani::cover!(btree_set.len() == 2);
