@@ -26,7 +26,7 @@ use rustc_codegen_ssa::back::link::link_binary;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CodegenResults, CrateInfo};
 use rustc_data_structures::fx::{FxHashMap, FxIndexMap};
-use rustc_errors::{DEFAULT_LOCALE_RESOURCE, ErrorGuaranteed};
+use rustc_errors::ErrorGuaranteed;
 use rustc_hir::def_id::{DefId as InternalDefId, LOCAL_CRATE};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
@@ -196,11 +196,6 @@ impl CodegenBackend for LlbcCodegenBackend {
 
     fn name(&self) -> &'static str {
         "kani-llbc"
-    }
-
-    fn locale_resource(&self) -> &'static str {
-        // We don't currently support multiple languages.
-        DEFAULT_LOCALE_RESOURCE
     }
 
     fn codegen_crate(&self, tcx: TyCtxt) -> Box<dyn Any> {

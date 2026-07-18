@@ -29,7 +29,6 @@ use rustc_codegen_ssa::back::link::link_binary;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CodegenResults, CrateInfo, TargetConfig};
 use rustc_data_structures::fx::{FxHashMap, FxIndexMap};
-use rustc_errors::DEFAULT_LOCALE_RESOURCE;
 use rustc_hir::def_id::{DefId as InternalDefId, LOCAL_CRATE};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
@@ -290,11 +289,6 @@ impl CodegenBackend for GotocCodegenBackend {
 
     fn name(&self) -> &'static str {
         "kani-cprover"
-    }
-
-    fn locale_resource(&self) -> &'static str {
-        // We don't currently support multiple languages.
-        DEFAULT_LOCALE_RESOURCE
     }
 
     fn target_config(&self, sess: &Session) -> TargetConfig {
