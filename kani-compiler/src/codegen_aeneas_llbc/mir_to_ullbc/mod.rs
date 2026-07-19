@@ -130,8 +130,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 let types = Vec::new();
                 let type_clauses = Vec::new();
                 let type_defaults = IndexMap::new();
-                let required_methods = Vec::new();
-                let provided_methods = Vec::new();
+                let methods = Vec::new();
                 let parent_clauses = CharonVector::new();
                 let c_traitdecl = CharonTraitDecl {
                     def_id: trait_decl_id,
@@ -143,8 +142,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     const_defaults,
                     types,
                     type_defaults,
-                    required_methods,
-                    provided_methods,
+                    methods,
                 };
                 self.translated.trait_decls.set_slot(trait_decl_id, c_traitdecl);
                 trait_decl_id
