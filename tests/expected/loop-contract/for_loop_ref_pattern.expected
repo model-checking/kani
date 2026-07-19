@@ -1,0 +1,8 @@
+lookup.loop_invariant_base.1\
+	 - Status: SUCCESS\
+	 - Description: "Check invariant before entry for loop lookup.0"
+
+	 - Status: SUCCESS\
+	 - Description: "assertion failed: n <= 2"
+
+VERIFICATION:- SUCCESSFUL

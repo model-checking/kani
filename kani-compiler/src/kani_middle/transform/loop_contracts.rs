@@ -301,10 +301,20 @@ impl LoopContractPass {
             let mut firstprj_nthprj: HashMap<usize, usize> = HashMap::new();
             firstprj_nthprj.insert(firstvar, nthvar);
 
+            // Only user variables (pattern bindings) are paired up with their nthpat
+            // counterparts. Compiler-generated temporaries (e.g. the deref temporaries
+            // that destructuring patterns like `&x` introduce) must not be paired:
+            // their assignments are kept in place (with the rvalue redirected to
+            // nthvar) so that later statements reading them remain well-defined.
+            // Note: before rust-lang/rust#145513 such temporaries were assigned via
+            // `Rvalue::CopyForDeref` and thus never matched the `Rvalue::Use` pattern
+            // below; nowadays they are plain `Rvalue::Use(Operand::Copy)` assignments.
+            let user_vars = self.get_user_defined_variables(body);
             for fstmt in firstprj_stmts_copy.iter() {
                 if let StatementKind::Assign(fprjplace, frval) = &fstmt.kind
                     && let Rvalue::Use(Operand::Copy(firstpatplace)) = frval
                     && firstpatplace.local == firstvar
+                    && user_vars.contains(&fprjplace.local)
                 {
                     let firstprj = fprjplace.local;
                     for istmt in nthprj_stmts_copy.iter() {
@@ -342,17 +352,29 @@ impl LoopContractPass {
                         match frval {
                             Rvalue::Use(Operand::Copy(firstpatplace)) => {
                                 if firstpatplace.local == firstvar {
-                                    let nthprj = firstprj_nthprj.get(&fprjplace.local).unwrap();
                                     let mut nthpatplace = firstpatplace.clone();
                                     nthpatplace.local = nthvar;
                                     let newrval = Rvalue::Use(Operand::Copy(nthpatplace));
-                                    new_stmt.kind = StatementKind::Assign(
-                                        Place {
-                                            local: *nthprj,
-                                            projection: fprjplace.projection.clone(),
-                                        },
-                                        newrval,
-                                    );
+                                    if let Some(nthprj) = firstprj_nthprj.get(&fprjplace.local) {
+                                        // A user pattern binding: redirect the assignment to
+                                        // the corresponding nthpat projection variable.
+                                        new_stmt.kind = StatementKind::Assign(
+                                            Place {
+                                                local: *nthprj,
+                                                projection: fprjplace.projection.clone(),
+                                            },
+                                            newrval,
+                                        );
+                                    } else {
+                                        // A compiler-generated temporary (e.g. a deref
+                                        // temporary, `Rvalue::CopyForDeref` before
+                                        // rust-lang/rust#145513): keep the assigned place and
+                                        // only redirect the rvalue to read from nthvar, so
+                                        // that following statements dereferencing the
+                                        // temporary keep working.
+                                        new_stmt.kind =
+                                            StatementKind::Assign(fprjplace.clone(), newrval);
+                                    }
                                 }
                             }
                             Rvalue::CopyForDeref(firstpatplace) => {
