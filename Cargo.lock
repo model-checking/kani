@@ -288,7 +288,7 @@ checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
 name = "charon"
-version = "0.1.68"
+version = "0.1.69"
 dependencies = [
  "annotate-snippets",
  "anstream 0.6.21",
