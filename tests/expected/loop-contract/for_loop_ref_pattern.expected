@@ -2,6 +2,7 @@ lookup.loop_invariant_base.1\
 	 - Status: SUCCESS\
 	 - Description: "Check invariant before entry for loop lookup.0"
 
+check_ref_pattern_deref_temp.assertion.1\
 	 - Status: SUCCESS\
 	 - Description: "assertion failed: n <= 2"
 
