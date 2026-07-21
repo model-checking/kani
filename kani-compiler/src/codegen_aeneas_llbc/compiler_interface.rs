@@ -15,8 +15,9 @@ use crate::kani_queries::QUERY_DB;
 use charon_lib::ast::{AnyTransId, TranslatedCrate, meta::ItemOpacity::*, meta::Span};
 use charon_lib::errors::ErrorCtx;
 use charon_lib::name_matcher::NamePattern;
+use charon_lib::options::{MirLevel, TranslateOptions};
 use charon_lib::transform::TransformCtx;
-use charon_lib::transform::ctx::{TransformOptions, TransformPass};
+use charon_lib::transform::ctx::TransformPass;
 use kani_metadata::ArtifactType;
 use kani_metadata::{AssignsContract, CompilerArtifactStub};
 use rustc_codegen_ssa::back::archive::{
@@ -393,7 +394,7 @@ where
     ret
 }
 
-fn get_transform_options(tcx: &TranslatedCrate, error_ctx: &mut ErrorCtx) -> TransformOptions {
+fn get_translate_options(tcx: &TranslatedCrate, error_ctx: &mut ErrorCtx) -> TranslateOptions {
     let mut parse_pattern = |s: &str| match NamePattern::parse(s) {
         Ok(p) => Ok(p),
         Err(e) => {
@@ -435,7 +436,9 @@ fn get_transform_options(tcx: &TranslatedCrate, error_ctx: &mut ErrorCtx) -> Tra
             .filter_map(|(s, opacity)| parse_pattern(&s).ok().map(|pat| (pat, opacity)))
             .collect()
     };
-    TransformOptions {
+    TranslateOptions {
+        mir_level: MirLevel::Built,
+        translate_all_methods: false,
         no_code_duplication: false,
         hide_marker_traits: true,
         no_merge_goto_chains: false,
@@ -449,6 +452,6 @@ fn create_charon_transformation_context(tcx: TyCtxt) -> TransformCtx {
     let crate_name = tcx.crate_name(LOCAL_CRATE).as_str().into();
     let translated = TranslatedCrate { crate_name, ..TranslatedCrate::default() };
     let mut errors = ErrorCtx::new(true, false);
-    let options = get_transform_options(&translated, &mut errors);
+    let options = get_translate_options(&translated, &mut errors);
     TransformCtx { options, translated, errors: std::cell::RefCell::new(errors) }
 }
