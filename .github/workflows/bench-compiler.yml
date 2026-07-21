@@ -20,6 +20,9 @@ jobs:
         run: |
           echo "NEW_REF=${{ github.event.after}}" | tee -a "$GITHUB_ENV"
           echo "OLD_REF=${{ github.event.before }}" | tee -a "$GITHUB_ENV"
+      # Note: in reusable workflows, github.event_name and github.event are
+      # those of the caller; when invoked from bench-pr.yml this is a
+      # pull_request event.
       - name: Save pull request HEAD and base to environment variables
         if: ${{ github.event_name == 'pull_request' }}
         run: |
@@ -83,6 +86,9 @@ jobs:
         run: |
           echo "NEW_REF=${{ github.event.after}}" | tee -a "$GITHUB_ENV"
           echo "OLD_REF=${{ github.event.before }}" | tee -a "$GITHUB_ENV"
+      # Note: in reusable workflows, github.event_name and github.event are
+      # those of the caller; when invoked from bench-pr.yml this is a
+      # pull_request event.
       - name: Save pull request HEAD and base to environment variables
         if: ${{ github.event_name == 'pull_request' }}
         run: |
