@@ -1873,7 +1873,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                             }
                         }
                         CharonTyKind::Adt(CharonTypeId::Tuple, genargs) => {
-                            let c_fprj = CharonFieldProjKind::Tuple(genargs.types.len());
+                            let c_fprj = CharonFieldProjKind::Tuple(genargs.types.elem_count());
                             current_ty = self.translate_ty(*ty);
                             c_provec.push((
                                 CharonProjectionElem::Field(c_fprj, c_fieldid),
