@@ -1,0 +1,8 @@
+[TEST] Build artifacts with --only-codegen
+[TEST] Artifacts produced
+[TEST] Verify pre-built artifacts
+Checking harness proofs::check_add_identity...
+Checking harness proofs::check_intentional_failure...
+Verification failed for - proofs::check_intentional_failure
+Complete - 1 successfully verified harnesses, 1 failures, 2 total.
+[TEST] Exit code: 1

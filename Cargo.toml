@@ -81,6 +81,7 @@ exclude = [
   "tests/script-based-pre/kani_lib_dep",
   "tests/script-based-pre/no_codegen",
   "tests/script-based-pre/no_codegen_error",
+  "tests/script-based-pre/verify_artifacts_cmd",
 ]
 
 [workspace.lints.clippy]

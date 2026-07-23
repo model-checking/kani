@@ -8,6 +8,7 @@ pub mod common;
 pub mod list_args;
 pub mod playback_args;
 pub mod std_args;
+pub mod verify_artifacts_args;
 
 use self::common::*;
 use crate::args::cargo::CargoTargetArgs;
@@ -175,6 +176,8 @@ pub enum StandaloneSubcommand {
     Playback(Box<playback_args::KaniPlaybackArgs>),
     /// Verify the rust standard library.
     VerifyStd(Box<std_args::VerifyStdArgs>),
+    /// Verify pre-built compiler artifacts without rebuilding.
+    VerifyArtifacts(Box<verify_artifacts_args::VerifyArtifactsArgs>),
 }
 
 #[derive(Debug, clap::Parser)]
@@ -570,6 +573,7 @@ impl ValidateArgs for StandaloneArgs {
 
         match &self.command {
             Some(StandaloneSubcommand::VerifyStd(args)) => args.validate()?,
+            Some(StandaloneSubcommand::VerifyArtifacts(args)) => args.validate()?,
             Some(StandaloneSubcommand::List(args)) => args.validate()?,
             Some(StandaloneSubcommand::Autoharness(args)) => args.validate()?,
             // TODO: Invoke PlaybackArgs::validate()
@@ -1258,5 +1262,29 @@ mod tests {
         let args = "kani input.rs --no-assert-contracts".split_whitespace();
         let err = StandaloneArgs::try_parse_from(args).unwrap().validate().unwrap_err();
         assert_eq!(err.kind(), ErrorKind::MissingRequiredArgument);
+    }
+
+    #[test]
+    fn check_verify_artifacts() {
+        let args = StandaloneArgs::try_parse_from(vec![
+            "kani",
+            "verify-artifacts",
+            "/some/artifact/dir",
+            "/another/dir",
+        ])
+        .unwrap();
+        let Some(StandaloneSubcommand::VerifyArtifacts(va)) = args.command else {
+            panic!("expected VerifyArtifacts subcommand, got {:?}", args.command);
+        };
+        assert_eq!(
+            va.artifact_dirs,
+            vec![PathBuf::from("/some/artifact/dir"), PathBuf::from("/another/dir")]
+        );
+    }
+
+    #[test]
+    fn check_verify_artifacts_requires_dir() {
+        let result = StandaloneArgs::try_parse_from(vec!["kani", "verify-artifacts"]);
+        assert!(result.is_err(), "verify-artifacts with no dirs should fail to parse");
     }
 }
