@@ -1,0 +1,10 @@
+Checking harness check_btreeset...
+
+ ** 3 of 3 cover properties satisfied
+
+Checking harness check_btreemap...
+
+ ** 3 of 3 cover properties satisfied
+
+Manual Harness Summary:
+Complete - 2 successfully verified harnesses, 0 failures, 2 total.
