@@ -170,6 +170,20 @@ impl Callbacks for KaniCompiler {
             // injecting `extern crate std` there would pull in a *second* `std`
             // (and `core`), causing duplicate-lang-item errors (E0152).
             && compiler.sess.opts.externs.get("std").is_some()
+            // Do not inject into external (registry/git) dependencies: the
+            // `#[macro_use]` scope is ambiguous (E0659) with an explicit glob
+            // import of the same macro name, and external crates may
+            // legitimately do that (e.g. libc >= 0.2.188 re-exports
+            // `core::assert` in an internal prelude that its modules
+            // glob-import, and calls `assert!`). External dependencies thus
+            // use the real `assert!`/`panic!`/... macros, which Kani models
+            // soundly, consistent with `no_std` dependencies which never had
+            // the overrides. Cargo passes `--cap-lints allow` exactly for
+            // non-local dependencies, so use that as the discriminator (like
+            // rustc's `Session::opts` consumers do for dependency-only
+            // behavior); local path/workspace crates and standalone `kani`
+            // builds keep the overrides.
+            && compiler.sess.opts.lint_cap.is_none()
         {
             inject_kani_macro_overrides(compiler, krate);
         }
