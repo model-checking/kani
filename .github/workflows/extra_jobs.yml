@@ -44,14 +44,8 @@ jobs:
       with:
         dot: true
 
-  end-to-end-bench:
-    name: End-to-End Benchmarks
-    needs: auto-label
-    if: ${{ contains(needs.auto-label.outputs.all-labels, 'Z-EndToEndBenchCI') && github.event_name != 'merge_group' }}
-    uses: ./.github/workflows/bench-e2e.yml
-
-  compiler-bench:
-    name: Compiler Benchmarks
-    needs: auto-label
-    if: ${{ contains(needs.auto-label.outputs.all-labels, 'Z-CompilerBenchCI') && github.event_name != 'merge_group' }}
-    uses: ./.github/workflows/bench-compiler.yml
+  # Note: the label-gated benchmark workflows (bench-pr.yml) used to be
+  # invoked from here, but they build and run the code proposed in the pull
+  # request, which must not happen in this workflow's trusted
+  # `pull_request_target` context. They now trigger on `pull_request`
+  # events directly.
