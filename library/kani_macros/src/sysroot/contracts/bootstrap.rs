@@ -83,6 +83,17 @@ impl<'a> ContractConditionsHandler<'a> {
                         kani_register_contract(#recursion_ident)
                     }
                     kani::internal::REPLACE => {
+                        // When called from within kani::any() (Arbitrary input
+                        // generation), use the original body to avoid infinite
+                        // recursion from stub_verified replacing calls inside
+                        // Arbitrary impls. This early return avoids the replace
+                        // closure capturing function parameters by move.
+                        if kani::internal::in_arbitrary_context() {
+                            return #block
+                        }
+                        // The replace closure must remain at the top level of this
+                        // arm so that subsequent contract attributes can find it via
+                        // expect_closure_in_match.
                         #replace_closure;
                         kani_register_contract(#replace_ident)
                     }
