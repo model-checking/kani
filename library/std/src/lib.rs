@@ -32,8 +32,9 @@ pub mod prelude {
     // Kani's versions here makes `#![no_std]` dependencies that import this prelude
     // explicitly (`extern crate std; use std::prelude::v1::*;`, e.g. lazy_static)
     // ambiguous against the injected core prelude (E0659). Instead, kani-compiler
-    // injects those overrides only into the crate under verification (see
-    // kani_compiler's macro-override injection). The print family is defined in this
+    // injects those overrides only into local crates, not external (registry/git)
+    // dependencies (see kani_compiler's macro-override injection). The print family
+    // is defined in this
     // crate (std) with no core-prelude counterpart, so overriding it here is safe and
     // applies everywhere (dependencies included), which is important so that a
     // dependency's `println!` does not run real formatting/IO during verification.
