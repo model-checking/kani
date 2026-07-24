@@ -124,16 +124,39 @@ macro_rules! generate_models {
                 let (byte_offset, overflow) = offset.overflowing_mul(t_size);
                 kani::safety_check(!overflow, "Offset in bytes overflows isize");
                 let orig_ptr = ptr.to_const_ptr();
-                // NOTE: For CBMC, using the pointer addition can have unexpected behavior
-                // when the offset is higher than the object bits since it will wrap around.
-                // See for more details: https://github.com/model-checking/kani/issues/1150
+                // The equation below asserts Rust's semantic contract for `offset`:
+                // the address of the result must equal the address of the original
+                // pointer plus the byte offset, in full-width (2^64) integer
+                // arithmetic.
                 //
-                // However, when I tried implementing this using usize operation, we got some
-                // unexpected failures that still require further debugging.
-                // let new_ptr = orig_ptr.addr().wrapping_add_signed(byte_offset) as *const T;
+                // Besides documenting that contract, it guards against CBMC's
+                // pointer encoding wrapping offsets at
+                // 2^(pointer_width - object_bits) rather than 2^pointer_width: for
+                // symbolic offsets that are multiples of 2^(64 - object_bits) the
+                // pointer addition below aliases back into the allocation, so the
+                // same-allocation check alone would pass spuriously and hide
+                // genuine UB (https://github.com/model-checking/kani/issues/1150).
+                // CBMC fixed this in https://github.com/diffblue/cbmc/pull/9134 by
+                // directing out-of-range results to the invalid object at a
+                // nondeterministic address (which makes the equation below
+                // refutable, so this safety check still fails; the two mechanisms
+                // agree); the guard remains necessary for CBMC versions without
+                // that fix, and remains correct with it.
+                //
+                // Implementation notes:
+                // * `addr()` (a pointer-to-integer transmute) is deliberately used
+                //   here rather than `kani::mem::pointer_offset`: CBMC's simplifier
+                //   rewrites `POINTER_OFFSET(p + k)` to `POINTER_OFFSET(p) + k` in
+                //   full-width arithmetic, which would make a pointer_offset-based
+                //   equation trivially true and hide the wrap again.
+                // * This formulation keeps all operations in the pointer domain (no
+                //   integer-to-pointer casts, which make the solver case-split the
+                //   address over every object and blow up, e.g., on harnesses using
+                //   `sort()`).
                 let new_ptr = orig_ptr.wrapping_byte_offset(byte_offset);
+                let no_wrap = new_ptr.addr() == orig_ptr.addr().wrapping_add(byte_offset as usize);
                 kani::safety_check(
-                    kani::mem::same_allocation_internal(orig_ptr, new_ptr),
+                    no_wrap && kani::mem::same_allocation_internal(orig_ptr, new_ptr),
                     "Offset result and original pointer must point to the same allocation",
                 );
                 P::from_const_ptr(new_ptr)
