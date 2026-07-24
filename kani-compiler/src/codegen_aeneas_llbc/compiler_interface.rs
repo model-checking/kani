@@ -13,7 +13,7 @@ use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_ite
 use crate::kani_middle::transform::{BodyTransformation, GlobalPasses};
 use crate::kani_queries::QUERY_DB;
 use charon_lib::ast::{AnyTransId, TranslatedCrate, meta::ItemOpacity::*, meta::Span};
-use charon_lib::errors::ErrorCtx;
+use charon_lib::errors::{ErrorCtx, Level};
 use charon_lib::name_matcher::NamePattern;
 use charon_lib::options::{MirLevel, TranslateOptions};
 use charon_lib::transform::TransformCtx;
@@ -399,7 +399,7 @@ fn get_translate_options(tcx: &TranslatedCrate, error_ctx: &mut ErrorCtx) -> Tra
         Ok(p) => Ok(p),
         Err(e) => {
             let msg = format!("failed to parse pattern `{s}` ({e})");
-            Err(error_ctx.span_err(&TranslatedCrate::default(), Span::dummy(), &msg))
+            Err(error_ctx.span_err(&TranslatedCrate::default(), Span::dummy(), &msg, Level::Error))
         }
     };
     let options = tcx.options.clone();
