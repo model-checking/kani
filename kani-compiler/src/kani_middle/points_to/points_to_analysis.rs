@@ -698,6 +698,9 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::UncheckedDiv
         | Intrinsic::UncheckedRem
         | Intrinsic::Unlikely
+        // Same argument shape/semantics as `WriteBytes` below (volatility is not
+        // an aliasing concern), so it is likewise identity-aliasing.
+        | Intrinsic::VolatileSetMemory
         | Intrinsic::VtableSize
         | Intrinsic::VtableAlign
         | Intrinsic::WrappingAdd

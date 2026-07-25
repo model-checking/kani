@@ -576,11 +576,45 @@ impl GotocCtx<'_, '_> {
             Intrinsic::UncheckedDiv => codegen_op_with_div_overflow_check!(div),
             Intrinsic::UncheckedRem => codegen_op_with_div_overflow_check!(rem),
             Intrinsic::Unlikely => self.codegen_expr_to_place_stable(place, fargs.remove(0), loc),
-            Intrinsic::VolatileCopyMemory => unstable_codegen!(codegen_intrinsic_copy!(Memmove)),
+            // Volatility is an I/O-observability property (it tells the
+            // optimizer not to elide or reorder the access) and not a
+            // memory-safety property: the UB conditions for
+            // `volatile_copy_memory`/`volatile_copy_nonoverlapping_memory`
+            // are exactly those of the non-volatile `copy`/
+            // `copy_nonoverlapping` intrinsics (see `codegen_copy`'s doc
+            // comment). Since Kani's codegen never performs the kind of
+            // optimization that volatility is meant to suppress, there is
+            // nothing extra to model, and it is sound to reuse
+            // `codegen_copy` as-is.
+            //
+            // Both intrinsics are declared as `(dst, src, count)`, but
+            // `codegen_copy` expects `fargs`/`farg_types` ordered as
+            // `[src, dst, ..]` (it does `fargs.remove(0)` for `src` followed
+            // by `fargs.remove(0)` for `dst`). So we swap the first two
+            // entries of `fargs`, and build a `farg_types` slice with the
+            // first two entries swapped as well, before delegating.
+            Intrinsic::VolatileCopyMemory => {
+                fargs.swap(0, 1);
+                let swapped_types = [farg_types[1], farg_types[0]];
+                self.codegen_copy(intrinsic_str, false, fargs, &swapped_types, Some(place), loc)
+            }
             Intrinsic::VolatileCopyNonOverlappingMemory => {
-                unstable_codegen!(codegen_intrinsic_copy!(Memcpy))
+                fargs.swap(0, 1);
+                let swapped_types = [farg_types[1], farg_types[0]];
+                self.codegen_copy(intrinsic_str, true, fargs, &swapped_types, Some(place), loc)
             }
             Intrinsic::VolatileLoad => self.codegen_volatile_load(fargs, farg_types, place, loc),
+            // `volatile_set_memory(dst, val, count)` has the same argument
+            // order as `write_bytes(dst, val, count)` (no `dst`/`src` swap
+            // is needed, unlike the two copy intrinsics above). As with the
+            // copy intrinsics, volatility here is purely an
+            // optimizer-observability concern, so the UB conditions match
+            // `write_bytes` exactly and `codegen_write_bytes` can be reused
+            // unmodified.
+            Intrinsic::VolatileSetMemory => {
+                assert!(self.place_ty_stable(place).kind().is_unit());
+                self.codegen_write_bytes(fargs, farg_types, loc)
+            }
             Intrinsic::VolatileStore => {
                 assert!(self.place_ty_stable(place).kind().is_unit());
                 self.codegen_volatile_store(fargs, farg_types, loc)
