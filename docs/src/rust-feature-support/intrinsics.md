@@ -232,10 +232,10 @@ unchecked_sub | Yes | |
 unlikely | Yes | |
 unreachable | Yes | |
 variant_count | Yes | |
-volatile_copy_memory | No | See [Notes - Concurrency](#concurrency) |
-volatile_copy_nonoverlapping_memory | No | See [Notes - Concurrency](#concurrency) |
+volatile_copy_memory | Partial | See [Notes - Concurrency](#concurrency) |
+volatile_copy_nonoverlapping_memory | Partial | See [Notes - Concurrency](#concurrency) |
 volatile_load | Partial | See [Notes - Concurrency](#concurrency) |
-volatile_set_memory | No | See [Notes - Concurrency](#concurrency) |
+volatile_set_memory | Partial | See [Notes - Concurrency](#concurrency) |
 volatile_store | Partial | See [Notes - Concurrency](#concurrency) |
 wrapping_add | Yes | |
 wrapping_mul | Yes | |
