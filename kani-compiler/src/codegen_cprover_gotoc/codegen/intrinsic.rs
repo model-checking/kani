@@ -569,7 +569,15 @@ impl GotocCtx<'_, '_> {
                 assert!(self.place_ty_stable(place).kind().is_unit());
                 let dst = fargs.remove(0);
                 let src = fargs.remove(0);
-                dst.dereference().assign(src, loc)
+                let dst_typ = farg_types[0];
+                if self.is_zst_stable(pointee_type_stable(dst_typ).unwrap()) {
+                    // Do not dereference (and assign) a ZST -- same guard as
+                    // `codegen_volatile_store`. A ZST pointer may legally be
+                    // dangling-but-aligned, so this path is reachable.
+                    Stmt::skip(loc)
+                } else {
+                    dst.dereference().assign(src, loc)
+                }
             }
             Intrinsic::UncheckedDiv => codegen_op_with_div_overflow_check!(div),
             Intrinsic::UncheckedRem => codegen_op_with_div_overflow_check!(rem),

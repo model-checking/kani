@@ -290,7 +290,7 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
                             state.extend(&lvalue_set, &state.successors(&rvalue_set));
                         }
                         // Semantically equivalent *a = b.
-                        Intrinsic::VolatileStore => {
+                        Intrinsic::VolatileStore | Intrinsic::UnalignedVolatileStore => {
                             let lvalue_set = self.successors_for_deref(state, args[0].node.clone());
                             let rvalue_set =
                                 self.successors_for_operand(state, args[1].node.clone());

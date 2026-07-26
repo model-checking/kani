@@ -8,9 +8,11 @@
 // alignment assertion for them. That makes the modelling itself the thing worth
 // testing: each proof compares against a byte-wise oracle, so an implementation
 // that quietly read or wrote the *aligned* word instead would be caught rather
-// than silently pass. Reading a `u32` at byte offset 1 of the pattern below, the
-// only correct little-endian answer is 0x55443322; an alignment-assuming read
-// from offset 0 would give 0x44332211.
+// than silently pass. The oracle is built with `u32::from_ne_bytes` so the test
+// is byte-precise without assuming an endianness: reading a `u32` at byte offset
+// 1 must equal the native-order interpretation of bytes 1..5, whereas an
+// alignment-assuming read from offset 0 would give the interpretation of bytes
+// 0..4 -- different under either endianness.
 #![feature(core_intrinsics)]
 
 #[kani::proof]
@@ -18,7 +20,8 @@ fn check_unaligned_volatile_load_is_byte_precise() {
     let buf: [u8; 8] = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88];
     let p = unsafe { buf.as_ptr().add(1) } as *const u32;
     let v = unsafe { std::intrinsics::unaligned_volatile_load(p) };
-    assert_eq!(v, 0x55443322u32, "unaligned load must read bytes 1..5, byte-precisely");
+    let expect = u32::from_ne_bytes([buf[1], buf[2], buf[3], buf[4]]);
+    assert_eq!(v, expect, "unaligned load must read bytes 1..5, byte-precisely");
 }
 
 // The store direction: write a `u32` at byte offset 1 and check the neighbouring
@@ -28,12 +31,14 @@ fn check_unaligned_volatile_load_is_byte_precise() {
 fn check_unaligned_volatile_store_is_byte_precise() {
     let mut buf: [u8; 8] = [0u8; 8];
     let p = unsafe { buf.as_mut_ptr().add(1) } as *mut u32;
-    unsafe { std::intrinsics::unaligned_volatile_store(p, 0x55443322u32) };
+    let val: u32 = 0x55443322;
+    let bytes = val.to_ne_bytes();
+    unsafe { std::intrinsics::unaligned_volatile_store(p, val) };
     assert_eq!(buf[0], 0x00, "byte before the store must be untouched");
-    assert_eq!(buf[1], 0x22);
-    assert_eq!(buf[2], 0x33);
-    assert_eq!(buf[3], 0x44);
-    assert_eq!(buf[4], 0x55);
+    assert_eq!(buf[1], bytes[0]);
+    assert_eq!(buf[2], bytes[1]);
+    assert_eq!(buf[3], bytes[2]);
+    assert_eq!(buf[4], bytes[3]);
     assert_eq!(buf[5], 0x00, "byte after the store must be untouched");
 }
 
@@ -47,6 +52,16 @@ fn check_unaligned_volatile_load_symbolic_offset() {
     kani::assume(off <= 4);
     let p = unsafe { buf.as_ptr().add(off) } as *const u32;
     let v = unsafe { std::intrinsics::unaligned_volatile_load(p) };
-    let expect = u32::from_le_bytes([buf[off], buf[off + 1], buf[off + 2], buf[off + 3]]);
+    let expect = u32::from_ne_bytes([buf[off], buf[off + 1], buf[off + 2], buf[off + 3]]);
     assert_eq!(v, expect, "unaligned load must agree with a byte-wise oracle at every offset");
+}
+
+// A ZST store: `unaligned_volatile_store::<()>` must not attempt a dereference.
+// A ZST pointer may legally be dangling-but-aligned, which is why
+// `codegen_volatile_store` carries the same guard.
+#[kani::proof]
+fn check_zst_unaligned_volatile_store() {
+    let mut zst = ();
+    let p = &mut zst as *mut ();
+    unsafe { std::intrinsics::unaligned_volatile_store(p, ()) };
 }
