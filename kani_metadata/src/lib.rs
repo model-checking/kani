@@ -55,9 +55,11 @@ pub struct AutoHarnessMetadata {
 /// Reasons that Kani does not generate an automatic harness for a function.
 #[derive(Debug, Clone, Serialize, Deserialize, Display, EnumString)]
 pub enum AutoHarnessSkipReason {
-    /// The function is generic.
+    /// The function is generic and autoharness could not find a monomorphic instantiation to
+    /// verify. The payload gives the specific reason (e.g. const generic parameters, or trait
+    /// bounds that no candidate type satisfies).
     #[strum(serialize = "Generic Function")]
-    GenericFn,
+    GenericFn(String),
     /// A Kani-internal function: already a harness, implementation of a Kani associated item or Kani contract instrumentation functions).
     #[strum(serialize = "Kani implementation")]
     KaniImpl,

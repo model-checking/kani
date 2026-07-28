@@ -450,15 +450,16 @@ fn args_satisfy_predicates(tcx: TyCtxt, def: FnDef, args: &GenericArgs) -> bool 
 /// generate an automatic harness. Substitute each type parameter with the first candidate from
 /// `generic_instantiation_candidates` such that all of the function's trait bounds are satisfied
 /// (using the same candidate for every type parameter), and erase lifetime parameters.
-/// Return `None` if no candidate satisfies the bounds, or if the function has const generic
-/// parameters, which we do not support instantiating yet.
-fn choose_generic_instantiation(tcx: TyCtxt, fn_item: CrateItem) -> Option<Instance> {
+/// Return the reason (to be attached to [AutoHarnessSkipReason::GenericFn]) if no candidate
+/// satisfies the bounds, or if the function has const generic parameters, which we do not
+/// support instantiating yet.
+fn choose_generic_instantiation(tcx: TyCtxt, fn_item: CrateItem) -> Result<Instance, String> {
     let TyKind::RigidTy(RigidTy::FnDef(def, identity_args)) = fn_item.ty().kind() else {
-        return None;
+        return Err("not a function definition".to_string());
     };
 
     if identity_args.0.iter().any(|arg| matches!(arg, GenericArgKind::Const(_))) {
-        return None;
+        return Err("const generic parameters are not supported yet".to_string());
     }
 
     for candidate in generic_instantiation_candidates() {
@@ -481,10 +482,17 @@ fn choose_generic_instantiation(tcx: TyCtxt, fn_item: CrateItem) -> Option<Insta
         if let Ok(instance) = Instance::resolve(def, &args)
             && instance.has_body()
         {
-            return Some(instance);
+            return Ok(instance);
         }
     }
-    None
+    Err(format!(
+        "no candidate type ({}) satisfies the function's trait bounds",
+        generic_instantiation_candidates()
+            .iter()
+            .map(|ty| ty.to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    ))
 }
 
 /// Partition every function in the crate into (chosen, skipped), where `chosen` is a vector of the Instances for which we'll generate automatic harnesses,
@@ -601,17 +609,16 @@ fn automatic_harness_partition(
         // and its name (e.g. `foo::<i32>`) reflects that.
         let instance = match Instance::try_from(func) {
             Ok(instance) => instance,
-            Err(_) => {
-                if let Some(instance) = choose_generic_instantiation(tcx, func) {
-                    instance
-                } else {
+            Err(_) => match choose_generic_instantiation(tcx, func) {
+                Ok(instance) => instance,
+                Err(detail) => {
                     skipped.insert(
                         crate::kani_middle::strip_local_crate_prefix(func.name()),
-                        AutoHarnessSkipReason::GenericFn,
+                        AutoHarnessSkipReason::GenericFn(detail),
                     );
                     continue;
                 }
-            }
+            },
         };
 
         if let Some(reason) = skip_reason(instance) {
