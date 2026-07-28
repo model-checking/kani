@@ -40,7 +40,7 @@ jobs:
 
     - name: Label PR
       id: labeler
-      uses: actions/labeler@v6
+      uses: actions/labeler@v7
       with:
         dot: true
 
