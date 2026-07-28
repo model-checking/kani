@@ -1,0 +1,11 @@
+| cargo_autoharness_generics | needs_exotic     | Generic Function    |
+| cargo_autoharness_generics | with_const       | Generic Function    |
+| cargo_autoharness_generics | Wrapper::<i32>::get | #[kani::proof]              | Success             |
+| cargo_autoharness_generics | contracted::<u32>   | #[kani::proof_for_contract] | Success             |
+| cargo_autoharness_generics | first::<i32>        | #[kani::proof]              | Success             |
+| cargo_autoharness_generics | identity::<i32>     | #[kani::proof]              | Success             |
+| cargo_autoharness_generics | max3::<i32>         | #[kani::proof]              | Success             |
+| cargo_autoharness_generics | pair::<i32, i32>    | #[kani::proof]              | Success             |
+| cargo_autoharness_generics | takes_impl::<u32>   | #[kani::proof]              | Success             |
+| cargo_autoharness_generics | buggy_add::<i32>    | #[kani::proof]              | Failure             |
+Complete - 7 successfully verified functions, 1 failures, 8 total.
