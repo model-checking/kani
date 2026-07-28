@@ -824,7 +824,12 @@ impl GotocCtx<'_, '_> {
                 } else {
                     offset_e
                 };
-                let expr = before.goto_expr.plus(idxe).dereference();
+                // The base expression is a pointer to the data if the slice was reached by
+                // dereferencing a fat pointer, but it is a flexible array if the slice was
+                // reached by a field projection on an unsized ADT (e.g. the trailing
+                // `data: [T]` field of `ArcInner<[T]>`). `Expr::index` dispatches on the type,
+                // handling both.
+                let expr = before.goto_expr.index(idxe);
                 let typ = TypeOrVariant::Type(elemt);
                 ProjectedPlace::try_new(
                     expr,
