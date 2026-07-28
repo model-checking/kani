@@ -105,6 +105,21 @@ This feature is experimental and is therefore subject to change.
 If you have ideas for improving the user experience of this feature,
 please add them to [this GitHub issue](https://github.com/model-checking/kani/issues/3832).
 
+## Type Safety Invariants
+If a type implements the [`Invariant`](https://model-checking.github.io/kani/crates/doc/kani/trait.Invariant.html) trait,
+Kani assumes that the nondeterministic values it generates for automatic harnesses respect the type's safety invariant,
+i.e., each generated value `v` satisfies `v.is_safe()`.
+This assumption applies to nested values as well: if a field of a generated value has a type that implements `Invariant`,
+the field's safety invariant is assumed to hold, even if the enclosing type does not implement `Invariant` itself.
+
+This matches the [Unsafe Code Guidelines' definition of a safety invariant](https://rust-lang.github.io/unsafe-code-guidelines/glossary.html#validity-and-safety-invariant):
+safe code is allowed to assume that the values it receives uphold their types' safety invariants,
+so verifying a function against invariant-violating inputs would produce spurious counterexamples.
+
+Note that automatic harnesses do not *assert* type invariants, e.g., they do not check that a function's return value satisfies `is_safe()`.
+To verify that a function preserves an invariant, add a [function contract](contracts.md) such as `#[kani::ensures(|result| result.is_safe())]`;
+autoharness verifies a function against its contract if it has one.
+
 ## Limitations
 ### Arguments Implementing Arbitrary
 Kani will only generate an automatic harness for a function if it can represent each of its arguments nondeterministically, without bounds.
