@@ -23,6 +23,7 @@
 mod arbitrary;
 mod bounded_arbitrary;
 mod float;
+mod invariant;
 mod iter;
 mod mem;
 mod mem_init;
@@ -49,6 +50,7 @@ macro_rules! kani_lib {
             kani_core::kani_intrinsics!();
             kani_core::generate_arbitrary!();
             kani_core::generate_bounded_arbitrary!();
+            kani_core::generate_invariant!();
             kani_core::generate_models!();
             kani_core::generate_iter!();
 
@@ -73,6 +75,7 @@ macro_rules! kani_lib {
         kani_core::kani_intrinsics!();
         kani_core::generate_arbitrary!();
         kani_core::generate_bounded_arbitrary!();
+        kani_core::generate_invariant!();
         kani_core::generate_models!();
         kani_core::generate_iter!();
 
