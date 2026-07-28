@@ -1194,7 +1194,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         let span = self.translate_span(mir_body.span);
         let arg_count = self.instance.fn_abi().unwrap().args.len();
         let vars = self.translate_body_locals(&mir_body);
-        let locals = CharonLocals { vars, arg_count };
+        let locals = CharonLocals { locals: vars, arg_count };
         let body: CharonBodyContents =
             mir_body.blocks.iter().map(|bb| self.translate_block(bb)).collect();
 
