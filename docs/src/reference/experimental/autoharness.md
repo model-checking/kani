@@ -105,6 +105,30 @@ This feature is experimental and is therefore subject to change.
 If you have ideas for improving the user experience of this feature,
 please add them to [this GitHub issue](https://github.com/model-checking/kani/issues/3832).
 
+## Raw Pointers
+For a function with raw pointer arguments (`*const T`/`*mut T`, including nested raw pointers),
+the generated harness produces pointers in a nondeterministic allocation state, provided that the
+pointee type implements `Arbitrary` (or can derive it). Each generated pointer is aligned and is either:
+- null,
+- out of bounds of its allocation (and thus invalid for reads or writes), or
+- valid: pointing to a nondeterministic value of the pointee type, which stays allocated for the entire harness.
+
+As a consequence, a function that dereferences a raw pointer argument without being able to rule out
+the null and out-of-bounds states will fail verification. For safe functions, such a failure points at a
+real robustness issue, since safe code can pass any pointer value. For functions whose safety relies on
+caller obligations (e.g., `unsafe fn`s with documented preconditions), add
+[function contracts](contracts.md) with Kani's
+[memory predicates](https://model-checking.github.io/kani/crates/doc/kani/mem/index.html) such as
+`#[kani::requires(kani::mem::can_dereference(ptr))]`: the automatic contract harness assumes the
+precondition, which excludes the invalid pointer states.
+
+Current limitations of the generated pointers:
+- Pointers are always aligned; misaligned-pointer bugs are not covered.
+- No pointers to deallocated objects are generated (Kani's memory predicates cannot reason about those).
+- Distinct pointer arguments never alias each other, and the pointee is always initialized in the valid state.
+- Raw pointers are only supported as direct arguments (possibly nested in other raw pointers), not behind
+  references or inside user-defined types.
+
 ## Limitations
 ### Arguments Implementing Arbitrary
 Kani will only generate an automatic harness for a function if it can represent each of its arguments nondeterministically, without bounds.
