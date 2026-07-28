@@ -300,6 +300,53 @@ fn implements_arbitrary(
     false
 }
 
+/// Inspect an `assume_safe::<T>()` (c.f. `KaniModel::AssumeSafe`) instantiation to determine if
+/// `T: Invariant`. The model looks like:
+/// ```rust
+/// fn assume_safe<T: Invariant>(value: T) -> T {
+///   kani::assume(value.is_safe());
+///   value
+/// }
+/// ```
+/// So we iterate over the call terminators in its body (`<T as Invariant>::is_safe` and
+/// `kani::assume`) and try to resolve them to Instances.
+/// `T` implements `Invariant` iff every callee resolves successfully (only the `is_safe` call
+/// can fail to resolve, and it does iff `T` does not implement `Invariant`).
+fn implements_invariant(
+    ty: Ty,
+    assume_safe_def: FnDef,
+    ty_invariant_cache: &mut FxHashMap<Ty, bool>,
+) -> bool {
+    if let Some(v) = ty_invariant_cache.get(&ty) {
+        return *v;
+    }
+
+    if ty.kind().rigid().is_none() {
+        return false;
+    }
+
+    let assume_safe_body =
+        Instance::resolve(assume_safe_def, &GenericArgs(vec![GenericArgKind::Type(ty)]))
+            .unwrap()
+            .body()
+            .unwrap();
+
+    let res = assume_safe_body.blocks.iter().all(|bb| {
+        let TerminatorKind::Call { func, .. } = &bb.terminator.kind else {
+            return true;
+        };
+        if let TyKind::RigidTy(RigidTy::FnDef(def, args)) =
+            func.ty(assume_safe_body.arg_locals()).unwrap().kind()
+        {
+            Instance::resolve(def, &args).is_ok()
+        } else {
+            true
+        }
+    });
+    ty_invariant_cache.insert(ty, res);
+    res
+}
+
 /// Is `ty` a struct or enum whose fields/variants implement Arbitrary, or a reference to such a
 /// type?
 fn can_derive_arbitrary(
