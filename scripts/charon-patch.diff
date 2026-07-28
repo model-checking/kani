@@ -1,18 +1,18 @@
 diff --git a/charon/Cargo.toml b/charon/Cargo.toml
-index 8af7fd79d..d12b89838 100644
+index 84b956a9..d425bbb5 100644
 --- a/charon/Cargo.toml
 +++ b/charon/Cargo.toml
 @@ -2,7 +2,7 @@
  name = "charon"
- version = "0.1.71"
- authors = ["Son Ho <hosonmarc@gmail.com>"]
+ version = "0.1.73"
+ authors = ["Son Ho <hosonmarc@gmail.com>", "Guillaume Boisseau <nadrieril+git@gmail.com>"]
 -edition = "2021"
 +edition = "2024"
  license = "Apache-2.0"
  
  [lib]
 diff --git a/charon/src/ids/vector.rs b/charon/src/ids/vector.rs
-index 24dd10839..3ef70b0bc 100644
+index 24dd1083..3ef70b0b 100644
 --- a/charon/src/ids/vector.rs
 +++ b/charon/src/ids/vector.rs
 @@ -260,7 +260,7 @@ where
@@ -25,7 +25,7 @@ index 24dd10839..3ef70b0bc 100644
      }
  
 diff --git a/charon/src/transform/expand_associated_types.rs b/charon/src/transform/expand_associated_types.rs
-index 2805ae0a1..23135dc5a 100644
+index ebd8c684..79095adf 100644
 --- a/charon/src/transform/expand_associated_types.rs
 +++ b/charon/src/transform/expand_associated_types.rs
 @@ -768,7 +768,7 @@ impl<'a> ComputeItemModifications<'a> {
@@ -37,3 +37,16 @@ index 2805ae0a1..23135dc5a 100644
      where
          F: Fn(TraitClauseId) -> TraitRefPath,
      {
+diff --git a/charon/src/transform/simplify_constants.rs b/charon/src/transform/simplify_constants.rs
+index a0ba23eb..75b96d08 100644
+--- a/charon/src/transform/simplify_constants.rs
++++ b/charon/src/transform/simplify_constants.rs
+@@ -11,7 +11,7 @@
+ //! handle the globals like function calls.
+ 
+ use itertools::Itertools;
+-use std::assert_matches::assert_matches;
++use std::assert_matches;
+ 
+ use crate::transform::TransformCtx;
+ use crate::ullbc_ast::*;

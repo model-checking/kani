@@ -168,7 +168,7 @@ impl LlbcCodegenBackend {
             todo!()
         }
 
-        let crate_data: charon_lib::export::CrateData = charon_lib::export::CrateData::new(&ccx);
+        let crate_data: charon_lib::export::CrateData = charon_lib::export::CrateData::new(ccx);
 
         // No output should be generated if user selected no_codegen.
         if !tcx.sess.opts.unstable_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
