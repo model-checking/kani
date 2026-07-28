@@ -1,10 +1,10 @@
 diff --git a/charon/Cargo.toml b/charon/Cargo.toml
-index cbba6280f..8b5b4ece8 100644
+index 8af7fd79d..d12b89838 100644
 --- a/charon/Cargo.toml
 +++ b/charon/Cargo.toml
 @@ -2,7 +2,7 @@
  name = "charon"
- version = "0.1.69"
+ version = "0.1.71"
  authors = ["Son Ho <hosonmarc@gmail.com>"]
 -edition = "2021"
 +edition = "2024"
@@ -25,10 +25,10 @@ index 24dd10839..3ef70b0bc 100644
      }
  
 diff --git a/charon/src/transform/expand_associated_types.rs b/charon/src/transform/expand_associated_types.rs
-index 2b8a5d162..4716da208 100644
+index 2805ae0a1..23135dc5a 100644
 --- a/charon/src/transform/expand_associated_types.rs
 +++ b/charon/src/transform/expand_associated_types.rs
-@@ -761,7 +761,7 @@ impl<'a> ComputeItemModifications<'a> {
+@@ -768,7 +768,7 @@ impl<'a> ComputeItemModifications<'a> {
          &'b mut self,
          clause: &TraitClause,
          clause_to_path: F,

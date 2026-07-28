@@ -44,7 +44,7 @@ use charon_lib::ast::{
     TypeVarId as CharonTypeVarId, UnOp as CharonUnOp, Var as CharonVar, VarId as CharonVarId,
     Variant as CharonVariant, VariantId as CharonVariantId,
 };
-use charon_lib::errors::{Error as CharonError, ErrorCtx as CharonErrorCtx};
+use charon_lib::errors::{Error as CharonError, ErrorCtx as CharonErrorCtx, Level as CharonLevel};
 use charon_lib::ids::Vector as CharonVector;
 use charon_lib::ullbc_ast::{
     BlockData as CharonBlockData, BlockId as CharonBlockId, BodyContents as CharonBodyContents,
@@ -115,8 +115,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         self.tcx
     }
 
-    fn span_err(&mut self, span: CharonSpan, msg: &str) -> CharonError {
-        self.errors.span_err(self.translated, span, msg)
+    fn span_err(&mut self, span: CharonSpan, msg: &str, level: CharonLevel) -> CharonError {
+        self.errors.span_err(self.translated, span, msg, level)
     }
 
     fn translate_traitdecl(&mut self, trait_def: TraitDef) -> CharonTraitDeclId {
@@ -715,7 +715,15 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         // For now, assume all items are transparent
         let opacity = CharonItemOpacity::Transparent;
 
-        Ok(CharonItemMeta { span, source_text, attr_info, name, is_local, opacity })
+        Ok(CharonItemMeta {
+            span,
+            source_text,
+            attr_info,
+            name,
+            is_local,
+            opacity,
+            lang_item: None,
+        })
     }
 
     fn translate_item_meta_from_defid(&mut self, defid: DefId) -> CharonItemMeta {
@@ -736,7 +744,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         // For now, assume all items are transparent
         let opacity = CharonItemOpacity::Transparent;
 
-        CharonItemMeta { span, source_text, attr_info, name, is_local, opacity }
+        CharonItemMeta { span, source_text, attr_info, name, is_local, opacity, lang_item: None }
     }
 
     fn translate_item_meta_adt(&mut self, adt: AdtDef) -> Result<CharonItemMeta, CharonError> {
@@ -756,7 +764,15 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         // For now, assume all items are transparent
         let opacity = CharonItemOpacity::Transparent;
 
-        Ok(CharonItemMeta { span, source_text, attr_info, name, is_local, opacity })
+        Ok(CharonItemMeta {
+            span,
+            source_text,
+            attr_info,
+            name,
+            is_local,
+            opacity,
+            lang_item: None,
+        })
     }
 
     fn is_builtin_fun(&mut self, func_def: InstanceDef) -> bool {
