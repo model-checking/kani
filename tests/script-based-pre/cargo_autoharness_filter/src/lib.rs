@@ -192,13 +192,14 @@ mod yes_harness {
     fn f_ref(x: u32, _y: &i32) -> u32 {
         x
     }
+
+    fn f_generic<T>(x: u32, _y: T) -> u32 {
+        x
+    }
 }
 
 mod no_harness {
     use crate::{DerivesArbitrary, DoesntImplementArbitrary};
-    fn unsupported_generic<T>(x: u32, _y: T) -> u32 {
-        x
-    }
     fn unsupported_const_pointer(x: u32, _y: *const i32) -> u32 {
         x
     }

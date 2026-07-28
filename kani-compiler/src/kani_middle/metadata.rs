@@ -139,7 +139,11 @@ pub fn gen_automatic_proof_metadata(
 
     let kani_attributes = KaniAttributes::for_instance(tcx, *fn_to_verify);
     let harness_kind = if kani_attributes.has_contract() {
-        HarnessKind::ProofForContract { target_fn: pretty_name.clone() }
+        // Use the definition's name rather than the instance's (`pretty_name`), since the two
+        // differ for generic functions under contract (e.g. `foo::<i32>` vs. `foo`), and
+        // `gen_contracts_metadata` matches `target_fn` against the definition-level names stored
+        // in `ContractedFunction`.
+        HarnessKind::ProofForContract { target_fn: strip_local_crate_prefix(def.name()) }
     } else {
         HarnessKind::Proof
     };

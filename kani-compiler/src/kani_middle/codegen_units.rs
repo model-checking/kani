@@ -24,13 +24,17 @@ use kani_metadata::{
 use regex::RegexSet;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_hir::def_id::DefId;
-use rustc_middle::ty::TyCtxt;
+use rustc_infer::infer::TyCtxtInferExt;
+use rustc_middle::ty::{self, TyCtxt, TypingMode};
 use rustc_public::mir::mono::Instance;
 use rustc_public::rustc_internal;
-use rustc_public::ty::{FnDef, GenericArgKind, GenericArgs, RigidTy, Ty, TyKind};
+use rustc_public::ty::{
+    FnDef, GenericArgKind, GenericArgs, IntTy, Region, RegionKind, RigidTy, Ty, TyKind, UintTy,
+};
 use rustc_public::{CrateDef, CrateItem};
 use rustc_public_bridge::IndexedVal;
 use rustc_session::config::OutputType;
+use rustc_trait_selection::traits::{Obligation, ObligationCause, ObligationCtxt};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::File;
 use std::io::BufWriter;
@@ -410,6 +414,79 @@ fn autoharness_filtered_out(
     !included || excluded
 }
 
+/// The candidate types for instantiating the type parameters of a generic function, in the order
+/// in which we try them. We start with `i32` since that is Rust's default integer type, and
+/// primitive types satisfy the most common trait bounds (`Copy`, `Clone`, `Ord`, `Hash`,
+/// `Default`, `Debug`, etc.) as well as Kani's `Arbitrary`.
+fn generic_instantiation_candidates() -> Vec<Ty> {
+    vec![
+        Ty::from_rigid_kind(RigidTy::Int(IntTy::I32)),
+        Ty::from_rigid_kind(RigidTy::Uint(UintTy::U32)),
+        Ty::from_rigid_kind(RigidTy::Uint(UintTy::Usize)),
+        Ty::from_rigid_kind(RigidTy::Bool),
+        Ty::from_rigid_kind(RigidTy::Char),
+    ]
+}
+
+/// Check whether instantiating the generic parameters of `def` with `args` satisfies all of
+/// `def`'s predicates (trait bounds and where clauses).
+/// `args` must be fully monomorphic.
+fn args_satisfy_predicates(tcx: TyCtxt, def: FnDef, args: &GenericArgs) -> bool {
+    let infcx = tcx.infer_ctxt().build(TypingMode::PostAnalysis);
+    let ocx = ObligationCtxt::new(&infcx);
+    let param_env = ty::ParamEnv::empty();
+    let cause = ObligationCause::dummy();
+
+    let def_id = rustc_internal::internal(tcx, def.def_id());
+    let args_internal = rustc_internal::internal(tcx, args);
+    let predicates = tcx.predicates_of(def_id).instantiate(tcx, args_internal);
+    for (predicate, _span) in predicates {
+        ocx.register_obligation(Obligation::new(tcx, cause.clone(), param_env, predicate));
+    }
+    ocx.evaluate_obligations_error_on_ambiguity().is_empty()
+}
+
+/// Try to find a monomorphic instantiation of the generic function `fn_item` for which we can
+/// generate an automatic harness. Substitute each type parameter with the first candidate from
+/// `generic_instantiation_candidates` such that all of the function's trait bounds are satisfied
+/// (using the same candidate for every type parameter), and erase lifetime parameters.
+/// Return `None` if no candidate satisfies the bounds, or if the function has const generic
+/// parameters, which we do not support instantiating yet.
+fn choose_generic_instantiation(tcx: TyCtxt, fn_item: CrateItem) -> Option<Instance> {
+    let TyKind::RigidTy(RigidTy::FnDef(def, identity_args)) = fn_item.ty().kind() else {
+        return None;
+    };
+
+    if identity_args.0.iter().any(|arg| matches!(arg, GenericArgKind::Const(_))) {
+        return None;
+    }
+
+    for candidate in generic_instantiation_candidates() {
+        let args = GenericArgs(
+            identity_args
+                .0
+                .iter()
+                .map(|arg| match arg {
+                    GenericArgKind::Type(_) => GenericArgKind::Type(candidate),
+                    GenericArgKind::Lifetime(_) => {
+                        GenericArgKind::Lifetime(Region { kind: RegionKind::ReErased })
+                    }
+                    GenericArgKind::Const(_) => unreachable!("const generics filtered out above"),
+                })
+                .collect(),
+        );
+        if !args_satisfy_predicates(tcx, def, &args) {
+            continue;
+        }
+        if let Ok(instance) = Instance::resolve(def, &args)
+            && instance.has_body()
+        {
+            return Some(instance);
+        }
+    }
+    None
+}
+
 /// Partition every function in the crate into (chosen, skipped), where `chosen` is a vector of the Instances for which we'll generate automatic harnesses,
 /// and `skipped` is a map of function names to the reason why we skipped them.
 fn automatic_harness_partition(
@@ -435,21 +512,10 @@ fn automatic_harness_partition(
     // Cache whether a type implements or can derive Arbitrary
     let mut ty_arbitrary_cache: FxHashMap<Ty, bool> = FxHashMap::default();
 
-    // If `func` is not eligible for an automatic harness, return the reason why; if it is eligible, return None.
+    // If `instance` is not eligible for an automatic harness, return the reason why; if it is eligible, return None.
     // Note that we only return one reason for ineligiblity, when there could be multiple;
     // we can revisit this implementation choice in the future if users request more verbose output.
-    let mut skip_reason = |fn_item: CrateItem| -> Option<AutoHarnessSkipReason> {
-        if KaniAttributes::for_def_id(tcx, fn_item.def_id()).is_kani_instrumentation() {
-            return Some(AutoHarnessSkipReason::KaniImpl);
-        }
-
-        let instance = match Instance::try_from(fn_item) {
-            Ok(inst) => inst,
-            Err(_) => {
-                return Some(AutoHarnessSkipReason::GenericFn);
-            }
-        };
-
+    let mut skip_reason = |instance: Instance| -> Option<AutoHarnessSkipReason> {
         if !instance.has_body() {
             return Some(AutoHarnessSkipReason::NoBody);
         }
@@ -475,7 +541,8 @@ fn automatic_harness_partition(
         }
 
         // Each argument of `instance` must implement Arbitrary.
-        // Note that we've already filtered out generic functions, so we know that each of these arguments has a concrete type.
+        // Note that generic functions have been instantiated with concrete types at this point,
+        // so we know that each of these arguments has a concrete type.
         let mut problematic_args = vec![];
         for (idx, arg) in body.arg_locals().iter().enumerate() {
             if !ty_arbitrary_cache.contains_key(&arg.ty) {
@@ -510,10 +577,36 @@ fn automatic_harness_partition(
     let mut skipped = BTreeMap::new();
 
     for func in crate_fns {
-        if let Some(reason) = skip_reason(func) {
-            skipped.insert(crate::kani_middle::strip_local_crate_prefix(func.name()), reason);
+        if KaniAttributes::for_def_id(tcx, func.def_id()).is_kani_instrumentation() {
+            skipped.insert(
+                crate::kani_middle::strip_local_crate_prefix(func.name()),
+                AutoHarnessSkipReason::KaniImpl,
+            );
+            continue;
+        }
+
+        // For generic functions, try to find a monomorphic instantiation whose bounds are
+        // satisfied; the generated harness verifies the function for that instantiation only,
+        // and its name (e.g. `foo::<i32>`) reflects that.
+        let instance = match Instance::try_from(func) {
+            Ok(instance) => instance,
+            Err(_) => {
+                if let Some(instance) = choose_generic_instantiation(tcx, func) {
+                    instance
+                } else {
+                    skipped.insert(
+                        crate::kani_middle::strip_local_crate_prefix(func.name()),
+                        AutoHarnessSkipReason::GenericFn,
+                    );
+                    continue;
+                }
+            }
+        };
+
+        if let Some(reason) = skip_reason(instance) {
+            skipped.insert(crate::kani_middle::strip_local_crate_prefix(instance.name()), reason);
         } else {
-            chosen.push(Instance::try_from(func).unwrap());
+            chosen.push(instance);
         }
     }
 
