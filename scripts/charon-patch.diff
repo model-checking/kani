@@ -1,16 +1,134 @@
 diff --git a/charon/Cargo.toml b/charon/Cargo.toml
-index 76e38f7e..33b47bc2 100644
+index ce25cc2f..1e7ac649 100644
 --- a/charon/Cargo.toml
 +++ b/charon/Cargo.toml
 @@ -2,7 +2,7 @@
  name = "charon"
- version = "0.1.76"
+ version = "0.1.82"
  authors = ["Son Ho <hosonmarc@gmail.com>", "Guillaume Boisseau <nadrieril+git@gmail.com>"]
 -edition = "2021"
 +edition = "2024"
  license = "Apache-2.0"
  
  [lib]
+@@ -37,7 +37,7 @@ path = "tests/cargo.rs"
+ harness = false
+ 
+ [dependencies]
+-annotate-snippets = { git = "https://github.com/rust-lang/annotate-snippets-rs", version = "0.11.5" }
++annotate-snippets = "0.11.4"
+ anstream = "0.6.18"
+ anyhow = "1.0.81"
+ assert_cmd = "2.0"
+diff --git a/charon/src/errors.rs b/charon/src/errors.rs
+index 6d0593e4..69f9ae55 100644
+--- a/charon/src/errors.rs
++++ b/charon/src/errors.rs
+@@ -13,11 +13,11 @@ use std::collections::{HashMap, HashSet};
+ macro_rules! register_error {
+     ($ctx:expr, crate($krate:expr), $span: expr, $($fmt:tt)*) => {{
+         let msg = format!($($fmt)*);
+-        $ctx.span_err($krate, $span, &msg, $crate::errors::Level::WARNING)
++        $ctx.span_err($krate, $span, &msg, $crate::errors::Level::Warning)
+     }};
+     ($ctx:expr, $span: expr, $($fmt:tt)*) => {{
+         let msg = format!($($fmt)*);
+-        $ctx.span_err($span, &msg, $crate::errors::Level::WARNING)
++        $ctx.span_err($span, &msg, $crate::errors::Level::Warning)
+     }};
+ }
+ pub use register_error;
+@@ -78,30 +78,38 @@ pub struct Error {
+ impl Error {
+     pub(crate) fn render(&self, krate: &TranslatedCrate, level: Level) -> String {
+         use annotate_snippets::*;
+-        let span = self.span.span;
++        let msg_indent = format!("{level:?}: ").len();
++        // If the message is multiline, indent the other lines to match the first line.
++        let mut msg = self
++            .msg
++            .replace('\n', &format!("\n{}", str::repeat(" ", msg_indent)));
+ 
+-        let mut group = Group::new();
++        let span = self.span.span;
+         let origin;
+-        if let Some(file) = krate.files.get(span.file_id) {
+-            origin = format!("{}", file.name);
++        let message = if let Some(file) = krate.files.get(span.file_id) {
+             if let Some(source) = &file.contents {
++                origin = format!("{}", file.name);
+                 let snippet = Snippet::source(source)
+                     .origin(&origin)
+                     .fold(true)
+-                    .annotation(AnnotationKind::Primary.span(span.to_byte_range(source)));
+-                group = group.element(snippet);
++                    .annotation(level.span(span.to_byte_range(source)));
++                level.title(&msg).snippet(snippet)
+             } else {
+                 // Show just the file and line/col.
+-                let origin = Origin::new(&origin)
+-                    .line(span.beg.line)
+-                    .char_column(span.beg.col + 1)
+-                    .primary(true);
+-                group = group.element(origin);
++                msg = format!(
++                    "{msg}\n --> {}:{}:{}",
++                    file.name,
++                    span.beg.line,
++                    span.beg.col + 1
++                );
++                level.title(&msg)
+             }
+-        }
+-        let message = level.header(&self.msg).group(group);
++        } else {
++            level.title(&msg)
++        };
+ 
+-        Renderer::styled().render(message).to_string()
++        let out = Renderer::styled().render(message).to_string();
++        out
+     }
+ }
+ 
+@@ -224,8 +232,8 @@ impl ErrorCtx {
+         msg: &str,
+         level: Level,
+     ) -> Error {
+-        let level = if level == Level::WARNING && self.error_on_warnings {
+-            Level::ERROR
++        let level = if level == Level::Warning && self.error_on_warnings {
++            Level::Error
+         } else {
+             level
+         };
+@@ -303,7 +311,7 @@ impl ErrorCtx {
+         // Sort by file id to avoid output instability.
+         by_file.sort_by_key(|(file_id, ..)| *file_id);
+ 
+-        let level = Level::NOTE;
++        let level = Level::Note;
+         let snippets = by_file.iter().map(|(_, origin, source, spans)| {
+             Snippet::source(source)
+                 .origin(&origin)
+@@ -311,7 +319,7 @@ impl ErrorCtx {
+                 .annotations(
+                     spans
+                         .iter()
+-                        .map(|span| AnnotationKind::Context.span(span.span.to_byte_range(source))),
++                        .map(|span| level.span(span.span.to_byte_range(source))),
+                 )
+         });
+ 
+@@ -320,7 +328,7 @@ impl ErrorCtx {
+              which is (transitively) used at the following location(s):",
+             krate.into_fmt().format_object(id)
+         );
+-        let message = level.header(&msg).group(Group::new().elements(snippets));
++        let message = level.title(&msg).snippets(snippets);
+         let out = Renderer::styled().render(message).to_string();
+         anstream::eprintln!("{}", out);
+     }
 diff --git a/charon/src/ids/vector.rs b/charon/src/ids/vector.rs
 index dbc354e2..aecb95b2 100644
 --- a/charon/src/ids/vector.rs
@@ -24,6 +142,19 @@ index dbc354e2..aecb95b2 100644
          self.vector.indices()
      }
  
+diff --git a/charon/src/transform/check_generics.rs b/charon/src/transform/check_generics.rs
+index eb8a8ada..f06ed12a 100644
+--- a/charon/src/transform/check_generics.rs
++++ b/charon/src/transform/check_generics.rs
+@@ -42,7 +42,7 @@ impl CheckGenericsVisitor<'_> {
+                 .join("\n  "),
+         );
+         // This is a fatal error: the output llbc is inconsistent and should not be used.
+-        self.ctx.span_err(self.span, &msg, Level::ERROR);
++        self.ctx.span_err(self.span, &msg, Level::Error);
+     }
+ 
+     /// For pretty error printing. This can print values that we encounter because we track binders
 diff --git a/charon/src/transform/expand_associated_types.rs b/charon/src/transform/expand_associated_types.rs
 index 28be9543..7cf2d870 100644
 --- a/charon/src/transform/expand_associated_types.rs
@@ -38,7 +169,7 @@ index 28be9543..7cf2d870 100644
          let clause_path = clause_to_path(clause.clause_id);
          self.compute_extra_params_for_trait(trait_id)
 diff --git a/charon/src/transform/simplify_constants.rs b/charon/src/transform/simplify_constants.rs
-index a0ba23eb..75b96d08 100644
+index 7f149ad8..6054f703 100644
 --- a/charon/src/transform/simplify_constants.rs
 +++ b/charon/src/transform/simplify_constants.rs
 @@ -11,7 +11,7 @@

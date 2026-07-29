@@ -1568,6 +1568,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 Some(CharonRawStatement::Assert(CharonAssert {
                     cond: self.translate_operand(cond),
                     expected: *expected,
+                    on_failure: CharonAbortKind::Panic(None),
                 })),
                 CharonRawTerminator::Goto { target: CharonBlockId::from_usize(*target) },
             ),
