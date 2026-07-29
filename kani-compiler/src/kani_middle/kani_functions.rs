@@ -83,6 +83,10 @@ pub enum KaniModel {
     AssumeSafe,
     #[strum(serialize = "BoundedAnyModel")]
     BoundedAny,
+    #[strum(serialize = "CheckDebugFmtModel")]
+    CheckDebugFmt,
+    #[strum(serialize = "CheckDisplayFmtModel")]
+    CheckDisplayFmt,
     #[strum(serialize = "CopyInitStateModel")]
     CopyInitState,
     #[strum(serialize = "CopyInitStateSingleModel")]
