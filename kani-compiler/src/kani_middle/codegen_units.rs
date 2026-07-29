@@ -29,7 +29,8 @@ use rustc_middle::ty::{self, TyCtxt, TypingMode};
 use rustc_public::mir::mono::Instance;
 use rustc_public::rustc_internal;
 use rustc_public::ty::{
-    FnDef, GenericArgKind, GenericArgs, IntTy, Region, RegionKind, RigidTy, Ty, TyKind, UintTy,
+    FnDef, GenericArgKind, GenericArgs, IntTy, Region, RegionKind, RigidTy, Ty, TyConst, TyKind,
+    UintTy,
 };
 use rustc_public::{CrateDef, CrateItem};
 use rustc_public_bridge::IndexedVal;
@@ -414,6 +415,12 @@ fn autoharness_filtered_out(
     !included || excluded
 }
 
+/// The value used to instantiate `usize` const generic parameters of generic functions
+/// (e.g. array lengths). As with the choice of type-parameter candidates, verifying a single
+/// instantiation underapproximates the function's behaviors; the summary table shows the
+/// chosen value as part of the instantiated name.
+const AUTOHARNESS_CONST_GENERIC_VALUE: u64 = 2;
+
 /// The candidate types for instantiating the type parameters of a generic function, in the order
 /// in which we try them. We start with `i32` since that is Rust's default integer type, and
 /// primitive types satisfy the most common trait bounds (`Copy`, `Clone`, `Ord`, `Hash`,
@@ -458,8 +465,16 @@ fn choose_generic_instantiation(tcx: TyCtxt, fn_item: CrateItem) -> Result<Insta
         return Err("not a function definition".to_string());
     };
 
-    if identity_args.0.iter().any(|arg| matches!(arg, GenericArgKind::Const(_))) {
-        return Err("const generic parameters are not supported yet".to_string());
+    // Const generic parameters of type usize (by far the most common case, e.g. array lengths)
+    // are instantiated with AUTOHARNESS_CONST_GENERIC_VALUE; other const parameter types are
+    // not supported yet. The check consults the internal generics (the public identity
+    // arguments do not carry the parameter's type).
+    let generics = tcx.generics_of(rustc_internal::internal(tcx, def.def_id()));
+    if generics.own_params.iter().any(|param| {
+        matches!(param.kind, rustc_middle::ty::GenericParamDefKind::Const { .. })
+            && tcx.type_of(param.def_id).skip_binder() != tcx.types.usize
+    }) {
+        return Err("non-usize const generic parameters are not supported yet".to_string());
     }
 
     for candidate in generic_instantiation_candidates() {
@@ -472,7 +487,9 @@ fn choose_generic_instantiation(tcx: TyCtxt, fn_item: CrateItem) -> Result<Insta
                     GenericArgKind::Lifetime(_) => {
                         GenericArgKind::Lifetime(Region { kind: RegionKind::ReErased })
                     }
-                    GenericArgKind::Const(_) => unreachable!("const generics filtered out above"),
+                    GenericArgKind::Const(_) => GenericArgKind::Const(
+                        TyConst::try_from_target_usize(AUTOHARNESS_CONST_GENERIC_VALUE).unwrap(),
+                    ),
                 })
                 .collect(),
         );

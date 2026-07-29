@@ -54,10 +54,16 @@ pub fn needs_exotic<T: Exotic>(x: T) -> u8 {
     x.exotic()
 }
 
-// TEST NOTE: skipped (Generic Function), since we do not instantiate const generic
-// parameters yet.
-pub fn with_const<const N: usize>(_x: [u8; N]) -> usize {
-    N
+// TEST NOTE: verified as `with_const::<2>`; usize const generic parameters are instantiated
+// with the value 2.
+pub fn with_const<const N: usize>(x: [u8; N]) -> usize {
+    x.len() + N
+}
+
+// TEST NOTE: skipped (Generic Function), since non-usize const generic parameters are not
+// supported yet.
+pub fn with_bool_const<const B: bool>(x: u8) -> u8 {
+    if B { x } else { 0 }
 }
 
 // TEST NOTE: verified as `Wrapper::<i32>::get`; generic parameters of the impl block are
