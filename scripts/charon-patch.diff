@@ -1,10 +1,10 @@
 diff --git a/charon/Cargo.toml b/charon/Cargo.toml
-index 84b956a9..d425bbb5 100644
+index 76e38f7e..33b47bc2 100644
 --- a/charon/Cargo.toml
 +++ b/charon/Cargo.toml
 @@ -2,7 +2,7 @@
  name = "charon"
- version = "0.1.73"
+ version = "0.1.76"
  authors = ["Son Ho <hosonmarc@gmail.com>", "Guillaume Boisseau <nadrieril+git@gmail.com>"]
 -edition = "2021"
 +edition = "2024"
@@ -12,7 +12,7 @@ index 84b956a9..d425bbb5 100644
  
  [lib]
 diff --git a/charon/src/ids/vector.rs b/charon/src/ids/vector.rs
-index 24dd1083..3ef70b0b 100644
+index dbc354e2..aecb95b2 100644
 --- a/charon/src/ids/vector.rs
 +++ b/charon/src/ids/vector.rs
 @@ -260,7 +260,7 @@ where
@@ -25,18 +25,18 @@ index 24dd1083..3ef70b0b 100644
      }
  
 diff --git a/charon/src/transform/expand_associated_types.rs b/charon/src/transform/expand_associated_types.rs
-index ebd8c684..79095adf 100644
+index 28be9543..7cf2d870 100644
 --- a/charon/src/transform/expand_associated_types.rs
 +++ b/charon/src/transform/expand_associated_types.rs
-@@ -768,7 +768,7 @@ impl<'a> ComputeItemModifications<'a> {
+@@ -794,7 +794,7 @@ impl<'a> ComputeItemModifications<'a> {
          &'b mut self,
          clause: &TraitClause,
-         clause_to_path: F,
--    ) -> impl Iterator<Item = AssocTypePath> + use<'b, F>
-+    ) -> impl Iterator<Item = AssocTypePath> + use<'a, 'b, F>
-     where
-         F: Fn(TraitClauseId) -> TraitRefPath,
-     {
+         clause_to_path: fn(TraitClauseId) -> TraitRefPath,
+-    ) -> impl Iterator<Item = AssocTypePath> + use<'b> {
++    ) -> impl Iterator<Item = AssocTypePath> + use<'a, 'b> {
+         let trait_id = clause.trait_.skip_binder.trait_id;
+         let clause_path = clause_to_path(clause.clause_id);
+         self.compute_extra_params_for_trait(trait_id)
 diff --git a/charon/src/transform/simplify_constants.rs b/charon/src/transform/simplify_constants.rs
 index a0ba23eb..75b96d08 100644
 --- a/charon/src/transform/simplify_constants.rs
