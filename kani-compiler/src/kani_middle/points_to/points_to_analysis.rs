@@ -402,6 +402,8 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
                     HashSet::new()
                 }
             }
+            // Runtime-check operands (rust-lang/rust#148766) reference no place or static.
+            Operand::RuntimeChecks(..) => HashSet::new(),
         }
     }
 
@@ -424,6 +426,8 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
                     HashSet::new()
                 }
             }
+            // Runtime-check operands (rust-lang/rust#148766) reference no place or static.
+            Operand::RuntimeChecks(..) => HashSet::new(),
         }
     }
 
@@ -452,6 +456,7 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
                         .join(&state.transitive_closure(state.resolve_place(place, self.instance)));
                 }
                 Operand::Constant(_) => {}
+                Operand::RuntimeChecks(_) => {}
             }
         }
 
@@ -581,7 +586,7 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
                 // The same story from BinOp applies here, too. Need to track those things.
                 self.successors_for_operand(state, operand)
             }
-            Rvalue::NullaryOp(..) | Rvalue::Discriminant(..) => {
+            Rvalue::Discriminant(..) => {
                 // All of those should yield a constant.
                 HashSet::new()
             }
@@ -638,6 +643,8 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::Exp2F64
         | Intrinsic::ExpF32
         | Intrinsic::ExpF64
+        | Intrinsic::FabsF128
+        | Intrinsic::FabsF16
         | Intrinsic::FabsF32
         | Intrinsic::FabsF64
         | Intrinsic::FaddFast
@@ -704,6 +711,7 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::SimdAnd
         | Intrinsic::SimdDiv
         | Intrinsic::SimdRem
+        | Intrinsic::SimdReduceAll
         | Intrinsic::SimdEq
         | Intrinsic::SimdExtract
         | Intrinsic::SimdGe
@@ -717,6 +725,7 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::SimdShl
         | Intrinsic::SimdShr
         | Intrinsic::SimdShuffle(_)
+        | Intrinsic::SimdSplat
         | Intrinsic::SimdSub
         | Intrinsic::SimdXor => {
             /* SIMD operations */

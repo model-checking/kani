@@ -234,6 +234,19 @@ To solve this, Kani generates **pure expression trees** for quantifier bodies:
    are inlined by looking up the function body in the symbol table, resolving its
    return expression, and substituting parameters — producing a pure expression.
 
+5. **Pointer arithmetic intrinsic lowering**: Wrapping pointer arithmetic functions
+   (`wrapping_add`, `wrapping_sub`, `wrapping_offset`, `wrapping_byte_offset`,
+   `wrapping_byte_add`, `wrapping_byte_sub`) are compiler intrinsics with no GOTO
+   body to inline. The inliner recognizes these by name and lowers them directly to
+   CBMC pointer `Plus` expressions. Since CBMC's pointer `Plus` scales the offset by
+   the pointee size, byte-offset variants first cast the pointer to `*u8` so the
+   scaling is by 1 byte, and `sub` variants negate the offset before adding.
+   Non-wrapping variants (`offset`, `add`) are not supported because they trigger
+   CBMC bounds checks inside quantifier bodies. Example:
+   ```rust
+   kani::forall!(|i in (0, len)| unsafe { *ptr.wrapping_byte_offset(i as isize) == 0 })
+   ```
+
 ### Typed quantifier variables
 
 The `forall!` and `exists!` macros support an optional type annotation:

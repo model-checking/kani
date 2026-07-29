@@ -26,6 +26,9 @@ impl Debug for SourceRegion {
     }
 }
 
+// The `Err` type of `span_to_source`'s callback is rustc's `SpanSnippetError`,
+// which clippy now flags as large; we cannot shrink it, so allow the lint.
+#[allow(clippy::result_large_err)]
 fn ensure_non_empty_span(source_map: &SourceMap, span: Span) -> Option<Span> {
     if !span.is_empty() {
         return Some(span);

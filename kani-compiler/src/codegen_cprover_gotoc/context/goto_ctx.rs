@@ -515,6 +515,56 @@ impl GotocCtx<'_, '_> {
             return original_expr.clone();
         }
 
+        // Lower known pointer arithmetic intrinsics directly to CBMC expressions.
+        // These intrinsics have no GOTO body to inline, so we handle them specially.
+        // We check that the function name contains a pointer-type path segment to
+        // avoid false-positives on user-defined functions with similar names.
+        //
+        // CBMC's pointer Plus scales the offset by the pointee size. So:
+        // - For element-offset variants (wrapping_add, wrapping_sub, wrapping_offset),
+        //   we apply Plus directly on the original pointer type (count is in elements of T).
+        // - For byte-offset variants (wrapping_byte_offset, wrapping_byte_add,
+        //   wrapping_byte_sub), we first cast the pointer to `*u8` so Plus scales by 1.
+        // - Sub variants negate the offset before adding.
+        //
+        // TODO: Replace name-based heuristic with a proper intrinsic registry
+        // (e.g., matching on DefId or a dedicated KaniIntrinsic enum) for
+        // robustness against mangling variations.
+        let fn_name = fn_id.to_string();
+        let is_ptr_fn = fn_name.contains("::ptr::") || fn_name.contains("const_ptr");
+        let ptr_op = if is_ptr_fn {
+            if fn_name.contains("wrapping_byte_offset") || fn_name.contains("wrapping_byte_add") {
+                Some((/*is_byte*/ true, /*is_sub*/ false))
+            } else if fn_name.contains("wrapping_byte_sub") {
+                Some((true, true))
+            } else if fn_name.contains("wrapping_add") || fn_name.contains("wrapping_offset") {
+                Some((false, false))
+            } else if fn_name.contains("wrapping_sub") {
+                Some((false, true))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        if let Some((is_byte, is_sub)) = ptr_op
+            && arguments.len() >= 2
+            && arguments[0].typ().is_pointer()
+        {
+            let original_ptr_typ = arguments[0].typ().clone();
+            let ptr = self.inline_as_pure_expr(&arguments[0], visited);
+            let offset = self.inline_as_pure_expr(&arguments[1], visited);
+            let offset = if is_sub { offset.neg() } else { offset };
+            // For byte-offset variants, cast the pointer to `*u8` so CBMC's Plus
+            // scales the offset by 1 byte (matching the Rust semantics that
+            // first casts `self.cast::<u8>()`), then cast the result back to the
+            // original pointer type so the surrounding expression sees the
+            // expected type.
+            let base = if is_byte { ptr.cast_to(Type::unsigned_int(8).to_pointer()) } else { ptr };
+            let result = base.plus(offset);
+            return if is_byte { result.cast_to(original_ptr_typ) } else { result };
+        }
+
         let function_body = self.symbol_table.lookup(*fn_id).and_then(|sym| match &sym.value {
             SymbolValues::Stmt(stmt) => Some(stmt.clone()),
             _ => None,

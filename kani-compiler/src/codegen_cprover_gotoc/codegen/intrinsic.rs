@@ -354,6 +354,24 @@ impl GotocCtx<'_, '_> {
             Intrinsic::Exp2F64 => codegen_simple_intrinsic!(Exp2),
             Intrinsic::ExpF32 => codegen_simple_intrinsic!(Expf),
             Intrinsic::ExpF64 => codegen_simple_intrinsic!(Exp),
+            // CBMC models neither `fabsf16` nor `fabsf128`, so compute the absolute
+            // value by clearing the IEEE sign bit. This is exactly `fabs` for every
+            // input (NaN, +/-0, and +/-inf included).
+            Intrinsic::FabsF16 => {
+                let arg = fargs.remove(0);
+                let bits = arg.transmute_to(Type::unsigned_int(16), &self.symbol_table);
+                let abs_bits = bits.bitand(Expr::int_constant(0x7fff, Type::unsigned_int(16)));
+                let result = abs_bits.transmute_to(Type::float16(), &self.symbol_table);
+                self.codegen_expr_to_place_stable(place, result, loc)
+            }
+            Intrinsic::FabsF128 => {
+                let arg = fargs.remove(0);
+                let bits = arg.transmute_to(Type::unsigned_int(128), &self.symbol_table);
+                // `i128::MAX` (== `u128::MAX >> 1`) clears only the sign bit (bit 127).
+                let abs_bits = bits.bitand(Expr::int_constant(i128::MAX, Type::unsigned_int(128)));
+                let result = abs_bits.transmute_to(Type::float128(), &self.symbol_table);
+                self.codegen_expr_to_place_stable(place, result, loc)
+            }
             Intrinsic::FabsF32 => codegen_simple_intrinsic!(Fabsf),
             Intrinsic::FabsF64 => codegen_simple_intrinsic!(Fabs),
             Intrinsic::FaddFast => {
@@ -443,6 +461,24 @@ impl GotocCtx<'_, '_> {
             Intrinsic::SimdEq => {
                 self.codegen_simd_cmp(Expr::vector_eq, fargs, place, span, farg_types, ret_ty)
             }
+            Intrinsic::SimdReduceAll => {
+                // Boolean AND-reduction: returns whether every lane is "true". The
+                // argument is a mask-like integer vector (lanes are 0 or all-ones),
+                // so a lane is true iff it is non-zero.
+                let vec = fargs.remove(0);
+                let (size, _) = self.simd_size_and_type(farg_types[0]);
+                let lane =
+                    |v: &Expr, i: u64| v.clone().index_array(Expr::int_constant(i, Type::size_t()));
+                let lane_true = |l: Expr| {
+                    let zero = Expr::int_constant(0, l.typ().clone());
+                    l.neq(zero)
+                };
+                let mut acc = lane_true(lane(&vec, 0));
+                for i in 1..size {
+                    acc = acc.and(lane_true(lane(&vec, i)));
+                }
+                self.codegen_expr_to_place_stable(place, acc.cast_to(cbmc_ret_ty), loc)
+            }
             Intrinsic::SimdExtract => {
                 self.codegen_intrinsic_simd_extract(fargs, place, farg_types, ret_ty, span)
             }
@@ -479,6 +515,26 @@ impl GotocCtx<'_, '_> {
             Intrinsic::SimdShuffle(stripped) => {
                 let n: u64 = self.simd_shuffle_length(stripped.as_str(), farg_types, span);
                 self.codegen_intrinsic_simd_shuffle(fargs, place, farg_types, ret_ty, n, span)
+            }
+            Intrinsic::SimdSplat => {
+                // Broadcast the scalar argument to every lane of the result vector.
+                let val = fargs.remove(0);
+                let (size, ret_base_type) = self.simd_size_and_type(ret_ty);
+                // `simd_splat<T, U>(value: U) -> T` has independent generic parameters,
+                // so a monomorphization where `U` is not `T`'s element type can reach
+                // codegen. Emit an error like rustc's backends (and like `simd_extract`
+                // and `simd_insert` above) rather than silently casting the value.
+                if farg_types[0] != ret_base_type {
+                    let err_msg = format!(
+                        "expected argument type `{ret_base_type}` (element of output `{ret_ty}`), found `{}`",
+                        farg_types[0]
+                    );
+                    utils::span_err(self.tcx, span, err_msg);
+                }
+                self.tcx.dcx().abort_if_errors();
+                let elem_ty = cbmc_ret_ty.base_type().unwrap().clone();
+                let elems = vec![val.cast_to(elem_ty); size as usize];
+                self.codegen_expr_to_place_stable(place, Expr::vector_expr(cbmc_ret_ty, elems), loc)
             }
             Intrinsic::SimdSub => self.codegen_simd_op_with_overflow(
                 Expr::sub,

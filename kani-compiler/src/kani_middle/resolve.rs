@@ -132,6 +132,19 @@ pub fn resolve_fn<'tcx>(
     Ok(rustc_internal::internal(tcx, result.def().def_id()))
 }
 
+/// Resolve a path string to a `DefId` for any item (not just functions).
+pub fn resolve_item<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    current_module: LocalDefId,
+    path_str: &str,
+) -> Result<DefId, ResolveError<'tcx>> {
+    let _span = debug_span!("resolve_item", ?path_str, ?current_module).entered();
+    let path: syn::Path = syn::parse_str(path_str).map_err(|err| ResolveError::InvalidPath {
+        msg: format!("Expected a path, but found `{path_str}`. {err}"),
+    })?;
+    resolve_path(tcx, current_module, &path)
+}
+
 /// Attempts to resolve a simple path (in the form of a string) to a `DefId`.
 /// The current module is provided as an argument in order to resolve relative
 /// paths.

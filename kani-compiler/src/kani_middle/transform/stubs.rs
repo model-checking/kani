@@ -163,7 +163,7 @@ impl MirVisitor for FnStubValidator<'_, '_> {
             && Instance::resolve(def, &args).is_err()
         {
             self.is_valid = false;
-            let callee = def.name();
+            let callee = crate::kani_middle::strip_local_crate_prefix(def.name());
             let receiver_ty = args.0[0].expect_ty();
             let sep = callee.rfind("::").unwrap();
             let trait_ = &callee[..sep];
@@ -173,8 +173,8 @@ impl MirVisitor for FnStubValidator<'_, '_> {
                     "type `{receiver_ty}` doesn't implement trait `{trait_}`, \
                      so `{}` cannot be stubbed by `{}`. \
                      All trait bounds of the stub must be satisfied by the original's call sites.",
-                    self.stub.0.name(),
-                    self.stub.1.name(),
+                    crate::kani_middle::strip_local_crate_prefix(self.stub.0.name()),
+                    crate::kani_middle::strip_local_crate_prefix(self.stub.1.name()),
                 ),
             );
         }

@@ -632,7 +632,6 @@ pub trait MutMirVisitor {
             Rvalue::CopyForDeref(_) | Rvalue::Discriminant(_) | Rvalue::Len(_) => {}
             Rvalue::Ref(..) => {}
             Rvalue::ThreadLocalRef(_) => {}
-            Rvalue::NullaryOp(..) => {}
         }
     }
 }
