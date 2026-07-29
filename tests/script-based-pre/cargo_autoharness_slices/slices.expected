@@ -1,0 +1,17 @@
+[without --bounded-arguments]
+| cargo_autoharness_slices | count_a          | Requires --bounded-arguments for argument(s) s: &str        |
+[with --bounded-arguments]
+| cargo_autoharness_slices | nested           | Missing Arbitrary implementation for argument(s) xs: &&[u8] |
+- Status: SATISFIED
+- Status: SATISFIED
+- Status: SATISFIED
+- Status: SATISFIED
+| cargo_autoharness_slices | count_a           | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_slices | slice_cover       | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_slices | str_cover         | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_slices | sum               | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_slices | zero_all          | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_slices | first             | #[kani::proof] (bounded)  | Failure             |
+| cargo_autoharness_slices | first_byte        | #[kani::proof] (bounded)  | Failure             |
+Note: harnesses marked "(bounded)" use bounded nondeterministic values for some arguments (--bounded-arguments);
+Complete - 5 successfully verified functions, 2 failures, 7 total.

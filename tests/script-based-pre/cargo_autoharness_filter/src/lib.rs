@@ -192,6 +192,10 @@ mod yes_harness {
     fn f_ref(x: u32, _y: &i32) -> u32 {
         x
     }
+
+    fn f_slice(x: u32, _y: &[u8]) -> u32 {
+        x
+    }
 }
 
 mod no_harness {
@@ -206,9 +210,6 @@ mod no_harness {
         x
     }
     fn unsupported_vec(x: u32, _y: Vec<u8>) -> u32 {
-        x
-    }
-    fn unsupported_slice(x: u32, _y: &[u8]) -> u32 {
         x
     }
     fn doesnt_implement_arbitrary(
