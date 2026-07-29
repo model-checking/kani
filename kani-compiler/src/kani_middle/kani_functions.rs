@@ -71,6 +71,8 @@ pub enum KaniModel {
     AnySliceRef,
     #[strum(serialize = "AnyStrRefModel")]
     AnyStrRef,
+    #[strum(serialize = "BoundedAnyModel")]
+    BoundedAny,
     #[strum(serialize = "CopyInitStateModel")]
     CopyInitState,
     #[strum(serialize = "CopyInitStateSingleModel")]

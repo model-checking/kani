@@ -9,10 +9,10 @@
 use crate::args::ReachabilityType;
 use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::codegen_units::CodegenUnit;
-use crate::kani_middle::implements_arbitrary;
 use crate::kani_middle::kani_functions::{KaniHook, KaniIntrinsic, KaniModel};
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
+use crate::kani_middle::{can_derive_arbitrary, implements_arbitrary};
 use crate::kani_queries::QueryDb;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::ty::TyCtxt;
@@ -39,6 +39,8 @@ pub struct AutomaticArbitraryPass {
     kani_any_slice_ref: FnDef,
     /// The FnDef of KaniModel::AnyStrRef
     kani_any_str_ref: FnDef,
+    /// The FnDef of KaniModel::BoundedAny
+    kani_bounded_any: FnDef,
 }
 
 impl AutomaticArbitraryPass {
@@ -47,7 +49,8 @@ impl AutomaticArbitraryPass {
         let kani_any = *kani_fns.get(&KaniModel::Any.into()).unwrap();
         let kani_any_slice_ref = *kani_fns.get(&KaniModel::AnySliceRef.into()).unwrap();
         let kani_any_str_ref = *kani_fns.get(&KaniModel::AnyStrRef.into()).unwrap();
-        Self { kani_any, kani_any_slice_ref, kani_any_str_ref }
+        let kani_bounded_any = *kani_fns.get(&KaniModel::BoundedAny.into()).unwrap();
+        Self { kani_any, kani_any_slice_ref, kani_any_str_ref, kani_bounded_any }
     }
 }
 
@@ -146,6 +149,14 @@ const AUTOHARNESS_SLICE_BOUND: u64 = 16;
 /// while 8 stay well within it.
 const AUTOHARNESS_STR_BOUND: u64 = 8;
 
+/// The bound for nondeterministic values of types that implement `BoundedArbitrary` (rather
+/// than `Arbitrary`) that automatic harnesses generate, e.g. `Vec<T>` or `String`.
+/// Verification results for functions with such arguments are only valid up to this bound.
+/// This is smaller than the slice/str bounds since `BoundedArbitrary` values are heap
+/// allocated, and for `String` additionally involve UTF-8 reasoning; a bound of 8 already
+/// makes simple `String` harnesses exceed Kani's default 60s harness timeout.
+const AUTOHARNESS_BOUNDED_ANY_BOUND: u64 = 4;
+
 /// Insert a call to kani::any::<ty>() in `body`; return the local storing the result.
 /// For `&[T]`/`&mut [T]`/`&str`, insert calls to the `KaniModel::AnySliceRef`/`AnyStrRef`
 /// models instead, which return a slice of nondeterministic length (bounded by
@@ -157,6 +168,7 @@ fn call_kani_any_for_ty(
     kani_any: FnDef,
     kani_any_slice_ref: FnDef,
     kani_any_str_ref: FnDef,
+    kani_bounded_any: FnDef,
     body: &mut MutableBody,
     ty: Ty,
     mutability: Mutability,
@@ -205,6 +217,7 @@ fn call_kani_any_for_ty(
                     kani_any,
                     kani_any_slice_ref,
                     kani_any_str_ref,
+                    kani_bounded_any,
                     body,
                     elem_ty,
                     Mutability::Not,
@@ -274,6 +287,7 @@ fn call_kani_any_for_ty(
             kani_any,
             kani_any_slice_ref,
             kani_any_str_ref,
+            kani_bounded_any,
             body,
             inner_ty,
             inner_mutability,
@@ -293,11 +307,29 @@ fn call_kani_any_for_ty(
         );
         ref_lcl
     } else {
-        let kani_any_inst =
-            Instance::resolve(kani_any, &GenericArgs(vec![GenericArgKind::Type(ty)]))
-                .unwrap_or_else(|_| panic!("expected a ty that implements Arbitrary, got {ty}"));
+        // Prefer an unbounded nondeterministic value via (implemented or compiler-derived)
+        // Arbitrary; fall back to BoundedArbitrary for container types like Vec<T> or String.
+        let mut cache = FxHashMap::default();
+        let use_arbitrary = implements_arbitrary(ty, kani_any, &mut cache)
+            || can_derive_arbitrary(ty, kani_any, &mut cache);
+        let (inst, generic_args) = if use_arbitrary {
+            (kani_any, GenericArgs(vec![GenericArgKind::Type(ty)]))
+        } else {
+            (
+                kani_bounded_any,
+                GenericArgs(vec![
+                    GenericArgKind::Type(ty),
+                    GenericArgKind::Const(
+                        TyConst::try_from_target_usize(AUTOHARNESS_BOUNDED_ANY_BOUND).unwrap(),
+                    ),
+                ]),
+            )
+        };
+        let inst = Instance::resolve(inst, &generic_args).unwrap_or_else(|_| {
+            panic!("expected a ty that implements Arbitrary or BoundedArbitrary, got {ty}")
+        });
         let lcl = body.new_local(ty, source.span(body.blocks()), mutability);
-        body.insert_call(&kani_any_inst, source, InsertPosition::Before, vec![], Place::from(lcl));
+        body.insert_call(&inst, source, InsertPosition::Before, vec![], Place::from(lcl));
         lcl
     }
 }
@@ -327,6 +359,7 @@ impl AutomaticArbitraryPass {
                 self.kani_any,
                 self.kani_any_slice_ref,
                 self.kani_any_str_ref,
+                self.kani_bounded_any,
                 body,
                 ty,
                 Mutability::Not,
@@ -376,6 +409,7 @@ impl AutomaticArbitraryPass {
             self.kani_any,
             self.kani_any_slice_ref,
             self.kani_any_str_ref,
+            self.kani_bounded_any,
             &mut new_body,
             Ty::from_rigid_kind(RigidTy::Uint(UintTy::U128)),
             Mutability::Not,
@@ -439,6 +473,7 @@ pub struct AutomaticHarnessPass {
     kani_any: FnDef,
     kani_any_slice_ref: FnDef,
     kani_any_str_ref: FnDef,
+    kani_bounded_any: FnDef,
     init_contracts_hook: Instance,
     kani_autoharness_intrinsic: FnDef,
 }
@@ -451,6 +486,7 @@ impl AutomaticHarnessPass {
         let kani_any = *kani_fns.get(&KaniModel::Any.into()).unwrap();
         let kani_any_slice_ref = *kani_fns.get(&KaniModel::AnySliceRef.into()).unwrap();
         let kani_any_str_ref = *kani_fns.get(&KaniModel::AnyStrRef.into()).unwrap();
+        let kani_bounded_any = *kani_fns.get(&KaniModel::BoundedAny.into()).unwrap();
         let init_contracts_hook = *kani_fns.get(&KaniHook::InitContracts.into()).unwrap();
         let init_contracts_hook =
             Instance::resolve(init_contracts_hook, &GenericArgs(vec![])).unwrap();
@@ -458,6 +494,7 @@ impl AutomaticHarnessPass {
             kani_any,
             kani_any_slice_ref,
             kani_any_str_ref,
+            kani_bounded_any,
             init_contracts_hook,
             kani_autoharness_intrinsic,
         }
@@ -524,6 +561,7 @@ impl TransformPass for AutomaticHarnessPass {
                     self.kani_any,
                     self.kani_any_slice_ref,
                     self.kani_any_str_ref,
+                    self.kani_bounded_any,
                     &mut harness_body,
                     local_decl.ty,
                     local_decl.mutability,

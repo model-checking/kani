@@ -125,6 +125,14 @@ smaller bound reflects the cost of reasoning about UTF-8 for symbolic execution.
 chosen to stay below the default loop-unwinding bound of 20, so that loops over the slice can
 be fully unwound by default.
 
+Additionally (also requiring `--bounded-arguments`), for arguments whose type implements
+[`BoundedArbitrary`](https://model-checking.github.io/kani/reference/experimental/bounded-arbitrary.html)
+(e.g. `Vec<T>`, `String`, or user types deriving it), the harness generates a bounded
+nondeterministic value with **bound 4** (via `kani::bounded_any`). The same caveat applies:
+verification results only hold up to the bound. The smaller bound reflects that these values are
+heap allocated and, for `String`, involve UTF-8 reasoning, both of which are costly for symbolic
+execution.
+
 Nested slice references (e.g. `&&[u8]`) and slices inside user-defined types remain unsupported.
 
 ## Limitations
