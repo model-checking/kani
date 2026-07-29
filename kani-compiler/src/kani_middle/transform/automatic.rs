@@ -12,7 +12,7 @@ use crate::kani_middle::codegen_units::CodegenUnit;
 use crate::kani_middle::kani_functions::{KaniHook, KaniIntrinsic, KaniModel};
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
-use crate::kani_middle::{implements_arbitrary, implements_invariant};
+use crate::kani_middle::{can_derive_arbitrary, implements_arbitrary, implements_invariant};
 use crate::kani_queries::QueryDb;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::ty::TyCtxt;
@@ -44,6 +44,8 @@ struct AnyModels {
     kani_any_str_ref: FnDef,
     /// The FnDef of KaniModel::AssumeSafe
     kani_assume_safe: FnDef,
+    /// The FnDef of KaniModel::BoundedAny
+    kani_bounded_any: FnDef,
 }
 
 impl AnyModels {
@@ -55,6 +57,7 @@ impl AnyModels {
             kani_any_slice_ref: *kani_fns.get(&KaniModel::AnySliceRef.into()).unwrap(),
             kani_any_str_ref: *kani_fns.get(&KaniModel::AnyStrRef.into()).unwrap(),
             kani_assume_safe: *kani_fns.get(&KaniModel::AssumeSafe.into()).unwrap(),
+            kani_bounded_any: *kani_fns.get(&KaniModel::BoundedAny.into()).unwrap(),
         }
     }
 }
@@ -172,6 +175,14 @@ const AUTOHARNESS_SLICE_BOUND: u64 = 16;
 /// not time out should raise `--harness-timeout`).
 const AUTOHARNESS_STR_BOUND: u64 = 4;
 
+/// The bound for nondeterministic values of types that implement `BoundedArbitrary` (rather
+/// than `Arbitrary`) that automatic harnesses generate, e.g. `Vec<T>` or `String`.
+/// Verification results for functions with such arguments are only valid up to this bound.
+/// This is smaller than the slice/str bounds since `BoundedArbitrary` values are heap
+/// allocated, and for `String` additionally involve UTF-8 reasoning; a bound of 8 already
+/// makes simple `String` harnesses exceed Kani's default 60s harness timeout.
+const AUTOHARNESS_BOUNDED_ANY_BOUND: u64 = 4;
+
 /// For raw pointer types, insert a call to the `KaniModel::AnyPtr` model instead, which generates
 /// a pointer in a nondeterministic allocation state (null, out of bounds, or valid);
 /// in the valid case, the pointer points to a nondeterministic value stored in a dedicated local
@@ -180,12 +191,15 @@ const AUTOHARNESS_STR_BOUND: u64 = 4;
 /// models instead, which return a slice of nondeterministic length (bounded by
 /// [AUTOHARNESS_SLICE_BOUND]) backed by a nondeterministic array stored in a dedicated local,
 /// which stays alive for the entire harness.
+/// If `ty` does not implement `Arbitrary` (and cannot derive it) but implements `BoundedArbitrary`
+/// (e.g. `Vec<T>` or `String`), insert a call to the `KaniModel::BoundedAny` model, which returns
+/// a *bounded* nondeterministic value (bounded by [AUTOHARNESS_BOUNDED_ANY_BOUND]).
 /// If `ty` is an ADT that implements `Invariant`, additionally insert a call to the
 /// `KaniModel::AssumeSafe` model (`kani_assume_safe`), which assumes that the nondeterministic
 /// value respects the type's safety invariant, c.f.
 /// <https://rust-lang.github.io/unsafe-code-guidelines/glossary.html#validity-and-safety-invariant>.
-/// Panics if `ty` does not implement Arbitrary (and is not a reference or raw pointer to such a
-/// type, or a reference to a slice or str of such a type).
+/// Panics if `ty` does not implement Arbitrary or BoundedArbitrary (and is not a reference or raw
+/// pointer to such a type, or a reference to a slice or str of such a type).
 fn call_kani_any_for_ty(
     models: AnyModels,
     body: &mut MutableBody,
@@ -367,16 +381,37 @@ fn call_kani_any_for_ty(
             ptr_lcl
         }
     } else {
-        let kani_any_inst =
-            Instance::resolve(models.kani_any, &GenericArgs(vec![GenericArgKind::Type(ty)]))
-                .unwrap_or_else(|_| panic!("expected a ty that implements Arbitrary, got {ty}"));
+        // Prefer an unbounded nondeterministic value via (implemented or compiler-derived)
+        // Arbitrary; fall back to BoundedArbitrary for container types like Vec<T> or String.
+        // Note: use a fresh cache for the Arbitrary check -- `invariant_cache` memoizes a
+        // different predicate (Invariant), so the two must not share a map.
+        let mut arbitrary_cache = FxHashMap::default();
+        let use_arbitrary = implements_arbitrary(ty, models.kani_any, &mut arbitrary_cache)
+            || can_derive_arbitrary(ty, models.kani_any, &mut arbitrary_cache);
+        let (model, generic_args) = if use_arbitrary {
+            (models.kani_any, GenericArgs(vec![GenericArgKind::Type(ty)]))
+        } else {
+            (
+                models.kani_bounded_any,
+                GenericArgs(vec![
+                    GenericArgKind::Type(ty),
+                    GenericArgKind::Const(
+                        TyConst::try_from_target_usize(AUTOHARNESS_BOUNDED_ANY_BOUND).unwrap(),
+                    ),
+                ]),
+            )
+        };
+        let any_inst = Instance::resolve(model, &generic_args).unwrap_or_else(|_| {
+            panic!("expected a ty that implements Arbitrary or BoundedArbitrary, got {ty}")
+        });
         let lcl = body.new_local(ty, source.span(body.blocks()), mutability);
-        body.insert_call(&kani_any_inst, source, InsertPosition::Before, vec![], Place::from(lcl));
+        body.insert_call(&any_inst, source, InsertPosition::Before, vec![], Place::from(lcl));
 
         // If the type has a safety invariant, assume that it holds for the nondeterministic value.
         // We only check ADTs since those are the only types for which users can implement
         // `Invariant` in a way that constrains the values (the library's implementations for
-        // primitive types are trivially `true`).
+        // primitive types are trivially `true`). This applies regardless of whether the value was
+        // generated via Arbitrary or BoundedArbitrary.
         if matches!(ty.kind(), TyKind::RigidTy(RigidTy::Adt(..)))
             && implements_invariant(ty, models.kani_assume_safe, invariant_cache)
         {
