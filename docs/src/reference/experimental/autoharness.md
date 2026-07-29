@@ -136,9 +136,11 @@ Note that verifying a single instantiation is an underapproximation of all of th
 a successful result for `foo::<i32>` does not imply that other instantiations of `foo` are also safe.
 Kani makes this explicit by displaying the instantiated name of the verified function.
 
+`usize` const generic parameters (e.g. array lengths) are instantiated with the value 2.
+
 Kani skips a generic function (with skip reason "Generic Function") if:
 - no candidate type satisfies the function's trait bounds, or
-- the function has const generic parameters, which Kani does not instantiate yet.
+- the function has non-`usize` const generic parameters, which Kani does not instantiate yet.
 
 If some caller of a generic function is eligible for an automatic harness, then additional monomorphized
 versions of the generic function may still be reachable (and thus verified) through the caller's harness.
