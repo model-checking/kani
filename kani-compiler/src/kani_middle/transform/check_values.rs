@@ -191,6 +191,9 @@ impl ValidValueReq {
     /// It's not possible to define a `rustc_layout_scalar_valid_range_*` to any other structure.
     /// Note that this annotation only applies to the first scalar in the layout.
     pub fn try_from_ty(tcx: TyCtxt, machine_info: &MachineInfo, ty: Ty) -> Option<ValidValueReq> {
+        // The `char` special case below is skipped for pattern types (whose
+        // stable `Ty::kind()` may panic); `ty_validity_per_offset` rejects
+        // pattern types over `char`, so it cannot be needed here.
         if !is_pattern_type(tcx, ty) && ty.kind().is_char() {
             Some(ValidValueReq {
                 offset: 0,
@@ -938,11 +941,24 @@ pub fn ty_validity_per_offset(
             vec![]
         }
     };
-    // A pattern type's validity is fully captured by the scalar valid_range in
-    // its layout ABI (see `try_from_ty`), so handle it here without inspecting
-    // the stable kind, which would panic for kinds `rustc_public` cannot yet
-    // convert (e.g. `PatternKind::NotNull` for `NonNull`).
-    if is_pattern_type(tcx, ty) {
+    // A pattern type is a scalar whose validity is fully captured by the
+    // scalar valid_range in its layout ABI (see `try_from_ty`): its base type
+    // is always a scalar, integer bases add no requirements of their own, and
+    // the `NotNull` constraint is part of the range. Handle it here without
+    // inspecting the stable kind, which would panic for kinds `rustc_public`
+    // cannot yet convert (e.g. `PatternKind::NotNull` for `NonNull`).
+    if let rustc_middle::ty::TyKind::Pat(base_ty, _) = rustc_internal::internal(tcx, ty).kind() {
+        // `char`'s validity (two intervals around the surrogate gap) exceeds
+        // what a single scalar range can express, and the `char` special case
+        // in `try_from_ty` is not applied to pattern types; reject instead of
+        // under-checking.
+        if base_ty.is_char() {
+            return Err("Unsupported pattern type over `char`".to_string());
+        }
+        assert!(
+            matches!(layout.abi, ValueAbi::Scalar(..)),
+            "expected pattern type to have a scalar ABI: {ty:?}"
+        );
         return Ok(ty_req());
     }
     match layout.fields {
@@ -1045,16 +1061,11 @@ pub fn ty_validity_per_offset(
                         }
                     }
                 }
-                RigidTy::Pat(base_ty, ..) => {
-                    // This is similar to a structure with one field and with niche defined.
-                    let mut pat_validity = ty_req();
-                    pat_validity.append(&mut ty_validity_per_offset(
-                        tcx,
-                        machine_info,
-                        *base_ty,
-                        0,
-                    )?);
-                    Ok(pat_validity)
+                // Pattern types have a scalar ABI and are fully handled before
+                // the match on the layout's field shape, so this arm can never
+                // be reached.
+                RigidTy::Pat(..) => {
+                    unreachable!("pattern types are handled before the field-shape match")
                 }
                 RigidTy::Tuple(tys) => {
                     let mut tuple_validity = vec![];
