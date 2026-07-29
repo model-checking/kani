@@ -28,13 +28,16 @@ fn test_volatile_copy_memory_simple() {
 
 #[kani::proof]
 fn test_volatile_copy_memory_with_overlap() {
-    let arr: [i32; 3] = [0, 1, 0];
-    let src: *const i32 = arr.as_ptr();
+    let mut arr: [i32; 3] = [0, 1, 0];
+    // Both pointers are derived from `as_mut_ptr`: the copy writes through
+    // `dst`, and writing through a pointer derived from a shared borrow
+    // (`as_ptr`) would be undefined behavior in its own right.
+    let src: *mut i32 = arr.as_mut_ptr();
 
     unsafe {
         // `dst` overlaps `src` in `arr[1]`. `volatile_copy_memory` must
         // still succeed here (unlike `volatile_copy_nonoverlapping_memory`).
-        let dst = src.add(1) as *mut i32;
+        let dst = src.add(1);
         core::intrinsics::volatile_copy_memory(dst, src, 2);
         // The first value does not change
         assert!(arr[0] == 0);
