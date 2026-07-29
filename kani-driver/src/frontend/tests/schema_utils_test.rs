@@ -62,6 +62,7 @@ fn test_create_harness_metadata_json() {
         contract: None,
         has_loop_contracts: true,
         is_automatically_generated: false,
+        is_bounded: false,
     };
 
     let json = create_harness_metadata_json(&harness);
@@ -89,6 +90,7 @@ fn test_create_verification_result_json() {
         contract: None,
         has_loop_contracts: false,
         is_automatically_generated: false,
+        is_bounded: false,
     };
 
     let properties = vec![
@@ -168,6 +170,7 @@ fn test_create_verification_summary_json_real() {
         contract: None,
         has_loop_contracts: false,
         is_automatically_generated: false,
+        is_bounded: false,
     };
 
     // Create a VerificationResult
@@ -199,6 +202,7 @@ fn test_add_runner_results_to_json_real() {
         contract: None,
         has_loop_contracts: false,
         is_automatically_generated: false,
+        is_bounded: false,
     };
 
     let verification_result = VerificationResult {
