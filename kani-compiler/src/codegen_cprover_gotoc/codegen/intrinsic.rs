@@ -559,9 +559,10 @@ impl GotocCtx<'_, '_> {
             // variants. CBMC models the misaligned typed access byte-precisely,
             // so the plain dereference is faithful -- see the byte-wise oracle
             // tests in `tests/kani/Intrinsics/Volatile/unaligned.rs`, which
-            // compare the loaded value against `u32::from_le_bytes` at every
-            // offset. Dereferenceability itself is still checked by
-            // `--pointer-check`, as for the aligned variants.
+            // compare the loaded value against `u32::from_ne_bytes` at every
+            // offset -- native order, so the oracle stays byte-precise without
+            // assuming an endianness. Dereferenceability itself is still checked
+            // by `--pointer-check`, as for the aligned variants.
             Intrinsic::UnalignedVolatileLoad => {
                 self.codegen_expr_to_place_stable(place, fargs.remove(0).dereference(), loc)
             }
