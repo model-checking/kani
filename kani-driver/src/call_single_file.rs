@@ -17,7 +17,12 @@ impl LibConfig {
     pub fn new(path: PathBuf) -> LibConfig {
         let sysroot = &path.parent().unwrap();
         let kani_std_rlib = path.join("libstd.rlib");
-        let kani_std_wrapper = format!("noprelude:std={}", kani_std_rlib.to_str().unwrap());
+        // `noprelude`: do not inject Kani's std into the prelude (it is aliased over the real
+        // std); `nounused`: do not fire the `unused_crate_dependencies` lint for it, since
+        // `#[no_std]` crates that deny that lint would otherwise fail through no fault of
+        // their own (Kani injects this extern unconditionally).
+        let kani_std_wrapper =
+            format!("noprelude,nounused:std={}", kani_std_rlib.to_str().unwrap());
         let args = [
             "--sysroot",
             sysroot.to_str().unwrap(),
