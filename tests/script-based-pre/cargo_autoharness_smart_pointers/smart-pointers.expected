@@ -1,0 +1,8 @@
+| cargo_autoharness_smart_pointers | box_not_derivable | Missing Arbitrary implementation for argument(s) b: std::boxed::Box<NotDerivable> |
+- Status: SATISFIED
+| cargo_autoharness_smart_pointers | arc_derivable     | #[kani::proof]            | Success             |
+| cargo_autoharness_smart_pointers | box_derivable     | #[kani::proof]            | Success             |
+| cargo_autoharness_smart_pointers | box_derived       | #[kani::proof]            | Success             |
+| cargo_autoharness_smart_pointers | rc_derivable      | #[kani::proof]            | Success             |
+| cargo_autoharness_smart_pointers | arc_assert        | #[kani::proof]            | Failure             |
+Complete - 4 successfully verified functions, 1 failures, 5 total.

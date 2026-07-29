@@ -9,10 +9,12 @@
 use crate::args::ReachabilityType;
 use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::codegen_units::CodegenUnit;
-use crate::kani_middle::implements_arbitrary;
 use crate::kani_middle::kani_functions::{KaniHook, KaniIntrinsic, KaniModel};
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
+use crate::kani_middle::{
+    SmartPointerModels, can_derive_arbitrary, implements_arbitrary, smart_pointer_model_instance,
+};
 use crate::kani_queries::QueryDb;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::ty::TyCtxt;
@@ -34,13 +36,16 @@ use tracing::debug;
 pub struct AutomaticArbitraryPass {
     /// The FnDef of KaniModel::Any
     kani_any: FnDef,
+    /// The (optional) smart-pointer generation models.
+    smart_pointer_models: SmartPointerModels,
 }
 
 impl AutomaticArbitraryPass {
     pub fn new(_unit: &CodegenUnit, query_db: &QueryDb) -> Self {
         let kani_fns = query_db.kani_functions();
         let kani_any = *kani_fns.get(&KaniModel::Any.into()).unwrap();
-        Self { kani_any }
+        let smart_pointer_models = SmartPointerModels::from_kani_functions(kani_fns);
+        Self { kani_any, smart_pointer_models }
     }
 }
 
@@ -93,7 +98,7 @@ impl TransformPass for AutomaticArbitraryPass {
     /// ```
     /// We match the implementations that kani_macros::derive creates for structs and enums,
     /// so see that module for full documentation of what the generated bodies look like.
-    fn transform(&mut self, _tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
+    fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         debug!(function=?instance.name(), "AutomaticArbitraryPass::transform");
 
         let unexpected_ty = |ty: &Ty| {
@@ -116,8 +121,8 @@ impl TransformPass for AutomaticArbitraryPass {
 
         if let TyKind::RigidTy(RigidTy::Adt(def, args)) = ty.kind() {
             match def.kind() {
-                AdtKind::Enum => (true, self.generate_enum_body(def, args, body)),
-                AdtKind::Struct => (true, self.generate_struct_body(def, args, body)),
+                AdtKind::Enum => (true, self.generate_enum_body(tcx, def, args, body)),
+                AdtKind::Struct => (true, self.generate_struct_body(tcx, def, args, body)),
                 AdtKind::Union => unexpected_ty(ty),
             }
         } else {
@@ -127,16 +132,29 @@ impl TransformPass for AutomaticArbitraryPass {
 }
 
 /// Insert a call to kani::any::<ty>() in `body`; return the local storing the result.
-/// Panics if `ty` does not implement Arbitrary.
+/// For `Box<T>`/`Rc<T>`/`Arc<T>` whose pointee only *can derive* Arbitrary, insert a call to
+/// the corresponding smart-pointer model instead (the model's internal `kani::any::<T>()` call
+/// is replaced with the compiler-synthesized implementation by `AutomaticArbitraryPass`).
+/// Panics if `ty` does not implement Arbitrary and is not a supported smart pointer.
 fn call_kani_any_for_ty(
+    tcx: TyCtxt,
     kani_any: FnDef,
+    smart_pointer_models: &SmartPointerModels,
     body: &mut MutableBody,
     ty: Ty,
     mutability: Mutability,
     source: &mut SourceInstruction,
 ) -> Local {
     if let TyKind::RigidTy(RigidTy::Ref(region, inner_ty, inner_mutability)) = ty.kind() {
-        let inner_lcl = call_kani_any_for_ty(kani_any, body, inner_ty, inner_mutability, source);
+        let inner_lcl = call_kani_any_for_ty(
+            tcx,
+            kani_any,
+            smart_pointer_models,
+            body,
+            inner_ty,
+            inner_mutability,
+            source,
+        );
         let ref_lcl = body.new_local(ty, source.span(body.blocks()), mutability);
         let borrow_kind = if inner_mutability == Mutability::Not {
             BorrowKind::Shared
@@ -151,11 +169,25 @@ fn call_kani_any_for_ty(
         );
         ref_lcl
     } else {
-        let kani_any_inst =
+        // Prefer a plain kani::any() call, which resolves to the type's (implemented or
+        // compiler-derived) Arbitrary; use the smart-pointer models only for pointees that
+        // lack an Arbitrary implementation (in which case resolving e.g.
+        // `<Box<T> as Arbitrary>::any` would fail).
+        let mut cache = FxHashMap::default();
+        let use_any = implements_arbitrary(ty, kani_any, &mut cache)
+            || can_derive_arbitrary(ty, kani_any, &mut cache);
+        let inst = if use_any {
             Instance::resolve(kani_any, &GenericArgs(vec![GenericArgKind::Type(ty)]))
-                .unwrap_or_else(|_| panic!("expected a ty that implements Arbitrary, got {ty}"));
+                .unwrap_or_else(|_| panic!("expected a ty that implements Arbitrary, got {ty}"))
+        } else {
+            let (inst, _) = smart_pointer_model_instance(tcx, ty, smart_pointer_models)
+                .unwrap_or_else(|| {
+                    panic!("expected a ty that implements Arbitrary or a smart pointer, got {ty}")
+                });
+            inst
+        };
         let lcl = body.new_local(ty, source.span(body.blocks()), mutability);
-        body.insert_call(&kani_any_inst, source, InsertPosition::Before, vec![], Place::from(lcl));
+        body.insert_call(&inst, source, InsertPosition::Before, vec![], Place::from(lcl));
         lcl
     }
 }
@@ -170,6 +202,7 @@ impl AutomaticArbitraryPass {
     /// This function will panic if a field type does not implement Arbitrary.
     fn call_kani_any_for_variant(
         &self,
+        tcx: TyCtxt,
         adt_def: AdtDef,
         adt_args: &GenericArgs,
         body: &mut MutableBody,
@@ -181,7 +214,15 @@ impl AutomaticArbitraryPass {
 
         // Construct nondeterministic values for each of the variant's fields
         for ty in fields.iter().map(|field| field.ty_with_args(adt_args)) {
-            let lcl = call_kani_any_for_ty(self.kani_any, body, ty, Mutability::Not, source);
+            let lcl = call_kani_any_for_ty(
+                tcx,
+                self.kani_any,
+                &self.smart_pointer_models,
+                body,
+                ty,
+                Mutability::Not,
+                source,
+            );
             field_locals.push(lcl);
         }
 
@@ -213,7 +254,7 @@ impl AutomaticArbitraryPass {
     ///   _ => Enum::LastVariant
     /// }
     /// ```
-    fn generate_enum_body(&self, def: AdtDef, args: GenericArgs, body: Body) -> Body {
+    fn generate_enum_body(&self, tcx: TyCtxt, def: AdtDef, args: GenericArgs, body: Body) -> Body {
         // Autoharness only deems a function with an enum eligible if it has at least one variant, c.f. `can_derive_arbitrary`
         assert!(def.num_variants() > 0);
 
@@ -223,7 +264,9 @@ impl AutomaticArbitraryPass {
 
         // Generate a nondet u128 to switch on
         let discr_lcl = call_kani_any_for_ty(
+            tcx,
             self.kani_any,
+            &self.smart_pointer_models,
             &mut new_body,
             Ty::from_rigid_kind(RigidTy::Uint(UintTy::U128)),
             Mutability::Not,
@@ -241,8 +284,14 @@ impl AutomaticArbitraryPass {
 
         let mut branches: Vec<(u128, BasicBlockIdx)> = vec![];
         for variant in def.variants_iter() {
-            let target_bb =
-                self.call_kani_any_for_variant(def, &args, &mut new_body, &mut source, variant);
+            let target_bb = self.call_kani_any_for_variant(
+                tcx,
+                def,
+                &args,
+                &mut new_body,
+                &mut source,
+                variant,
+            );
             branches.push((variant.idx.to_index() as u128, target_bb));
         }
 
@@ -268,7 +317,13 @@ impl AutomaticArbitraryPass {
     ///   ...
     /// }
     /// ```
-    fn generate_struct_body(&self, def: AdtDef, args: GenericArgs, body: Body) -> Body {
+    fn generate_struct_body(
+        &self,
+        tcx: TyCtxt,
+        def: AdtDef,
+        args: GenericArgs,
+        body: Body,
+    ) -> Body {
         assert_eq!(def.num_variants(), 1);
 
         let mut new_body = MutableBody::from(body);
@@ -276,7 +331,7 @@ impl AutomaticArbitraryPass {
         let mut source = SourceInstruction::Terminator { bb: 0 };
 
         let variant = def.variants()[0];
-        self.call_kani_any_for_variant(def, &args, &mut new_body, &mut source, variant);
+        self.call_kani_any_for_variant(tcx, def, &args, &mut new_body, &mut source, variant);
 
         new_body.into()
     }
@@ -285,6 +340,7 @@ impl AutomaticArbitraryPass {
 #[derive(Debug, Clone)]
 pub struct AutomaticHarnessPass {
     kani_any: FnDef,
+    smart_pointer_models: SmartPointerModels,
     init_contracts_hook: Instance,
     kani_autoharness_intrinsic: FnDef,
 }
@@ -295,10 +351,11 @@ impl AutomaticHarnessPass {
         let kani_autoharness_intrinsic =
             *kani_fns.get(&KaniIntrinsic::AutomaticHarness.into()).unwrap();
         let kani_any = *kani_fns.get(&KaniModel::Any.into()).unwrap();
+        let smart_pointer_models = SmartPointerModels::from_kani_functions(kani_fns);
         let init_contracts_hook = *kani_fns.get(&KaniHook::InitContracts.into()).unwrap();
         let init_contracts_hook =
             Instance::resolve(init_contracts_hook, &GenericArgs(vec![])).unwrap();
-        Self { kani_any, init_contracts_hook, kani_autoharness_intrinsic }
+        Self { kani_any, smart_pointer_models, init_contracts_hook, kani_autoharness_intrinsic }
     }
 }
 
@@ -359,7 +416,9 @@ impl TransformPass for AutomaticHarnessPass {
             .iter()
             .map(|local_decl| {
                 call_kani_any_for_ty(
+                    tcx,
                     self.kani_any,
+                    &self.smart_pointer_models,
                     &mut harness_body,
                     local_decl.ty,
                     local_decl.mutability,

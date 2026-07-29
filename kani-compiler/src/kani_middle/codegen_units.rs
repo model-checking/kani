@@ -15,7 +15,7 @@ use crate::kani_middle::metadata::{
 };
 use crate::kani_middle::reachability::filter_crate_items;
 use crate::kani_middle::stubbing::{check_compatibility, harness_stub_map};
-use crate::kani_middle::{can_derive_arbitrary, implements_arbitrary};
+use crate::kani_middle::{SmartPointerModels, autoharness_supported_arg_ty};
 use crate::kani_queries::QueryDb;
 use kani_metadata::{
     ArtifactType, AssignsContract, AutoHarnessMetadata, AutoHarnessSkipReason, HarnessMetadata,
@@ -103,6 +103,7 @@ impl CodegenUnits {
                     args,
                     &crate_info.name,
                     *kani_fns.get(&KaniModel::Any.into()).unwrap(),
+                    SmartPointerModels::from_kani_functions(kani_fns),
                 );
                 AUTOHARNESS_MD
                     .set(AutoHarnessMetadata {
@@ -417,6 +418,7 @@ fn automatic_harness_partition(
     args: &Arguments,
     crate_name: &str,
     kani_any_def: FnDef,
+    smart_pointer_models: SmartPointerModels,
 ) -> (Vec<Instance>, BTreeMap<String, AutoHarnessSkipReason>) {
     let crate_fn_defs = rustc_public::local_crate().fn_defs().into_iter().collect::<FxHashSet<_>>();
     // Filter out CrateItems that are functions, but not functions defined in the crate itself, i.e., rustc-inserted functions
@@ -474,17 +476,24 @@ fn automatic_harness_partition(
             return Some(AutoHarnessSkipReason::UserFilter);
         }
 
-        // Each argument of `instance` must implement Arbitrary.
+        // Each argument of `instance` must be supported by automatic harness generation, i.e.,
+        // implement Arbitrary (or be capable of deriving it), or be a supported smart pointer,
+        // c.f. `autoharness_supported_arg_ty`.
         // Note that we've already filtered out generic functions, so we know that each of these arguments has a concrete type.
+        // We deliberately do not insert the verdict into `ty_arbitrary_cache` here: the cache
+        // stores whether a type implements (or can derive) Arbitrary, which is the wrong
+        // semantics for types that are supported in argument position only (smart pointers of
+        // derivable pointees); `implements_arbitrary` memoizes its own recursion internally,
+        // so repeated argument types stay cheap.
         let mut problematic_args = vec![];
         for (idx, arg) in body.arg_locals().iter().enumerate() {
-            if !ty_arbitrary_cache.contains_key(&arg.ty) {
-                let impls_arbitrary =
-                    implements_arbitrary(arg.ty, kani_any_def, &mut ty_arbitrary_cache)
-                        || can_derive_arbitrary(arg.ty, kani_any_def, &mut ty_arbitrary_cache);
-                ty_arbitrary_cache.insert(arg.ty, impls_arbitrary);
-            }
-            let impls_arbitrary = ty_arbitrary_cache.get(&arg.ty).unwrap();
+            let impls_arbitrary = &autoharness_supported_arg_ty(
+                tcx,
+                arg.ty,
+                kani_any_def,
+                &smart_pointer_models,
+                &mut ty_arbitrary_cache,
+            );
 
             if !impls_arbitrary {
                 // Find the name of the argument by referencing var_debug_info.
