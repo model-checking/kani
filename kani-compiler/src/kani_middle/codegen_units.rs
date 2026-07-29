@@ -15,7 +15,7 @@ use crate::kani_middle::metadata::{
 };
 use crate::kani_middle::reachability::filter_crate_items;
 use crate::kani_middle::stubbing::{check_compatibility, harness_stub_map};
-use crate::kani_middle::{can_derive_arbitrary, implements_arbitrary};
+use crate::kani_middle::{can_derive_arbitrary, fmt_impl_self_ty, implements_arbitrary};
 use crate::kani_queries::QueryDb;
 use kani_metadata::{
     ArtifactType, AssignsContract, AutoHarnessMetadata, AutoHarnessSkipReason, HarnessMetadata,
@@ -472,6 +472,23 @@ fn automatic_harness_partition(
 
         if autoharness_filtered_out(&name, &included_set, &excluded_set) {
             return Some(AutoHarnessSkipReason::UserFilter);
+        }
+
+        // Debug/Display fmt implementations are handled specially: their `&mut Formatter`
+        // argument cannot be generated, but the generated harness formats a nondeterministic
+        // value of the self type into a discarding sink instead,
+        // c.f. `fmt_impl_self_ty`.
+        if let Some((_, self_ty)) = fmt_impl_self_ty(tcx, instance) {
+            return if implements_arbitrary(self_ty, kani_any_def, &mut ty_arbitrary_cache)
+                || can_derive_arbitrary(self_ty, kani_any_def, &mut ty_arbitrary_cache)
+            {
+                None
+            } else {
+                Some(AutoHarnessSkipReason::MissingArbitraryImpl(vec![(
+                    "self".to_string(),
+                    format!("{self_ty}"),
+                )]))
+            };
         }
 
         // Each argument of `instance` must implement Arbitrary.

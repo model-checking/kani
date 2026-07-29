@@ -67,6 +67,10 @@ pub enum KaniModel {
     AlignOfVal,
     #[strum(serialize = "AnyModel")]
     Any,
+    #[strum(serialize = "CheckDebugFmtModel")]
+    CheckDebugFmt,
+    #[strum(serialize = "CheckDisplayFmtModel")]
+    CheckDisplayFmt,
     #[strum(serialize = "CopyInitStateModel")]
     CopyInitState,
     #[strum(serialize = "CopyInitStateSingleModel")]
