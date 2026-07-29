@@ -1,10 +1,10 @@
 diff --git a/charon/Cargo.toml b/charon/Cargo.toml
-index ce25cc2f..1e7ac649 100644
+index 71024f7c..615b9484 100644
 --- a/charon/Cargo.toml
 +++ b/charon/Cargo.toml
 @@ -2,7 +2,7 @@
  name = "charon"
- version = "0.1.82"
+ version = "0.1.87"
  authors = ["Son Ho <hosonmarc@gmail.com>", "Guillaume Boisseau <nadrieril+git@gmail.com>"]
 -edition = "2021"
 +edition = "2024"
@@ -21,7 +21,7 @@ index ce25cc2f..1e7ac649 100644
  anyhow = "1.0.81"
  assert_cmd = "2.0"
 diff --git a/charon/src/errors.rs b/charon/src/errors.rs
-index 6d0593e4..69f9ae55 100644
+index 800e8768..4bf3e6a6 100644
 --- a/charon/src/errors.rs
 +++ b/charon/src/errors.rs
 @@ -13,11 +13,11 @@ use std::collections::{HashMap, HashSet};
@@ -38,7 +38,7 @@ index 6d0593e4..69f9ae55 100644
      }};
  }
  pub use register_error;
-@@ -78,30 +78,38 @@ pub struct Error {
+@@ -78,37 +78,45 @@ pub struct Error {
  impl Error {
      pub(crate) fn render(&self, krate: &TranslatedCrate, level: Level) -> String {
          use annotate_snippets::*;
@@ -91,7 +91,15 @@ index 6d0593e4..69f9ae55 100644
      }
  }
  
-@@ -224,8 +232,8 @@ impl ErrorCtx {
+ /// Display an error without a specific location.
+ pub fn display_unspanned_error(level: Level, msg: &str) {
+     use annotate_snippets::*;
+-    let message = level.header(msg);
++    let message = level.title(msg);
+     let message = Renderer::styled().render(message).to_string();
+     anstream::eprintln!("{message}\n");
+ }
+@@ -232,8 +240,8 @@ impl ErrorCtx {
          msg: &str,
          level: Level,
      ) -> Error {
@@ -102,7 +110,7 @@ index 6d0593e4..69f9ae55 100644
          } else {
              level
          };
-@@ -303,7 +311,7 @@ impl ErrorCtx {
+@@ -311,7 +319,7 @@ impl ErrorCtx {
          // Sort by file id to avoid output instability.
          by_file.sort_by_key(|(file_id, ..)| *file_id);
  
@@ -111,7 +119,7 @@ index 6d0593e4..69f9ae55 100644
          let snippets = by_file.iter().map(|(_, origin, source, spans)| {
              Snippet::source(source)
                  .origin(&origin)
-@@ -311,7 +319,7 @@ impl ErrorCtx {
+@@ -319,7 +327,7 @@ impl ErrorCtx {
                  .annotations(
                      spans
                          .iter()
@@ -120,7 +128,7 @@ index 6d0593e4..69f9ae55 100644
                  )
          });
  
-@@ -320,7 +328,7 @@ impl ErrorCtx {
+@@ -328,7 +336,7 @@ impl ErrorCtx {
               which is (transitively) used at the following location(s):",
              krate.into_fmt().format_object(id)
          );
@@ -130,10 +138,10 @@ index 6d0593e4..69f9ae55 100644
          anstream::eprintln!("{}", out);
      }
 diff --git a/charon/src/ids/vector.rs b/charon/src/ids/vector.rs
-index dbc354e2..aecb95b2 100644
+index d7e85c2e..5d6a0ac5 100644
 --- a/charon/src/ids/vector.rs
 +++ b/charon/src/ids/vector.rs
-@@ -260,7 +260,7 @@ where
+@@ -261,7 +261,7 @@ where
          self.iter_indexed().map(|(id, _)| id)
      }
  
@@ -142,8 +150,28 @@ index dbc354e2..aecb95b2 100644
          self.vector.indices()
      }
  
+diff --git a/charon/src/options.rs b/charon/src/options.rs
+index 84dd5bd0..fe5b8a96 100644
+--- a/charon/src/options.rs
++++ b/charon/src/options.rs
+@@ -328,13 +328,13 @@ impl CliOpts {
+ 
+         if self.mir_optimized {
+             display_unspanned_error(
+-                Level::WARNING,
++                Level::Warning,
+                 "`--mir_optimized` is deprecated, use `--mir optimized` instead",
+             )
+         }
+         if self.mir_promoted {
+             display_unspanned_error(
+-                Level::WARNING,
++                Level::Warning,
+                 "`--mir_promoted` is deprecated, use `--mir promoted` instead",
+             )
+         }
 diff --git a/charon/src/transform/check_generics.rs b/charon/src/transform/check_generics.rs
-index eb8a8ada..f06ed12a 100644
+index cf4dad41..180adf08 100644
 --- a/charon/src/transform/check_generics.rs
 +++ b/charon/src/transform/check_generics.rs
 @@ -42,7 +42,7 @@ impl CheckGenericsVisitor<'_> {
@@ -156,7 +184,7 @@ index eb8a8ada..f06ed12a 100644
  
      /// For pretty error printing. This can print values that we encounter because we track binders
 diff --git a/charon/src/transform/expand_associated_types.rs b/charon/src/transform/expand_associated_types.rs
-index 28be9543..7cf2d870 100644
+index 418a1eb5..fd2e5e37 100644
 --- a/charon/src/transform/expand_associated_types.rs
 +++ b/charon/src/transform/expand_associated_types.rs
 @@ -794,7 +794,7 @@ impl<'a> ComputeItemModifications<'a> {
@@ -169,7 +197,7 @@ index 28be9543..7cf2d870 100644
          let clause_path = clause_to_path(clause.clause_id);
          self.compute_extra_params_for_trait(trait_id)
 diff --git a/charon/src/transform/simplify_constants.rs b/charon/src/transform/simplify_constants.rs
-index 7f149ad8..6054f703 100644
+index 9a44997c..77ccece2 100644
 --- a/charon/src/transform/simplify_constants.rs
 +++ b/charon/src/transform/simplify_constants.rs
 @@ -11,7 +11,7 @@

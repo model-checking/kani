@@ -182,7 +182,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 regions: CharonVector::new(),
                 skip_binder: CharonTraitDeclRef {
                     trait_id: c_traitdecl_id,
-                    generics: c_genarg.clone(),
+                    generics: Box::new(c_genarg.clone()),
                 },
             };
             let debr = CharonDeBruijnVar::free(CharonTraitClauseId::from_usize(i));
@@ -222,7 +222,10 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 .translate_generic_args_without_trait(trait_ref.args().clone(), trait_def.def_id());
             let c_polytrait = CharonPolyTraitDeclRef {
                 regions: CharonVector::new(),
-                skip_binder: CharonTraitDeclRef { trait_id: c_traitdecl_id, generics: c_genarg },
+                skip_binder: CharonTraitDeclRef {
+                    trait_id: c_traitdecl_id,
+                    generics: Box::new(c_genarg),
+                },
             };
             let c_traitclause = CharonTraitClause {
                 clause_id: CharonTraitClauseId::from_usize(i),
@@ -1260,7 +1263,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 regions: trait_ref.trait_decl_ref.regions.clone(),
                 skip_binder: CharonTraitDeclRef {
                     trait_id: traitdecl_id,
-                    generics: generics.clone(),
+                    generics: Box::new(generics.clone()),
                 },
             };
             let subs_traitref = CharonTraitRef {
@@ -1543,7 +1546,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                         };
                         let funcid = CharonFunIdOrTraitMethodRef::Fun(CharonFunId::Regular(fid));
                         let generics = self.translate_generic_args(genarg_resolve, def_id);
-                        CharonFnPtr { func: funcid, generics }
+                        CharonFnPtr { func: Box::new(funcid), generics: Box::new(generics) }
                     }
                     TyKind::RigidTy(RigidTy::FnPtr(..)) => todo!(),
                     x => unreachable!(
@@ -1667,7 +1670,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                                     c_type_id,
                                     c_variant_id,
                                     c_field_id,
-                                    c_generic_args,
+                                    Box::new(c_generic_args),
                                 );
                                 CharonRvalue::Aggregate(c_agg_kind, c_operands)
                             }
@@ -1683,7 +1686,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                                     c_type_id,
                                     c_variant_id,
                                     c_field_id,
-                                    c_generic_args,
+                                    Box::new(c_generic_args),
                                 );
                                 CharonRvalue::Aggregate(c_agg_kind, c_operands)
                             }
@@ -1695,7 +1698,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                             CharonTypeId::Tuple,
                             None,
                             None,
-                            CharonGenericArgs::empty(CharonGenericsSource::Builtin),
+                            Box::new(CharonGenericArgs::empty(CharonGenericsSource::Builtin)),
                         ),
                         c_operands,
                     ),
@@ -1720,7 +1723,9 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     fn translate_operand(&mut self, operand: &Operand) -> CharonOperand {
         trace!("translate_operand: {operand:?}");
         match operand {
-            Operand::Constant(constant) => CharonOperand::Const(self.translate_constant(constant)),
+            Operand::Constant(constant) => {
+                CharonOperand::Const(Box::new(self.translate_constant(constant)))
+            }
             Operand::Copy(place) => CharonOperand::Copy(self.translate_place(&place)),
             Operand::Move(place) => CharonOperand::Move(self.translate_place(&place)),
             // `Operand::RuntimeChecks` (rust-lang/rust#148766) is not yet modeled by the
@@ -1747,7 +1752,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 let c_genarg = self.translate_generic_args(uc.args.clone(), defid);
                 CharonRawConstantExpr::Global(CharonGlobalDeclRef {
                     id: c_defid,
-                    generics: c_genarg,
+                    generics: Box::new(c_genarg),
                 })
             }
             ConstantKind::Param(_) => todo!(),
