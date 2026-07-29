@@ -1,0 +1,3 @@
+| cargo_autoharness_ref_field | read_direct       |
+| cargo_autoharness_ref_field | read_ref         | Missing Arbitrary implementation for argument(s) h: HasStaticRef |
+|       | cargo_autoharness_ref_field | read_direct |
