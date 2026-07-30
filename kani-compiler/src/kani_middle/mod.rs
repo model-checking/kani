@@ -301,6 +301,14 @@ fn implements_arbitrary(
     false
 }
 
+/// Whether `ty` is statically sized. Nondeterministic-value generation (and the resolution
+/// checks probing for it) must not instantiate generic models with unsized types: apart from
+/// being ungeneratable, this can crash constant evaluation during body retrieval.
+fn ty_is_sized(tcx: TyCtxt, ty: Ty) -> bool {
+    rustc_internal::internal(tcx, ty)
+        .is_sized(*tcx.at(rustc_span::DUMMY_SP), rustc_middle::ty::TypingEnv::fully_monomorphized())
+}
+
 /// Inspect a `kani::bounded_any::<T, N>()` (c.f. `KaniModel::BoundedAny`) instantiation to
 /// determine if `T: BoundedArbitrary`. The model looks like:
 /// ```rust
@@ -311,8 +319,8 @@ fn implements_arbitrary(
 /// So we select the terminator that calls `T::bounded_any::<N>()`, then try to resolve it to an
 /// Instance; `T` implements `BoundedArbitrary` iff we successfully resolve the Instance
 /// (mirroring `implements_arbitrary`).
-fn implements_bounded_arbitrary(ty: Ty, kani_bounded_any_def: FnDef) -> bool {
-    if ty.kind().rigid().is_none() {
+fn implements_bounded_arbitrary(tcx: TyCtxt, ty: Ty, kani_bounded_any_def: FnDef) -> bool {
+    if ty.kind().rigid().is_none() || !ty_is_sized(tcx, ty) {
         return false;
     }
 
@@ -416,6 +424,7 @@ pub enum ArgSupport {
 /// - types that implement `BoundedArbitrary` (e.g. `Vec<T>`, `String`, or user types deriving
 ///   it): the harness generates a bounded nondeterministic value via `KaniModel::BoundedAny`.
 fn autoharness_supported_arg_ty(
+    tcx: TyCtxt,
     ty: Ty,
     kani_any_def: FnDef,
     kani_bounded_any_def: FnDef,
@@ -454,7 +463,7 @@ fn autoharness_supported_arg_ty(
     } else {
         if arbitrary_or_derive(ty, ty_arbitrary_cache) == ArgSupport::Arbitrary {
             ArgSupport::Arbitrary
-        } else if implements_bounded_arbitrary(ty, kani_bounded_any_def) {
+        } else if implements_bounded_arbitrary(tcx, ty, kani_bounded_any_def) {
             ArgSupport::Bounded
         } else {
             ArgSupport::Unsupported
