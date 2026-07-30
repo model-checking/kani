@@ -1,10 +1,10 @@
 diff --git a/charon/Cargo.toml b/charon/Cargo.toml
-index 71024f7c..615b9484 100644
+index 51a4b00d..25f528f2 100644
 --- a/charon/Cargo.toml
 +++ b/charon/Cargo.toml
 @@ -2,7 +2,7 @@
  name = "charon"
- version = "0.1.87"
+ version = "0.1.88"
  authors = ["Son Ho <hosonmarc@gmail.com>", "Guillaume Boisseau <nadrieril+git@gmail.com>"]
 -edition = "2021"
 +edition = "2024"
@@ -151,10 +151,10 @@ index d7e85c2e..5d6a0ac5 100644
      }
  
 diff --git a/charon/src/options.rs b/charon/src/options.rs
-index 84dd5bd0..fe5b8a96 100644
+index 692680d8..af052a50 100644
 --- a/charon/src/options.rs
 +++ b/charon/src/options.rs
-@@ -328,13 +328,13 @@ impl CliOpts {
+@@ -335,13 +335,13 @@ impl CliOpts {
  
          if self.mir_optimized {
              display_unspanned_error(
@@ -184,7 +184,7 @@ index cf4dad41..180adf08 100644
  
      /// For pretty error printing. This can print values that we encounter because we track binders
 diff --git a/charon/src/transform/expand_associated_types.rs b/charon/src/transform/expand_associated_types.rs
-index 418a1eb5..fd2e5e37 100644
+index 418a1eb5..23f78c0f 100644
 --- a/charon/src/transform/expand_associated_types.rs
 +++ b/charon/src/transform/expand_associated_types.rs
 @@ -794,7 +794,7 @@ impl<'a> ComputeItemModifications<'a> {
@@ -196,6 +196,15 @@ index 418a1eb5..fd2e5e37 100644
          let trait_id = clause.trait_.skip_binder.trait_id;
          let clause_path = clause_to_path(clause.clause_id);
          self.compute_extra_params_for_trait(trait_id)
+@@ -806,7 +806,7 @@ impl<'a> ComputeItemModifications<'a> {
+     fn compute_implied_constraints_for_predicate<'b>(
+         &'b mut self,
+         pred: &'b TraitDeclRef,
+-    ) -> impl Iterator<Item = (AssocTypePath, Ty)> + use<'b> {
++    ) -> impl Iterator<Item = (AssocTypePath, Ty)> + use<'a, 'b> {
+         let _ = self.compute_extra_params_for_trait(pred.trait_id);
+         self.trait_modifications[pred.trait_id]
+             .as_processed()
 diff --git a/charon/src/transform/simplify_constants.rs b/charon/src/transform/simplify_constants.rs
 index 9a44997c..77ccece2 100644
 --- a/charon/src/transform/simplify_constants.rs
