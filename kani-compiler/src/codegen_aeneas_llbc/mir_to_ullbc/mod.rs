@@ -1561,8 +1561,9 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     dest: self.translate_place(destination),
                 };
                 (
-                    Some(CharonRawStatement::Call(call)),
-                    CharonRawTerminator::Goto {
+                    None,
+                    CharonRawTerminator::Call {
+                        call,
                         target: CharonBlockId::from_usize(target.unwrap()),
                     },
                 )
