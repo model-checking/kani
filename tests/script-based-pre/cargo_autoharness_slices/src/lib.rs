@@ -48,6 +48,16 @@ pub fn str_cover(s: &str) {
     kani::cover!(s.chars().next() == Some('\u{e9}'), "string starting with a non-ASCII char");
 }
 
+// TEST NOTE: should PASS: slices of element types whose Arbitrary implementation the
+// compiler derives are supported (the backing array is built element-wise).
+pub struct OnlyDerivable {
+    pub v: u8,
+}
+
+pub fn sum_derivable(xs: &[OnlyDerivable]) -> u64 {
+    xs.iter().map(|x| x.v as u64).sum()
+}
+
 // TEST NOTE: skipped: nested slice references are not supported (yet).
 pub fn nested(xs: &&[u8]) -> usize {
     xs.len()
