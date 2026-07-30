@@ -349,6 +349,14 @@ fn implements_invariant(
     res
 }
 
+/// Whether `ty` is statically sized. Nondeterministic-value generation (and the resolution
+/// checks probing for it) must not instantiate generic models with unsized types: apart from
+/// being ungeneratable, this can crash constant evaluation during body retrieval.
+fn ty_is_sized(tcx: TyCtxt, ty: Ty) -> bool {
+    rustc_internal::internal(tcx, ty)
+        .is_sized(*tcx.at(rustc_span::DUMMY_SP), rustc_middle::ty::TypingEnv::fully_monomorphized())
+}
+
 /// Inspect a `kani::bounded_any::<T, N>()` (c.f. `KaniModel::BoundedAny`) instantiation to
 /// determine if `T: BoundedArbitrary`. The model looks like:
 /// ```rust
@@ -359,8 +367,8 @@ fn implements_invariant(
 /// So we select the terminator that calls `T::bounded_any::<N>()`, then try to resolve it to an
 /// Instance; `T` implements `BoundedArbitrary` iff we successfully resolve the Instance
 /// (mirroring `implements_arbitrary`).
-fn implements_bounded_arbitrary(ty: Ty, kani_bounded_any_def: FnDef) -> bool {
-    if ty.kind().rigid().is_none() {
+fn implements_bounded_arbitrary(tcx: TyCtxt, ty: Ty, kani_bounded_any_def: FnDef) -> bool {
+    if ty.kind().rigid().is_none() || !ty_is_sized(tcx, ty) {
         return false;
     }
 
@@ -472,6 +480,7 @@ pub enum ArgSupport {
 /// inside an ADT remains unsupported, since the pointee/backing storage that the generated harness
 /// allocates would not outlive the generated value.
 fn autoharness_supported_arg_ty(
+    tcx: TyCtxt,
     ty: Ty,
     kani_any_def: FnDef,
     kani_bounded_any_def: FnDef,
@@ -490,7 +499,13 @@ fn autoharness_supported_arg_ty(
     if let TyKind::RigidTy(RigidTy::RawPtr(inner_ty, _)) = ty.kind() {
         // A raw pointer is supported as long as its pointee is: propagate the pointee's verdict,
         // so a pointer to a bounded pointee (e.g. `*mut &[T]`) is itself reported as bounded.
-        autoharness_supported_arg_ty(inner_ty, kani_any_def, kani_bounded_any_def, ty_arbitrary_cache)
+        autoharness_supported_arg_ty(
+            tcx,
+            inner_ty,
+            kani_any_def,
+            kani_bounded_any_def,
+            ty_arbitrary_cache,
+        )
     } else if let TyKind::RigidTy(RigidTy::Ref(_, inner_ty, inner_mutability)) = ty.kind() {
         match inner_ty.kind() {
             TyKind::RigidTy(RigidTy::Slice(elem_ty)) => {
@@ -514,7 +529,7 @@ fn autoharness_supported_arg_ty(
     } else {
         if arbitrary_or_derive(ty, ty_arbitrary_cache) == ArgSupport::Arbitrary {
             ArgSupport::Arbitrary
-        } else if implements_bounded_arbitrary(ty, kani_bounded_any_def) {
+        } else if implements_bounded_arbitrary(tcx, ty, kani_bounded_any_def) {
             ArgSupport::Bounded
         } else {
             ArgSupport::Unsupported

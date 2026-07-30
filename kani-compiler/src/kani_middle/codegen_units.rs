@@ -591,6 +591,7 @@ fn automatic_harness_partition(
             // same key would poison the cache for the ADT-field checks. `implements_arbitrary`
             // memoizes its own recursion internally, so repeated argument types stay cheap.
             let support = autoharness_supported_arg_ty(
+                tcx,
                 arg.ty,
                 kani_any_def,
                 kani_bounded_any_def,
