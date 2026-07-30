@@ -300,6 +300,14 @@ fn implements_arbitrary(
     false
 }
 
+/// Whether `ty` is statically sized. Nondeterministic-value generation (and the resolution
+/// checks probing for it) must not instantiate generic models with unsized types: apart from
+/// being ungeneratable, this can crash constant evaluation during body retrieval.
+fn ty_is_sized(tcx: TyCtxt, ty: Ty) -> bool {
+    rustc_internal::internal(tcx, ty)
+        .is_sized(*tcx.at(rustc_span::DUMMY_SP), rustc_middle::ty::TypingEnv::fully_monomorphized())
+}
+
 /// The smart-pointer types for which automatic harnesses can generate nondeterministic values
 /// via dedicated (optional) models, c.f. `KaniModel::is_optional`.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -337,6 +345,9 @@ fn smart_pointer_pointee(tcx: TyCtxt, ty: Ty) -> Option<(SmartPointerKind, Ty)> 
         GenericArgKind::Type(ty) => Some(*ty),
         _ => None,
     })?;
+    if !ty_is_sized(tcx, pointee) {
+        return None;
+    }
     Some((kind, pointee))
 }
 

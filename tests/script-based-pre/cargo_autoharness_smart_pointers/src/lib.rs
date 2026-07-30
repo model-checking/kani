@@ -47,6 +47,12 @@ pub fn arc_assert(a: Arc<Derived>) {
     assert!(a.x < 255);
 }
 
+// TEST NOTE: skipped (gracefully, without crashing the compiler): unsized pointees are not
+// supported.
+pub fn box_unsized(b: Box<[u8]>) -> usize {
+    b.len()
+}
+
 // TEST NOTE: skipped: pointees that can neither implement nor derive Arbitrary remain
 // unsupported.
 pub struct NotDerivable {
