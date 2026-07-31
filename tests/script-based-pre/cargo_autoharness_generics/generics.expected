@@ -1,12 +1,18 @@
-| cargo_autoharness_generics | needs_exotic     | Generic Function: no candidate type (i32, u32, usize, bool, char) satisfies the function's trait bounds |
-| cargo_autoharness_generics | with_bool_const  | Generic Function: non-usize const generic parameters are not supported yet                              |
-| cargo_autoharness_generics | Wrapper::<i32>::get | #[kani::proof]              | Success             |
-| cargo_autoharness_generics | contracted::<u32>   | #[kani::proof_for_contract] | Success             |
-| cargo_autoharness_generics | first::<i32>        | #[kani::proof]              | Success             |
-| cargo_autoharness_generics | identity::<i32>     | #[kani::proof]              | Success             |
-| cargo_autoharness_generics | max3::<i32>         | #[kani::proof]              | Success             |
-| cargo_autoharness_generics | pair::<i32, i32>    | #[kani::proof]              | Success             |
-| cargo_autoharness_generics | takes_impl::<u32>   | #[kani::proof]              | Success             |
-| cargo_autoharness_generics | with_const::<2>     | #[kani::proof]              | Success             |
-| cargo_autoharness_generics | buggy_add::<i32>    | #[kani::proof]              | Failure             |
-Complete - 8 successfully verified functions, 1 failures, 9 total.
+| cargo_autoharness_generics | needs_exotic     | Generic Function: no candidate type (i32, u32, usize, u8, i64, u64, f64, f32, bool, char) satisfies the function's trait bounds |
+| cargo_autoharness_generics | with_bool_const  | Generic Function: non-usize const generic parameters are not supported yet                                                      |
+| cargo_autoharness_generics | <Widget as Frobnicate>::frob | #[kani::proof]              | Success             |
+| cargo_autoharness_generics | <f32 as FloatLike>::half     | #[kani::proof]              | Success             |
+| cargo_autoharness_generics | <f64 as FloatLike>::half     | #[kani::proof]              | Success             |
+| cargo_autoharness_generics | Wrapper::<i32>::get          | #[kani::proof]              | Success             |
+| cargo_autoharness_generics | contracted::<u32>            | #[kani::proof_for_contract] | Success             |
+| cargo_autoharness_generics | first::<i32>                 | #[kani::proof]              | Success             |
+| cargo_autoharness_generics | frob_it::<Widget>            | #[kani::proof]              | Success             |
+| cargo_autoharness_generics | halve::<f64>                 | #[kani::proof]              | Success             |
+| cargo_autoharness_generics | identity::<i32>              | #[kani::proof]              | Success             |
+| cargo_autoharness_generics | max3::<i32>                  | #[kani::proof]              | Success             |
+| cargo_autoharness_generics | mixed::<f64, Widget>         | #[kani::proof]              | Success             |
+| cargo_autoharness_generics | pair::<i32, i32>             | #[kani::proof]              | Success             |
+| cargo_autoharness_generics | takes_impl::<u32>            | #[kani::proof]              | Success             |
+| cargo_autoharness_generics | with_const::<2>              | #[kani::proof]              | Success             |
+| cargo_autoharness_generics | buggy_add::<i32>             | #[kani::proof]              | Failure             |
+Complete - 14 successfully verified functions, 1 failures, 15 total.

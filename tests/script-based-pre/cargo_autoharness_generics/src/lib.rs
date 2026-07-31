@@ -46,12 +46,57 @@ pub fn takes_impl(x: impl Into<u64> + Copy) -> u64 {
     x.into()
 }
 
-// TEST NOTE: skipped (Generic Function), since no candidate type implements `Exotic`.
+// TEST NOTE: skipped (Generic Function), since no candidate type implements `Exotic`
+// (the trait has no implementations at all).
 pub trait Exotic {
     fn exotic(&self) -> u8;
 }
 pub fn needs_exotic<T: Exotic>(x: T) -> u8 {
     x.exotic()
+}
+
+// TEST NOTE: verified as `halve::<f64>`; no integral candidate satisfies the bound, but the
+// float candidates do (mimics num-traits' `Float`).
+pub trait FloatLike {
+    fn half(self) -> Self;
+}
+impl FloatLike for f64 {
+    fn half(self) -> Self {
+        self / 2.0
+    }
+}
+impl FloatLike for f32 {
+    fn half(self) -> Self {
+        self / 2.0
+    }
+}
+pub fn halve<T: FloatLike>(x: T) -> T {
+    x.half()
+}
+
+// TEST NOTE: verified as `frob_it::<Widget>`; no primitive implements `Frobnicate`, so the
+// candidate is derived from the trait's implementations.
+pub trait Frobnicate {
+    fn frob(&self) -> u32;
+}
+#[derive(kani::Arbitrary)]
+pub struct Widget {
+    pub id: u32,
+}
+impl Frobnicate for Widget {
+    fn frob(&self) -> u32 {
+        self.id.wrapping_add(1)
+    }
+}
+pub fn frob_it<W: Frobnicate>(w: W) -> u32 {
+    w.frob()
+}
+
+// TEST NOTE: verified as `mixed::<f64, Widget>`; the parameters require *different*
+// candidate types, found by the per-parameter search.
+pub fn mixed<T: FloatLike, U: Frobnicate>(x: T, w: U) -> u32 {
+    let _ = x.half();
+    w.frob()
 }
 
 // TEST NOTE: verified as `with_const::<2>`; usize const generic parameters are instantiated

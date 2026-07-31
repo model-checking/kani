@@ -116,8 +116,14 @@ Note that this automatic derivation feature is only available for autoharness.
 
 ### Generic Functions
 For a generic function, Kani generates a harness for a single monomorphic instantiation of the function:
-it substitutes every type parameter with the first candidate from a fixed list of primitive types
-(starting with `i32`) such that all of the function's trait bounds are satisfied, and erases lifetime parameters.
+it substitutes the function's type parameters with concrete types such that all of the function's
+trait bounds are satisfied, and erases lifetime parameters. Kani first tries a fixed list of
+primitive types (starting with `i32`, and including the wider integer and float types) uniformly
+for all parameters; if that fails, it searches per-parameter combinations, drawing additional
+candidate types from the concrete implementations of the traits each parameter is bound by
+(so, e.g., a parameter bound by a crate-local trait can be instantiated with a crate-local struct
+implementing it). The search is capped, so functions with many type parameters or very complex
+bounds may still be skipped.
 For example, given:
 ```rust
 fn foo<T: Eq>(x: T, y: T) {
