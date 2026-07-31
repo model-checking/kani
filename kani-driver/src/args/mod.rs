@@ -318,9 +318,11 @@ pub struct VerificationArgs {
     #[arg(long, hide_short_help = true)]
     pub only_codegen: bool,
 
-    /// Toggle between different styles of output
-    #[arg(long, default_value = "regular", ignore_case = true, value_enum)]
-    pub output_format: OutputFormat,
+    /// Toggle between different styles of output. Defaults to "regular", except for
+    /// `autoharness`, which defaults to "terse" (to support parallel harness verification,
+    /// c.f. `--jobs`) unless this option is passed explicitly.
+    #[arg(long, ignore_case = true, value_enum)]
+    pub output_format: Option<OutputFormat>,
 
     /// Write verification results into per-harness files, rather than to stdout
     #[arg(long, hide_short_help = true)]
@@ -473,6 +475,23 @@ impl VerificationArgs {
         }
     }
 
+    /// The output format, defaulting to `regular` when the user did not specify one.
+    pub fn output_format(&self) -> OutputFormat {
+        self.output_format.unwrap_or(OutputFormat::Regular)
+    }
+
+    /// Default to parallel harness verification with terse output for `autoharness`, which
+    /// typically generates hundreds of harnesses; sequential verification is a poor fit.
+    /// Explicit user choices are always preserved, and the parse-time validation that
+    /// `--jobs` requires `--output-format=terse` is unaffected (these defaults are applied
+    /// after it, and only when neither option was passed).
+    pub fn apply_autoharness_parallel_defaults(&mut self) {
+        if self.jobs.is_none() && self.output_format.is_none() {
+            self.jobs = Some(None); // `-j`: the thread pool's default thread count
+            self.output_format = Some(OutputFormat::Terse);
+        }
+    }
+
     /// Computes how many threads should be used to verify harnesses.
     pub fn jobs(&self) -> NumThreads {
         match self.jobs {
@@ -502,7 +521,7 @@ pub enum ConcretePlaybackMode {
     InPlace,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, ValueEnum)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 pub enum OutputFormat {
     Regular,
     Terse,
@@ -764,14 +783,14 @@ impl ValidateArgs for VerificationArgs {
                     "Conflicting options: --concrete-playback=print and --quiet.",
                 ));
             }
-            if self.concrete_playback.is_some() && self.output_format == OutputFormat::Old {
+            if self.concrete_playback.is_some() && self.output_format() == OutputFormat::Old {
                 return Err(Error::raw(
                     ErrorKind::ArgumentConflict,
                     "Conflicting options: --concrete-playback isn't compatible with \
                 --output-format=old.",
                 ));
             }
-            if self.sarif.is_some() && self.output_format == OutputFormat::Old {
+            if self.sarif.is_some() && self.output_format() == OutputFormat::Old {
                 return Err(Error::raw(
                     ErrorKind::ArgumentConflict,
                     "Conflicting options: --sarif isn't compatible with --output-format=old.",
@@ -790,7 +809,7 @@ impl ValidateArgs for VerificationArgs {
                     "Conflicting options: --sarif isn't compatible with --only-codegen.",
                 ));
             }
-            if self.jobs().will_multithread() && self.output_format != OutputFormat::Terse {
+            if self.jobs().will_multithread() && self.output_format() != OutputFormat::Terse {
                 // More verbose output formats make it hard to interpret output right now when run in parallel.
                 // This can be removed when we change up how results are printed.
                 return Err(Error::raw(
