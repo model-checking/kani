@@ -32,8 +32,8 @@ use rustc_middle::ty::{self, TyCtxt, TypingMode};
 use rustc_public::mir::mono::Instance;
 use rustc_public::rustc_internal;
 use rustc_public::ty::{
-    FnDef, GenericArgKind, GenericArgs, IntTy, Region, RegionKind, RigidTy, Ty, TyConst, TyKind,
-    UintTy,
+    FloatTy, FnDef, GenericArgKind, GenericArgs, IntTy, Region, RegionKind, RigidTy, Ty, TyConst,
+    TyKind, UintTy,
 };
 use rustc_public::{CrateDef, CrateItem};
 use rustc_public_bridge::IndexedVal;
@@ -438,9 +438,67 @@ fn generic_instantiation_candidates() -> Vec<Ty> {
         Ty::from_rigid_kind(RigidTy::Int(IntTy::I32)),
         Ty::from_rigid_kind(RigidTy::Uint(UintTy::U32)),
         Ty::from_rigid_kind(RigidTy::Uint(UintTy::Usize)),
+        Ty::from_rigid_kind(RigidTy::Uint(UintTy::U8)),
+        Ty::from_rigid_kind(RigidTy::Int(IntTy::I64)),
+        Ty::from_rigid_kind(RigidTy::Uint(UintTy::U64)),
+        Ty::from_rigid_kind(RigidTy::Float(FloatTy::F64)),
+        Ty::from_rigid_kind(RigidTy::Float(FloatTy::F32)),
         Ty::from_rigid_kind(RigidTy::Bool),
         Ty::from_rigid_kind(RigidTy::Char),
     ]
+}
+
+/// Cap on trait-solver queries per function when searching for a satisfying instantiation,
+/// so that functions with many type parameters do not blow up partitioning time.
+const GENERIC_INSTANTIATION_ATTEMPT_LIMIT: usize = 256;
+
+/// Cap on the number of trait-impl-derived candidate types collected per type parameter.
+const IMPL_DERIVED_CANDIDATE_LIMIT: usize = 16;
+
+/// For each type parameter of `def` (keyed by its index in the generic parameter list),
+/// collect concrete types that implement the parameter's trait bounds, by enumerating the
+/// non-blanket implementations of each trait the parameter is bound by. This finds candidates
+/// for parameters bound by crate-local or third-party traits (e.g. num-traits' `Float`),
+/// which no primitive candidate may satisfy.
+/// Candidates are deduplicated, restricted to fully concrete types, and sorted for
+/// determinism; each parameter's list is capped at [IMPL_DERIVED_CANDIDATE_LIMIT].
+fn impl_derived_candidates(tcx: TyCtxt, def: FnDef) -> FxHashMap<usize, Vec<Ty>> {
+    let mut candidates: FxHashMap<usize, Vec<Ty>> = FxHashMap::default();
+    // Walk the parent chain: `GenericPredicates::predicates` holds only the item's *own*
+    // predicates, so for an associated function the bounds on the impl's type parameters (e.g.
+    // `T` in `impl<T: Frob> Holder<T> { fn combine<U: Nizzle>(..) }`) live on the parent. They
+    // constrain the same argument list, and `args_satisfy_predicates` checks them (via
+    // `GenericPredicates::instantiate`, which does recurse into the parent), so missing them
+    // here would leave such a parameter with primitive candidates only.
+    let mut next = Some(rustc_internal::internal(tcx, def.def_id()));
+    while let Some(def_id) = next {
+        let generic_predicates = tcx.predicates_of(def_id);
+        next = generic_predicates.parent;
+        for (predicate, _span) in generic_predicates.predicates {
+            let Some(trait_pred) = predicate.as_trait_clause() else { continue };
+            let trait_pred = trait_pred.skip_binder();
+            let ty::Param(param_ty) = trait_pred.self_ty().kind() else { continue };
+            let slot = candidates.entry(param_ty.index as usize).or_default();
+            for impls in tcx.trait_impls_of(trait_pred.def_id()).non_blanket_impls().values() {
+                for &impl_def_id in impls {
+                    let self_ty = tcx.type_of(impl_def_id).instantiate_identity();
+                    // Only fully concrete self types can be substituted directly.
+                    if rustc_middle::ty::TypeVisitableExt::has_param(&self_ty) {
+                        continue;
+                    }
+                    let stable_ty = rustc_internal::stable(self_ty);
+                    if !slot.contains(&stable_ty) {
+                        slot.push(stable_ty);
+                    }
+                }
+            }
+        }
+    }
+    for slot in candidates.values_mut() {
+        slot.sort_by_key(|ty| ty.to_string());
+        slot.truncate(IMPL_DERIVED_CANDIDATE_LIMIT);
+    }
+    candidates
 }
 
 /// Check whether instantiating the generic parameters of `def` with `args` satisfies all of
@@ -485,13 +543,43 @@ fn choose_generic_instantiation(tcx: TyCtxt, fn_item: CrateItem) -> Result<Insta
         return Err("non-usize const generic parameters are not supported yet".to_string());
     }
 
-    for candidate in generic_instantiation_candidates() {
-        let args = GenericArgs(
+    // Positions of the type parameters among the identity arguments, and the candidate list
+    // for each: the shared primitive candidates, plus types derived from the parameter's own
+    // trait bounds (concrete implementors of the traits it must satisfy).
+    let impl_derived = impl_derived_candidates(tcx, def);
+    let type_slots: Vec<usize> = identity_args
+        .0
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, arg)| matches!(arg, GenericArgKind::Type(_)).then_some(idx))
+        .collect();
+    let slot_candidates: Vec<Vec<Ty>> = type_slots
+        .iter()
+        .map(|&idx| {
+            let mut cands = generic_instantiation_candidates();
+            for ty in impl_derived.get(&idx).into_iter().flatten() {
+                if !cands.contains(ty) {
+                    cands.push(*ty);
+                }
+            }
+            cands
+        })
+        .collect();
+    let n_impl_derived: usize = impl_derived.values().map(|v| v.len()).sum();
+
+    // Build the argument list substituting `choice[i]` for the i-th type parameter.
+    let build_args = |choice: &[Ty]| {
+        let mut next_type = 0;
+        GenericArgs(
             identity_args
                 .0
                 .iter()
                 .map(|arg| match arg {
-                    GenericArgKind::Type(_) => GenericArgKind::Type(candidate),
+                    GenericArgKind::Type(_) => {
+                        let ty = choice[next_type];
+                        next_type += 1;
+                        GenericArgKind::Type(ty)
+                    }
                     GenericArgKind::Lifetime(_) => {
                         GenericArgKind::Lifetime(Region { kind: RegionKind::ReErased })
                     }
@@ -500,25 +588,74 @@ fn choose_generic_instantiation(tcx: TyCtxt, fn_item: CrateItem) -> Result<Insta
                     ),
                 })
                 .collect(),
-        );
+        )
+    };
+
+    let attempts = std::cell::Cell::new(0usize);
+    let try_choice = |choice: &[Ty]| -> Option<Instance> {
+        attempts.set(attempts.get() + 1);
+        let args = build_args(choice);
         if !args_satisfy_predicates(tcx, def, &args) {
-            continue;
+            return None;
         }
         // Return the resolved instance regardless of whether it has a body: a body-less
         // instance (e.g. a generic trait method without a default) is then reported accurately
         // as `NoBody` by `skip_reason`, rather than falling through to a generic-function skip
         // reason here.
-        if let Ok(instance) = Instance::resolve(def, &args) {
+        Instance::resolve(def, &args).ok()
+    };
+
+    // First pass: the same primitive candidate for every type parameter (the common case,
+    // and cheap). Second pass: the cartesian product of the per-parameter candidate lists,
+    // capped at GENERIC_INSTANTIATION_ATTEMPT_LIMIT trait-solver queries, which finds
+    // instantiations for functions whose parameters need *different* types (e.g.
+    // `fn cast<T: Float, U: PrimInt>`) or types implementing non-primitive-friendly bounds.
+    for candidate in generic_instantiation_candidates() {
+        if let Some(instance) = try_choice(&vec![candidate; type_slots.len()]) {
             return Ok(instance);
         }
     }
+    if !type_slots.is_empty() {
+        let mut odometer = vec![0usize; type_slots.len()];
+        'product: loop {
+            let choice: Vec<Ty> =
+                odometer.iter().enumerate().map(|(i, &c)| slot_candidates[i][c]).collect();
+            // Skip choices already tried in the uniform pass.
+            let uniform = choice.iter().all(|ty| *ty == choice[0])
+                && generic_instantiation_candidates().contains(&choice[0]);
+            if !uniform {
+                if let Some(instance) = try_choice(&choice) {
+                    return Ok(instance);
+                }
+                if attempts.get() >= GENERIC_INSTANTIATION_ATTEMPT_LIMIT {
+                    break;
+                }
+            }
+            // Advance the odometer.
+            for i in (0..odometer.len()).rev() {
+                odometer[i] += 1;
+                if odometer[i] < slot_candidates[i].len() {
+                    continue 'product;
+                }
+                odometer[i] = 0;
+                if i == 0 {
+                    break 'product;
+                }
+            }
+        }
+    }
     Err(format!(
-        "no candidate type ({}) satisfies the function's trait bounds",
+        "no candidate type ({}{}) satisfies the function's trait bounds",
         generic_instantiation_candidates()
             .iter()
             .map(|ty| ty.to_string())
             .collect::<Vec<_>>()
-            .join(", ")
+            .join(", "),
+        if n_impl_derived > 0 {
+            format!(" and {n_impl_derived} types implementing the required traits")
+        } else {
+            String::new()
+        }
     ))
 }
 
