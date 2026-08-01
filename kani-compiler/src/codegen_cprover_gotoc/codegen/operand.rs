@@ -353,7 +353,20 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                         "https://github.com/model-checking/kani/issues/2549",
                     )
                 }
-                _ => unreachable!("{inner_ty:?}"),
+                _ => {
+                    // E.g. a constant fat pointer to a custom slice-tailed DST such as
+                    // zerovec's `&ZeroSlice<T>`: representing these requires computing the
+                    // metadata for the unsized tail, which is not implemented yet. Degrade to
+                    // an unsupported-construct check rather than crashing the compiler, so
+                    // that only harnesses that actually reach this constant fail.
+                    let typ = self.codegen_ty_stable(ty);
+                    self.codegen_unimplemented_expr(
+                        &format!("constant fat pointer to unsized type {inner_ty}"),
+                        typ,
+                        loc,
+                        "https://github.com/model-checking/kani/issues/new/choose",
+                    )
+                }
             }
         } else if !alloc.provenance.ptrs.is_empty() {
             // Codegen the provenance pointer.
