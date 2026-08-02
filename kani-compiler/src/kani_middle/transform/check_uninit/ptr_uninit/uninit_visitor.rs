@@ -329,7 +329,7 @@ impl MirVisitor for CheckUninitVisitor {
                             Intrinsic::VolatileLoad | Intrinsic::UnalignedVolatileLoad => {
                                 self.push_target(MemoryInitOp::Check { operand: args[0].clone() });
                             }
-                            Intrinsic::VolatileStore => {
+                            Intrinsic::VolatileStore | Intrinsic::UnalignedVolatileStore => {
                                 self.push_target(MemoryInitOp::Set {
                                     operand: args[0].clone(),
                                     value: true,

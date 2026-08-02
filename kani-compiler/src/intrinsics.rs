@@ -138,6 +138,7 @@ pub enum Intrinsic {
     TruncF64,
     TypedSwap,
     UnalignedVolatileLoad,
+    UnalignedVolatileStore,
     UncheckedDiv,
     UncheckedRem,
     Unlikely,
@@ -390,6 +391,10 @@ impl Intrinsic {
             "unaligned_volatile_load" => {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => _);
                 Self::UnalignedVolatileLoad
+            }
+            "unaligned_volatile_store" => {
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => RigidTy::Tuple(_));
+                Self::UnalignedVolatileStore
             }
             "unchecked_add" | "unchecked_mul" | "unchecked_shl" | "unchecked_shr"
             | "unchecked_sub" => {
