@@ -65,3 +65,15 @@ fn check_zst_unaligned_volatile_store() {
     let p = &mut zst as *mut ();
     unsafe { std::intrinsics::unaligned_volatile_store(p, ()) };
 }
+
+// The case the ZST guard actually exists for: a *dangling* pointer. A ZST
+// reference is allowed to be any non-null, suitably aligned address, so this is
+// a pointer safe Rust can hand to the intrinsic. Nothing is dereferenced, so
+// this must verify. The harness above passes a pointer to a real local, which a
+// dereference would happily succeed on -- so it does not exercise the guard,
+// and only this one does.
+#[kani::proof]
+fn check_dangling_zst_unaligned_volatile_store() {
+    let p = core::ptr::without_provenance_mut::<()>(core::mem::align_of::<()>());
+    unsafe { std::intrinsics::unaligned_volatile_store(p, ()) };
+}
