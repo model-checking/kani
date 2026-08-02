@@ -144,6 +144,7 @@ pub enum Intrinsic {
     VolatileCopyMemory,
     VolatileCopyNonOverlappingMemory,
     VolatileLoad,
+    VolatileSetMemory,
     VolatileStore,
     VtableSize,
     VtableAlign,
@@ -423,6 +424,10 @@ impl Intrinsic {
             "volatile_load" => {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => _);
                 Self::VolatileLoad
+            }
+            "volatile_set_memory" => {
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), RigidTy::Uint(UintTy::U8), RigidTy::Uint(UintTy::Usize) => RigidTy::Tuple(_));
+                Self::VolatileSetMemory
             }
             "volatile_store" => {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => RigidTy::Tuple(_));
