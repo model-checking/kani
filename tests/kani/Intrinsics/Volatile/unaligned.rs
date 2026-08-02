@@ -10,9 +10,9 @@
 // that quietly read or wrote the *aligned* word instead would be caught rather
 // than silently pass. The oracle is built with `u32::from_ne_bytes` so the test
 // is byte-precise without assuming an endianness: reading a `u32` at byte offset
-// 1 must equal the native-order interpretation of bytes 1..5, whereas an
-// alignment-assuming read from offset 0 would give the interpretation of bytes
-// 0..4 -- different under either endianness.
+// 1 must equal the native-order interpretation of bytes 1, 2, 3 and 4, whereas
+// an alignment-assuming read from offset 0 would give the interpretation of
+// bytes 0, 1, 2 and 3 -- different under either endianness.
 #![feature(core_intrinsics)]
 
 #[kani::proof]
@@ -21,7 +21,7 @@ fn check_unaligned_volatile_load_is_byte_precise() {
     let p = unsafe { buf.as_ptr().add(1) } as *const u32;
     let v = unsafe { std::intrinsics::unaligned_volatile_load(p) };
     let expect = u32::from_ne_bytes([buf[1], buf[2], buf[3], buf[4]]);
-    assert_eq!(v, expect, "unaligned load must read bytes 1..5, byte-precisely");
+    assert_eq!(v, expect, "unaligned load must read bytes 1, 2, 3 and 4, byte-precisely");
 }
 
 // The store direction: write a `u32` at byte offset 1 and check the neighbouring
