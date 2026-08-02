@@ -56,6 +56,34 @@ fn check_unaligned_volatile_load_symbolic_offset() {
     assert_eq!(v, expect, "unaligned load must agree with a byte-wise oracle at every offset");
 }
 
+// The store direction with a symbolic offset, mirroring the load above. Without
+// this, byte-precision on the store side rests on a constant offset alone, which
+// a correct simplifier could satisfy while the general path stayed wrong.
+#[kani::proof]
+fn check_unaligned_volatile_store_symbolic_offset() {
+    let mut buf: [u8; 8] = [0u8; 8];
+    let off: usize = kani::any();
+    kani::assume(off <= 4);
+    let p = unsafe { buf.as_mut_ptr().add(off) } as *mut u32;
+    let val: u32 = 0x55443322;
+    let bytes = val.to_ne_bytes();
+    unsafe { std::intrinsics::unaligned_volatile_store(p, val) };
+    // The four written bytes must land at `off`, not at the aligned word.
+    assert_eq!(buf[off], bytes[0], "store must begin at the requested byte offset");
+    assert_eq!(buf[off + 1], bytes[1]);
+    assert_eq!(buf[off + 2], bytes[2]);
+    assert_eq!(buf[off + 3], bytes[3]);
+    // Everything outside that range must be untouched, so a wrongly-aligned
+    // write shows up as a clobbered neighbour at every offset, not just one.
+    let mut i = 0;
+    while i < 8 {
+        if i < off || i >= off + 4 {
+            assert_eq!(buf[i], 0, "bytes outside the stored range must be untouched");
+        }
+        i += 1;
+    }
+}
+
 // A ZST store: `unaligned_volatile_store::<()>` must not attempt a dereference.
 // A ZST pointer may legally be dangling-but-aligned, which is why
 // `codegen_volatile_store` carries the same guard.

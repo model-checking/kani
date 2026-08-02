@@ -6,6 +6,11 @@ check_unaligned_volatile_store_out_of_bounds.pointer_dereference\
 Status: FAILURE\
 Description: "dereference failure: pointer outside object bounds"
 
+kani::rustc_intrinsics::offset::<u8, *const u8, usize>\
+Status: SUCCESS\
+Description: "Offset result and original pointer must point to the same allocation"
+
+kani::rustc_intrinsics::offset::<u8, *mut u8, usize>\
 Status: SUCCESS\
 Description: "Offset result and original pointer must point to the same allocation"
 
