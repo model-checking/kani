@@ -205,3 +205,20 @@ macro_rules! assert_spanned_err {
         assert_spanned_err!($condition, $span_source, concat!("Failed assertion ", stringify!($condition)))
     };
 }
+
+/// Wrap the evaluation of a contract clause expression so that the
+/// kani_core clause-depth counter is incremented around it.
+///
+/// While a clause is being evaluated, calls to the function whose contract is
+/// currently under verification are dispatched to its contract *replacement*
+/// instead of its contract *check* (see `FunctionWithContractPass::set_mode`
+/// in the Kani compiler). The linear `let` form (rather than a closure)
+/// avoids altering the borrow semantics of the expression.
+pub fn bracket_clause_expr(expr: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
+    quote::quote!({
+        kani::internal::enter_contract_clause();
+        let __kani_clause_value = #expr;
+        kani::internal::exit_contract_clause();
+        __kani_clause_value
+    })
+}

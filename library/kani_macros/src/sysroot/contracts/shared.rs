@@ -122,9 +122,12 @@ pub fn build_ensures(data: &ExprClosure) -> (TokenStream2, Expr) {
     let expr = &mut data.clone();
     vis.visit_expr_closure_mut(expr);
 
-    let remembers_stmts: TokenStream2 = remembers_exprs
-        .iter()
-        .fold(quote!(), |collect, (ident, expr)| quote!(let #ident = (#expr).clone(); #collect));
+    let remembers_stmts: TokenStream2 =
+        remembers_exprs.iter().fold(quote!(), |collect, (ident, expr)| {
+            let bracketed =
+                crate::sysroot::contracts::helpers::bracket_clause_expr(quote!((#expr).clone()));
+            quote!(let #ident = #bracketed; #collect)
+        });
 
     let result: Ident = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
     (remembers_stmts, Expr::Verbatim(quote!(kani::internal::apply_closure(#expr, &#result))))

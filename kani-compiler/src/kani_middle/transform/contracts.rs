@@ -13,10 +13,13 @@ use rustc_middle::ty::TyCtxt;
 use rustc_public::CrateDef;
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::{
-    Body, ConstOperand, Operand, Rvalue, Terminator, TerminatorKind, VarDebugInfoContents,
+    BinOp, Body, CastKind, ConstOperand, Mutability, Operand, Place, Rvalue, Terminator,
+    TerminatorKind, VarDebugInfoContents,
 };
 use rustc_public::rustc_internal;
-use rustc_public::ty::{ClosureDef, FnDef, MirConst, RigidTy, TyKind, TypeAndMut, UintTy};
+use rustc_public::ty::{
+    ClosureDef, FnDef, GenericArgs, MirConst, RigidTy, Ty, TyKind, TypeAndMut, UintTy,
+};
 use rustc_span::Symbol;
 use std::collections::HashSet;
 use std::fmt::Debug;
@@ -279,6 +282,10 @@ pub struct FunctionWithContractPass {
     unused_closures: HashSet<ClosureDef>,
     /// Cache KaniRunContract function used to implement contracts.
     run_contract_fn: Option<FnDef>,
+    /// Cache of the InContractClauseModel function used to dispatch calls to
+    /// the function under contract verification to its contract replacement
+    /// when they occur during evaluation of another contract's clauses.
+    in_clause_fn: Option<FnDef>,
 }
 
 impl TransformPass for FunctionWithContractPass {
@@ -365,12 +372,16 @@ impl FunctionWithContractPass {
             let run_contract_fn =
                 queries.kani_functions().get(&KaniModel::RunContract.into()).copied();
             assert!(run_contract_fn.is_some(), "Failed to find Kani run contract function");
+            let in_clause_fn =
+                queries.kani_functions().get(&KaniModel::InContractClause.into()).copied();
+            assert!(in_clause_fn.is_some(), "Failed to find Kani in-contract-clause function");
             FunctionWithContractPass {
                 check_fn,
                 replace_fns,
                 assert_contracts: !queries.args().no_assert_contracts,
                 unused_closures: Default::default(),
                 run_contract_fn,
+                in_clause_fn,
             }
         } else {
             // If reachability mode is PubFns or Tests, we just remove any contract logic.
@@ -442,12 +453,62 @@ impl FunctionWithContractPass {
 
         let span = mode_call.span(new_body.blocks());
         let mode_const = new_body.new_uint_operand(mode as _, UintTy::U8, span);
-        new_body.assign_to(
-            ret.clone(),
-            Rvalue::Use(mode_const),
-            &mut mode_call,
-            InsertPosition::Before,
-        );
+        if matches!(mode, ContractMode::SimpleCheck | ContractMode::RecursiveCheck) {
+            // While the harness is checking the contract of this function,
+            // the function may also be called from *contract clauses* of
+            // other functions in the harness's call graph (e.g. a
+            // postcondition mentioning `NonNull::as_ptr` evaluated while
+            // `as_ptr` itself is under verification). Such calls must not be
+            // dispatched to the check closure: they would consume the single
+            // top-level contract check and run write-set instrumentation in
+            // the clause's context. Dispatch them to the original body
+            // instead (exact semantics; unlike dispatching to the contract
+            // replacement this does not require the return type to implement
+            // Arbitrary), by computing the mode at runtime as
+            // `mode * (1 - in_contract_clause())`, which yields
+            // `ORIGINAL` (0) during clause evaluation and `mode` otherwise.
+            let in_clause_instance =
+                Instance::resolve(self.in_clause_fn.unwrap(), &GenericArgs(vec![])).unwrap();
+            let in_clause_local = new_body.new_local(Ty::bool_ty(), span, Mutability::Mut);
+            new_body.insert_call(
+                &in_clause_instance,
+                &mut mode_call,
+                InsertPosition::Before,
+                vec![],
+                Place::from(in_clause_local),
+            );
+            let u8_ty = Ty::from_rigid_kind(RigidTy::Uint(UintTy::U8));
+            let in_clause_u8 = new_body.insert_assignment(
+                Rvalue::Cast(
+                    CastKind::IntToInt,
+                    Operand::Move(Place::from(in_clause_local)),
+                    u8_ty,
+                ),
+                &mut mode_call,
+                InsertPosition::Before,
+            );
+            let one_const = new_body.new_uint_operand(1, UintTy::U8, span);
+            let not_in_clause = new_body.insert_binary_op(
+                BinOp::Sub,
+                one_const,
+                Operand::Move(Place::from(in_clause_u8)),
+                &mut mode_call,
+                InsertPosition::Before,
+            );
+            new_body.assign_to(
+                ret.clone(),
+                Rvalue::BinaryOp(BinOp::Mul, mode_const, Operand::Move(Place::from(not_in_clause))),
+                &mut mode_call,
+                InsertPosition::Before,
+            );
+        } else {
+            new_body.assign_to(
+                ret.clone(),
+                Rvalue::Use(mode_const),
+                &mut mode_call,
+                InsertPosition::Before,
+            );
+        }
         new_body.replace_terminator(
             &mode_call,
             Terminator { kind: TerminatorKind::Goto { target }, span },

@@ -286,6 +286,7 @@ impl AutomaticArbitraryPass {
 pub struct AutomaticHarnessPass {
     kani_any: FnDef,
     init_contracts_hook: Instance,
+    reset_clause_depth: Instance,
     kani_autoharness_intrinsic: FnDef,
 }
 
@@ -298,7 +299,11 @@ impl AutomaticHarnessPass {
         let init_contracts_hook = *kani_fns.get(&KaniHook::InitContracts.into()).unwrap();
         let init_contracts_hook =
             Instance::resolve(init_contracts_hook, &GenericArgs(vec![])).unwrap();
-        Self { kani_any, init_contracts_hook, kani_autoharness_intrinsic }
+        let reset_clause_depth =
+            *kani_fns.get(&KaniModel::ResetContractClauseDepth.into()).unwrap();
+        let reset_clause_depth =
+            Instance::resolve(reset_clause_depth, &GenericArgs(vec![])).unwrap();
+        Self { kani_any, init_contracts_hook, reset_clause_depth, kani_autoharness_intrinsic }
     }
 }
 
@@ -349,6 +354,18 @@ impl TransformPass for AutomaticHarnessPass {
                 InsertPosition::Before,
                 vec![],
                 Place::from(ret_local),
+            );
+            let reset_ret = harness_body.new_local(
+                Ty::new_tuple(&[]),
+                source.span(harness_body.blocks()),
+                Mutability::Not,
+            );
+            harness_body.insert_call(
+                &self.reset_clause_depth,
+                &mut source,
+                InsertPosition::Before,
+                vec![],
+                Place::from(reset_ret),
             );
         }
 
