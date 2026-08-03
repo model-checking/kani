@@ -453,20 +453,35 @@ impl FunctionWithContractPass {
 
         let span = mode_call.span(new_body.blocks());
         let mode_const = new_body.new_uint_operand(mode as _, UintTy::U8, span);
-        if matches!(mode, ContractMode::SimpleCheck | ContractMode::RecursiveCheck) {
-            // While the harness is checking the contract of this function,
-            // the function may also be called from *contract clauses* of
-            // other functions in the harness's call graph (e.g. a
-            // postcondition mentioning `NonNull::as_ptr` evaluated while
-            // `as_ptr` itself is under verification). Such calls must not be
-            // dispatched to the check closure: they would consume the single
-            // top-level contract check and run write-set instrumentation in
-            // the clause's context. Dispatch them to the original body
-            // instead (exact semantics; unlike dispatching to the contract
-            // replacement this does not require the return type to implement
-            // Arbitrary), by computing the mode at runtime as
-            // `mode * (1 - in_contract_clause())`, which yields
-            // `ORIGINAL` (0) during clause evaluation and `mode` otherwise.
+        if matches!(
+            mode,
+            ContractMode::SimpleCheck | ContractMode::RecursiveCheck | ContractMode::Assert
+        ) {
+            // Calls occurring during the evaluation of *contract clauses* of
+            // other functions are dispatched to the original body (mode 0,
+            // exact semantics) rather than the mode selected for normal
+            // calls, by computing the mode at runtime as
+            // `mode * (1 - in_contract_clause())`:
+            //
+            // * For check modes: while the harness is checking the contract
+            //   of this function, the function may also be called from
+            //   contract clauses of other functions in the harness's call
+            //   graph (e.g. a postcondition mentioning `NonNull::as_ptr`
+            //   evaluated while `as_ptr` itself is under verification). Such
+            //   calls must not be dispatched to the check closure: they
+            //   would consume the single top-level contract check and run
+            //   write-set instrumentation in the clause's context. (Unlike
+            //   dispatching to the contract replacement, the original body
+            //   does not require the return type to implement Arbitrary.)
+            //
+            // * For assert mode: asserting the contracts of dependencies
+            //   (the default since #3802) is an aid for detecting API misuse
+            //   in user code; re-asserting them for calls made by *contract
+            //   clauses* checks specification-level plumbing at a
+            //   multiplicative cost. Clause evaluation is meant to compute a
+            //   predicate over the pre-/post-states, and the functions it
+            //   calls are best executed with their exact semantics (their
+            //   bodies remain fully inlined and UB-checked either way).
             let in_clause_instance =
                 Instance::resolve(self.in_clause_fn.unwrap(), &GenericArgs(vec![])).unwrap();
             let in_clause_local = new_body.new_local(Ty::bool_ty(), span, Mutability::Mut);
