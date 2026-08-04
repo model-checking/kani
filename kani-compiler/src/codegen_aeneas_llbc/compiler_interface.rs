@@ -440,7 +440,6 @@ fn get_translate_options(tcx: &TranslatedCrate, error_ctx: &mut ErrorCtx) -> Tra
         mir_level: MirLevel::Built,
         translate_all_methods: false,
         monomorphize: false,
-        no_code_duplication: false,
         no_ops_to_function_calls: false,
         hide_marker_traits: true,
         no_merge_goto_chains: false,
