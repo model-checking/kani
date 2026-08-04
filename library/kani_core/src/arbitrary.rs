@@ -171,6 +171,34 @@ macro_rules! generate_arbitrary {
             }
         }
 
+        /// Generate a raw pointer in a nondeterministic allocation state, pointing to `storage`
+        /// in the valid case. The states are:
+        /// - null,
+        /// - out of bounds of the allocation (one past the end of `storage`, aligned and
+        ///   non-null, but not valid for reads or writes),
+        /// - valid, i.e., pointing to `storage`, which the caller keeps alive for as long as the
+        ///   returned pointer is in use.
+        ///
+        /// This model is used by the compiler to generate nondeterministic raw pointer values for
+        /// automatic harnesses (`kani autoharness`). Note that the returned pointer is aligned in
+        /// all states and has valid provenance, so that memory predicates such as
+        /// `kani::mem::can_dereference` can reason about it (they do not support pointers cast
+        /// from arbitrary integer addresses).
+        /// We do not generate pointers to deallocated objects, since Kani's memory predicates
+        /// cannot reason about those either ("Kani does not support reasoning about pointer to
+        /// unallocated memory"), which would break harnesses for functions with contracts over
+        /// their pointer arguments.
+        #[kanitool::fn_marker = "AnyPtrModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_ptr<T>(storage: &mut T) -> *mut T {
+            match crate::kani::any::<u8>() {
+                0 => ptr::null_mut(),
+                1 => (storage as *mut T).wrapping_add(1),
+                _ => storage as *mut T,
+            }
+        }
+
         arbitrary_tuple!(A);
         arbitrary_tuple!(A, B);
         arbitrary_tuple!(A, B, C);

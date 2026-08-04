@@ -1,0 +1,13 @@
+| cargo_autoharness_raw_pointers | has_ptr_field      | Missing Arbitrary implementation for argument(s) h: HasPtrField     |
+| cargo_autoharness_raw_pointers | has_ptr_field_last | Missing Arbitrary implementation for argument(s) h: HasPtrFieldLast |
+ ** 1 of 1 cover properties satisfied
+| cargo_autoharness_raw_pointers | contract_deref        | #[kani::proof_for_contract] | Success             |
+| cargo_autoharness_raw_pointers | contract_write        | #[kani::proof_for_contract] | Success             |
+| cargo_autoharness_raw_pointers | nested_ptr_addr       | #[kani::proof]              | Success             |
+| cargo_autoharness_raw_pointers | ptr_arg_after_struct  | #[kani::proof]              | Success             |
+| cargo_autoharness_raw_pointers | ptr_to_addr           | #[kani::proof]              | Success             |
+| cargo_autoharness_raw_pointers | valid_state_reachable | #[kani::proof]              | Success             |
+| cargo_autoharness_raw_pointers | nested_ptr_deref      | #[kani::proof]              | Failure             |
+| cargo_autoharness_raw_pointers | null_check_only       | #[kani::proof]              | Failure             |
+| cargo_autoharness_raw_pointers | unchecked_deref       | #[kani::proof]              | Failure             |
+Complete - 6 successfully verified functions, 3 failures, 9 total.

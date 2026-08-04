@@ -351,3 +351,26 @@ fn can_derive_arbitrary(
         false
     }
 }
+
+/// Can an automatic harness generate a nondeterministic value of type `ty` for a harness
+/// argument?
+/// In addition to the types that implement or can derive `Arbitrary`, automatic harnesses support
+/// raw pointer arguments, as long as the pointee type (after peeling all raw pointer layers)
+/// implements or can derive `Arbitrary`: for those, the harness generates a pointer in a
+/// nondeterministic allocation state (null, dangling, dead object, or valid),
+/// c.f. `KaniModel::AnyPtr`.
+/// Note that raw pointers are only supported as immediate harness arguments (or through other raw
+/// pointers): a raw pointer behind a reference or inside an ADT remains unsupported, since the
+/// pointee storage that the generated harness allocates would not outlive the generated value.
+fn autoharness_supported_arg_ty(
+    ty: Ty,
+    kani_any_def: FnDef,
+    ty_arbitrary_cache: &mut FxHashMap<Ty, bool>,
+) -> bool {
+    if let TyKind::RigidTy(RigidTy::RawPtr(inner_ty, _)) = ty.kind() {
+        autoharness_supported_arg_ty(inner_ty, kani_any_def, ty_arbitrary_cache)
+    } else {
+        implements_arbitrary(ty, kani_any_def, ty_arbitrary_cache)
+            || can_derive_arbitrary(ty, kani_any_def, ty_arbitrary_cache)
+    }
+}
