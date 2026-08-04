@@ -527,7 +527,6 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
             // Using the operand unchanged requires determining where it could point, which
             // `successors_for_operand` does.
             Rvalue::Use(operand)
-            | Rvalue::ShallowInitBox(operand, _)
             | Rvalue::Cast(_, operand, _)
             | Rvalue::Repeat(operand, ..)
             | Rvalue::WrapUnsafeBinder(operand, _) => self.successors_for_operand(state, operand),
