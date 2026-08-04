@@ -1714,7 +1714,6 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 }
             }
 
-            Rvalue::ShallowInitBox(_, _) => todo!(),
             Rvalue::CopyForDeref(_) => todo!(),
             Rvalue::ThreadLocalRef(_) => todo!(),
             _ => todo!(),

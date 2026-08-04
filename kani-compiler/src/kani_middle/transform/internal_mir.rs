@@ -250,10 +250,6 @@ impl RustcInternalMir for Rvalue {
                 operand.internal_mir(tcx),
                 internal(tcx, ty_const),
             ),
-            Rvalue::ShallowInitBox(operand, ty) => rustc_middle::mir::Rvalue::ShallowInitBox(
-                operand.internal_mir(tcx),
-                internal(tcx, ty),
-            ),
             Rvalue::ThreadLocalRef(crate_item) => {
                 rustc_middle::mir::Rvalue::ThreadLocalRef(internal(tcx, crate_item.0))
             }
