@@ -85,8 +85,9 @@ impl<'a> ContractConditionsHandler<'a> {
             ContractConditionsData::Requires { attr } => {
                 let Self { attr_copy, .. } = self;
                 let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
+                let attr_bracketed = bracket_clause_expr(quote!(#attr));
                 quote!({
-                    kani::assert(#attr, stringify!(#attr_copy));
+                    kani::assert(#attr_bracketed, stringify!(#attr_copy));
                     #(#before)*
                     #(#after)*
                     #result
@@ -94,6 +95,7 @@ impl<'a> ContractConditionsHandler<'a> {
             }
             ContractConditionsData::Ensures { attr } => {
                 let (remembers, ensures_clause) = build_ensures(attr);
+                let ensures_bracketed = bracket_clause_expr(quote!(#ensures_clause));
                 let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
 
                 let (asserts, rest_of_before) = split_for_remembers(before, ContractMode::Replace);
@@ -103,15 +105,27 @@ impl<'a> ContractConditionsHandler<'a> {
                     #remembers
                     #(#rest_of_before)*
                     #(#after)*
-                    kani::assume(#ensures_clause);
+                    kani::assume(#ensures_bracketed);
                     #result
                 })
             }
             ContractConditionsData::Modifies { attr } => {
                 let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
+                let havoc_stmts: Vec<_> = attr
+                    .iter()
+                    .map(|attr| {
+                        let bracketed =
+                            bracket_clause_expr(quote!(kani::internal::untracked_deref(&#attr)));
+                        quote!(unsafe {
+                            kani::internal::write_any(kani::internal::Pointer::assignable(
+                                #bracketed,
+                            ))
+                        };)
+                    })
+                    .collect();
                 quote!({
                     #(#before)*
-                    #(unsafe{kani::internal::write_any(kani::internal::Pointer::assignable(kani::internal::untracked_deref(&#attr)))};)*
+                    #(#havoc_stmts)*
                     #(#after)*
                     #result
                 })

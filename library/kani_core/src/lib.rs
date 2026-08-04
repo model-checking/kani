@@ -618,6 +618,81 @@ macro_rules! kani_intrinsics {
             /// Insert the contract into the body of the function as assertion(s).
             pub const ASSERT: Mode = 4;
 
+            /// Tracks whether execution is currently evaluating a contract
+            /// clause (requires / ensures / modifies expression). Nesting is
+            /// possible when a clause calls a function whose own contract
+            /// clauses are evaluated, hence a depth counter rather than a
+            /// flag. Verification is single-threaded, so a static is sound.
+            static mut CONTRACT_CLAUSE_DEPTH: usize = 0;
+
+            /// Resets the clause-depth counter at harness entry. Static
+            /// variables are not reliably zero-initialized in every
+            /// verification configuration, so harnesses reset the counter
+            /// explicitly before the first contract dispatch.
+            #[doc(hidden)]
+            #[inline(never)]
+            #[kanitool::fn_marker = "ResetContractClauseDepthModel"]
+            pub fn reset_contract_clause_depth() {
+                unsafe {
+                    CONTRACT_CLAUSE_DEPTH = 0;
+                }
+            }
+
+            /// Marks the beginning of the evaluation of a contract clause.
+            /// Inserted by the contract macros around every clause expression.
+            ///
+            /// The `__VERIFIER` symbol prefix makes CBMC's function-contract
+            /// instrumentation (DFCC) treat this function as
+            /// verification-internal (see `dfcc_is_cprover_function_symbol`),
+            /// so the counter update is not flagged as an illegal side effect
+            /// (assigns-clause violation) of a function under contract
+            /// checking.
+            #[doc(hidden)]
+            #[inline(never)]
+            #[unsafe(export_name = "__VERIFIER_kani_enter_contract_clause")]
+            pub fn enter_contract_clause() {
+                // Saturating arithmetic: when a contract check is enforced,
+                // CBMC havocs static state, so the counter value inside the
+                // enforced region is arbitrary. Saturation avoids spurious
+                // overflow failures while keeping `in_contract_clause`
+                // correct at every read (all reads occur between an
+                // enter/exit pair, where the depth is at least 1 regardless
+                // of the havocked base value).
+                unsafe {
+                    CONTRACT_CLAUSE_DEPTH = CONTRACT_CLAUSE_DEPTH.saturating_add(1);
+                }
+            }
+
+            /// Marks the end of the evaluation of a contract clause.
+            ///
+            /// See [enter_contract_clause] regarding the symbol name.
+            #[doc(hidden)]
+            #[inline(never)]
+            #[unsafe(export_name = "__VERIFIER_kani_exit_contract_clause")]
+            pub fn exit_contract_clause() {
+                unsafe {
+                    CONTRACT_CLAUSE_DEPTH = CONTRACT_CLAUSE_DEPTH.saturating_sub(1);
+                }
+            }
+
+            /// Whether execution is currently evaluating a contract clause.
+            ///
+            /// The contract transformation pass dispatches calls to the
+            /// function under contract verification to its *original body*
+            /// rather than its contract *check* when they occur during clause
+            /// evaluation: clauses of other functions in the harness's call
+            /// graph may legitimately call the function under verification
+            /// (e.g. a postcondition mentioning `NonNull::as_ptr` while
+            /// `as_ptr` itself is being verified), and such calls must
+            /// neither consume the single top-level contract check nor be
+            /// checked inside the clause's write-set context.
+            #[doc(hidden)]
+            #[inline(never)]
+            #[kanitool::fn_marker = "InContractClauseModel"]
+            pub fn in_contract_clause() -> bool {
+                unsafe { CONTRACT_CLAUSE_DEPTH > 0 }
+            }
+
             /// Creates a non-fatal property with the specified condition and message.
             ///
             /// This check will not impact the program control flow even when it fails.
