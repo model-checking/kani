@@ -86,6 +86,8 @@ pub struct Context<'a, 'tcx> {
     errors: &'a mut CharonErrorCtx,
     local_names: FxHashMap<Local, String>,
     file_to_id: HashMap<CharonFileName, CharonFileId>,
+    /// Block ID of the synthetic unwind block (kani does not model unwinding).
+    unwind_block: CharonBlockId,
 }
 
 impl<'a, 'tcx> Context<'a, 'tcx> {
@@ -108,7 +110,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             }
         }
         let file_to_id: HashMap<CharonFileName, CharonFileId> = HashMap::new();
-        Self { tcx, instance, translated, id_map, errors, local_names, file_to_id }
+        let unwind_block = CharonBlockId::from_usize(0);
+        Self { tcx, instance, translated, id_map, errors, local_names, file_to_id, unwind_block }
     }
 
     fn tcx(&self) -> TyCtxt<'tcx> {
@@ -1198,8 +1201,25 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         let arg_count = self.instance.fn_abi().unwrap().args.len();
         let vars = self.translate_body_locals(&mir_body);
         let locals = CharonLocals { locals: vars, arg_count };
-        let body: CharonBodyContents =
+        // The synthetic unwind block (see below) is appended after the translated
+        // blocks, so its ID is the number of MIR blocks. It must be assigned
+        // *before* translating the blocks: `Call` terminators reference it as
+        // their `on_unwind` target.
+        self.unwind_block = CharonBlockId::from_usize(mir_body.blocks.len());
+        let mut body: CharonBodyContents =
             mir_body.blocks.iter().map(|bb| self.translate_block(bb)).collect();
+
+        // Add a synthetic unwind block that aborts (kani does not model unwinding).
+        let unwind_block = CharonBlockData {
+            statements: Vec::new(),
+            terminator: CharonTerminator {
+                span: span.clone(),
+                content: CharonRawTerminator::Abort(CharonAbortKind::UndefinedBehavior),
+                comments_before: Vec::new(),
+            },
+        };
+        body.push(unwind_block);
+        assert_eq!(self.unwind_block.index(), body.elem_count() - 1);
 
         let body_expr = CharonExprBody { span, locals, body, comments: Vec::new() };
         CharonBody::Unstructured(body_expr)
@@ -1565,6 +1585,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     CharonRawTerminator::Call {
                         call,
                         target: CharonBlockId::from_usize(target.unwrap()),
+                        on_unwind: self.unwind_block,
                     },
                 )
             }
