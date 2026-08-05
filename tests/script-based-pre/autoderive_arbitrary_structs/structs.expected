@@ -1,4 +1,4 @@
-Kani generated automatic harnesses for 17 function(s):
+Kani generated automatic harnesses for 15 function(s):
 +------------------------------+-------------------------------------------------------------------------------+
 | Crate                        | Selected Function                                                             |
 +==============================================================================================================+
@@ -30,16 +30,16 @@ Kani generated automatic harnesses for 17 function(s):
 |------------------------------+-------------------------------------------------------------------------------|
 | autoderive_arbitrary_structs | should_derive::recursively_eligible                                           |
 |------------------------------+-------------------------------------------------------------------------------|
-| autoderive_arbitrary_structs | should_derive::ref_ref_struct                                                 |
 |------------------------------+-------------------------------------------------------------------------------|
-| autoderive_arbitrary_structs | should_derive::ref_struct                                                     |
 |------------------------------+-------------------------------------------------------------------------------|
 | autoderive_arbitrary_structs | should_derive::unit_struct                                                    |
 +------------------------------+-------------------------------------------------------------------------------+
 
-Kani did not generate automatic harnesses for 3 function(s).
+Kani did not generate automatic harnesses for 5 function(s).
 +------------------------------+--------------------------------------------+------------------------------------------------------------------------------------------------------------------------+
 | Crate                        | Skipped Function                           | Reason for Skipping                                                                                                    |
+| autoderive_arbitrary_structs | should_derive::ref_ref_struct              | Missing Arbitrary implementation for argument(s) foo: should_derive::RefRefStruct                                      |
+| autoderive_arbitrary_structs | should_derive::ref_struct                  | Missing Arbitrary implementation for argument(s) foo: should_derive::RefStruct                                         |
 +====================================================================================================================================================================================================+
 | autoderive_arbitrary_structs | should_not_derive::generic_unsupported_arg | Missing Arbitrary implementation for argument(s) unsupported: should_not_derive::UnsupportedGenericField<char>         |
 |------------------------------+--------------------------------------------+------------------------------------------------------------------------------------------------------------------------|
@@ -128,9 +128,7 @@ Autoharness Summary:
 |------------------------------+-------------------------------------------------------------------------------+-----------------------------+---------------------|
 | autoderive_arbitrary_structs | should_derive::recursively_eligible                                           | #[kani::proof]              | Success             |
 |------------------------------+-------------------------------------------------------------------------------+-----------------------------+---------------------|
-| autoderive_arbitrary_structs | should_derive::ref_ref_struct                                                 | #[kani::proof]              | Success             |
 |------------------------------+-------------------------------------------------------------------------------+-----------------------------+---------------------|
-| autoderive_arbitrary_structs | should_derive::ref_struct                                                     | #[kani::proof]              | Success             |
 |------------------------------+-------------------------------------------------------------------------------+-----------------------------+---------------------|
 | autoderive_arbitrary_structs | should_derive::unit_struct                                                    | #[kani::proof]              | Success             |
 |------------------------------+-------------------------------------------------------------------------------+-----------------------------+---------------------|
