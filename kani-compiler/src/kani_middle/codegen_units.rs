@@ -373,13 +373,13 @@ fn determine_targets(
 /// the AutomaticHarnessPass will later transform the bodies of these instances to actually verify the function.
 fn get_all_automatic_harnesses(
     tcx: TyCtxt,
-    verifiable_fns: Vec<(Instance, bool)>,
+    verifiable_fns: Vec<(Instance, AutoHarnessCaveats)>,
     kani_harness_intrinsic: FnDef,
     base_filename: &Path,
 ) -> HashMap<Harness, HarnessMetadata> {
     verifiable_fns
         .into_iter()
-        .map(|(fn_to_verify, is_bounded)| {
+        .map(|(fn_to_verify, caveats)| {
             // Set the generic arguments of the harness to be the function it is verifying
             // so that later, in AutomaticHarnessPass, we can retrieve the function to verify
             // and generate the harness body accordingly.
@@ -393,7 +393,8 @@ fn get_all_automatic_harnesses(
                 base_filename,
                 &fn_to_verify,
                 harness.mangled_name(),
-                is_bounded,
+                caveats.is_bounded,
+                caveats.is_ctor_based,
             );
             (harness, metadata)
         })
@@ -659,6 +660,16 @@ fn choose_generic_instantiation(tcx: TyCtxt, fn_item: CrateItem) -> Result<Insta
     ))
 }
 
+/// The caveats that apply to a generated harness, reported in the summary table and stored in
+/// its metadata. They are independent: a harness can be both bounded and constructor-based.
+#[derive(Clone, Copy, Debug, Default)]
+struct AutoHarnessCaveats {
+    /// Some argument uses *bounded* nondeterministic values, c.f. `--bounded-arguments`.
+    is_bounded: bool,
+    /// Some value is generated through a type's public constructor, c.f. `--constructor-args`.
+    is_ctor_based: bool,
+}
+
 /// Partition every function in the crate into (chosen, skipped), where `chosen` is a vector of the Instances for which we'll generate automatic harnesses,
 /// and `skipped` is a map of function names to the reason why we skipped them.
 fn automatic_harness_partition(
@@ -668,7 +679,7 @@ fn automatic_harness_partition(
     kani_any_def: FnDef,
     kani_bounded_any_def: FnDef,
     smart_pointer_models: SmartPointerModels,
-) -> (Vec<(Instance, bool)>, BTreeMap<String, AutoHarnessSkipReason>) {
+) -> (Vec<(Instance, AutoHarnessCaveats)>, BTreeMap<String, AutoHarnessSkipReason>) {
     let crate_fn_defs = rustc_public::local_crate().fn_defs().into_iter().collect::<FxHashSet<_>>();
     // Filter out CrateItems that are functions, but not functions defined in the crate itself, i.e., rustc-inserted functions
     // (c.f. https://github.com/model-checking/kani/issues/4189)
@@ -685,6 +696,9 @@ fn automatic_harness_partition(
 
     // Cache whether a type implements or can derive Arbitrary
     let mut ty_arbitrary_cache: FxHashMap<Ty, bool> = FxHashMap::default();
+    // The constructor search needs the same predicate, but `skip_reason` borrows the cache above
+    // for the whole loop, so give the `--constructor-args` check its own.
+    let mut ty_arbitrary_cache_ctor: FxHashMap<Ty, bool> = FxHashMap::default();
 
     // If `instance` is not eligible for an automatic harness, return the reason why (`Err`); if it
     // is eligible, return whether its harness requires *bounded* nondeterministic arguments
@@ -825,7 +839,23 @@ fn automatic_harness_partition(
                 skipped
                     .insert(crate::kani_middle::strip_local_crate_prefix(instance.name()), reason);
             }
-            Ok(is_bounded) => chosen.push((instance, is_bounded)),
+            Ok(is_bounded) => {
+                // Whether any generated value will come from a type's public constructor
+                // rather than raw field synthesis, which the summary reports as "(ctor)".
+                let is_ctor_based = args.autoharness_constructor_args
+                    && instance.body().is_some_and(|body| {
+                        body.arg_locals().iter().any(|arg| {
+                            crate::kani_middle::uses_ctor_generation(
+                                tcx,
+                                arg.ty,
+                                kani_any_def,
+                                &mut ty_arbitrary_cache_ctor,
+                                &mut vec![],
+                            )
+                        })
+                    });
+                chosen.push((instance, AutoHarnessCaveats { is_bounded, is_ctor_based }));
+            }
         }
     }
 

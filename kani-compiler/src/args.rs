@@ -122,6 +122,10 @@ pub struct Arguments {
     /// references). See kani_driver::autoharness_args for documentation.
     #[arg(long = "autoharness-bounded-arguments")]
     pub autoharness_bounded_arguments: bool,
+
+    /// Enable constructor-based nondeterministic value generation for autoharness.
+    #[arg(long = "autoharness-constructor-args")]
+    pub autoharness_constructor_args: bool,
 }
 
 #[derive(Debug, Clone, Copy, AsRefStr, EnumString, VariantNames, PartialEq, Eq)]
