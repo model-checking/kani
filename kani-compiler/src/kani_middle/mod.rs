@@ -9,11 +9,12 @@ use crate::kani_queries::QueryDb;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_hir::{def::DefKind, def_id::DefId as InternalDefId, def_id::LOCAL_CRATE};
 use rustc_middle::ty::TyCtxt;
-use rustc_public::mir::TerminatorKind;
 use rustc_public::mir::mono::{Instance, MonoItem};
+use rustc_public::mir::{Mutability, TerminatorKind};
 use rustc_public::rustc_internal;
 use rustc_public::ty::{
-    AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, RigidTy, Span as SpanStable, Ty, TyKind,
+    AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, RigidTy, Span as SpanStable, Ty, TyConst,
+    TyKind,
 };
 use rustc_public::visitor::{Visitable, Visitor as TyVisitor};
 use rustc_public::{CrateDef, DefId, local_crate};
@@ -300,6 +301,53 @@ fn implements_arbitrary(
     false
 }
 
+/// Whether `ty` is statically sized. Nondeterministic-value generation (and the resolution
+/// checks probing for it) must not instantiate generic models with unsized types: apart from
+/// being ungeneratable, this can crash constant evaluation during body retrieval.
+fn ty_is_sized(tcx: TyCtxt, ty: Ty) -> bool {
+    rustc_internal::internal(tcx, ty)
+        .is_sized(*tcx.at(rustc_span::DUMMY_SP), rustc_middle::ty::TypingEnv::fully_monomorphized())
+}
+
+/// Inspect a `kani::bounded_any::<T, N>()` (c.f. `KaniModel::BoundedAny`) instantiation to
+/// determine if `T: BoundedArbitrary`. The model looks like:
+/// ```rust
+/// fn bounded_any<T: BoundedArbitrary, const N: usize>() -> T {
+///   T::bounded_any::<N>()
+/// }
+/// ```
+/// So we select the terminator that calls `T::bounded_any::<N>()`, then try to resolve it to an
+/// Instance; `T` implements `BoundedArbitrary` iff we successfully resolve the Instance
+/// (mirroring `implements_arbitrary`).
+fn implements_bounded_arbitrary(tcx: TyCtxt, ty: Ty, kani_bounded_any_def: FnDef) -> bool {
+    if ty.kind().rigid().is_none() || !ty_is_sized(tcx, ty) {
+        return false;
+    }
+
+    let args = GenericArgs(vec![
+        GenericArgKind::Type(ty),
+        GenericArgKind::Const(TyConst::try_from_target_usize(1).unwrap()),
+    ]);
+    let Ok(instance) = Instance::resolve(kani_bounded_any_def, &args) else {
+        return false;
+    };
+    let Some(body) = instance.body() else {
+        return false;
+    };
+
+    for bb in body.blocks.iter() {
+        let TerminatorKind::Call { func, .. } = &bb.terminator.kind else {
+            continue;
+        };
+        if let TyKind::RigidTy(RigidTy::FnDef(def, args)) =
+            func.ty(body.arg_locals()).unwrap().kind()
+        {
+            return Instance::resolve(def, &args).is_ok();
+        }
+    }
+    false
+}
+
 /// Is `ty` a struct or enum whose fields/variants implement Arbitrary, or a reference to such a
 /// type?
 fn can_derive_arbitrary(
@@ -349,5 +397,76 @@ fn can_derive_arbitrary(
         can_derive_arbitrary(inner_ty, kani_any_def, ty_arbitrary_cache)
     } else {
         false
+    }
+}
+
+/// How an automatic harness can generate a nondeterministic value of a given argument type,
+/// c.f. `autoharness_supported_arg_ty`.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum ArgSupport {
+    /// An unbounded nondeterministic value, via (implemented or compiler-derived) `Arbitrary`.
+    Arbitrary,
+    /// A *bounded* nondeterministic value; verification results only hold up to the bound.
+    /// Only used if the user passed `--bounded-arguments`.
+    Bounded,
+    /// The type is not supported.
+    Unsupported,
+}
+
+/// Determine how an automatic harness can generate a nondeterministic value of type `ty` for a
+/// harness argument.
+/// In addition to the types that implement or can derive `Arbitrary`, automatic harnesses
+/// support the following, both reported as [ArgSupport::Bounded]:
+/// - slice references (`&[T]`/`&mut [T]`, provided `T` implements or can derive `Arbitrary`)
+///   and string slices (`&str`): the harness generates a slice of *bounded* nondeterministic
+///   length backed by harness-local storage, c.f. `KaniModel::AnySliceRef` and
+///   `KaniModel::AnyStrRef`;
+/// - types that implement `BoundedArbitrary` (e.g. `Vec<T>`, `String`, or user types deriving
+///   it): the harness generates a bounded nondeterministic value via `KaniModel::BoundedAny`.
+fn autoharness_supported_arg_ty(
+    tcx: TyCtxt,
+    ty: Ty,
+    kani_any_def: FnDef,
+    kani_bounded_any_def: FnDef,
+    ty_arbitrary_cache: &mut FxHashMap<Ty, bool>,
+) -> ArgSupport {
+    let arbitrary_or_derive = |ty: Ty, cache: &mut FxHashMap<Ty, bool>| {
+        if implements_arbitrary(ty, kani_any_def, cache)
+            || can_derive_arbitrary(ty, kani_any_def, cache)
+        {
+            ArgSupport::Arbitrary
+        } else {
+            ArgSupport::Unsupported
+        }
+    };
+
+    if let TyKind::RigidTy(RigidTy::Ref(_, inner_ty, inner_mutability)) = ty.kind() {
+        match inner_ty.kind() {
+            TyKind::RigidTy(RigidTy::Slice(elem_ty)) => {
+                if arbitrary_or_derive(elem_ty, ty_arbitrary_cache) == ArgSupport::Arbitrary {
+                    ArgSupport::Bounded
+                } else {
+                    ArgSupport::Unsupported
+                }
+            }
+            // There is no way to obtain a `&mut str` from our nondeterministic byte storage
+            // without breaking the UTF-8 safety invariant on writes, so only support `&str`.
+            TyKind::RigidTy(RigidTy::Str) => {
+                if inner_mutability == Mutability::Not {
+                    ArgSupport::Bounded
+                } else {
+                    ArgSupport::Unsupported
+                }
+            }
+            _ => arbitrary_or_derive(ty, ty_arbitrary_cache),
+        }
+    } else {
+        if arbitrary_or_derive(ty, ty_arbitrary_cache) == ArgSupport::Arbitrary {
+            ArgSupport::Arbitrary
+        } else if implements_bounded_arbitrary(tcx, ty, kani_bounded_any_def) {
+            ArgSupport::Bounded
+        } else {
+            ArgSupport::Unsupported
+        }
     }
 }
