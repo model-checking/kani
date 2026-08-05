@@ -79,7 +79,7 @@ fn extract_msg_or_err(gcx: &GotocCtx, msg_expr: &Expr, span: Span, construct: &s
     gcx.extract_const_message(msg_expr).unwrap_or_else(|| {
         utils::span_err(gcx.tcx, span, format!("`{construct}` message must be a string literal"));
         gcx.tcx.dcx().abort_if_errors();
-        String::new()
+        unreachable!("Rustc should have aborted already")
     })
 }
 
