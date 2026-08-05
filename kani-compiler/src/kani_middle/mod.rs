@@ -323,6 +323,49 @@ fn implements_arbitrary(
     false
 }
 
+/// The niche constraint of a scalar-ABI type: the width of the scalar in bits, and the
+/// (possibly wrapping) inclusive range of valid bit patterns.
+/// Returns None for non-scalar ABIs, pointer/float scalars, and scalars whose valid range
+/// covers every bit pattern.
+///
+/// Rationale: a layout niche is a language-level validity invariant (rustc packs enum
+/// variants into the invalid patterns), so a synthesized `kani::any` body must not produce
+/// values outside it -- they are as invalid as a `bool` holding 3. Assuming the range is
+/// therefore sound by construction and requires no reporting caveat.
+pub struct ScalarNiche {
+    /// Width of the scalar in bits (8, 16, 32, 64 or 128).
+    pub bits: u64,
+    /// Inclusive start of the valid range (bit pattern).
+    pub start: u128,
+    /// Inclusive end of the valid range (bit pattern). If `end < start`, the range wraps.
+    pub end: u128,
+}
+
+pub fn scalar_niche(tcx: TyCtxt, ty: Ty) -> Option<ScalarNiche> {
+    use rustc_abi::{BackendRepr, Primitive, Scalar};
+    let internal_ty = rustc_internal::internal(tcx, ty);
+    let layout = tcx
+        .layout_of(rustc_middle::ty::TypingEnv::fully_monomorphized().as_query_input(internal_ty))
+        .ok()?;
+    let BackendRepr::Scalar(scalar) = layout.backend_repr else { return None };
+    let Scalar::Initialized { value, valid_range } = scalar else { return None };
+    let Primitive::Int(int, _signed) = value else { return None };
+    let bits = int.size().bits();
+    let full = if bits == 128 { u128::MAX } else { (1u128 << bits) - 1 };
+    if valid_range.start == 0 && valid_range.end == full {
+        return None;
+    }
+    // A `Transmute` to the width-matched uint is only well-formed if the type occupies exactly
+    // the scalar's bytes. rustc is not known to report a `Scalar` ABI with padding, but bail out
+    // rather than emit an ill-sized cast: losing the constraint can only cause a (visible) false
+    // alarm, whereas comparing the wrong bits could assume `false` and silently make the harness
+    // vacuous.
+    if layout.size.bits() != bits {
+        return None;
+    }
+    Some(ScalarNiche { bits, start: valid_range.start, end: valid_range.end })
+}
+
 /// Inspect an `assume_safe::<T>()` (c.f. `KaniModel::AssumeSafe`) instantiation to determine if
 /// `T: Invariant`. The model looks like:
 /// ```rust
