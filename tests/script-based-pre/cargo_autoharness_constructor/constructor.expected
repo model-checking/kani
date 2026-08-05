@@ -5,6 +5,9 @@
 | cargo_autoharness_constructor | Day::ordinal0 | #[kani::proof] | Failure |
 | cargo_autoharness_constructor | Even::half | #[kani::proof] | Failure |
 | cargo_autoharness_constructor | Even::try_new | #[kani::proof] | Success |
+| cargo_autoharness_constructor | Ranged::new_unchecked | #[kani::proof] | Failure |
+| cargo_autoharness_constructor | Wrapper::from_raw_unchecked | #[kani::proof] | Failure |
+| cargo_autoharness_constructor | wrapped_ordinal0 | #[kani::proof] | Failure |
 === with flag ===
 Note: harnesses marked "(ctor)" generate some values through a type's public constructor (--constructor-args);
 | cargo_autoharness_constructor | Celsius::from_milli | #[kani::proof] | Success |
@@ -13,3 +16,6 @@ Note: harnesses marked "(ctor)" generate some values through a type's public con
 | cargo_autoharness_constructor | Day::ordinal0 | #[kani::proof] (ctor) | Success |
 | cargo_autoharness_constructor | Even::half | #[kani::proof] (ctor) | Success |
 | cargo_autoharness_constructor | Even::try_new | #[kani::proof] | Success |
+| cargo_autoharness_constructor | Ranged::new_unchecked | #[kani::proof] | Failure |
+| cargo_autoharness_constructor | Wrapper::from_raw_unchecked | #[kani::proof] | Failure |
+| cargo_autoharness_constructor | wrapped_ordinal0 | #[kani::proof] (ctor) | Success |

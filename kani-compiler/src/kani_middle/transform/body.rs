@@ -359,6 +359,28 @@ impl MutableBody {
         self.split_bb(source, position, terminator);
     }
 
+    /// Append a fully-formed basic block (whose targets the caller has already remapped into
+    /// this body's index space) and return its index. Building block for inlining callee
+    /// bodies, c.f. `automatic::inline_with_assumed_panics`.
+    pub fn push_raw_bb(&mut self, bb: BasicBlock) -> BasicBlockIdx {
+        self.blocks.push(bb);
+        self.blocks.len() - 1
+    }
+
+    /// Split the block at `source`, terminating the first half with `terminator` (whose
+    /// targets may still be placeholders), and return (index of the terminator's block,
+    /// index of the remainder block). Building block for inlining callee bodies.
+    pub fn split_with_terminator(
+        &mut self,
+        source: &mut SourceInstruction,
+        terminator: Terminator,
+    ) -> (BasicBlockIdx, BasicBlockIdx) {
+        let remainder_idx = self.blocks.len();
+        let term_bb_idx = source.bb();
+        self.split_bb(source, InsertPosition::Before, terminator);
+        (term_bb_idx, remainder_idx)
+    }
+
     /// Insert statement before or after the source instruction and update the source as needed. If
     /// `InsertPosition` is `InsertPosition::Before`, `source` will point to the same instruction as
     /// before. If `InsertPosition` is `InsertPosition::After`, `source` will point to the
