@@ -508,13 +508,21 @@ impl VerificationArgs {
 
     /// Default to parallel harness verification with terse output for `autoharness`, which
     /// typically generates hundreds of harnesses; sequential verification is a poor fit.
-    /// Explicit user choices are always preserved, and the parse-time validation that
-    /// `--jobs` requires `--output-format=terse` is unaffected (these defaults are applied
-    /// after it, and only when neither option was passed).
+    ///
+    /// Explicit user choices are preserved: `--output-format` is only defaulted when the user
+    /// did not pass it, and `--jobs` is only defaulted when the user did not pass it *and* the
+    /// resulting format is `terse` (parallel verification requires terse output, c.f.
+    /// `validate`). Consequently `--output-format=regular` (or `old`) opts back into sequential
+    /// verification, while a bare `--jobs=N` still gets the terse output it needs.
+    ///
+    /// This must run *before* argument validation, so that validation sees the options the run
+    /// will actually use; it is idempotent, so calling it again later is harmless.
     pub fn apply_autoharness_parallel_defaults(&mut self) {
-        if self.jobs.is_none() && self.output_format.is_none() {
-            self.jobs = Some(None); // `-j`: the thread pool's default thread count
+        if self.output_format.is_none() {
             self.output_format = Some(OutputFormat::Terse);
+        }
+        if self.jobs.is_none() && self.output_format() == OutputFormat::Terse {
+            self.jobs = Some(None); // `-j`: the thread pool's default thread count
         }
     }
 
@@ -1405,5 +1413,62 @@ mod tests {
         let args = "kani input.rs --no-assert-contracts".split_whitespace();
         let err = StandaloneArgs::try_parse_from(args).unwrap().validate().unwrap_err();
         assert_eq!(err.kind(), ErrorKind::MissingRequiredArgument);
+    }
+
+    /// `autoharness` verifies harnesses in parallel by default, which requires terse output.
+    /// Check each combination of explicitly passed / defaulted `--jobs` and `--output-format`.
+    #[test]
+    fn check_autoharness_parallel_defaults() {
+        let effective = |extra: &str| {
+            let args = format!("kani autoharness -Z autoharness {extra} input.rs");
+            let parsed = StandaloneArgs::try_parse_from(args.split_whitespace()).unwrap();
+            let Some(StandaloneSubcommand::Autoharness(mut autoharness)) = parsed.command else {
+                panic!("expected the autoharness subcommand");
+            };
+            autoharness.verify_opts.apply_autoharness_parallel_defaults();
+            (autoharness.verify_opts.jobs(), autoharness.verify_opts.output_format())
+        };
+
+        // Neither option passed: parallel with terse output.
+        assert_eq!(effective(""), (NumThreads::ThreadPoolDefault, OutputFormat::Terse));
+        // Only `--jobs`: the user's thread count, plus the terse output it requires.
+        assert_eq!(effective("--jobs=4"), (NumThreads::UserSpecified(4), OutputFormat::Terse));
+        // Only `--output-format=terse`: parallel, since terse is what parallel needs.
+        assert_eq!(
+            effective("--output-format=terse"),
+            (NumThreads::ThreadPoolDefault, OutputFormat::Terse)
+        );
+        // A more verbose format opts back into sequential verification.
+        assert_eq!(
+            effective("--output-format=regular"),
+            (NumThreads::NoMultithreading, OutputFormat::Regular)
+        );
+        assert_eq!(
+            effective("--output-format=old"),
+            (NumThreads::NoMultithreading, OutputFormat::Old)
+        );
+
+        // Applying the defaults is idempotent, and plain verification is unaffected.
+        let args = "kani input.rs".split_whitespace();
+        let parsed = StandaloneArgs::try_parse_from(args).unwrap();
+        assert_eq!(parsed.verify_opts.jobs(), NumThreads::NoMultithreading);
+        assert_eq!(parsed.verify_opts.output_format(), OutputFormat::Regular);
+    }
+
+    /// `--jobs` with an explicitly requested non-terse format stays an error, for `autoharness`
+    /// (where the defaults cannot silently override the user) as well as plain verification.
+    #[test]
+    fn check_jobs_still_requires_terse() {
+        for args in [
+            "kani autoharness -Z autoharness --jobs=4 --output-format=regular input.rs",
+            "kani --jobs=4 input.rs",
+        ] {
+            let mut parsed = StandaloneArgs::try_parse_from(args.split_whitespace()).unwrap();
+            if let Some(StandaloneSubcommand::Autoharness(autoharness)) = &mut parsed.command {
+                autoharness.verify_opts.apply_autoharness_parallel_defaults();
+            }
+            let err = parsed.validate().unwrap_err();
+            assert_eq!(err.kind(), ErrorKind::ArgumentConflict, "for `{args}`");
+        }
     }
 }

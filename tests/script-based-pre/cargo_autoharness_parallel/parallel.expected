@@ -1,3 +1,4 @@
+TERSE: yes
 PARALLEL: yes
 | f1 | #[kani::proof] | Success
 | f2 | #[kani::proof] | Success

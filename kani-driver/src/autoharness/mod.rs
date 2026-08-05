@@ -52,6 +52,9 @@ pub fn autoharness_standalone(args: StandaloneAutoharnessArgs) -> Result<()> {
 
 /// Execute autoharness-specific KaniSession configuration.
 fn setup_session(session: &mut KaniSession, common_autoharness_args: &CommonAutoharnessArgs) {
+    // `main` already applies these before validating the arguments (so that validation sees the
+    // options the run will actually use); repeat it here -- the call is idempotent -- so that the
+    // session is configured correctly regardless of how it was constructed.
     session.args.apply_autoharness_parallel_defaults();
     session.enable_autoharness();
     session.add_default_bounds();
