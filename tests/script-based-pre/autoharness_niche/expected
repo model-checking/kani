@@ -1,0 +1,4 @@
+Status: SATISFIED
+Status: SATISFIED
+| niche_probe | cover_extremes                      | #[kani::proof]            | Success             |
+| niche_probe | days_left_in_year                   | #[kani::proof]            | Success             |
