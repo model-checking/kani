@@ -107,10 +107,11 @@ please add them to [this GitHub issue](https://github.com/model-checking/kani/is
 
 ## Type Safety Invariants
 If a type implements the [`Invariant`](https://model-checking.github.io/kani/crates/doc/kani/trait.Invariant.html) trait,
-Kani assumes that the nondeterministic values it generates for automatic harnesses respect the type's safety invariant,
+Kani assumes that the nondeterministic struct and enum values it generates for automatic harnesses respect the type's safety invariant,
 i.e., each generated value `v` satisfies `v.is_safe()`.
-This assumption applies to nested values as well: if a field of a generated value has a type that implements `Invariant`,
+This assumption applies to nested values as well: if a field of a generated value has a struct or enum type that implements `Invariant`,
 the field's safety invariant is assumed to hold, even if the enclosing type does not implement `Invariant` itself.
+Invariants implemented for non-ADT types (e.g., tuples or arrays) are currently not assumed.
 
 This matches the [Unsafe Code Guidelines' definition of a safety invariant](https://rust-lang.github.io/unsafe-code-guidelines/glossary.html#validity-and-safety-invariant):
 safe code is allowed to assume that the values it receives uphold their types' safety invariants,
