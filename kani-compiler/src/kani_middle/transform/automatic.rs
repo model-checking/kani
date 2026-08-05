@@ -12,7 +12,10 @@ use crate::kani_middle::codegen_units::CodegenUnit;
 use crate::kani_middle::kani_functions::{KaniHook, KaniIntrinsic, KaniModel};
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
-use crate::kani_middle::{implements_arbitrary, scalar_niche};
+use crate::kani_middle::{
+    CtorReturn, adt_has_private_field_check, find_arbitrary_constructor, implements_arbitrary,
+    scalar_niche,
+};
 use crate::kani_queries::QueryDb;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::ty::TyCtxt;
@@ -20,7 +23,8 @@ use rustc_public::CrateDef;
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::{
     AggregateKind, BasicBlockIdx, BinOp, Body, BorrowKind, CastKind, ConstOperand, Local,
-    MutBorrowKind, Mutability, Operand, Place, Rvalue, SwitchTargets, Terminator, TerminatorKind,
+    MutBorrowKind, Mutability, Operand, Place, ProjectionElem, Rvalue, SwitchTargets, Terminator,
+    TerminatorKind,
 };
 use rustc_public::ty::{
     AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyKind, UintTy,
@@ -35,8 +39,12 @@ use tracing::debug;
 pub struct AutomaticArbitraryPass {
     /// The FnDef of KaniModel::Any
     kani_any: FnDef,
-    /// The FnDef of KaniHook::Assume (used for layout-niche assumptions).
+    /// The FnDef of KaniHook::Assume (used for layout-niche assumptions and constructor
+    /// success).
     kani_assume: FnDef,
+    /// Whether --constructor-args is enabled: generate values of private-field types through
+    /// their public constructors instead of raw field synthesis.
+    constructor_args: bool,
 }
 
 impl AutomaticArbitraryPass {
@@ -44,7 +52,8 @@ impl AutomaticArbitraryPass {
         let kani_fns = query_db.kani_functions();
         let kani_any = *kani_fns.get(&KaniModel::Any.into()).unwrap();
         let kani_assume = *kani_fns.get(&KaniHook::Assume.into()).unwrap();
-        Self { kani_any, kani_assume }
+        let constructor_args = query_db.args().autoharness_constructor_args;
+        Self { kani_any, kani_assume, constructor_args }
     }
 }
 
@@ -119,6 +128,19 @@ impl TransformPass for AutomaticArbitraryPass {
         }
 
         if let TyKind::RigidTy(RigidTy::Adt(def, args)) = ty.kind() {
+            // Under --constructor-args, generate values of structs with private fields
+            // through one of their public constructors (raw field synthesis can violate the
+            // type's representation invariant, producing false alarms); fall through to
+            // field synthesis when no viable constructor exists.
+            if self.constructor_args
+                && def.kind() == AdtKind::Struct
+                && adt_has_private_field_check(tcx, def)
+                && let Some((ctor, shape)) =
+                    find_arbitrary_constructor(tcx, *ty, self.kani_any, &mut FxHashMap::default())
+            {
+                debug!(?ty, ctor=?ctor.name(), ?shape, "generate_ctor_body");
+                return (true, self.generate_ctor_body(tcx, ctor, shape, *ty, body));
+            }
             match def.kind() {
                 AdtKind::Enum => (true, self.generate_enum_body(tcx, def, args, body)),
                 AdtKind::Struct => (true, self.generate_struct_body(tcx, def, args, body)),
@@ -307,6 +329,171 @@ impl AutomaticArbitraryPass {
 
         // The index of the first block we inserted is (last bb index - number of bbs we inserted above it)
         source.bb() - (fields.len() + 1)
+    }
+
+    /// Overwrite the default `kani::any()` implementation `body` for a struct with private
+    /// fields by calling a public constructor with nondeterministic arguments
+    /// (`--constructor-args`). The returned body is equivalent to:
+    /// ```ignore
+    /// // ctor returning Self:
+    /// Ty::ctor(kani::any(), ..)
+    /// // ctor returning Option<Self> (Result<Self, E> analogously):
+    /// match Ty::ctor(kani::any(), ..) {
+    ///     Some(v) => v,
+    ///     None => { kani::assume(false); unreachable!() }
+    /// }
+    /// ```
+    fn generate_ctor_body(
+        &self,
+        tcx: TyCtxt,
+        ctor: Instance,
+        shape: CtorReturn,
+        ty: Ty,
+        body: Body,
+    ) -> Body {
+        let mut new_body = MutableBody::from(body);
+        new_body.clear_body(TerminatorKind::Unreachable);
+        let mut source = SourceInstruction::Terminator { bb: 0 };
+
+        let ctor_sig = ctor.ty().kind().fn_sig().unwrap().skip_binder();
+
+        // Generate a nondeterministic value for every constructor argument.
+        let arg_ops: Vec<Operand> = ctor_sig
+            .inputs()
+            .iter()
+            .map(|input_ty| {
+                let lcl = call_kani_any_for_ty(
+                    tcx,
+                    self.kani_any,
+                    self.kani_assume,
+                    &mut new_body,
+                    *input_ty,
+                    Mutability::Not,
+                    &mut source,
+                );
+                Operand::Move(Place::from(lcl))
+            })
+            .collect();
+
+        if shape == CtorReturn::Direct {
+            // RETURN_LOCAL = ctor(args); return
+            new_body.insert_call(
+                &ctor,
+                &mut source,
+                InsertPosition::Before,
+                arg_ops,
+                Place::from(0),
+            );
+            let ret_span = source.span(new_body.blocks());
+            new_body.insert_terminator(
+                &mut source,
+                InsertPosition::Before,
+                Terminator { kind: TerminatorKind::Return, span: ret_span },
+            );
+            return new_body.into();
+        }
+
+        // Option<Self> / Result<Self, E>: call, switch on the discriminant, assume success.
+        let ret_ty = ctor_sig.output();
+        let TyKind::RigidTy(RigidTy::Adt(wrap_def, _)) = ret_ty.kind() else {
+            unreachable!("constructor return shape guaranteed by find_arbitrary_constructor")
+        };
+        // Some = variant 1 of Option; Ok = variant 0 of Result. Both have discriminant
+        // values equal to their variant indices.
+        let ok_idx = match shape {
+            CtorReturn::OptionOf => 1usize,
+            CtorReturn::ResultOf => 0usize,
+            CtorReturn::Direct => unreachable!(),
+        };
+        let ok_variant = wrap_def.variants()[ok_idx];
+
+        let span = source.span(new_body.blocks());
+        let ret_lcl = new_body.new_local(ret_ty, span, Mutability::Not);
+        new_body.insert_call(
+            &ctor,
+            &mut source,
+            InsertPosition::Before,
+            arg_ops,
+            Place::from(ret_lcl),
+        );
+
+        // Read the discriminant.
+        let discr_ty = ret_ty.kind().discriminant_ty().unwrap();
+        let discr_lcl = new_body.new_local(discr_ty, span, Mutability::Not);
+        new_body.assign_to(
+            Place::from(discr_lcl),
+            Rvalue::Discriminant(Place::from(ret_lcl)),
+            &mut source,
+            InsertPosition::Before,
+        );
+
+        // Placeholder for the SwitchInt terminator.
+        let span = source.span(new_body.blocks());
+        new_body.insert_terminator(
+            &mut source,
+            InsertPosition::Before,
+            Terminator { kind: TerminatorKind::Unreachable, span },
+        );
+        let switch_instr = SourceInstruction::Terminator { bb: source.bb() - 1 };
+
+        // Failure branch: kani::assume(false); unreachable.
+        let assume_inst = Instance::resolve(self.kani_assume, &GenericArgs(vec![])).unwrap();
+        let false_op = Operand::Constant(ConstOperand {
+            span,
+            user_ty: None,
+            const_: MirConst::from_bool(false),
+        });
+        let unit_lcl = new_body.new_local(Ty::new_tuple(&[]), span, Mutability::Not);
+        new_body.insert_call(
+            &assume_inst,
+            &mut source,
+            InsertPosition::Before,
+            vec![false_op],
+            Place::from(unit_lcl),
+        );
+        new_body.insert_terminator(
+            &mut source,
+            InsertPosition::Before,
+            Terminator { kind: TerminatorKind::Unreachable, span },
+        );
+        // insert_call + terminator added two blocks; the failure branch starts at the first.
+        let bad_bb = source.bb() - 2;
+
+        // Success branch: RETURN_LOCAL = move (ret as OkVariant).0; return.
+        let payload_place = Place {
+            local: ret_lcl,
+            projection: vec![
+                ProjectionElem::Downcast(ok_variant.idx),
+                ProjectionElem::Field(0, ty),
+            ],
+        };
+        new_body.insert_terminator(
+            &mut source,
+            InsertPosition::Before,
+            Terminator { kind: TerminatorKind::Return, span },
+        );
+        let ok_bb = source.bb() - 1;
+        let mut assign_instr = SourceInstruction::Terminator { bb: ok_bb };
+        new_body.assign_to(
+            Place::from(0),
+            Rvalue::Use(Operand::Move(payload_place)),
+            &mut assign_instr,
+            InsertPosition::Before,
+        );
+
+        let switch = Terminator {
+            kind: TerminatorKind::SwitchInt {
+                discr: Operand::Copy(Place::from(discr_lcl)),
+                targets: SwitchTargets::new(
+                    vec![(ok_variant.idx.to_index() as u128, ok_bb)],
+                    bad_bb,
+                ),
+            },
+            span,
+        };
+        new_body.replace_terminator(&switch_instr, switch);
+
+        new_body.into()
     }
 
     /// Overwrite the default kani::any() implementation `body` for the enum described by `def`.

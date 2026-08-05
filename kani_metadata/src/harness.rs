@@ -42,6 +42,11 @@ pub struct HarnessMetadata {
     pub has_loop_contracts: bool,
     /// If the harness was automatically generated or manually written.
     pub is_automatically_generated: bool,
+    /// Whether the (automatically generated) harness generates some values through a type's
+    /// public constructor (c.f. the autoharness --constructor-args option), in which case its
+    /// verification result only covers constructor-reachable values.
+    #[serde(default)]
+    pub is_ctor_based: bool,
 }
 
 /// The attributes added by the user to control how a harness is executed.
