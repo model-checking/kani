@@ -295,6 +295,41 @@ macro_rules! kani_intrinsics {
             T::any()
         }
 
+        /// Exercise a type's `Debug` implementation by formatting a value into a sink that
+        /// discards the output. The `Formatter` is constructed by the core formatting
+        /// machinery, so it is always valid; panics or undefined behavior inside the `fmt`
+        /// implementation are detected as usual.
+        ///
+        /// This model is used by the compiler to generate automatic harnesses for `Debug::fmt`
+        /// implementations (`kani autoharness`), whose `&mut Formatter` argument cannot be
+        /// generated nondeterministically.
+        #[kanitool::fn_marker = "CheckDebugFmtModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn check_debug_fmt<T: core_path::fmt::Debug>(value: &T) {
+            struct Sink;
+            impl core_path::fmt::Write for Sink {
+                fn write_str(&mut self, _s: &str) -> core_path::fmt::Result {
+                    Ok(())
+                }
+            }
+            let _ = core_path::fmt::write(&mut Sink, format_args!("{:?}", value));
+        }
+
+        /// Like [check_debug_fmt], but for `Display` implementations.
+        #[kanitool::fn_marker = "CheckDisplayFmtModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn check_display_fmt<T: core_path::fmt::Display>(value: &T) {
+            struct Sink;
+            impl core_path::fmt::Write for Sink {
+                fn write_str(&mut self, _s: &str) -> core_path::fmt::Result {
+                    Ok(())
+                }
+            }
+            let _ = core_path::fmt::write(&mut Sink, format_args!("{}", value));
+        }
+
         /// Creates a symbolic value *bounded* by `N`. Bounded means `|T| <= N`. The type
         /// implementing BoundedArbitrary decides exactly what size means for them.
         ///
