@@ -18,7 +18,7 @@ use tokio::process::Command as TokioCommand;
 use crate::args::common::Verbosity;
 use crate::args::{OutputFormat, VerificationArgs};
 use crate::cbmc_output_parser::{
-    CheckStatus, Property, VerificationOutput, extract_results, process_cbmc_output,
+    CheckStatus, ParserItem, Property, VerificationOutput, extract_results, process_cbmc_output,
 };
 use crate::cbmc_property_renderer::{format_coverage, format_result, kani_cbmc_output_filter};
 use crate::coverage::cov_results::{CoverageCheck, CoverageResults};
@@ -75,6 +75,12 @@ pub struct VerificationResult {
     pub runtime: Duration,
     /// Whether concrete playback generated a test
     pub generated_concrete_test: bool,
+    /// The number of quantifier expressions CBMC's solver backend could not encode and
+    /// dropped (replaced with unconstrained values), c.f. CBMC's "warning: ignoring forall"
+    /// messages. Nonzero counts make results unreliable: an `assume` containing such a
+    /// quantifier is not enforced (a successful result may be vacuous), and an `assert`
+    /// containing one may fail spuriously.
+    pub ignored_quantifiers: usize,
     /// The coverage results
     pub coverage_results: Option<CoverageResults>,
 }
@@ -162,6 +168,7 @@ impl KaniSession {
                 results: Err(ExitStatus::Timeout),
                 runtime: start_time.elapsed(),
                 generated_concrete_test: false,
+                ignored_quantifiers: 0,
                 coverage_results: None,
             })
         }
@@ -323,6 +330,35 @@ impl KaniSession {
     }
 }
 
+/// Count CBMC messages reporting that a quantifier expression could not be encoded and was
+/// dropped. CBMC's SAT-based backends only support quantifiers with constant bounds; other
+/// quantifiers are replaced by unconstrained values, with only a low-visibility message
+/// (`prop_conv_solvert::ignoring`, printed as "warning: ignoring forall" followed by the
+/// pretty-printed expression).
+fn count_ignored_quantifiers(items: &[ParserItem]) -> usize {
+    items
+        .iter()
+        .filter(|item| {
+            matches!(item, ParserItem::Message { message_text, .. }
+                if message_text.starts_with("warning: ignoring forall")
+                    || message_text.starts_with("warning: ignoring exists"))
+        })
+        .count()
+}
+
+/// The warning rendered when the solver backend dropped quantifier expressions.
+fn ignored_quantifiers_warning(count: usize) -> String {
+    format!(
+        "warning: the solver backend does not support quantifiers with non-constant bounds \
+and ignored {count} quantifier expression(s), replacing them with unconstrained values.\n\
+         Verification results are unreliable: `kani::assume` calls containing such a \
+quantifier are NOT enforced (a successful result may not cover the intended property), and \
+`kani::assert` calls containing one may fail spuriously.\n\
+         Consider using an SMT solver backend, e.g. `#[kani::solver(z3)]`, which supports \
+these quantifiers.\n"
+    )
+}
+
 impl VerificationResult {
     /// Computes a `VerificationResult` (kani-driver's notion of the result of a CBMC call) from a
     /// `VerificationOutput` (cbmc_output_parser's idea of CBMC results).
@@ -338,6 +374,7 @@ impl VerificationResult {
         start_time: Instant,
     ) -> VerificationResult {
         let runtime = start_time.elapsed();
+        let ignored_quantifiers = count_ignored_quantifiers(&output.processed_items);
         let (_, results) = extract_results(output.processed_items);
 
         if let Some(results) = results {
@@ -350,6 +387,7 @@ impl VerificationResult {
                 results: Ok(results),
                 runtime,
                 generated_concrete_test: false,
+                ignored_quantifiers,
                 coverage_results,
             }
         } else {
@@ -365,6 +403,7 @@ impl VerificationResult {
                 results: Err(exit_status),
                 runtime,
                 generated_concrete_test: false,
+                ignored_quantifiers,
                 coverage_results: None,
             }
         }
@@ -377,6 +416,7 @@ impl VerificationResult {
             results: Ok(vec![]),
             runtime: Duration::from_secs(0),
             generated_concrete_test: false,
+            ignored_quantifiers: 0,
             coverage_results: None,
         }
     }
@@ -391,6 +431,7 @@ impl VerificationResult {
             results: Err(ExitStatus::Other(42)),
             runtime: Duration::from_secs(0),
             generated_concrete_test: false,
+            ignored_quantifiers: 0,
             coverage_results: None,
         }
     }
@@ -414,6 +455,10 @@ impl VerificationResult {
                 } else {
                     format_result(results, status, should_panic, failed_properties, show_checks)
                 };
+                if self.ignored_quantifiers > 0 {
+                    result.push('\n');
+                    result.push_str(&ignored_quantifiers_warning(self.ignored_quantifiers));
+                }
                 writeln!(result, "Verification Time: {}s", self.runtime.as_secs_f32()).unwrap();
                 result
             }
