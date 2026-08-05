@@ -79,7 +79,12 @@ fn extract_msg_or_err(gcx: &GotocCtx, msg_expr: &Expr, span: Span, construct: &s
     gcx.extract_const_message(msg_expr).unwrap_or_else(|| {
         utils::span_err(gcx.tcx, span, format!("`{construct}` message must be a string literal"));
         gcx.tcx.dcx().abort_if_errors();
-        unreachable!("Rustc should have aborted already")
+        // `span_err` above emits a hard error, which `abort_if_errors` is guaranteed to
+        // observe and turn into a fatal error, unwinding before we get here.
+        unreachable!(
+            "rustc should have aborted after the `{construct}` message error emitted above; \
+             reaching this point means that error was never counted by the diagnostic context"
+        )
     })
 }
 
