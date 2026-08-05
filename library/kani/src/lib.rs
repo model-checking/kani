@@ -54,6 +54,13 @@ pub use kani_macros::*;
 // Declare common Kani API such as assume, assert
 kani_core::kani_lib!(kani);
 
+/// Compatibility module: the `Invariant` trait is now defined at the crate root (its
+/// definition moved into `kani_core`), but it was previously importable as
+/// `kani::invariant::Invariant`; keep that path working.
+pub mod invariant {
+    pub use super::Invariant;
+}
+
 // Used to bind `core::assert` to a different name to avoid possible name conflicts if a
 // crate uses `extern crate std as core`. See
 // https://github.com/model-checking/kani/issues/1949 and https://github.com/model-checking/kani/issues/2187
