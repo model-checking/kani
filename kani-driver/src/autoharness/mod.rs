@@ -274,7 +274,7 @@ impl KaniSession {
         }
         if any_ctor {
             println!(
-                "Note: harnesses marked \"(ctor)\" generate some values through a type's public constructor (--constructor-args);\n\
+                "Note: harnesses marked \"(ctor)\" generate some values through one of a type's own constructors (--constructor-args);\n\
                  their verification results only cover values reachable through that constructor."
             );
         }

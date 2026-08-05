@@ -30,11 +30,13 @@ pub struct CommonAutoharnessArgs {
     #[arg(long)]
     pub bounded_arguments: bool,
 
-    /// Generate nondeterministic values for types without an Arbitrary implementation by
-    /// calling one of the type's own public constructors with nondeterministic arguments
-    /// (assuming the constructor succeeds). Such harnesses are marked "(ctor)" in the output,
-    /// and their verification results only cover values reachable through that constructor;
-    /// a bug that requires a different value will not be found.
+    /// Generate nondeterministic values for types without an Arbitrary implementation through
+    /// one of the type's own constructors with nondeterministic arguments: either an inlined
+    /// assert-guarded representation constructor (unsafe/doc-hidden/*_unchecked) whose
+    /// assertions filter the arguments, or a checked public constructor (assuming it succeeds).
+    /// Such harnesses are marked "(ctor)" in the output, and their verification results only
+    /// cover values reachable through that constructor; a bug that requires a different value
+    /// will not be found.
     #[arg(long)]
     pub constructor_args: bool,
 
