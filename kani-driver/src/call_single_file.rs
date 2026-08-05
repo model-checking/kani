@@ -121,6 +121,10 @@ impl KaniSession {
     pub fn kani_compiler_local_flags(&self) -> Vec<KaniArg> {
         let mut flags: Vec<KaniArg> = vec![];
 
+        if self.args.no_assert_overrides {
+            flags.push("--no-assert-overrides".into());
+        }
+
         if self.args.common_args.debug {
             flags.push("--log-level=debug".into());
         } else if self.args.common_args.verbose {

@@ -281,6 +281,13 @@ pub struct VerificationArgs {
     #[arg(long, hide_short_help = true)]
     pub ignore_global_asm: bool,
 
+    /// Do not replace `assert!`, `panic!`, and related macros with Kani's versions.
+    /// Assertion failures are then reported as generic panics, without the original condition
+    /// or message. Use this as an escape hatch if your crate's macro imports conflict with
+    /// Kani's injected overrides (error E0659: `assert` is ambiguous).
+    #[arg(long, hide_short_help = true)]
+    pub no_assert_overrides: bool,
+
     /// Number of threads to spawn to verify harnesses in parallel.
     /// Omit the flag entirely to run sequentially (i.e. one thread).
     /// Pass -j to run with the thread pool's default number of threads.
