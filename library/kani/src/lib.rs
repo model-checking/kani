@@ -31,7 +31,6 @@ pub mod bounded_arbitrary;
 #[cfg(feature = "concrete_playback")]
 mod concrete_playback;
 pub mod futures;
-pub mod invariant;
 pub mod iter;
 pub mod shadow;
 pub mod vec;
@@ -40,7 +39,6 @@ mod models;
 
 #[cfg(feature = "concrete_playback")]
 pub use concrete_playback::concrete_playback_run;
-pub use invariant::Invariant;
 
 #[cfg(not(feature = "concrete_playback"))]
 /// NOP `concrete_playback` for type checking during verification mode.
@@ -55,6 +53,13 @@ pub use kani_macros::*;
 
 // Declare common Kani API such as assume, assert
 kani_core::kani_lib!(kani);
+
+/// Compatibility module: the `Invariant` trait is now defined at the crate root (its
+/// definition moved into `kani_core`), but it was previously importable as
+/// `kani::invariant::Invariant`; keep that path working.
+pub mod invariant {
+    pub use super::Invariant;
+}
 
 // Used to bind `core::assert` to a different name to avoid possible name conflicts if a
 // crate uses `extern crate std as core`. See
