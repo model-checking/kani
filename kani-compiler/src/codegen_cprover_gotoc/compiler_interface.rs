@@ -10,9 +10,12 @@ use crate::codegen_cprover_gotoc::{GotocCtx, context};
 use crate::kani_middle::analysis;
 use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::check_reachable_items;
-use crate::kani_middle::codegen_units::{CodegenUnit, CodegenUnits};
+use crate::kani_middle::codegen_order::HeuristicOrderable;
+use crate::kani_middle::codegen_units::{CodegenUnit, CodegenUnits, Harness};
 use crate::kani_middle::provide;
-use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
+use crate::kani_middle::reachability::{
+    ReachabilityInfo, collect_reachable_items, filter_crate_items,
+};
 use crate::kani_middle::transform::{BodyTransformation, GlobalPasses};
 use crate::kani_queries::QUERY_DB;
 use cbmc::goto_program::Location;
@@ -78,7 +81,7 @@ impl GotocCodegenBackend {
     fn codegen_items<'tcx>(
         &self,
         tcx: TyCtxt<'tcx>,
-        starting_items: &[MonoItem],
+        mut reachability: ReachabilityInfo,
         symtab_goto: &Path,
         machine_model: &MachineModel,
         check_contract: Option<InternalDefId>,
@@ -86,20 +89,14 @@ impl GotocCodegenBackend {
         transformer: &mut BodyTransformation,
         thread_pool: &ThreadPool,
     ) -> (MinimalGotocCtx, Vec<MonoItem>, Option<AssignsContract>) {
-        // This runs reachability analysis before global passes are applied.
-        //
-        // Alternatively, we could run reachability only once after the global passes are applied
-        // and resolve the necessary dependencies inside the passes on the fly. This, however, has a
-        // disadvantage of not having a precomputed call graph for the global passes to use. The
-        // call graph could be used, for example, in resolving function pointer or vtable calls for
-        // global passes that need this.
-        let (mut items, call_graph) = with_timer(
-            || collect_reachable_items(tcx, transformer, starting_items),
-            "codegen reachability analysis",
-        );
+        // We already ran initial reachability before calling `codegen_items`.
+        // Reuse that result and only recompute after global passes if needed.
+        let mut items = reachability.reachable.clone();
+        let call_graph = reachability.call_graph.clone();
 
         // Retrieve all instances from the currently codegened items.
-        let instances = items
+        let instances = reachability
+            .reachable
             .iter()
             .filter_map(|item| match item {
                 MonoItem::Fn(instance) => Some(*instance),
@@ -115,30 +112,41 @@ impl GotocCodegenBackend {
         let any_pass_modified = global_passes.run_global_passes(
             transformer,
             tcx,
-            starting_items,
-            instances,
+            &reachability.starting,
+            items
+                .iter()
+                .filter_map(|item| match item {
+                    MonoItem::Fn(instance) => Some(*instance),
+                    MonoItem::Static(static_def) => {
+                        let instance: Instance = (*static_def).into();
+                        instance.has_body().then_some(instance)
+                    }
+                    MonoItem::GlobalAsm(_) => None,
+                })
+                .collect(),
             call_graph,
         );
 
         // Re-collect reachable items after global transformations were applied. This is necessary
         // since global pass could add extra calls to instrumentation.
         if any_pass_modified {
-            (items, _) = with_timer(
-                || collect_reachable_items(tcx, transformer, starting_items),
+            (reachability.reachable, _) = with_timer(
+                || collect_reachable_items(tcx, transformer, &reachability.starting),
                 "codegen reachability analysis (second pass)",
             );
+            items = reachability.reachable.clone();
         }
 
         // Follow rustc naming convention (cx is abbrev for context).
         // https://rustc-dev-guide.rust-lang.org/conventions.html#naming-conventions
         let mut gcx =
             QUERY_DB.with(|db| GotocCtx::new(tcx, db.borrow().clone(), machine_model, transformer));
-        check_reachable_items(gcx.tcx, &gcx.queries, &items);
+        check_reachable_items(gcx.tcx, &gcx.queries, &reachability.reachable);
 
         let contract_info = with_timer(
             || {
                 // we first declare all items
-                for item in &items {
+                for item in &reachability.reachable {
                     match *item {
                         MonoItem::Fn(instance) => {
                             gcx.call_with_panic_debug_info(
@@ -159,7 +167,7 @@ impl GotocCodegenBackend {
                 }
 
                 // then we move on to codegen
-                for item in &items {
+                for item in &reachability.reachable {
                     match *item {
                         MonoItem::Fn(instance) => {
                             gcx.call_with_panic_debug_info(
@@ -185,7 +193,8 @@ impl GotocCodegenBackend {
                     }
                 }
 
-                check_contract.map(|check_id| gcx.handle_check_contract(check_id, &items))
+                check_contract
+                    .map(|check_id| gcx.handle_check_contract(check_id, &reachability.reachable))
             },
             "codegen",
         );
@@ -238,7 +247,7 @@ impl GotocCodegenBackend {
             thread_pool.send_work(file_data_with_interner).unwrap();
         }
 
-        (min_gcx, items, contract_info)
+        (min_gcx, reachability.reachable, contract_info)
     }
 
     /// Determines the number of threads to add to the pool for goto binary exporting.
@@ -275,6 +284,30 @@ impl GotocCodegenBackend {
             let harness_attrs = KaniAttributes::for_def_id(tcx, harness.def.def_id());
             harness_attrs.interpret_for_contract_attribute()
         }
+    }
+}
+
+pub type HarnessWithReachable<'a> = (&'a Harness, ReachabilityInfo);
+
+/// Returns a function that can handle reachability analysis for all harnesses in a given unit,
+/// using the given QueryDb and TyCtxt.
+///
+/// (This could also just be done as a big closure inside of `codegen_crate` where we
+/// generate `ordered_harnesses` with the nested map, but this seemed cleaner.)
+fn reachability_analysis_fn_for_harness<'a>(
+    unit: &CodegenUnit,
+    queries: &QueryDb,
+    tcx: TyCtxt,
+) -> impl Fn(&'a Harness) -> (HarnessWithReachable<'a>, BodyTransformation) {
+    move |harness: &'a Harness| {
+        let mut transformer = BodyTransformation::new(queries, tcx, unit);
+
+        let info = with_timer(
+            || ReachabilityInfo::generate_from(tcx, &mut transformer, vec![MonoItem::Fn(*harness)]),
+            "codegen reachability analysis",
+        );
+
+        ((harness, info), transformer)
     }
 }
 
@@ -392,7 +425,7 @@ impl CodegenBackend for GotocCodegenBackend {
                     let template_passes = GlobalPasses::new(&queries, tcx);
 
                     // Cross-crate collecting of all items that are reachable from the crate harnesses.
-                    for unit in units.iter() {
+                    for ((harness, reachability), mut transformer) in ordered_harnesses {
                         // Generate a new transformer that will be shared for all harnesses within the codegen unit.
                         // We reset the body cache between units for now because each codegen unit has different
                         // configurations that affect how we transform the instance body.
@@ -406,13 +439,12 @@ impl CodegenBackend for GotocCodegenBackend {
                                 self.target_if_contract_harness(tcx, harness, is_automatic_harness);
                             let (min_gcx, items, contract_info) = self.codegen_items(
                                 tcx,
-                                &[MonoItem::Fn(*harness)],
+                                reachability,
                                 model_path,
                                 &results.machine_model,
-                                contract_metadata
-                                    .map(|def| rustc_internal::internal(tcx, def.def_id())),
+                                contract_metadata.map(|def| rustc_internal::internal(tcx, def.def_id())),
                                 template_passes.clone(),
-                                &mut shared_unit_transformer,
+                                &mut transformer,
                                 &export_thread_pool,
                             );
                             if min_gcx.has_loop_contracts {
@@ -424,6 +456,7 @@ impl CodegenBackend for GotocCodegenBackend {
                             }
                         }
                     }
+
                     units.store_modifies(&modifies_instances);
                     units.store_loop_contracts(&loop_contracts_instances);
                     units.write_metadata(&queries, tcx);
@@ -431,7 +464,6 @@ impl CodegenBackend for GotocCodegenBackend {
                 ReachabilityType::None => unreachable!(),
                 ReachabilityType::PubFns => {
                     let unit = CodegenUnit::default();
-
                     // Here, we don't know up front how many harnesses we will have to analyze, so pass None.
                     export_thread_pool.add_workers(Self::thread_pool_size(None));
 
@@ -445,10 +477,11 @@ impl CodegenBackend for GotocCodegenBackend {
                     .into_iter()
                     .map(MonoItem::Fn)
                     .collect::<Vec<_>>();
+
                     let model_path = base_filename.with_extension(ArtifactType::SymTabGoto);
                     let (gcx, items, contract_info) = self.codegen_items(
                         tcx,
-                        &local_reachable,
+                        ReachabilityInfo::generate_from(tcx, &mut transformer, local_reachable),
                         &model_path,
                         &results.machine_model,
                         Default::default(),
