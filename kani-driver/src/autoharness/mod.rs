@@ -232,7 +232,7 @@ impl KaniSession {
             verified_fns.add_row(vec![
                 success.harness.crate_name.clone(),
                 success.harness.pretty_name.clone(),
-                harness_kind(&success.harness),
+                harness_kind(success.harness),
                 success.result.status.to_string(),
             ]);
         }
@@ -242,7 +242,7 @@ impl KaniSession {
             verified_fns.add_row(vec![
                 failure.harness.crate_name.clone(),
                 failure.harness.pretty_name.clone(),
-                harness_kind(&failure.harness),
+                harness_kind(failure.harness),
                 failure.result.status.to_string(),
             ]);
         }
