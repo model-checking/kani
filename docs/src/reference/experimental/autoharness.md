@@ -79,6 +79,14 @@ Autoharness also accepts a `--list` argument, which runs the [list subcommand](.
 
 For a full list of options, run `kani autoharness --help`.
 
+### Parallel verification
+
+Since autoharness typically generates many harnesses, it verifies them in parallel by default,
+using the `--jobs` option with the thread pool's default number of threads and
+`--output-format=terse`. Pass `-j <N>` to control the number of threads, or
+`--output-format=regular` to verify harnesses sequentially with Kani's default, more detailed
+output.
+
 ## Example
 Using the `estimate_size` example from [First Steps](../../tutorial-first-steps.md) again:
 ```rust

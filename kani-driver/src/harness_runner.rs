@@ -126,7 +126,7 @@ impl KaniSession {
                 self.write_output_to_file(result, harness, thread_index);
             }
 
-            let output = result.render(&self.args.output_format, harness.attributes.should_panic);
+            let output = result.render(&self.args.output_format(), harness.attributes.should_panic);
             if rayon::current_num_threads() > 1 {
                 println!("Thread {thread_index}: {output}");
             } else {
@@ -136,7 +136,7 @@ impl KaniSession {
     }
 
     fn should_print_output(&self) -> bool {
-        !self.args.common_args.quiet && self.args.output_format != OutputFormat::Old
+        !self.args.common_args.quiet && self.args.output_format() != OutputFormat::Old
     }
 
     fn write_output_to_file(

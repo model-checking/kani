@@ -1,0 +1,6 @@
+PARALLEL: yes
+| f1 | #[kani::proof] | Success
+| f2 | #[kani::proof] | Success
+| f3 | #[kani::proof] | Success
+| f4 | #[kani::proof] | Success
+Complete - 4 successfully verified functions, 0 failures, 4 total.
