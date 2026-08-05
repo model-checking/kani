@@ -42,10 +42,6 @@ Autoharness: Checking function should_pass::alignment::Alignment::as_usize's con
 
 should_pass::alignment::Alignment::as_usize\
 	 - Status: SUCCESS\
-	 - Description: "Rust intrinsic assumption failed"
-
-should_pass::alignment::Alignment::as_usize\
-	 - Status: SUCCESS\
 	 - Description: "|result| result.is_power_of_two()"
 
 Manual Harness Summary:

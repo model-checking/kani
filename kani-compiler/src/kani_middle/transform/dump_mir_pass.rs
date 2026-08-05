@@ -8,8 +8,8 @@ use crate::kani_middle::transform::GlobalPass;
 use crate::kani_queries::QueryDb;
 use kani_metadata::ArtifactType;
 use rustc_middle::ty::TyCtxt;
+use rustc_public::mir::mono::{Instance, MonoItem};
 use rustc_session::config::OutputType;
-use stable_mir::mir::mono::{Instance, MonoItem};
 use std::fs::File;
 use std::io::BufWriter;
 use std::io::Write;
@@ -17,7 +17,7 @@ use std::io::Write;
 use super::BodyTransformation;
 
 /// Dump all MIR bodies.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DumpMirPass {
     enabled: bool,
 }
@@ -63,7 +63,7 @@ impl GlobalPass for DumpMirPass {
         // For each def_id, dump their MIR.
         for instance in instances.iter() {
             writeln!(writer, "// Item: {} ({})", instance.name(), instance.mangled_name()).unwrap();
-            let _ = transformer.body(tcx, *instance).dump(&mut writer, &instance.name());
+            let _ = transformer.body_ref(tcx, *instance).dump(&mut writer, &instance.name());
         }
 
         // This pass just reads the MIR and thus never modifies it.

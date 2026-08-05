@@ -1,0 +1,11 @@
+assertion\
+	- Status: SUCCESS\
+	- Description: "|result| *result == Enum::Second"\
+
+assertion\
+	- Status: SUCCESS\
+	- Description: "|result| *result == Enum::First"\
+
+VERIFICATION:- SUCCESSFUL
+
+Complete - 5 successfully verified harnesses, 0 failures, 5 total.

@@ -8,7 +8,7 @@ use crate::kani_middle::transform::body::{
     CheckType, InsertPosition, MutableBody, SourceInstruction,
 };
 use relevant_instruction::{InitRelevantInstruction, MemoryInitOp};
-use stable_mir::{
+use rustc_public::{
     mir::{
         AggregateKind, BasicBlock, Body, ConstOperand, Mutability, Operand, Place, Rvalue,
         Statement, StatementKind, Terminator, TerminatorKind, UnwindAction, mono::Instance,

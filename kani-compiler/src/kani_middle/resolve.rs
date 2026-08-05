@@ -5,22 +5,21 @@
 //! `DefId`s for functions and methods. For the definition of a path, see
 //! <https://doc.rust-lang.org/reference/paths.html>.
 //!
-//! TODO: Change `resolve_fn` in order to return information about trait implementations.
-//! <https://github.com/model-checking/kani/issues/1997>
-//!
 //! Note that glob use statements can form loops. The paths can also walk through the loop.
 
 use crate::kani_middle::stable_fn_def;
 use quote::ToTokens;
-use rustc_errors::ErrorGuaranteed;
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::{CRATE_DEF_INDEX, DefId, LOCAL_CRATE, LocalDefId, LocalModDefId};
 use rustc_hir::{ItemKind, UseKind};
 use rustc_middle::ty::TyCtxt;
 use rustc_middle::ty::fast_reject::{self, TreatParams};
-use stable_mir::CrateDef;
-use stable_mir::rustc_internal;
-use stable_mir::ty::{FnDef, RigidTy, Ty, TyKind};
+use rustc_public::mir::mono::Instance;
+use rustc_public::rustc_internal;
+use rustc_public::ty::{
+    AssocItem, FnDef, GenericArgKind, GenericArgs, RigidTy, TraitDef, Ty, TyKind,
+};
+use rustc_public::{CrateDef, CrateDefItems};
 use std::collections::HashSet;
 use std::fmt;
 use std::iter::Peekable;
@@ -47,6 +46,15 @@ pub enum FnResolution {
     FnImpl { def: FnDef, ty: Ty },
 }
 
+impl FnResolution {
+    pub fn def(&self) -> FnDef {
+        match self {
+            Self::Fn(def) => *def,
+            Self::FnImpl { def, .. } => *def,
+        }
+    }
+}
+
 /// Resolve a path to a function / method.
 ///
 /// The path can either be a simple path or a qualified path.
@@ -59,10 +67,30 @@ pub fn resolve_fn_path<'tcx>(
     match &path.qself {
         // Qualified path for a trait method implementation, like `<Foo as Bar>::bar`.
         Some(QSelf { ty: syn_ty, position, .. }) if *position > 0 => {
+            // Resolve the self type and DefId of the trait definition method.
+            // E.g., in path <usize as SliceIndex<[i32]>>::get_unchecked, ty = `usize` and `trait_fn_id` is the ID of `get_unchecked`
+            // in the definition of the `SliceIndex`` trait.
             let ty = type_resolution::resolve_ty(tcx, current_module, syn_ty)?;
-            let def_id = resolve_path(tcx, current_module, &path.path)?;
-            validate_kind!(tcx, def_id, "function / method", DefKind::Fn | DefKind::AssocFn)?;
-            Ok(FnResolution::FnImpl { def: stable_fn_def(tcx, def_id).unwrap(), ty })
+            let trait_fn_id = resolve_path(tcx, current_module, &path.path)?;
+            validate_kind!(tcx, trait_fn_id, "function / method", DefKind::Fn | DefKind::AssocFn)?;
+            // Extract generic args from the trait segment (e.g., <u32> from Convert<u32>).
+            // For `<Type as crate::mod::Trait<u32>>::method`, segments after `as` are
+            // [crate, mod, Trait<u32>, method]. The trait segment with generic args is
+            // always second-to-last (last is the method name).
+            let trait_generic_args = path
+                .path
+                .segments
+                .iter()
+                .rev()
+                .nth(1) // The trait segment is second-to-last (last is the method name)
+                .and_then(|seg| {
+                    if let syn::PathArguments::AngleBracketed(args) = &seg.arguments {
+                        Some(args)
+                    } else {
+                        None
+                    }
+                });
+            resolve_in_trait_impl(tcx, Some(current_module), ty, trait_fn_id, trait_generic_args)
         }
         // Qualified path for a primitive type, such as `<[u8]::sort>`.
         Some(QSelf { ty: syn_ty, .. }) if type_resolution::is_type_primitive(syn_ty) => {
@@ -90,9 +118,7 @@ pub fn resolve_fn_path<'tcx>(
     }
 }
 
-/// Attempts to resolve a *simple path* (in the form of a string) to a function / method `DefId`.
-///
-/// Use `[resolve_fn_path]` if you want to handle qualified paths and simple paths.
+/// Attempts to resolve a path (in the form of a string) to a function / method `DefId`.
 pub fn resolve_fn<'tcx>(
     tcx: TyCtxt<'tcx>,
     current_module: LocalDefId,
@@ -103,38 +129,20 @@ pub fn resolve_fn<'tcx>(
         msg: format!("Expected a path, but found `{path_str}`. {err}"),
     })?;
     let result = resolve_fn_path(tcx, current_module, &path)?;
-    if let FnResolution::Fn(def) = result {
-        Ok(rustc_internal::internal(tcx, def.def_id()))
-    } else {
-        Err(ResolveError::UnsupportedPath { kind: "qualified paths" })
-    }
+    Ok(rustc_internal::internal(tcx, result.def().def_id()))
 }
 
-/// Resolve the name of a function from the context of the definition provided.
-///
-/// Ideally this should pass a more precise span, but we don't keep them around.
-pub fn expect_resolve_fn<T: CrateDef>(
-    tcx: TyCtxt,
-    res_cx: T,
-    name: &str,
-    reason: &str,
-) -> Result<FnDef, ErrorGuaranteed> {
-    let internal_def_id = rustc_internal::internal(tcx, res_cx.def_id());
-    let current_module = tcx.parent_module_from_def_id(internal_def_id.as_local().unwrap());
-    let maybe_resolved = resolve_fn(tcx, current_module.to_local_def_id(), name);
-    let resolved = maybe_resolved.map_err(|err| {
-        tcx.dcx().span_err(
-            rustc_internal::internal(tcx, res_cx.span()),
-            format!("Failed to resolve `{name}` for `{reason}`: {err}"),
-        )
+/// Resolve a path string to a `DefId` for any item (not just functions).
+pub fn resolve_item<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    current_module: LocalDefId,
+    path_str: &str,
+) -> Result<DefId, ResolveError<'tcx>> {
+    let _span = debug_span!("resolve_item", ?path_str, ?current_module).entered();
+    let path: syn::Path = syn::parse_str(path_str).map_err(|err| ResolveError::InvalidPath {
+        msg: format!("Expected a path, but found `{path_str}`. {err}"),
     })?;
-    let ty_internal = tcx.type_of(resolved).instantiate_identity();
-    let ty = rustc_internal::stable(ty_internal);
-    if let TyKind::RigidTy(RigidTy::FnDef(def, _)) = ty.kind() {
-        Ok(def)
-    } else {
-        unreachable!("Expected function for `{name}`, but found: {ty}")
-    }
+    resolve_path(tcx, current_module, &path)
 }
 
 /// Attempts to resolve a simple path (in the form of a string) to a `DefId`.
@@ -147,21 +155,25 @@ fn resolve_path<'tcx>(
 ) -> Result<DefId, ResolveError<'tcx>> {
     debug!(?path, "resolve_path");
     let path = resolve_prefix(tcx, current_module, path)?;
-    path.segments.into_iter().try_fold(path.base, |base, segment| {
-        let name = segment.ident.to_string();
-        let def_kind = tcx.def_kind(base);
-        match def_kind {
-            DefKind::ForeignMod | DefKind::Mod => resolve_in_module(tcx, base, &name),
-            DefKind::Struct | DefKind::Enum | DefKind::Union => {
-                resolve_in_type_def(tcx, base, &path.base_path_args, &name)
-            }
-            DefKind::Trait => resolve_in_trait(tcx, base, &name),
-            kind => {
-                debug!(?base, ?kind, "resolve_path: unexpected item");
-                Err(ResolveError::UnexpectedType { tcx, item: base, expected: "module" })
-            }
-        }
-    })
+    path.segments
+        .into_iter()
+        .try_fold((path.base, path.base_path_args.clone()), |(base, base_path_args), segment| {
+            let name = segment.ident.to_string();
+            let def_kind = tcx.def_kind(base);
+            let base = match def_kind {
+                DefKind::ForeignMod | DefKind::Mod => resolve_in_module(tcx, base, &name),
+                DefKind::Struct | DefKind::Enum | DefKind::Union => {
+                    resolve_in_type_def(tcx, base, &base_path_args, &name)
+                }
+                DefKind::Trait => resolve_in_trait_def(tcx, base, &name),
+                kind => {
+                    debug!(?base, ?kind, "resolve_path: unexpected item");
+                    Err(ResolveError::UnexpectedType { tcx, item: base, expected: "module" })
+                }
+            };
+            base.map(|base| (base, segment.arguments))
+        })
+        .map(|it| it.0)
 }
 
 /// Provide information about where the resolution failed.
@@ -177,6 +189,8 @@ pub enum ResolveError<'tcx> {
     InvalidPath { msg: String },
     /// Unable to find an item.
     MissingItem { tcx: TyCtxt<'tcx>, base: DefId, unresolved: String },
+    /// Unable to find the specified implementation of a trait.
+    MissingTraitImpl { tcx: TyCtxt<'tcx>, trait_fn_id: DefId, ty: Ty },
     /// Unable to find an item in a primitive type.
     MissingPrimitiveItem { base: Ty, unresolved: String },
     /// Error triggered when the identifier points to an item with unexpected type.
@@ -231,6 +245,10 @@ impl fmt::Display for ResolveError<'_> {
             ResolveError::MissingItem { tcx, base, unresolved } => {
                 let def_desc = description(*tcx, *base);
                 write!(f, "unable to find `{unresolved}` inside {def_desc}")
+            }
+            ResolveError::MissingTraitImpl { tcx, trait_fn_id, ty } => {
+                let def_desc = description(*tcx, *trait_fn_id);
+                write!(f, "unable to find implementation of {def_desc} for {ty}")
             }
             ResolveError::MissingPrimitiveItem { base, unresolved } => {
                 write!(f, "unable to find `{unresolved}` inside `{base}`")
@@ -404,6 +422,85 @@ fn resolve_in_foreign_module(tcx: TyCtxt, foreign_mod: DefId, name: &str) -> Opt
         .find_map(|item| if item.ident.as_str() == name { item.res.opt_def_id() } else { None })
 }
 
+/// Scan all traits in the local crate to check if any of their associated items match `name`.
+/// If so, check if `ty` implements the trait, and return a match if so.
+fn resolve_in_any_trait<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty, name: &str) -> Option<FnResolution> {
+    let matches: Vec<FnResolution> = rustc_public::all_trait_decls()
+        .into_iter()
+        .filter_map(|trait_def| {
+            resolve_in_trait_def_stable(tcx, trait_def, name).ok().and_then(|item| {
+                // No current_module or trait_args needed: this path resolves
+                // unqualified method names (e.g., `x.foo()`), not user-specified
+                // `<Type as Trait<T>>::method` syntax.
+                resolve_in_trait_impl(
+                    tcx,
+                    None,
+                    ty,
+                    rustc_internal::internal(tcx, item.def_id.def_id()),
+                    None,
+                )
+                .ok()
+            })
+        })
+        .collect();
+    debug!(?name, ?ty, ?matches, "resolve_in_any_trait");
+    if matches.len() == 1 { Some(matches[0]) } else { None }
+}
+
+/// Resolves a trait method implementation by checking if there exists an Instance of the trait method for `ty`.
+/// This is distinct from `resolve_in_trait_def`: that function checks if the associated function is defined for the trait,
+/// while this function checks if it's implemented for `ty`.
+fn resolve_in_trait_impl<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    current_module: Option<LocalDefId>,
+    ty: Ty,
+    trait_fn_id: DefId,
+    trait_args: Option<&syn::AngleBracketedGenericArguments>,
+) -> Result<FnResolution, ResolveError<'tcx>> {
+    debug!(?ty, ?trait_args, "resolve_in_trait_impl");
+    // Given the `FnDef` of the *definition* of the trait method, see if there exists an Instance
+    // that implements that method for `ty`.
+    let trait_fn_fn_def = stable_fn_def(tcx, trait_fn_id).unwrap();
+
+    // Build generic args: Self type + any trait generic parameters (e.g., T in Convert<T>).
+    let mut args = vec![GenericArgKind::Type(ty)];
+    if let Some(syn_args) = trait_args {
+        let Some(module) = current_module else {
+            return Err(ResolveError::UnsupportedPath {
+                kind: "stub resolution requires generic trait arguments to have a known module context",
+            });
+        };
+        for arg in &syn_args.args {
+            match arg {
+                syn::GenericArgument::Type(syn_ty) => {
+                    let resolved_ty = type_resolution::resolve_ty(tcx, module, syn_ty)?;
+                    args.push(GenericArgKind::Type(resolved_ty));
+                }
+                syn::GenericArgument::Const(_) => {
+                    return Err(ResolveError::UnsupportedPath {
+                        kind: "const generic arguments in trait stubs",
+                    });
+                }
+                syn::GenericArgument::Lifetime(_) => {
+                    // Lifetimes are erased — safe to skip.
+                }
+                _ => {
+                    return Err(ResolveError::UnsupportedPath {
+                        kind: "associated type/const constraints in trait stubs",
+                    });
+                }
+            }
+        }
+    }
+    let desired_generic_args = GenericArgs(args);
+    let exists = Instance::resolve(trait_fn_fn_def, &desired_generic_args);
+
+    // If such an Instance exists, return *its* FnDef (i.e., the FnDef inside the impl block for this `ty`)
+    exists.map_or(Err(ResolveError::MissingTraitImpl { tcx, trait_fn_id, ty }), |inst| {
+        Ok(FnResolution::FnImpl { def: inst.ty().kind().fn_def().unwrap().0, ty })
+    })
+}
+
 /// Generates a more friendly string representation of a def_id including kind and name.
 /// (the default representation for the crate root is the empty string).
 fn description(tcx: TyCtxt, def_id: DefId) -> String {
@@ -429,6 +526,11 @@ fn resolve_relative(tcx: TyCtxt, current_module: LocalModDefId, name: &str) -> R
     debug!(?name, ?current_module, "resolve_relative");
 
     let mut glob_imports = vec![];
+    let mut foreign_items = vec![];
+    // Note: `find_map` short-circuits on `Some`, but the `ForeignMod` branch
+    // always returns `None`, so foreign items are always collected even if
+    // `find_map` returns early from a different branch. This is intentional:
+    // direct module items take precedence over foreign items.
     let result = tcx.hir_module_free_items(current_module).find_map(|item_id| {
         let item = tcx.hir_item(item_id);
         if item.kind.ident().is_some_and(|ident| ident.as_str() == name) {
@@ -448,10 +550,31 @@ fn resolve_relative(tcx: TyCtxt, current_module: LocalModDefId, name: &str) -> R
                 // since paths resolved via non-globs take precedence.
                 glob_imports.extend(use_path.res.present_items());
             }
+            // Collect foreign items declared inside `extern` blocks so we can
+            // search them if the name is not found as a direct module item.
+            // This handles `extern "C" { fn foo(); }` where `foo` is a child
+            // of the ForeignMod, not a top-level module item. (fixes #2686, #2673)
+            if let ItemKind::ForeignMod { items, .. } = item.kind {
+                for foreign_item in items {
+                    let fi = tcx.hir_foreign_item(*foreign_item);
+                    if fi.ident.as_str() == name {
+                        foreign_items.push(fi.owner_id.def_id.to_def_id());
+                    }
+                }
+            }
             None
         }
     });
-    result.map_or(RelativeResolution::Globs(glob_imports), RelativeResolution::Found)
+    if let Some(def_id) = result {
+        return RelativeResolution::Found(def_id);
+    }
+    // Take the first matching foreign item. If multiple `extern` blocks declare
+    // functions with the same name, that is a user error (rustc would reject it
+    // as a duplicate symbol), so we don't need ambiguity diagnostics here.
+    if let Some(def_id) = foreign_items.into_iter().next() {
+        return RelativeResolution::Found(def_id);
+    }
+    RelativeResolution::Globs(glob_imports)
 }
 
 /// Resolves a path relative to a local or foreign module.
@@ -576,7 +699,7 @@ fn resolve_in_type_def<'tcx>(
     base_path_args: &PathArguments,
     name: &str,
 ) -> Result<DefId, ResolveError<'tcx>> {
-    debug!(?name, ?type_id, "resolve_in_type");
+    debug!(?name, ?type_id, "resolve_in_type_def");
     // Try the inherent `impl` blocks (i.e., non-trait `impl`s).
     let candidates: Vec<DefId> = tcx
         .inherent_impls(type_id)
@@ -587,7 +710,17 @@ fn resolve_in_type_def<'tcx>(
         .collect();
 
     match candidates.len() {
-        0 => Err(ResolveError::MissingItem { tcx, base: type_id, unresolved: name.to_string() }),
+        0 => {
+            // Try to find the method in any trait implementation
+            let ty = rustc_internal::stable(tcx.type_of(type_id)).value;
+            resolve_in_any_trait(tcx, ty, name)
+                .map(|res| rustc_internal::internal(tcx, res.def().def_id()))
+                .ok_or_else(|| ResolveError::MissingItem {
+                    tcx,
+                    base: type_id,
+                    unresolved: name.to_string(),
+                })
+        }
         1 => Ok(candidates[0]),
         _ => {
             let invalid_path_err = |generic_args, candidates: Vec<DefId>| -> ResolveError {
@@ -643,13 +776,35 @@ fn resolve_in_type_def<'tcx>(
     }
 }
 
-/// Resolves a function in a trait.
-fn resolve_in_trait<'tcx>(
+/// Resolves a function in a trait definition.
+fn resolve_in_trait_def_stable<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    trait_def: TraitDef,
+    name: &str,
+) -> Result<AssocItem, ResolveError<'tcx>> {
+    debug!(?name, ?trait_def, "resolve_in_trait_def_stable");
+    let trait_def_def_id = rustc_internal::internal(tcx, trait_def.def_id());
+    let missing_item_err =
+        || ResolveError::MissingItem { tcx, base: trait_def_def_id, unresolved: name.to_string() };
+    // Look for the given name in the list of associated items for the trait definition.
+    trait_def
+        .associated_items()
+        .into_iter()
+        .find(|item| {
+            let item_def_id = rustc_internal::internal(tcx, item.def_id.def_id());
+            is_item_name(tcx, item_def_id, name)
+        })
+        .ok_or_else(missing_item_err)
+}
+
+/// Resolves a function in a trait definition.
+/// TODO: remove this function in favor of `resolve_in_trait_def_stable`, c.f. https://github.com/model-checking/kani/issues/4252
+fn resolve_in_trait_def<'tcx>(
     tcx: TyCtxt<'tcx>,
     trait_id: DefId,
     name: &str,
 ) -> Result<DefId, ResolveError<'tcx>> {
-    debug!(?name, ?trait_id, "resolve_in_trait");
+    debug!(?name, ?trait_id, "resolve_in_trait_def");
     let missing_item_err =
         || ResolveError::MissingItem { tcx, base: trait_id, unresolved: name.to_string() };
     let trait_def = tcx.trait_def(trait_id);
@@ -689,6 +844,10 @@ where
                     .copied()
                     .find(|item| is_item_name(tcx, *item, &name))
             })
+            .or_else(|| {
+                resolve_in_any_trait(tcx, ty, &name)
+                    .map(|res| rustc_internal::internal(tcx, res.def().def_id()))
+            })
             .ok_or_else(|| ResolveError::MissingPrimitiveItem {
                 base: ty,
                 unresolved: name.to_string(),
@@ -724,7 +883,31 @@ fn is_item_name_with_generic_args(
 // This is just a helper function for is_item_name_with_generic_args.
 // It's in a separate function so we can unit-test it without a mock TyCtxt or DefIds.
 fn last_two_items_of_path_match(item_path: &str, generic_args: &str, name: &str) -> bool {
-    let parts: Vec<&str> = item_path.split("::").collect();
+    let mut angle_bracket_depth = 0;
+    let mut parts = Vec::new();
+    let mut part_start = 0;
+
+    for (i, c) in item_path.char_indices() {
+        match c {
+            '<' => {
+                angle_bracket_depth += 1;
+            }
+            '>' => {
+                angle_bracket_depth -= 1;
+            }
+            ':' if angle_bracket_depth == 0
+                && i > 0
+                && item_path.chars().nth(i - 1) == Some(':') =>
+            {
+                if part_start < i {
+                    parts.push(&item_path[part_start..i - 1]);
+                }
+                part_start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    parts.push(&item_path[part_start..]);
 
     if parts.len() < 2 {
         return false;
@@ -736,7 +919,7 @@ fn last_two_items_of_path_match(item_path: &str, generic_args: &str, name: &str)
     let last_two = format!("{}{}{}", generic_args, "::", name);
 
     // The last two components of the item_path should be the same as ::{generic_args}::{name}
-    last_two == actual_last_two
+    last_two.chars().eq(actual_last_two.chars().filter(|c| !c.is_whitespace()))
 }
 
 #[cfg(test)]
@@ -766,6 +949,14 @@ mod tests {
             let name = "unchecked_add";
             let item_path = format!("core::num::NonZero{}::{}", "::<u32>", name);
             assert!(!last_two_items_of_path_match(&item_path, generic_args, name))
+        }
+
+        #[test]
+        fn generic_args_with_segmented_params() {
+            let generic_args = "::<core::mem::MaybeUninit<T>,A>";
+            let name = "assume_init";
+            let item_path = format!("rc::Rc{}::{}", "::<core::mem::MaybeUninit<T>, A>", name);
+            assert!(last_two_items_of_path_match(&item_path, generic_args, name))
         }
     }
 }

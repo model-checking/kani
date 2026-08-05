@@ -36,6 +36,7 @@ mod harness_runner;
 mod list;
 mod metadata;
 mod project;
+mod sarif;
 mod session;
 mod util;
 mod version;
@@ -44,6 +45,13 @@ mod version;
 /// The driver can be invoked via `cargo kani` and `kani` commands, which determines what kind of
 /// project should be verified.
 fn main() -> ExitCode {
+    // Set GLIBC_TUNABLES for child processes (CBMC, etc.) if not already set
+    // This enables THP for subprocesses even if the parent didn't have it set at startup
+    if std::env::var("GLIBC_TUNABLES").is_err() {
+        // SAFETY: Called at start of main before any threads are spawned
+        unsafe { std::env::set_var("GLIBC_TUNABLES", "glibc.malloc.hugetlb=1") };
+    }
+
     let invocation_type = determine_invocation_type(Vec::from_iter(std::env::args_os()));
 
     let result = match invocation_type {
@@ -128,7 +136,7 @@ fn standalone_main() -> Result<()> {
 /// Run verification on the given project.
 fn verify_project(project: Project, session: KaniSession) -> Result<()> {
     debug!(?project, "verify_project");
-    let harnesses = session.determine_targets(&project.get_all_harnesses())?;
+    let harnesses = session.determine_targets(project.get_all_harnesses())?;
     debug!(n = harnesses.len(), ?harnesses, "verify_project");
 
     // Verification
@@ -145,13 +153,16 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
         // users in a proof debugging session, who are usually interested in the
         // most recent results.
         let time_now = OffsetDateTime::now_utc();
-        let format = format_description::parse("[year]-[month]-[day]_[hour]-[minute]").unwrap();
+        let format =
+            format_description::parse_borrowed::<3>("[year]-[month]-[day]_[hour]-[minute]")
+                .unwrap();
         let timestamp = time_now.format(&format).unwrap();
 
         session.save_coverage_metadata(&project, &timestamp)?;
         session.save_coverage_results(&project, &results, &timestamp)?;
     }
 
+    session.write_sarif(&results)?;
     session.print_final_summary(&results)
 }
 

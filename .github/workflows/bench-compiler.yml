@@ -3,6 +3,8 @@
 #
 # Run performance benchmarks comparing the compiler performance of two different Kani versions.
 name: Kani Compiler Performance Benchmarks
+permissions:
+  contents: read
 on:
   push:
     branches:
@@ -18,36 +20,27 @@ jobs:
         run: |
           echo "NEW_REF=${{ github.event.after}}" | tee -a "$GITHUB_ENV"
           echo "OLD_REF=${{ github.event.before }}" | tee -a "$GITHUB_ENV"
+      # Note: in reusable workflows, github.event_name and github.event are
+      # those of the caller; when invoked from bench-pr.yml this is a
+      # pull_request event.
       - name: Save pull request HEAD and base to environment variables
-        if: ${{ contains(fromJSON('["pull_request", "pull_request_target"]'), github.event_name) }}
+        if: ${{ github.event_name == 'pull_request' }}
         run: |
           echo "OLD_REF=${{ github.event.pull_request.base.sha }}" | tee -a "$GITHUB_ENV"
           echo "NEW_REF=${{ github.event.pull_request.head.sha }}" | tee -a "$GITHUB_ENV"
       - name: Check out Kani (old variant)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: ./old
           ref: ${{ env.OLD_REF }}
           fetch-depth: 2
 
       - name: Check out Kani (new variant)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: ./new
           ref: ${{ env.NEW_REF }}
           fetch-depth: 1
-
-      - name: Cache Kani build artifacts
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-          shared-key: "kani-rust-cache-bench"
-          workspaces: |
-            new
-            new/tools/compile-timer
-            old
-            old/tools/compile-timer
-          cache-directories: "~/.rustup"
 
       - name: Set up Kani Dependencies (old variant)
         uses: ./old/.github/actions/setup
@@ -93,37 +86,28 @@ jobs:
         run: |
           echo "NEW_REF=${{ github.event.after}}" | tee -a "$GITHUB_ENV"
           echo "OLD_REF=${{ github.event.before }}" | tee -a "$GITHUB_ENV"
+      # Note: in reusable workflows, github.event_name and github.event are
+      # those of the caller; when invoked from bench-pr.yml this is a
+      # pull_request event.
       - name: Save pull request HEAD and base to environment variables
-        if: ${{ contains(fromJSON('["pull_request", "pull_request_target"]'), github.event_name) }}
+        if: ${{ github.event_name == 'pull_request' }}
         run: |
           echo "OLD_REF=${{ github.event.pull_request.base.sha }}" | tee -a "$GITHUB_ENV"
           echo "NEW_REF=${{ github.event.pull_request.head.sha }}" | tee -a "$GITHUB_ENV"
       
       - name: Check out Kani (old variant)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: ./old
           ref: ${{ env.OLD_REF }}
           fetch-depth: 2
 
       - name: Check out Kani (new variant)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: ./new
           ref: ${{ env.NEW_REF }}
           fetch-depth: 1
-
-      - name: Cache Kani build artifacts
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-          shared-key: "kani-rust-cache-bench"
-          workspaces: |
-            new
-            new/tools/compile-timer
-            old
-            old/tools/compile-timer
-          cache-directories: "~/.rustup"
 
       - name: Set up Kani Dependencies (old variant)
         uses: ./old/.github/actions/setup

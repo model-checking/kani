@@ -5,18 +5,19 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::codegen_cprover_gotoc::codegen::block::reverse_postorder;
+use crate::kani_middle::readable_name;
 use cbmc::InternString;
 use cbmc::InternedString;
 use cbmc::goto_program::{Expr, Stmt, Symbol};
-use stable_mir::CrateDef;
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{Body, Local};
-use stable_mir::ty::{RigidTy, TyKind};
+use rustc_public::CrateDef;
+use rustc_public::mir::mono::Instance;
+use rustc_public::mir::{Body, Local};
+use rustc_public::ty::{RigidTy, TyKind};
 use std::collections::BTreeMap;
 use tracing::{debug, debug_span};
 
 /// Codegen MIR functions into gotoc
-impl GotocCtx<'_> {
+impl GotocCtx<'_, '_> {
     /// Declare variables according to their index.
     /// - Index 0 represents the return value.
     /// - Indices [1, N] represent the function parameters where N is the number of parameters.
@@ -32,7 +33,13 @@ impl GotocCtx<'_> {
             }
             let base_name = self.codegen_var_base_name(&lc);
             let name = self.codegen_var_name(&lc);
-            let var_type = self.codegen_ty_stable(ldata.ty);
+            // Unsized-by-value arguments (`unsized_fn_params`) are represented as fat pointers,
+            // consistent with `fn_typ` and `codegen_local`.
+            let var_type = if self.is_unsized_by_value_arg(lc) {
+                self.codegen_ty_ref_stable(ldata.ty)
+            } else {
+                self.codegen_ty_stable(ldata.ty)
+            };
             let loc = self.codegen_span_stable(ldata.span);
             // Indices [1, N] represent the function parameters where N is the number of parameters.
             // Except that ZST fields are not included as parameters.
@@ -220,7 +227,7 @@ impl GotocCtx<'_> {
             &fname,
             self.fn_typ(instance, &body),
             None,
-            instance.name(),
+            readable_name(instance),
             self.codegen_span_stable(instance.def.span()),
         );
         if !self.symbol_table.contains((&fname).into()) {
@@ -235,17 +242,17 @@ impl GotocCtx<'_> {
     }
 }
 
-pub mod rustc_smir {
+pub mod rustc_public_bridge {
     use crate::codegen_cprover_gotoc::codegen::source_region::{SourceRegion, make_source_region};
-    use crate::stable_mir::CrateDef;
+    use crate::rustc_public::CrateDef;
     use rustc_middle::mir::coverage::BasicCoverageBlock;
     use rustc_middle::mir::coverage::MappingKind::Code;
     use rustc_middle::ty::TyCtxt;
-    use stable_mir::mir::mono::Instance;
-    use stable_mir::rustc_internal;
-    use stable_mir::{Filename, Opaque};
+    use rustc_public::mir::mono::Instance;
+    use rustc_public::rustc_internal;
+    use rustc_public::{Filename, Opaque};
 
-    type CoverageOpaque = stable_mir::Opaque;
+    type CoverageOpaque = rustc_public::Opaque;
 
     /// Retrieves the `SourceRegion` associated with the data in a
     /// `CoverageOpaque` object.

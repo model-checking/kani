@@ -7,8 +7,8 @@
 //! This module will perform all the analyses requested. Callers are responsible for selecting
 //! when the cost of these analyses are worth it.
 
-use stable_mir::mir::mono::MonoItem;
-use stable_mir::mir::{
+use rustc_public::mir::mono::MonoItem;
+use rustc_public::mir::{
     MirVisitor, Rvalue, Statement, StatementKind, Terminator, TerminatorKind, visit::Location,
 };
 use std::collections::HashMap;
@@ -110,7 +110,7 @@ impl<T: Into<Key>> FromIterator<T> for Counter {
 struct Key(pub &'static str);
 
 impl From<&MonoItem> for Key {
-    fn from(value: &stable_mir::mir::mono::MonoItem) -> Self {
+    fn from(value: &rustc_public::mir::mono::MonoItem) -> Self {
         match value {
             MonoItem::Fn(_) => Key("function"),
             MonoItem::GlobalAsm(_) => Key("global assembly"),
@@ -123,7 +123,6 @@ impl From<&Statement> for Key {
     fn from(value: &Statement) -> Self {
         match value.kind {
             StatementKind::Assign(..) => Key("Assign"),
-            StatementKind::Deinit(_) => Key("Deinit"),
             StatementKind::Intrinsic(_) => Key("Intrinsic"),
             StatementKind::SetDiscriminant { .. } => Key("SetDiscriminant"),
             // For now, we don't care about the ones below.
@@ -169,7 +168,6 @@ impl From<&Rvalue> for Key {
             Rvalue::Cast(_, _, _) => Key("Cast"),
             Rvalue::BinaryOp(..) => Key("BinaryOp"),
             Rvalue::CheckedBinaryOp(..) => Key("CheckedBinaryOp"),
-            Rvalue::NullaryOp(_, _) => Key("NullaryOp"),
             Rvalue::UnaryOp(_, _) => Key("UnaryOp"),
             Rvalue::Discriminant(_) => Key("Discriminant"),
             Rvalue::Aggregate(_, _) => Key("Aggregate"),

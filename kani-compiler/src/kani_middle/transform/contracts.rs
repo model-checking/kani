@@ -9,16 +9,15 @@ use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceIns
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use cbmc::{InternString, InternedString};
-use rustc_hir::def_id::DefId as InternalDefId;
 use rustc_middle::ty::TyCtxt;
-use rustc_span::Symbol;
-use stable_mir::CrateDef;
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{
+use rustc_public::CrateDef;
+use rustc_public::mir::mono::Instance;
+use rustc_public::mir::{
     Body, ConstOperand, Operand, Rvalue, Terminator, TerminatorKind, VarDebugInfoContents,
 };
-use stable_mir::rustc_internal;
-use stable_mir::ty::{ClosureDef, FnDef, MirConst, RigidTy, TyKind, TypeAndMut, UintTy};
+use rustc_public::rustc_internal;
+use rustc_public::ty::{ClosureDef, FnDef, MirConst, RigidTy, TyKind, TypeAndMut, UintTy};
+use rustc_span::Symbol;
 use std::collections::HashSet;
 use std::fmt::Debug;
 use tracing::{debug, trace};
@@ -32,7 +31,7 @@ use tracing::{debug, trace};
 /// depending on what the type of the input it
 ///
 /// any_modifies is replaced with any
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AnyModifiesPass {
     kani_any: Option<FnDef>,
     kani_any_modifies: Option<FnDef>,
@@ -184,11 +183,11 @@ impl AnyModifiesPass {
                         valid = false;
                         debug!(?e, "AnyModifiesPass::any_body failed");
                         let receiver_ty = args.0[0].expect_ty();
-                        let msg = if self.target_fn.is_some() {
+                        let msg = if let Some(target_fn) = self.target_fn {
                             format!(
                                 "`{receiver_ty}` doesn't implement `kani::Arbitrary`.\
                                         Please, check `{}` contract.",
-                                self.target_fn.unwrap(),
+                                target_fn,
                             )
                         } else {
                             format!("`{receiver_ty}` doesn't implement `kani::Arbitrary`.")
@@ -266,12 +265,12 @@ impl AnyModifiesPass {
 ///    - Replace the non-used generated closures body with unreachable.
 /// 3. Replace the body of `kani_register_contract` by `kani::internal::run_contract_fn` to
 ///    invoke the closure.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct FunctionWithContractPass {
     /// Function that is being checked, if any.
-    check_fn: Option<InternalDefId>,
+    check_fn: Option<FnDef>,
     /// Functions that should be stubbed by their contract.
-    replace_fns: HashSet<InternalDefId>,
+    replace_fns: HashSet<FnDef>,
     /// Should we interpret contracts as assertions? (true iff the no-assert-contracts option is not passed)
     assert_contracts: bool,
     /// Functions annotated with contract attributes will contain contract closures even if they
@@ -303,6 +302,9 @@ impl TransformPass for FunctionWithContractPass {
         match instance.ty().kind().rigid().unwrap() {
             RigidTy::FnDef(def, args) => {
                 if let Some(mode) = self.contract_mode(tcx, *def) {
+                    if mode == ContractMode::RecursiveCheck {
+                        check_mutual_recursion(tcx, *def, &body);
+                    }
                     self.mark_unused(tcx, *def, &body, mode);
                     let new_body = self.set_mode(tcx, body, mode);
                     (true, new_body)
@@ -351,19 +353,12 @@ impl FunctionWithContractPass {
                     let (fn_to_verify_def, _) = kind.fn_def().unwrap();
                     // For automatic harnesses, the target is the function to verify,
                     // and stubs are empty.
-                    (
-                        Some(rustc_internal::internal(tcx, fn_to_verify_def.def_id())),
-                        HashSet::default(),
-                    )
+                    (Some(fn_to_verify_def), HashSet::default())
                 } else {
                     let attrs = KaniAttributes::for_instance(tcx, *harness);
-                    let check_fn =
-                        attrs.interpret_for_contract_attribute().map(|(_, def_id, _)| def_id);
-                    let replace_fns: HashSet<_> = attrs
-                        .interpret_stub_verified_attribute()
-                        .iter()
-                        .map(|(_, def_id, _)| *def_id)
-                        .collect();
+                    let check_fn = attrs.interpret_for_contract_attribute();
+                    let replace_fns: HashSet<_> =
+                        attrs.interpret_stub_verified_attribute().into_iter().collect();
                     (check_fn, replace_fns)
                 }
             };
@@ -468,14 +463,13 @@ impl FunctionWithContractPass {
     fn contract_mode(&self, tcx: TyCtxt, fn_def: FnDef) -> Option<ContractMode> {
         let kani_attributes = KaniAttributes::for_def_id(tcx, fn_def.def_id());
         kani_attributes.has_contract().then(|| {
-            let fn_def_id = rustc_internal::internal(tcx, fn_def.def_id());
-            if self.check_fn == Some(fn_def_id) {
+            if self.check_fn == Some(fn_def) {
                 if kani_attributes.has_recursion() {
                     ContractMode::RecursiveCheck
                 } else {
                     ContractMode::SimpleCheck
                 }
-            } else if self.replace_fns.contains(&fn_def_id) {
+            } else if self.replace_fns.contains(&fn_def) {
                 ContractMode::Replace
             } else if self.assert_contracts {
                 ContractMode::Assert
@@ -560,4 +554,75 @@ fn find_closure(tcx: TyCtxt, fn_def: FnDef, body: &Body, name: &str) -> ClosureD
             tcx.sess.dcx().abort_if_errors();
             unreachable!()
         })
+}
+
+/// Check if a function with `#[kani::recursion]` is involved in mutual recursion.
+///
+/// Scans the function's MIR body for calls to other functions that also have
+/// `#[kani::recursion]`. For each such callee, checks if the callee's body calls
+/// back to the original function (one level of indirection). If so, emits a
+/// compilation error because the per-function REENTRY mechanism only handles
+/// direct recursion soundly.
+///
+/// We require both `has_contract()` and `has_recursion()` on the callee because
+/// if the callee has a contract but no `#[kani::recursion]`, Kani replaces the
+/// callee with its contract abstraction — no mutual recursion occurs.
+///
+/// Limitations:
+/// - Only detects one level of indirection (f→g→f), not deeper chains (f→g→h→f).
+///   TODO(#3316): Extend to detect deeper mutual recursion chains.
+fn check_mutual_recursion(tcx: TyCtxt, fn_def: FnDef, body: &Body) {
+    let fn_name = tcx.def_path_str(rustc_internal::internal(tcx, fn_def.def_id()));
+
+    for bb in body.blocks.iter() {
+        let TerminatorKind::Call { func, .. } = &bb.terminator.kind else { continue };
+        let Ok(func_ty) = func.ty(body.locals()) else { continue };
+        let TyKind::RigidTy(RigidTy::FnDef(callee_def, callee_args)) = func_ty.kind() else {
+            continue;
+        };
+
+        // Skip direct recursion (that's handled correctly by REENTRY).
+        if callee_def.def_id() == fn_def.def_id() {
+            continue;
+        }
+
+        // Only error when the callee also uses #[kani::recursion] with a contract.
+        // If the callee has a contract but no #[kani::recursion], Kani replaces
+        // the call with the contract abstraction, so no mutual recursion occurs.
+        let callee_attrs = KaniAttributes::for_def_id(tcx, callee_def.def_id());
+        if !callee_attrs.has_contract() || !callee_attrs.has_recursion() {
+            continue;
+        }
+
+        // Check if the callee calls back to us (one level deep).
+        let Ok(callee_instance) = Instance::resolve(callee_def, &callee_args) else { continue };
+        let Some(callee_body) = callee_instance.body() else { continue };
+
+        for callee_bb in callee_body.blocks.iter() {
+            let TerminatorKind::Call { func: callee_func, .. } = &callee_bb.terminator.kind else {
+                continue;
+            };
+            let Ok(callee_func_ty) = callee_func.ty(callee_body.locals()) else { continue };
+            let TyKind::RigidTy(RigidTy::FnDef(transitive_def, _)) = callee_func_ty.kind() else {
+                continue;
+            };
+
+            if transitive_def.def_id() == fn_def.def_id() {
+                let callee_name =
+                    tcx.def_path_str(rustc_internal::internal(tcx, callee_def.def_id()));
+                let span = rustc_internal::internal(tcx, bb.terminator.span);
+                tcx.dcx().span_err(
+                    span,
+                    format!(
+                        "`#[kani::recursion]` is used on `{fn_name}`, which calls \
+                         `{callee_name}` that calls back to `{fn_name}`. \
+                         Mutual recursion is not supported by contract verification \
+                         and produces unsound results. Only direct recursion \
+                         (a function calling itself) is handled correctly."
+                    ),
+                );
+                break; // One error per callee is enough; continue checking other callees.
+            }
+        }
+    }
 }

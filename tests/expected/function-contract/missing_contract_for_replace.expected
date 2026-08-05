@@ -1,4 +1,4 @@
-error: Target function in `stub_verified(no_contract)` has no contract.
+error: Target function in stub_verified, `no_contract`, has no contract.
   |
 8 | #[kani::stub_verified(no_contract)]
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -8,9 +8,9 @@
 //! the call-graph could be reused by different analysis.
 
 use crate::analysis::{FnCallVisitor, FnUnsafeOperations, OverallStats};
-use stable_mir::mir::{MirVisitor, Safety};
-use stable_mir::ty::{FnDef, RigidTy, Ty, TyKind};
-use stable_mir::{CrateDef, CrateDefType};
+use rustc_public::mir::{MirVisitor, Safety};
+use rustc_public::ty::{FnDef, RigidTy, Ty, TyKind};
+use rustc_public::{CrateDef, CrateDefType};
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
 use std::hash::{Hash, Hasher};
@@ -24,7 +24,7 @@ impl OverallStats {
     /// - 1 if this function calls a safe abstraction.
     /// - 2+ if this function calls other functions that call safe abstractions.
     pub fn unsafe_distance(&mut self, filename: PathBuf) {
-        let all_items = stable_mir::all_local_items();
+        let all_items = rustc_public::all_local_items();
         let mut queue =
             all_items.into_iter().filter_map(|item| Node::try_new(item.ty())).collect::<Vec<_>>();
         // Build call graph
@@ -61,7 +61,7 @@ impl OverallStats {
                 }
             }
         }
-        let krate = stable_mir::local_crate();
+        let krate = rustc_public::local_crate();
         let transitive_unsafe = visited
             .into_iter()
             .filter_map(|(def, distance)| (def.krate() == krate).then_some((def.name(), distance)))

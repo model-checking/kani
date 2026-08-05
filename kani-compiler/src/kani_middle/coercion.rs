@@ -18,10 +18,10 @@ use rustc_middle::traits::{ImplSource, ImplSourceUserDefinedData};
 use rustc_middle::ty::TraitRef;
 use rustc_middle::ty::adjustment::CustomCoerceUnsized;
 use rustc_middle::ty::{PseudoCanonicalInput, Ty, TyCtxt, TypingEnv};
+use rustc_public::Symbol;
+use rustc_public::rustc_internal;
+use rustc_public::ty::{RigidTy, Ty as TyStable, TyKind};
 use rustc_span::DUMMY_SP;
-use stable_mir::Symbol;
-use stable_mir::rustc_internal;
-use stable_mir::ty::{RigidTy, Ty as TyStable, TyKind};
 use tracing::trace;
 
 /// Given an unsized coercion (e.g. from `&u8` to `&dyn Debug`), extract the pair of

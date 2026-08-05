@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::args::VerificationArgs;
-use crate::call_single_file::{LibConfig, to_rustc_arg};
+use crate::call_single_file::LibConfig;
 use crate::project::Artifact;
 use crate::session::{
     KaniSession, get_cargo_path, lib_folder, lib_no_core_folder, setup_cargo_command,
     setup_cargo_command_inner,
 };
 use crate::util;
+use crate::util::args::{CargoArg, CommandWrapper as _, KaniArg, PassTo, encode_as_rustc_arg};
 use anyhow::{Context, Result, bail};
 use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
 use cargo_metadata::{
@@ -17,7 +18,6 @@ use cargo_metadata::{
 };
 use kani_metadata::{ArtifactType, CompilerArtifactStub};
 use std::collections::HashMap;
-use std::ffi::{OsStr, OsString};
 use std::fmt::{self, Display};
 use std::fs::{self, File};
 use std::io::IsTerminal;
@@ -77,13 +77,19 @@ crate-type = ["lib"]
     pub fn cargo_build_std(&self, std_path: &Path, krate_path: &Path) -> Result<Vec<Artifact>> {
         let lib_path = lib_no_core_folder().unwrap();
         let mut rustc_args = self.kani_rustc_flags(LibConfig::new_no_core(lib_path));
-        rustc_args.push(to_rustc_arg(self.kani_compiler_local_flags()).into());
-        // Ignore global assembly, since `compiler_builtins` has some.
-        rustc_args.push(
-            to_rustc_arg(vec!["--ignore-global-asm".to_string(), self.reachability_arg()]).into(),
-        );
 
-        let mut cargo_args: Vec<OsString> = vec!["build".into()];
+        // In theory, these could be passed just to the local crate rather than all crates,
+        // but the `cargo build` command we use for building `std` doesn't allow you to pass `rustc`
+        // arguments, so we have to pass them through the environment variable instead.
+        rustc_args.push(encode_as_rustc_arg(&self.kani_compiler_local_flags()));
+
+        // Ignore global assembly, since `compiler_builtins` has some.
+        rustc_args.push(encode_as_rustc_arg(&[
+            KaniArg::from("--ignore-global-asm"),
+            self.reachability_arg(),
+        ]));
+
+        let mut cargo_args: Vec<CargoArg> = vec!["build".into()];
         cargo_args.append(&mut cargo_config_args());
 
         // Configuration needed to parse cargo compilation status.
@@ -103,12 +109,10 @@ crate-type = ["lib"]
 
         // Since we are verifying the standard library, we set the reachability to all crates.
         let mut cmd = setup_cargo_command()?;
-        cmd.args(&cargo_args)
+        cmd.pass_cargo_args(&cargo_args)
             .current_dir(krate_path)
             .env("RUSTC", &self.kani_compiler)
-            // Use CARGO_ENCODED_RUSTFLAGS instead of RUSTFLAGS is preferred. See
-            // https://doc.rust-lang.org/cargo/reference/environment-variables.html
-            .env("CARGO_ENCODED_RUSTFLAGS", rustc_args.join(OsStr::new("\x1f")))
+            .pass_rustc_args(&rustc_args, PassTo::AllCrates)
             .env("CARGO_TERM_PROGRESS_WHEN", "never")
             .env("__CARGO_TESTS_ONLY_SRC_ROOT", full_path.as_os_str());
 
@@ -146,9 +150,9 @@ crate-type = ["lib"]
 
         let lib_path = lib_folder().unwrap();
         let mut rustc_args = self.kani_rustc_flags(LibConfig::new(lib_path));
-        rustc_args.push(to_rustc_arg(self.kani_compiler_dependency_flags()).into());
+        rustc_args.push(encode_as_rustc_arg(&self.kani_compiler_dependency_flags()));
 
-        let mut cargo_args: Vec<OsString> = vec!["rustc".into()];
+        let mut cargo_args: Vec<CargoArg> = vec!["rustc".into()];
         if let Some(path) = &self.args.cargo.manifest_path {
             cargo_args.push("--manifest-path".into());
             cargo_args.push(path.into());
@@ -159,10 +163,10 @@ crate-type = ["lib"]
         if self.args.cargo.no_default_features {
             cargo_args.push("--no-default-features".into());
         }
-        let features = self.args.cargo.features();
-        if !features.is_empty() {
-            cargo_args.push(format!("--features={}", features.join(",")).into());
-        }
+        // Note: We do NOT add --features here globally. Features are filtered
+        // per-package below to handle workspaces where packages don't all
+        // declare the same features. This matches cargo's behavior.
+        let requested_features = self.args.cargo.features();
 
         cargo_args.append(&mut cargo_config_args());
 
@@ -201,25 +205,31 @@ crate-type = ["lib"]
         let mut kani_pkg_args = vec![self.reachability_arg()];
         kani_pkg_args.extend(self.kani_compiler_local_flags());
 
-        // Convert package args to rustc args for passing
-        let pkg_args = vec!["--".into(), to_rustc_arg(kani_pkg_args)];
-
         let mut found_target = false;
         let packages = self.packages_to_verify(&self.args, &metadata)?;
         let mut artifacts = vec![];
         let mut failed_targets = vec![];
         for package in packages {
+            // Filter requested features to only include those that this package defines.
+            // This matches cargo's behavior for `cargo test --workspace --features <feature>`
+            // where features are applied only to packages that declare them.
+            let pkg_features = filter_features_for_package(&requested_features, package);
+
             for verification_target in package_targets(&self.args, package) {
                 let mut cmd =
                     setup_cargo_command_inner(Some(verification_target.target().name.clone()))?;
-                cmd.args(&cargo_args)
-                    .args(vec!["-p", &package.id.to_string()])
-                    .args(verification_target.to_args())
-                    .args(&pkg_args)
+                cmd.pass_cargo_args(&cargo_args).args(vec!["-p", &package.id.to_string()]);
+
+                // Add filtered features for this specific package
+                if !pkg_features.is_empty() {
+                    cmd.arg(format!("--features={}", pkg_features.join(",")));
+                }
+
+                cmd.args(verification_target.to_args())
+                    .arg("--") // Add this delimiter so we start passing args to rustc and not Cargo
                     .env("RUSTC", &self.kani_compiler)
-                    // Use CARGO_ENCODED_RUSTFLAGS instead of RUSTFLAGS is preferred. See
-                    // https://doc.rust-lang.org/cargo/reference/environment-variables.html
-                    .env("CARGO_ENCODED_RUSTFLAGS", rustc_args.join(OsStr::new("\x1f")))
+                    .pass_rustc_args(&rustc_args, PassTo::AllCrates)
+                    .pass_rustc_arg(encode_as_rustc_arg(&kani_pkg_args), PassTo::OnlyLocalCrate)
                     // This is only required for stable but is a no-op for nightly channels
                     .env("RUSTC_BOOTSTRAP", "1")
                     .env("CARGO_TERM_PROGRESS_WHEN", "never");
@@ -472,7 +482,7 @@ crate-type = ["lib"]
     }
 }
 
-pub fn cargo_config_args() -> Vec<OsString> {
+pub fn cargo_config_args() -> Vec<CargoArg> {
     [
         "--target",
         env!("TARGET"),
@@ -481,7 +491,7 @@ pub fn cargo_config_args() -> Vec<OsString> {
         "-Ztarget-applies-to-host",
         "--config=host.rustflags=[\"--cfg=kani_host\"]",
     ]
-    .map(OsString::from)
+    .map(CargoArg::from)
     .to_vec()
 }
 
@@ -655,4 +665,21 @@ fn package_targets(args: &VerificationArgs, package: &Package) -> Vec<Verificati
         }
     }
     verification_targets
+}
+
+/// Filter a list of requested features to only include those that a package defines.
+///
+/// This is necessary to support `cargo kani --workspace --features <feature>` where not all
+/// workspace members declare the same features. Without filtering, cargo would fail with
+/// "none of the selected packages contains these features" error.
+///
+/// This matches cargo's behavior for `cargo test --workspace --features <feature>` where
+/// features are applied only to packages that declare them, and silently skipped for
+/// packages that don't.
+fn filter_features_for_package(requested_features: &[String], package: &Package) -> Vec<String> {
+    requested_features
+        .iter()
+        .filter(|feature| package.features.contains_key(*feature))
+        .cloned()
+        .collect()
 }

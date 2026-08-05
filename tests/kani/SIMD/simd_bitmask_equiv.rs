@@ -7,9 +7,7 @@
 // This test checks the equivalence of Kani's old and new implementations of the
 // `simd_bitmask` intrinsic
 
-use std::fmt::Debug;
-
-pub trait MaskElement: PartialEq + Debug {
+pub trait MaskElement: PartialEq {
     const TRUE: Self;
     const FALSE: Self;
 }
@@ -56,7 +54,7 @@ where
 }
 
 #[repr(simd)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy)]
 struct CustomMask<const LANES: usize>([i32; LANES]);
 
 impl<const LANES: usize> kani::Arbitrary for CustomMask<LANES>

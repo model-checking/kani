@@ -14,24 +14,23 @@ use crate::kani_middle::metadata::{
     gen_automatic_proof_metadata, gen_contracts_metadata, gen_proof_metadata,
 };
 use crate::kani_middle::reachability::filter_crate_items;
-use crate::kani_middle::resolve::expect_resolve_fn;
 use crate::kani_middle::stubbing::{check_compatibility, harness_stub_map};
 use crate::kani_middle::{can_derive_arbitrary, implements_arbitrary};
 use crate::kani_queries::QueryDb;
-use fxhash::{FxHashMap, FxHashSet};
 use kani_metadata::{
-    ArtifactType, AssignsContract, AutoHarnessMetadata, AutoHarnessSkipReason, HarnessKind,
-    HarnessMetadata, KaniMetadata,
+    ArtifactType, AssignsContract, AutoHarnessMetadata, AutoHarnessSkipReason, HarnessMetadata,
+    KaniMetadata, find_proof_harnesses,
 };
 use regex::RegexSet;
+use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_hir::def_id::DefId;
 use rustc_middle::ty::TyCtxt;
+use rustc_public::mir::mono::Instance;
+use rustc_public::rustc_internal;
+use rustc_public::ty::{FnDef, GenericArgKind, GenericArgs, RigidTy, Ty, TyKind};
+use rustc_public::{CrateDef, CrateItem};
+use rustc_public_bridge::IndexedVal;
 use rustc_session::config::OutputType;
-use rustc_smir::IndexedVal;
-use stable_mir::mir::mono::Instance;
-use stable_mir::rustc_internal;
-use stable_mir::ty::{FnDef, GenericArgKind, GenericArgs, RigidTy, Ty, TyKind};
-use stable_mir::{CrateDef, CrateItem};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::File;
 use std::io::BufWriter;
@@ -69,13 +68,17 @@ pub struct CodegenUnit {
 
 impl CodegenUnits {
     pub fn new(queries: &QueryDb, tcx: TyCtxt) -> Self {
-        let crate_info = CrateInfo { name: stable_mir::local_crate().name.as_str().into() };
+        let crate_info = CrateInfo { name: rustc_public::local_crate().name.as_str().into() };
         let base_filepath = tcx.output_filenames(()).path(OutputType::Object);
         let base_filename = base_filepath.as_path();
         let args = queries.args();
         match args.reachability_analysis {
             ReachabilityType::Harnesses => {
-                let all_harnesses = get_all_manual_harnesses(tcx, base_filename);
+                let all_harnesses = determine_targets(
+                    get_all_manual_harnesses(tcx, base_filename),
+                    &args.harnesses,
+                    args.exact,
+                );
                 // Even if no_stubs is empty we still need to store rustc metadata.
                 let units = group_by_stubs(tcx, &all_harnesses);
                 validate_units(tcx, &units);
@@ -83,7 +86,11 @@ impl CodegenUnits {
                 CodegenUnits { units, harness_info: all_harnesses, crate_info }
             }
             ReachabilityType::AllFns => {
-                let mut all_harnesses = get_all_manual_harnesses(tcx, base_filename);
+                let mut all_harnesses = determine_targets(
+                    get_all_manual_harnesses(tcx, base_filename),
+                    &args.harnesses,
+                    args.exact,
+                );
                 let mut units = group_by_stubs(tcx, &all_harnesses);
                 validate_units(tcx, &units);
 
@@ -99,7 +106,10 @@ impl CodegenUnits {
                 );
                 AUTOHARNESS_MD
                     .set(AutoHarnessMetadata {
-                        chosen: chosen.iter().map(|func| func.name()).collect::<BTreeSet<_>>(),
+                        chosen: chosen
+                            .iter()
+                            .map(|func| crate::kani_middle::strip_local_crate_prefix(func.name()))
+                            .collect::<BTreeSet<_>>(),
                         skipped,
                     })
                     .expect("Initializing the autoharness metadata failed");
@@ -201,7 +211,7 @@ fn group_by_stubs(
     let mut per_stubs: HashMap<_, CodegenUnit> = HashMap::default();
     for (harness, metadata) in all_harnesses {
         let stub_ids = harness_stub_map(tcx, *harness, metadata);
-        let contracts = extract_contracts(tcx, *harness, metadata);
+        let contracts = extract_contracts(tcx, *harness);
         let stub_map = stub_ids
             .iter()
             .map(|(k, v)| (tcx.def_path_hash(*k), tcx.def_path_hash(*v)))
@@ -231,22 +241,15 @@ enum ContractUsage {
 ///
 /// Note that any error interpreting the result is emitted, but we delay aborting, so we emit as
 /// many errors as possible.
-fn extract_contracts(
-    tcx: TyCtxt,
-    harness: Harness,
-    metadata: &HarnessMetadata,
-) -> BTreeSet<ContractUsage> {
+fn extract_contracts(tcx: TyCtxt, harness: Harness) -> BTreeSet<ContractUsage> {
     let def = harness.def;
     let mut result = BTreeSet::new();
-    if let HarnessKind::ProofForContract { target_fn } = &metadata.attributes.kind
-        && let Ok(check_def) = expect_resolve_fn(tcx, def, target_fn, "proof_for_contract")
-    {
-        result.insert(ContractUsage::Check(check_def.def_id().to_index()));
+    let attributes = KaniAttributes::for_def_id(tcx, def.def_id());
+    if let Some(target) = attributes.interpret_for_contract_attribute() {
+        result.insert(ContractUsage::Check(target.def_id().to_index()));
     }
-
-    for stub in &metadata.attributes.verified_stubs {
-        let Ok(stub_def) = expect_resolve_fn(tcx, def, stub, "stub_verified") else { continue };
-        result.insert(ContractUsage::Stub(stub_def.def_id().to_index()));
+    for stub in attributes.interpret_stub_verified_attribute() {
+        result.insert(ContractUsage::Stub(stub.def_id().to_index()));
     }
 
     result
@@ -301,7 +304,7 @@ fn apply_transitivity(tcx: TyCtxt, harness: Harness, stubs: Stubs) -> Stubs {
                     format!(
                         "Cannot stub `{}`. Stub configuration for harness `{}` has a cycle",
                         orig.name(),
-                        harness.def.name(),
+                        crate::kani_middle::strip_local_crate_prefix(harness.def.name()),
                     ),
                 );
                 break;
@@ -326,6 +329,30 @@ fn get_all_manual_harnesses(
             (harness, metadata)
         })
         .collect::<HashMap<_, _>>()
+}
+
+/// Filter which harnesses to codegen based on user filters. Shares use of `find_proof_harnesses` with the `determine_targets` function
+/// in `kani-driver/src/metadata.rs` to ensure the filter is consistent and thus codegen is always done for the subset of harnesses we want
+/// to analyze.
+fn determine_targets(
+    all_harnesses: HashMap<Harness, HarnessMetadata>,
+    harness_filters: &[String],
+    exact_filter: bool,
+) -> HashMap<Harness, HarnessMetadata> {
+    if harness_filters.is_empty() {
+        return all_harnesses;
+    }
+
+    // If there are filters, only keep around harnesses that satisfy them.
+    let mut new_harnesses = all_harnesses.clone();
+    let valid_harnesses = find_proof_harnesses(
+        &BTreeSet::from_iter(harness_filters.iter()),
+        all_harnesses.values(),
+        exact_filter,
+    );
+
+    new_harnesses.retain(|_, metadata| valid_harnesses.contains(&&*metadata));
+    new_harnesses
 }
 
 /// For each function eligible for automatic verification,
@@ -391,10 +418,10 @@ fn automatic_harness_partition(
     crate_name: &str,
     kani_any_def: FnDef,
 ) -> (Vec<Instance>, BTreeMap<String, AutoHarnessSkipReason>) {
-    let crate_fn_defs = stable_mir::local_crate().fn_defs().into_iter().collect::<FxHashSet<_>>();
+    let crate_fn_defs = rustc_public::local_crate().fn_defs().into_iter().collect::<FxHashSet<_>>();
     // Filter out CrateItems that are functions, but not functions defined in the crate itself, i.e., rustc-inserted functions
     // (c.f. https://github.com/model-checking/kani/issues/4189)
-    let crate_fns = stable_mir::all_local_items().into_iter().filter(|item| {
+    let crate_fns = rustc_public::all_local_items().into_iter().filter(|item| {
         if let TyKind::RigidTy(RigidTy::FnDef(def, _)) = item.ty().kind() {
             crate_fn_defs.contains(&def)
         } else {
@@ -428,7 +455,12 @@ fn automatic_harness_partition(
         }
 
         // Preprend the crate name so that users can filter out entire crates using the existing function filter flags.
-        let name = format!("{crate_name}::{}", instance.name());
+        // `instance.name()` is already crate-qualified for local items (rust-lang/rust#149401),
+        // so strip that prefix first to avoid double-qualifying (`crate::crate::fn`).
+        let name = format!(
+            "{crate_name}::{}",
+            crate::kani_middle::strip_local_crate_prefix(instance.name())
+        );
         let body = instance.body().unwrap();
 
         if is_proof_harness(tcx, instance)
@@ -456,7 +488,7 @@ fn automatic_harness_partition(
 
             if !impls_arbitrary {
                 // Find the name of the argument by referencing var_debug_info.
-                // Note that enumerate() starts at 0, while StableMIR argument_index starts at 1, hence the idx+1.
+                // Note that enumerate() starts at 0, while rustc_public argument_index starts at 1, hence the idx+1.
                 let arg_name = body
                     .var_debug_info
                     .iter()
@@ -479,7 +511,7 @@ fn automatic_harness_partition(
 
     for func in crate_fns {
         if let Some(reason) = skip_reason(func) {
-            skipped.insert(func.name(), reason);
+            skipped.insert(crate::kani_middle::strip_local_crate_prefix(func.name()), reason);
         } else {
             chosen.push(Instance::try_from(func).unwrap());
         }

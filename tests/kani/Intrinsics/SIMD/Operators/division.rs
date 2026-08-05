@@ -8,8 +8,14 @@ use std::intrinsics::simd::{simd_div, simd_rem};
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 pub struct i32x2([i32; 2]);
+
+impl i32x2 {
+    fn into_array(self) -> [i32; 2] {
+        unsafe { std::mem::transmute(self) }
+    }
+}
 
 #[kani::proof]
 fn test_simd_div() {
@@ -22,7 +28,7 @@ fn test_simd_div() {
     let divisors = i32x2([divisor, divisor]);
     let normal_result = dividend / divisor;
     let simd_result = unsafe { simd_div(dividends, divisors) };
-    assert_eq!(normal_result, simd_result.0[0]);
+    assert_eq!(normal_result, simd_result.into_array()[0]);
 }
 
 #[kani::proof]
@@ -36,5 +42,5 @@ fn test_simd_rem() {
     let divisors = i32x2([divisor, divisor]);
     let normal_result = dividend % divisor;
     let simd_result = unsafe { simd_rem(dividends, divisors) };
-    assert_eq!(normal_result, simd_result.0[0]);
+    assert_eq!(normal_result, simd_result.into_array()[0]);
 }

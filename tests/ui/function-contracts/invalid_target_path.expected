@@ -1,15 +1,17 @@
-Failed to resolve checking function NonZero::<g32>::unchecked_mul because the generic arguments ::<g32> are invalid. The available implementations are: 
-       NonZero::<u32>::unchecked_mul
-       NonZero::<i32>::unchecked_mul
+error: failed to resolve `NonZero :: < g32 >::unchecked_mul`: the generic arguments ::<g32> are invalid. The available implementations are:\
+       NonZero::<u32>::unchecked_mul\
+       NonZero::<i32>::unchecked_mul\
+invalid_target_path.rs\
  |
  | #[kani::proof_for_contract(NonZero::<g32>::unchecked_mul)]
  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Failed to resolve checking function NonZero::unchecked_mul because there are multiple implementations of unchecked_mul in struct `NonZero`. Found:
-       NonZero::<u32>::unchecked_mul
-       NonZero::<i32>::unchecked_mul
+error: failed to resolve `NonZero::unchecked_mul`: there are multiple implementations of unchecked_mul in struct `NonZero`. Found:\
+       NonZero::<u32>::unchecked_mul\
+       NonZero::<i32>::unchecked_mul\
+invalid_target_path.rs\
  |
  | #[kani::proof_for_contract(NonZero::unchecked_mul)]
  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  |
-   = help: Replace NonZero::unchecked_mul with a specific implementation.
+   = help: replace `NonZero::unchecked_mul` with a specific implementation.

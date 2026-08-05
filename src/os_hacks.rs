@@ -40,8 +40,11 @@ fn setup_nixos_patchelf(kani_dir: &Path) -> Result<()> {
     // Prevents clippy error.
     let target = "x86_64-unknown-linux-gnu";
     assert!(env!("TARGET") == target);
-    if Path::new("/lib64/ld-linux-x86-64.so.2").exists() {
-        // if the expected path exists, I guess things are fine?
+    if let Ok(linker) = Path::new("/lib64/ld-linux-x86-64.so.2").canonicalize()
+        && linker.exists()
+        && !linker.to_string_lossy().contains("-stub-ld-")
+    {
+        // looks like a valid linker, I guess things are fine?
         return Ok(());
     }
 

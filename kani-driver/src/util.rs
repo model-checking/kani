@@ -88,6 +88,158 @@ pub fn info_operation(op: &str, msg: &str) {
     println!("{op_fmt} {msg_fmt}")
 }
 
+/// # Kani Argument Types
+///
+/// We have three different kinds of arguments we use to influence our compilation process.
+/// This module provides specific types, conversions and methods for each to codify the differences betweeen them
+/// and how they can be used.
+///
+/// [`KaniArg`](args::KaniArg) -- First, there are Kani-specific arguments that the `kani-compiler` uses to direct its codegen.
+/// (See the [`Arguments`] struct in `kani-compiler/src/args.rs` for how they are parsed.)
+///
+/// [`RustcArg`](args::RustcArg) -- Before codegen, the Kani compiler invokes `rustc` to compile Rust source to MIR,
+/// and we pass arguments to influence that compilation.
+/// See [`LibConfig`](crate::call_single_file::LibConfig) for how this is used in a typical Kani invocation.
+///
+/// [`CargoArg`](args::CargoArg) -- If we're calling Kani through `cargo kani`, we also want to pass arguments to Cargo itself.
+///
+///
+/// ## Usage
+/// * `CargoArg`s can be passed directly to a `&mut Command` using the `pass_cargo_args` method.
+/// * `RustcArg`s can also be passed directly to a `&mut Command` using the `pass_rustc_arg{s}` methods,
+///   with the added wrinkle that you have to specify whether they should be passed to all crates or just the local one.
+///   If passing to `AllCrates`, this uses an environment variable, meaning that it can only be called once for each Command.
+/// * Any `KaniArg`s must first be converted into a single `RustcArg` with the [`to_rustc_arg`](args::to_rustc_arg) function
+///   before being passed to commands the same way as other `RustcArg`s. We do this (rather than having a separate
+///   `pass_kani_args` function) because both kinds of arguments often have to share the same underlying `pass_rustc_args`
+///   call to ensure the environment variables for one doesn't get overwritten as mentioned above.
+pub(crate) mod args {
+    use std::{
+        ffi::{OsStr, OsString},
+        process::Command,
+    };
+
+    #[derive(Clone, PartialEq)]
+    /// Kani-specific arguments passed to `rustc` and then used by `kani-compiler`.
+    pub struct KaniArg(String);
+
+    #[derive(Clone, PartialEq, Debug)]
+    /// Arguments passed to `rustc`.
+    pub struct RustcArg(OsString);
+
+    #[derive(Clone, PartialEq)]
+    /// Arguments passed to Cargo.
+    pub struct CargoArg(OsString);
+
+    macro_rules! from_impl {
+        ($type:tt, $inner:ty) => {
+            impl<T> From<T> for $type
+            where
+                T: Into<$inner>,
+            {
+                fn from(value: T) -> Self {
+                    $type(value.into())
+                }
+            }
+
+            impl $type {
+                /// Get a reference to this argument's underlying type.
+                pub fn as_inner(&self) -> &$inner {
+                    &self.0
+                }
+            }
+        };
+    }
+
+    from_impl!(KaniArg, String);
+    from_impl!(RustcArg, OsString);
+    from_impl!(CargoArg, OsString);
+
+    /// This function can be used to convert Kani compiler specific arguments into a rustc one.
+    /// We currently pass Kani specific arguments using the `--llvm-args` structure which is the
+    /// hacky mechanism used by other rustc backend to receive arguments unknown to rustc.
+    ///
+    /// Note that Cargo caching mechanism takes the building context into consideration, which
+    /// includes the value of the rust flags. By using `--llvm-args`, we ensure that Cargo takes into
+    /// consideration all arguments that are used to configure Kani compiler. For example, enabling the
+    /// reachability checks will force recompilation if they were disabled in previous build.
+    /// For more details on this caching mechanism, see the
+    /// [fingerprint documentation](https://github.com/rust-lang/cargo/blob/82c3bb79e3a19a5164e33819ef81bfc2c984bc56/src/cargo/core/compiler/fingerprint/mod.rs)
+    pub fn encode_as_rustc_arg<'a>(kani_args: impl IntoIterator<Item = &'a KaniArg>) -> RustcArg {
+        format!(
+            r#"-Cllvm-args={}"#,
+            kani_args
+                .into_iter()
+                .map(KaniArg::as_inner)
+                .cloned()
+                .collect::<Vec<String>>()
+                .join(" ")
+        )
+        .into()
+    }
+
+    pub enum PassTo {
+        /// Only pass arguments for use in the local crate.
+        /// This will just pass them directly as arguments to the command.
+        OnlyLocalCrate,
+        /// Pass arguments for use when compiling all dependencies using the
+        /// `CARGO_ENCODED_RUSTFLAGS` environment variable.
+        AllCrates,
+    }
+
+    /// A wrapper trait that allows us to call these methods on a [Command].
+    pub trait CommandWrapper {
+        fn pass_cargo_args(&mut self, args: &[CargoArg]) -> &mut Self;
+        fn pass_rustc_args(&mut self, args: &[RustcArg], to: PassTo) -> &mut Self;
+        fn pass_rustc_arg(&mut self, args: RustcArg, to: PassTo) -> &mut Self;
+    }
+
+    impl CommandWrapper for Command {
+        /// Pass general arguments to cargo.
+        fn pass_cargo_args(&mut self, args: &[CargoArg]) -> &mut Self {
+            self.args(args.iter().map(CargoArg::as_inner))
+        }
+
+        fn pass_rustc_arg(&mut self, args: RustcArg, to: PassTo) -> &mut Self {
+            self.pass_rustc_args(&[args], to)
+        }
+
+        /// Pass rustc arguments to the compiler for use in certain dependencies.
+        fn pass_rustc_args(&mut self, args: &[RustcArg], to: PassTo) -> &mut Self {
+            match to {
+                // Since we just want to pass to the local crate, just add them as arguments to the command.
+                PassTo::OnlyLocalCrate => self.args(args.iter().map(RustcArg::as_inner)),
+
+                // Since we also want to recursively pass these args to all dependencies,
+                // use an environment variable that gets checked for each dependency.
+                PassTo::AllCrates => {
+                    // Use of CARGO_ENCODED_RUSTFLAGS instead of RUSTFLAGS is preferred. See
+                    // https://doc.rust-lang.org/cargo/reference/environment-variables.html
+                    let env_var = OsString::from("CARGO_ENCODED_RUSTFLAGS");
+
+                    // Ensure we wouldn't be overwriting an existing environment variable.
+                    let env_var_exists = self.get_envs().any(|(var, _)| var == env_var);
+                    assert!(
+                        !env_var_exists,
+                        "pass_rustc_args() uses an environment variable when called with `PassTo::AllCrates`, \
+                        so calling it multiple times in this way will overwrite all but the most recent call. \
+                        try combining the arguments you want to add and passing them to a single call instead."
+                    );
+
+                    self.env(
+                        "CARGO_ENCODED_RUSTFLAGS",
+                        args.iter()
+                            .map(RustcArg::as_inner)
+                            .cloned()
+                            .collect::<Vec<OsString>>()
+                            .join(OsStr::new("\x1f")),
+                    )
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

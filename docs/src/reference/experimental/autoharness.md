@@ -75,6 +75,10 @@ Note that because Kani prefixes function paths with the crate name, some pattern
 For example, given a function `foo_top_level` inside crate `my_crate`, the regex `.*::foo_.*` will match `foo_top_level`, since Kani interprets it as `my_crate::foo_top_level`.
 To match only `foo_` functions inside modules, use a more specific pattern, e.g. `.*::[^:]+::foo_.*`.
 
+Autoharness also accepts a `--list` argument, which runs the [list subcommand](../list.md) including automatic harnesses.
+
+For a full list of options, run `kani autoharness --help`.
+
 ## Example
 Using the `estimate_size` example from [First Steps](../../tutorial-first-steps.md) again:
 ```rust
@@ -104,7 +108,9 @@ please add them to [this GitHub issue](https://github.com/model-checking/kani/is
 ## Limitations
 ### Arguments Implementing Arbitrary
 Kani will only generate an automatic harness for a function if it can represent each of its arguments nondeterministically, without bounds.
-In technical terms, each of the arguments needs to implement the `Arbitrary` trait or be capable of deriving it.
+In technical terms, each of the arguments needs to implement the `Arbitrary`
+trait or be capable of deriving it, or be a reference (mutable or immutable)
+where any of the prior requirements is fulfilled by the referenced type.
 Kani will detect if a struct or enum could implement `Arbitrary` and derive it automatically.
 Note that this automatic derivation feature is only available for autoharness.
 

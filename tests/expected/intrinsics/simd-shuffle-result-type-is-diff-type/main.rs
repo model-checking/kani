@@ -8,12 +8,12 @@ use std::intrinsics::simd::simd_shuffle;
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy)]
 pub struct i64x2([i64; 2]);
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy)]
 pub struct f64x2([f64; 2]);
 
 #[repr(simd)]

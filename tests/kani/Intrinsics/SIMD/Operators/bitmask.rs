@@ -9,11 +9,10 @@
 #![feature(repr_simd, core_intrinsics)]
 #![feature(generic_const_exprs)]
 #![feature(portable_simd)]
-use std::fmt::Debug;
 use std::intrinsics::simd::simd_bitmask;
 
 #[repr(simd)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy)]
 struct CustomMask<const LANES: usize>([i32; LANES]);
 
 impl<const LANES: usize> CustomMask<LANES> {
@@ -48,7 +47,7 @@ fn check_u8() {
 #[kani::proof]
 fn check_unsigned_bitmask() {
     let mask = kani::any::<CustomMask<8>>();
-    let bitmask = unsafe { simd_bitmask::<_, u8>(mask.clone()) };
+    let bitmask = unsafe { simd_bitmask::<_, u8>(mask) };
     assert_eq!(bitmask.count_ones() as usize, mask.as_array().iter().filter(|e| **e == -1).count());
     assert_eq!(bitmask.count_zeros() as usize, mask.as_array().iter().filter(|e| **e == 0).count());
 }

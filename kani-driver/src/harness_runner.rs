@@ -8,7 +8,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
-use crate::args::OutputFormat;
+use crate::args::{NumThreads, OutputFormat};
 use crate::call_cbmc::{VerificationResult, VerificationStatus};
 use crate::project::Project;
 use crate::session::{BUG_REPORT_URL, KaniSession};
@@ -55,13 +55,18 @@ impl<'pr> HarnessRunner<'_, 'pr> {
         &self,
         harnesses: &'pr [&HarnessMetadata],
     ) -> Result<Vec<HarnessResult<'pr>>> {
-        self.check_stubbing(harnesses)?;
-
         let sorted_harnesses = crate::metadata::sort_harnesses_by_loc(harnesses);
         let pool = {
             let mut builder = rayon::ThreadPoolBuilder::new();
-            if let Some(x) = self.sess.args.jobs() {
-                builder = builder.num_threads(x);
+            match self.sess.args.jobs() {
+                NumThreads::UserSpecified(num_threads) => {
+                    builder = builder.num_threads(num_threads);
+                }
+                NumThreads::NoMultithreading => {
+                    builder = builder.num_threads(1);
+                }
+                NumThreads::ThreadPoolDefault => { /* rayon will automatically set num_threads to the default if not specified here */
+                }
             }
             builder.build()?
         };
@@ -106,33 +111,6 @@ impl<'pr> HarnessRunner<'_, 'pr> {
                 }
             }
         }
-    }
-
-    /// Return an error if the user is trying to verify a harness with stubs without enabling the
-    /// experimental feature.
-    fn check_stubbing(&self, harnesses: &[&HarnessMetadata]) -> Result<()> {
-        if !self.sess.args.is_stubbing_enabled() {
-            let with_stubs: Vec<_> = harnesses
-                .iter()
-                .filter_map(|harness| {
-                    (!harness.attributes.stubs.is_empty()).then_some(harness.pretty_name.as_str())
-                })
-                .collect();
-            match with_stubs.as_slice() {
-                [] => { /* do nothing */ }
-                [harness] => bail!(
-                    "Use of unstable feature 'stubbing' in harness `{}`.\n\
-                    To enable stubbing, pass option `-Z stubbing`",
-                    harness
-                ),
-                harnesses => bail!(
-                    "Use of unstable feature 'stubbing' in harnesses `{}`.\n\
-                    To enable stubbing, pass option `-Z stubbing`",
-                    harnesses.join("`, `")
-                ),
-            }
-        }
-        Ok(())
     }
 }
 
@@ -224,6 +202,23 @@ impl KaniSession {
             }
 
             println!("{msg}");
+
+            // Print stubs applied to this harness so users know which
+            // assumptions are in effect.
+            let multi = rayon::current_num_threads() > 1;
+            let print_line = |line: String| {
+                if multi {
+                    println!("Thread {thread_index}: {line}");
+                } else {
+                    println!("{line}");
+                }
+            };
+            for stub in &harness.attributes.stubs {
+                print_line(format!("  - Stub: {} -> {}", stub.original, stub.replacement));
+            }
+            for verified in &harness.attributes.verified_stubs {
+                print_line(format!("  - Verified stub: {verified}"));
+            }
         }
 
         let mut result = self.with_timer(|| self.run_cbmc(binary, harness), "run_cbmc")?;

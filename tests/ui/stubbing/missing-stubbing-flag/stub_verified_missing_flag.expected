@@ -1,0 +1,7 @@
+error: Using the stub_verified attribute requires activating the unstable `stubbing` feature\
+stub_verified_missing_flag\
+|\
+| #[kani::stub_verified(some_function)]\
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: aborting due to 1 previous error

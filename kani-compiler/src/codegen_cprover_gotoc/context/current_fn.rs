@@ -5,10 +5,10 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::InternedString;
 use cbmc::goto_program::Stmt;
 use rustc_middle::ty::Instance as InstanceInternal;
-use stable_mir::CrateDef;
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{Body, Local, LocalDecl, Rvalue, visit::Location, visit::MirVisitor};
-use stable_mir::rustc_internal;
+use rustc_public::CrateDef;
+use rustc_public::mir::mono::Instance;
+use rustc_public::mir::{Body, Local, LocalDecl, Rvalue, visit::Location, visit::MirVisitor};
+use rustc_public::rustc_internal;
 use std::collections::{HashMap, HashSet};
 
 /// This structure represents useful data about the function we are currently compiling.
@@ -24,6 +24,8 @@ pub struct CurrentFnCtx<'tcx> {
     instance_internal: InstanceInternal<'tcx>,
     /// A list of local declarations used to retrieve MIR component types.
     locals: Vec<LocalDecl>,
+    /// The number of formal arguments of the current function (locals `1..=arg_count`).
+    arg_count: usize,
     /// A list of pretty names for locals that corrspond to user variables.
     local_names: HashMap<Local, InternedString>,
     /// Collection of variables that are used in a reference or address-of expression.
@@ -56,11 +58,12 @@ impl MirVisitor for AddressTakenLocalsCollector {
 
 /// Constructor
 impl<'tcx> CurrentFnCtx<'tcx> {
-    pub fn new(instance: Instance, gcx: &GotocCtx<'tcx>, body: &Body) -> Self {
+    pub fn new(instance: Instance, gcx: &GotocCtx<'tcx, '_>, body: &Body) -> Self {
         let instance_internal = rustc_internal::internal(gcx.tcx, instance);
-        let readable_name = instance.name();
+        let readable_name = crate::kani_middle::readable_name(instance);
         let name = instance.mangled_name();
         let locals = body.locals().to_vec();
+        let arg_count = body.arg_locals().len();
         let local_names = body
             .var_debug_info
             .iter()
@@ -74,6 +77,7 @@ impl<'tcx> CurrentFnCtx<'tcx> {
             instance_internal,
             krate: instance.def.krate().name,
             locals,
+            arg_count,
             local_names,
             address_taken_locals: visitor.address_taken_locals,
             name,
@@ -124,6 +128,12 @@ impl<'tcx> CurrentFnCtx<'tcx> {
 
     pub fn locals(&self) -> &[LocalDecl] {
         &self.locals
+    }
+
+    /// The number of formal arguments of the current function; locals `1..=arg_count()`
+    /// are the arguments.
+    pub fn arg_count(&self) -> usize {
+        self.arg_count
     }
 
     pub fn local_name(&self, local: Local) -> Option<InternedString> {

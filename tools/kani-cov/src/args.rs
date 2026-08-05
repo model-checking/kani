@@ -10,7 +10,6 @@
 use std::path::PathBuf;
 
 use anyhow::{Result, bail};
-use clap::{arg, command};
 
 use crate::{merge, report, summary};
 

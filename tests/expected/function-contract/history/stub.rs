@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // This test consumes > 9 GB of memory with 16 object bits. Reducing the number
 // of object bits to 8 to avoid running out of memory.
-// kani-flags: -Zfunction-contracts -Z unstable-options --cbmc-args --object-bits 8
+// kani-flags: -Zfunction-contracts -Zstubbing -Z unstable-options --cbmc-args --object-bits 8
 
 #[kani::ensures(|result| old(*ptr + *ptr) == *ptr)]
 #[kani::requires(*ptr < 100)]

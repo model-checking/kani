@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::codegen_cprover_gotoc::GotocCtx;
-use stable_mir::mir::{BasicBlock, BasicBlockIdx, Body};
+use rustc_public::mir::{BasicBlock, BasicBlockIdx, Body};
 use std::collections::HashSet;
 use tracing::debug;
 
@@ -10,7 +10,7 @@ pub fn bb_label(bb: BasicBlockIdx) -> String {
     format!("bb{bb}")
 }
 
-impl GotocCtx<'_> {
+impl GotocCtx<'_, '_> {
     /// Generates Goto-C for a basic block.
     ///
     /// A MIR basic block consists of 0 or more statements followed by a terminator.

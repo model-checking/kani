@@ -16,6 +16,7 @@
 #![feature(f16)]
 #![feature(non_exhaustive_omitted_patterns_lint)]
 #![feature(cfg_version)]
+#![feature(mpmc_channel)]
 // Once the `stable` branch is at 1.86 or later, remove this line, since float_next_up_down is stabilized
 #![cfg_attr(not(version("1.86")), feature(float_next_up_down))]
 #![feature(try_blocks)]
@@ -33,11 +34,12 @@ extern crate rustc_interface;
 extern crate rustc_metadata;
 extern crate rustc_middle;
 extern crate rustc_mir_dataflow;
+extern crate rustc_parse;
+extern crate rustc_public;
+extern crate rustc_public_bridge;
 extern crate rustc_session;
-extern crate rustc_smir;
 extern crate rustc_span;
 extern crate rustc_target;
-extern crate stable_mir;
 // We can't add this directly as a dependency because we need the version to match rustc
 extern crate tempfile;
 
@@ -57,6 +59,12 @@ use std::env;
 
 /// Main function. Configure arguments and run the compiler.
 fn main() {
+    // Set GLIBC_TUNABLES for THP support in this process and child processes
+    if env::var("GLIBC_TUNABLES").is_err() {
+        // SAFETY: Called at start of main before any threads are spawned
+        unsafe { env::set_var("GLIBC_TUNABLES", "glibc.malloc.hugetlb=1") };
+    }
+
     session::init_panic_hook();
     let (kani_compiler, rustc_args) = is_kani_compiler(env::args().collect());
 

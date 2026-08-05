@@ -13,8 +13,8 @@ use crate::kani_middle::transform::{
 };
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
-use stable_mir::rustc_internal;
-use stable_mir::{
+use rustc_public::rustc_internal;
+use rustc_public::{
     CrateDef,
     mir::{Body, Mutability, Place, mono::Instance},
     ty::{FnDef, GenericArgs, Ty},
@@ -28,7 +28,7 @@ mod uninit_visitor;
 
 /// Top-level pass that instruments the code with checks for uninitialized memory access through raw
 /// pointers.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UninitPass {
     pub safety_check_type: CheckType,
     pub unsupported_check_type: CheckType,

@@ -16,6 +16,51 @@ pub use std::*;
 // Override process calls with stubs.
 pub mod process;
 
+// The standard prelude explicitly re-exports the built-in macros
+// (rust-lang/rust "Explicitly export core and std macros"), rather than
+// injecting them via `#[macro_use] extern crate std`. Because `pub use std::*`
+// above also re-exports `std::prelude`, user code would otherwise pick up the
+// *original* `println!`/`assert!`/... from the std prelude and ignore the
+// overrides defined below. Provide our own `prelude` (which shadows the glob
+// re-export) that re-exports Kani's versions of the overridden macros. Explicit
+// `use` imports take precedence over the `pub use std::prelude::...::*` globs,
+// so only the overridden macros are replaced; everything else comes from std.
+#[cfg(not(feature = "concrete_playback"))]
+pub mod prelude {
+    // The standard prelude is kept free of Kani's `assert`/`debug_assert`/
+    // `unreachable`/`panic` overrides: those are core-prelude macros, and putting
+    // Kani's versions here makes `#![no_std]` dependencies that import this prelude
+    // explicitly (`extern crate std; use std::prelude::v1::*;`, e.g. lazy_static)
+    // ambiguous against the injected core prelude (E0659). Instead, kani-compiler
+    // injects those overrides only into local crates, not external (registry/git)
+    // dependencies (see kani_compiler's macro-override injection). The print family
+    // is defined in this
+    // crate (std) with no core-prelude counterpart, so overriding it here is safe and
+    // applies everywhere (dependencies included), which is important so that a
+    // dependency's `println!` does not run real formatting/IO during verification.
+    pub mod v1 {
+        pub use crate::{eprint, eprintln, print, println};
+        pub use std::prelude::v1::*;
+    }
+    pub mod rust_2015 {
+        pub use super::v1::*;
+    }
+    pub mod rust_2018 {
+        pub use super::v1::*;
+    }
+    pub mod rust_2021 {
+        pub use super::v1::*;
+        pub use core::prelude::rust_2021::*;
+        // Both globs bring `panic` (std's vs core's); prefer std's, matching std's own prelude.
+        pub use super::v1::panic;
+    }
+    pub mod rust_2024 {
+        pub use super::v1::panic;
+        pub use super::v1::*;
+        pub use core::prelude::rust_2024::*;
+    }
+}
+
 /// This assert macro calls kani's assert function passing it down the condition
 /// as well as a message that will be used when reporting the assertion result.
 ///
@@ -124,19 +169,19 @@ macro_rules! assert_ne {
 #[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! debug_assert {
-    ($($x:tt)*) => ({ $crate::assert!($($x)*); })
+    ($($x:tt)*) => ({ if cfg!(debug_assertions) { $crate::assert!($($x)*); } })
 }
 
 #[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! debug_assert_eq {
-    ($($x:tt)*) => ({ $crate::assert_eq!($($x)*); })
+    ($($x:tt)*) => ({ if cfg!(debug_assertions) { $crate::assert_eq!($($x)*); } })
 }
 
 #[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! debug_assert_ne {
-    ($($x:tt)*) => ({ $crate::assert_ne!($($x)*); })
+    ($($x:tt)*) => ({ if cfg!(debug_assertions) { $crate::assert_ne!($($x)*); } })
 }
 
 // Override the print macros to skip all the printing functionality (which

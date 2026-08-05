@@ -5,12 +5,12 @@
 
 use std::fmt::Display;
 
-use rustc_smir::IndexedVal;
-use stable_mir::{
+use rustc_public::{
     abi::{FieldsShape, Scalar, TagEncoding, ValueAbi, VariantsShape},
     target::{MachineInfo, MachineSize},
     ty::{AdtKind, RigidTy, Ty, TyKind, UintTy, VariantIdx},
 };
+use rustc_public_bridge::IndexedVal;
 
 /// Represents a chunk of data bytes in a data structure.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -259,14 +259,8 @@ fn data_bytes_for_ty(
                                     for (index, variant) in variants.iter().enumerate() {
                                         let mut field_data_bytes_for_variant = vec![];
                                         let fields = ty_variants[index].fields();
-                                        // Get offsets of all fields in a variant.
-                                        let FieldsShape::Arbitrary { offsets: field_offsets } =
-                                            variant.fields.clone()
-                                        else {
-                                            unreachable!()
-                                        };
-                                        for field_idx in variant.fields.fields_by_offset_order() {
-                                            let field_offset = field_offsets[field_idx].bytes();
+                                        for field_idx in variant.fields_by_offset_order() {
+                                            let field_offset = variant.offsets[field_idx].bytes();
                                             let field_ty = fields[field_idx].ty_with_args(args);
                                             field_data_bytes_for_variant.append(
                                                 &mut data_bytes_for_ty(
@@ -394,11 +388,11 @@ fn data_bytes_for_ty(
                 RigidTy::FnDef(_, _)
                 | RigidTy::FnPtr(_)
                 | RigidTy::Closure(_, _)
-                | RigidTy::Coroutine(_, _, _)
+                | RigidTy::Coroutine(_, _)
                 | RigidTy::CoroutineClosure(_, _)
                 | RigidTy::CoroutineWitness(_, _)
                 | RigidTy::Foreign(_)
-                | RigidTy::Dynamic(_, _, _) => Err(LayoutComputationError::UnsupportedType(ty)),
+                | RigidTy::Dynamic(_, _) => Err(LayoutComputationError::UnsupportedType(ty)),
             }
         }
         FieldsShape::Union(_) => Err(LayoutComputationError::UnionAsField(ty)),

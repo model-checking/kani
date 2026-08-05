@@ -81,7 +81,7 @@
 use crate::irep::{Irep, IrepId, Symbol, SymbolTable};
 use crate::{InternString, InternedString};
 #[cfg(not(test))]
-use fxhash::FxHashMap;
+use rustc_hash::FxHashMap;
 #[cfg(test)]
 use std::collections::HashMap;
 use std::fs::File;

@@ -7,23 +7,29 @@ use std::intrinsics::simd::*;
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy)]
 pub struct f64x2([f64; 2]);
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy)]
 pub struct i64x2([i64; 2]);
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy)]
 pub struct i32x2([i32; 2]);
+
+impl i32x2 {
+    fn into_array(self) -> [i32; 2] {
+        unsafe { std::mem::transmute(self) }
+    }
+}
 
 macro_rules! assert_cmp {
     ($res_cmp: ident, $simd_cmp: ident, $x: expr, $y: expr, $($res: expr),+) => {
         let $res_cmp: i32x2 = $simd_cmp($x, $y);
-        assert!($res_cmp == i32x2($($res),+))
+        assert!($res_cmp.into_array() == i32x2($($res),+).into_array())
     };
 }
 

@@ -8,9 +8,9 @@ use crate::args::playback_args::{CargoPlaybackArgs, KaniPlaybackArgs, MessageFor
 use crate::call_cargo::cargo_config_args;
 use crate::call_single_file::{LibConfig, base_rustc_flags};
 use crate::session::{InstallType, lib_playback_folder, setup_cargo_command};
+use crate::util::args::{CargoArg, CommandWrapper, PassTo, RustcArg};
 use crate::{session, util};
 use anyhow::Result;
-use std::ffi::OsString;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -72,7 +72,7 @@ fn build_test(install: &InstallType, args: &KaniPlaybackArgs) -> Result<PathBuf>
 
     let mut rustc_args = base_rustc_flags(LibConfig::new(lib_playback_folder()?));
     rustc_args.push("--test".into());
-    rustc_args.push(OsString::from(&args.input));
+    rustc_args.push(RustcArg::from(&args.input));
     rustc_args.push(format!("--crate-name={TEST_BIN_NAME}").into());
 
     if args.playback.common_opts.verbose() {
@@ -84,7 +84,7 @@ fn build_test(install: &InstallType, args: &KaniPlaybackArgs) -> Result<PathBuf>
     }
 
     let mut cmd = Command::new(install.kani_compiler()?);
-    cmd.args(rustc_args);
+    cmd.pass_rustc_args(&rustc_args, PassTo::OnlyLocalCrate);
 
     session::run_terminal(&args.playback.common_opts, cmd)?;
 
@@ -97,7 +97,7 @@ fn cargo_test(args: CargoPlaybackArgs) -> Result<()> {
     let mut cmd = setup_cargo_command()?;
 
     let rustc_args = base_rustc_flags(LibConfig::new(lib_playback_folder()?));
-    let mut cargo_args: Vec<OsString> = vec!["test".into()];
+    let mut cargo_args: Vec<CargoArg> = vec!["test".into()];
 
     if args.playback.common_opts.verbose() {
         cargo_args.push("-vv".into());
@@ -123,11 +123,9 @@ fn cargo_test(args: CargoPlaybackArgs) -> Result<()> {
     }
 
     // Arguments that will only be passed to the target package.
-    cmd.args(&cargo_args)
+    cmd.pass_cargo_args(&cargo_args)
         .env("RUSTC", &install.kani_compiler()?)
-        // Use CARGO_ENCODED_RUSTFLAGS instead of RUSTFLAGS is preferred. See
-        // https://doc.rust-lang.org/cargo/reference/environment-variables.html
-        .env("CARGO_ENCODED_RUSTFLAGS", rustc_args.join(&OsString::from("\x1f")))
+        .pass_rustc_args(&rustc_args, PassTo::AllCrates)
         .env("CARGO_TERM_PROGRESS_WHEN", "never");
 
     session::run_terminal(&args.playback.common_opts, cmd)?;

@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Zfunction-contracts
+// kani-flags: -Zfunction-contracts -Zstubbing
 type T = u8;
 
 /// Euclid's algorithm for calculating the GCD of two numbers
@@ -52,6 +52,14 @@ impl Frac {
         let gcd2 = self.den / f2.den;
         assert_eq!(gcd1, gcd2);
     }
+}
+
+#[kani::proof_for_contract(gcd)]
+#[kani::unwind(64)]
+fn gcd_harness() {
+    let x: T = kani::any();
+    let y: T = kani::any();
+    gcd(x, y);
 }
 
 #[kani::proof]

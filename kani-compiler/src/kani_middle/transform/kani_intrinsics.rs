@@ -22,13 +22,13 @@ use crate::kani_middle::transform::check_values::{build_limits, ty_validity_per_
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{
+use rustc_public::mir::mono::Instance;
+use rustc_public::mir::{
     AggregateKind, BasicBlock, BinOp, Body, ConstOperand, Local, Mutability, Operand, Place,
     RETURN_LOCAL, Rvalue, Statement, StatementKind, Terminator, TerminatorKind, UnOp, UnwindAction,
 };
-use stable_mir::target::MachineInfo;
-use stable_mir::ty::{
+use rustc_public::target::MachineInfo;
+use rustc_public::ty::{
     AdtDef, FnDef, GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyKind, UintTy,
 };
 use std::collections::HashMap;
@@ -37,7 +37,7 @@ use std::str::FromStr;
 use tracing::{debug, trace};
 
 /// Generate the body for a few Kani intrinsics.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct IntrinsicGeneratorPass {
     unsupported_check_type: CheckType,
     /// Used to cache FnDef lookups for models and Kani intrinsics.
@@ -73,7 +73,7 @@ impl TransformPass for IntrinsicGeneratorPass {
                 KaniIntrinsic::CheckedAlignOf => (true, self.checked_align_of(body, instance)),
                 KaniIntrinsic::CheckedSizeOf => (true, self.checked_size_of(body, instance)),
                 KaniIntrinsic::IsInitialized => (true, self.is_initialized_body(body)),
-                KaniIntrinsic::ValidValue => (true, self.valid_value_body(body)),
+                KaniIntrinsic::ValidValue => (true, self.valid_value_body(tcx, body)),
                 // The former two are handled in contracts pass for now, while the latter is handled in the the automatic harness pass.
                 KaniIntrinsic::WriteAny
                 | KaniIntrinsic::AnyModifies
@@ -105,7 +105,7 @@ impl IntrinsicGeneratorPass {
     ///     ret
     /// }
     /// ```
-    fn valid_value_body(&self, body: Body) -> Body {
+    fn valid_value_body(&self, tcx: TyCtxt, body: Body) -> Body {
         let mut new_body = MutableBody::from(body);
         new_body.clear_body(TerminatorKind::Return);
 
@@ -128,7 +128,7 @@ impl IntrinsicGeneratorPass {
         // The first and only argument type.
         let arg_ty = new_body.locals()[1].ty;
         let TyKind::RigidTy(RigidTy::RawPtr(target_ty, _)) = arg_ty.kind() else { unreachable!() };
-        let validity = ty_validity_per_offset(&machine_info, target_ty, 0);
+        let validity = ty_validity_per_offset(tcx, &machine_info, target_ty, 0);
         match validity {
             Ok(ranges) if ranges.is_empty() => {
                 // Nothing to check

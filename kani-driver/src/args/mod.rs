@@ -286,7 +286,7 @@ pub struct VerificationArgs {
     /// Pass -j to run with the thread pool's default number of threads.
     /// Pass -j <N> to specify N threads.
     #[arg(short, long, hide_short_help = true)]
-    pub jobs: Option<Option<usize>>,
+    jobs: Option<Option<usize>>,
 
     /// Keep temporary files generated throughout Kani process. This is already the default
     /// behavior for `cargo-kani`.
@@ -330,6 +330,11 @@ pub struct VerificationArgs {
     #[arg(long, hide = true)]
     pub print_llbc: bool,
 
+    /// Compute verification results under the assumption that no panic occurs.
+    /// This feature is unstable, and it requires `-Z unstable-options` to be used
+    #[arg(long, hide_short_help = true)]
+    pub prove_safety_only: bool,
+
     /// Randomize the layout of structures. This option can help catching code that relies on
     /// a specific layout chosen by the compiler that is not guaranteed to be stable in the future.
     /// If a value is given, it will be used as the seed for randomization
@@ -345,6 +350,10 @@ pub struct VerificationArgs {
     /// Execute CBMC's sanity checks to ensure the goto-program we generate is correct.
     #[arg(long, hide_short_help = true)]
     pub run_sanity_checks: bool,
+
+    /// Write SARIF output (Static Analysis Results Interchange Format) to the given path.
+    #[arg(long, value_name = "PATH")]
+    pub sarif: Option<PathBuf>,
 
     /// Specify the CBMC solver to use. Overrides the harness `solver` attribute.
     /// If no solver is specified (with --solver or harness attribute), Kani will use CaDiCaL.
@@ -391,6 +400,27 @@ pub struct VerificationArgs {
     pub target: CargoTargetArgs,
 }
 
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub enum NumThreads {
+    /// The user specified a specific number of threads to use (the `-j [COUNT]` option).
+    UserSpecified(usize),
+    /// The user asked for multithreading, but didn't specify exactly how much (the `-j` option).
+    ThreadPoolDefault,
+    /// The user didn't ask for any multithreading (default).
+    NoMultithreading,
+}
+
+impl NumThreads {
+    /// Checks if this will spawn multiple threads in the pool.
+    pub fn will_multithread(&self) -> bool {
+        match self {
+            Self::UserSpecified(x) if *x != 1 => true,
+            Self::ThreadPoolDefault => true,
+            _ => false,
+        }
+    }
+}
+
 impl VerificationArgs {
     pub fn restrict_vtable(&self) -> bool {
         self.common_args.unstable_features.contains(UnstableFeature::RestrictVtable)
@@ -411,12 +441,26 @@ impl VerificationArgs {
         }
     }
 
-    /// Given an argument, warn if UnstableFeature::UnstableOptions is enabled.
+    /// Given the string representation of an option, warn if it's enabled while
+    /// UnstableFeature::UnstableOptions is also enabled.
     /// This is for cases where the option was previously unstable but has since been stabilized.
+    /// Example invocation: self.check_unnecessary_unstable_option(self.jobs.is_some(), "jobs");
+    #[allow(dead_code)]
     pub fn check_unnecessary_unstable_option(&self, enabled: bool, option: &str) {
+        // Note that the body of this function is subject to change; an option
+        // will only be here if it has been stabilized *recently*, such that we should still warn about unstable-options.
+        // So a body of just `None` is fine, since that just means that no unstable options are currently in that in-between period.
+        // Example of an appropriate body:
+        // ```rust
+        //    match option {
+        //      "jobs" => Some("0.63.0".to_string()),
+        //      _ => None,
+        //    }
+        // ```
+        // for the unstable jobs option, which was stabilized in version 0.63.
+        #[allow(clippy::match_single_binding)]
         fn stabilization_version(option: &str) -> Option<String> {
             match option {
-                "jobs" => Some("0.63.0".to_string()),
                 _ => None,
             }
         }
@@ -430,11 +474,11 @@ impl VerificationArgs {
     }
 
     /// Computes how many threads should be used to verify harnesses.
-    pub fn jobs(&self) -> Option<usize> {
+    pub fn jobs(&self) -> NumThreads {
         match self.jobs {
-            None => Some(1),          // no argument, default 1
-            Some(None) => None,       // -j
-            Some(Some(x)) => Some(x), // -j=x
+            None => NumThreads::NoMultithreading, // no argument, default 1
+            Some(None) => NumThreads::ThreadPoolDefault, // -j
+            Some(Some(x)) => NumThreads::UserSpecified(x), // -j=x
         }
     }
 
@@ -468,39 +512,22 @@ pub enum OutputFormat {
 #[derive(Debug, clap::Args)]
 #[clap(next_help_heading = "Memory Checks")]
 pub struct CheckArgs {
-    // Rust argument parsers (/clap) don't have the convenient '--flag' and '--no-flag' boolean pairs, so approximate
-    // We're put both here then create helper functions to "intepret"
-    /// Turn on all default checks
-    #[arg(long, hide = true)]
-    pub default_checks: bool,
     /// Turn off all default checks
     #[arg(long)]
     pub no_default_checks: bool,
 
-    /// Turn on default memory safety checks
-    #[arg(long, hide = true)]
-    pub memory_safety_checks: bool,
     /// Turn off default memory safety checks
     #[arg(long)]
     pub no_memory_safety_checks: bool,
 
-    /// Turn on default overflow checks
-    #[arg(long, hide = true)]
-    pub overflow_checks: bool,
     /// Turn off default overflow checks
     #[arg(long)]
     pub no_overflow_checks: bool,
 
-    /// Turn on undefined function checks
-    #[arg(long, hide = true)]
-    pub undefined_function_checks: bool,
     /// Turn off undefined function checks
     #[arg(long)]
     pub no_undefined_function_checks: bool,
 
-    /// Turn on default unwinding checks
-    #[arg(long, hide = true)]
-    pub unwinding_checks: bool,
     /// Turn off default unwinding checks
     #[arg(long)]
     pub no_unwinding_checks: bool,
@@ -508,41 +535,16 @@ pub struct CheckArgs {
 
 impl CheckArgs {
     pub fn memory_safety_on(&self) -> bool {
-        !self.no_default_checks && !self.no_memory_safety_checks || self.memory_safety_checks
+        !self.no_default_checks && !self.no_memory_safety_checks
     }
     pub fn overflow_on(&self) -> bool {
-        !self.no_default_checks && !self.no_overflow_checks || self.overflow_checks
+        !self.no_default_checks && !self.no_overflow_checks
     }
     pub fn undefined_function_on(&self) -> bool {
         !self.no_default_checks && !self.no_undefined_function_checks
-            || self.undefined_function_checks
     }
     pub fn unwinding_on(&self) -> bool {
-        !self.no_default_checks && !self.no_unwinding_checks || self.unwinding_checks
-    }
-    pub fn print_deprecated(&self, verbosity: &CommonArgs) {
-        let deprecation_version = "0.63.0";
-        let alternative = "omitting the argument, since this is already the default behavior";
-        if self.default_checks {
-            print_deprecated(verbosity, "--default-checks", deprecation_version, alternative);
-        }
-        if self.memory_safety_checks {
-            print_deprecated(verbosity, "--memory-safety-checks", deprecation_version, alternative);
-        }
-        if self.overflow_checks {
-            print_deprecated(verbosity, "--overflow-checks", deprecation_version, alternative);
-        }
-        if self.undefined_function_checks {
-            print_deprecated(
-                verbosity,
-                "--undefined-function-checks",
-                deprecation_version,
-                alternative,
-            );
-        }
-        if self.unwinding_checks {
-            print_deprecated(verbosity, "--unwinding-checks", deprecation_version, alternative);
-        }
+        !self.no_default_checks && !self.no_unwinding_checks
     }
 }
 
@@ -726,6 +728,12 @@ impl ValidateArgs for VerificationArgs {
                 UnstableFeature::FunctionContracts,
             )?;
 
+            self.common_args.check_unstable(
+                self.prove_safety_only,
+                "prove-safety-only",
+                UnstableFeature::UnstableOptions,
+            )?;
+
             Ok(())
         };
 
@@ -763,14 +771,26 @@ impl ValidateArgs for VerificationArgs {
                 --output-format=old.",
                 ));
             }
-            if self.concrete_playback.is_some() && self.jobs() != Some(1) {
+            if self.sarif.is_some() && self.output_format == OutputFormat::Old {
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    "Conflicting options: --sarif isn't compatible with --output-format=old.",
+                ));
+            }
+            if self.concrete_playback.is_some() && self.jobs().will_multithread() {
                 // Concrete playback currently embeds a lot of assumptions about the order in which harnesses get called.
                 return Err(Error::raw(
                     ErrorKind::ArgumentConflict,
-                    "Conflicting options: --concrete-playback isn't compatible with --jobs.",
+                    "Conflicting options: --concrete-playback isn't compatible with --jobs specifying multiple threads.",
                 ));
             }
-            if self.jobs.is_some() && self.output_format != OutputFormat::Terse {
+            if self.sarif.is_some() && self.only_codegen {
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    "Conflicting options: --sarif isn't compatible with --only-codegen.",
+                ));
+            }
+            if self.jobs().will_multithread() && self.output_format != OutputFormat::Terse {
                 // More verbose output formats make it hard to interpret output right now when run in parallel.
                 // This can be removed when we change up how results are printed.
                 return Err(Error::raw(
@@ -796,9 +816,6 @@ impl ValidateArgs for VerificationArgs {
 
         // Check for any deprecated/obsolete options, or providing an unstable flag that has since been stabilized.
         let deprecated_stabilized_obsolete = || -> Result<(), Error> {
-            self.checks.print_deprecated(&self.common_args);
-            self.check_unnecessary_unstable_option(self.jobs.is_some(), "jobs");
-
             if self.write_json_symtab {
                 return Err(Error::raw(
                     ErrorKind::ValueValidation,
@@ -824,8 +841,10 @@ impl ValidateArgs for VerificationArgs {
         deprecated_stabilized_obsolete()?;
 
         // Bespoke validations that don't fit into any of the categories above.
-        if self.randomize_layout.is_some() && self.concrete_playback.is_some() {
-            let random_seed = if let Some(seed) = self.randomize_layout.unwrap() {
+        if let Some(randomize_layout) = self.randomize_layout
+            && self.concrete_playback.is_some()
+        {
+            let random_seed = if let Some(seed) = randomize_layout {
                 format!(" -Z layout-seed={seed}")
             } else {
                 String::new()
@@ -847,6 +866,18 @@ impl ValidateArgs for VerificationArgs {
                 format!(
                     "Invalid argument: `--target-dir` argument `{}` is not a directory",
                     out_dir.display()
+                ),
+            ));
+        }
+        if let Some(out_file) = &self.sarif
+            && out_file.exists()
+            && out_file.is_dir()
+        {
+            return Err(Error::raw(
+                ErrorKind::InvalidValue,
+                format!(
+                    "Invalid argument: `--sarif` argument `{}` is a directory",
+                    out_file.display()
                 ),
             ));
         }
@@ -1131,6 +1162,24 @@ mod tests {
         );
         expect_validation_error(
             "kani --concrete-playback=inplace --output-format=old -Z concrete-playback test.rs",
+            ErrorKind::ArgumentConflict,
+        );
+    }
+
+    #[test]
+    fn check_sarif_parsing() {
+        let args = parse_unstable_disabled("--sarif out.sarif").unwrap();
+        assert_eq!(args.verify_opts.sarif, Some(PathBuf::from("out.sarif")));
+    }
+
+    #[test]
+    fn check_sarif_conflicts() {
+        expect_validation_error(
+            "kani file.rs --sarif out.sarif --output-format=old",
+            ErrorKind::ArgumentConflict,
+        );
+        expect_validation_error(
+            "kani file.rs --sarif out.sarif --only-codegen",
             ErrorKind::ArgumentConflict,
         );
     }

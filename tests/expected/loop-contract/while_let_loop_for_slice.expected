@@ -1,0 +1,9 @@
+trim_ascii_start.loop_invariant_base.1\
+	 - Status: SUCCESS\
+	 - Description: "Check invariant before entry for loop trim_ascii_start.0"
+
+trim_ascii_start.loop_invariant_step.1\
+	 - Status: SUCCESS\
+	 - Description: "Check invariant after step for loop trim_ascii_start.0"
+
+VERIFICATION:- SUCCESSFUL

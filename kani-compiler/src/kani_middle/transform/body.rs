@@ -7,9 +7,9 @@
 
 use crate::kani_middle::kani_functions::KaniHook;
 use crate::kani_queries::QueryDb;
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::*;
-use stable_mir::ty::{GenericArgs, MirConst, Span, Ty, UintTy};
+use rustc_public::mir::mono::Instance;
+use rustc_public::mir::*;
+use rustc_public::ty::{GenericArgs, MirConst, Span, Ty, UintTy};
 use std::fmt::Debug;
 use std::mem;
 
@@ -507,7 +507,7 @@ impl SourceInstruction {
 ///
 /// We removed many methods for simplicity.
 ///
-/// TODO: Contribute this to stable_mir.
+/// TODO: Contribute this to rustc_public.
 /// <https://github.com/rust-lang/project-stable-mir/issues/81>
 ///
 /// This code was based on the existing MirVisitor:
@@ -569,7 +569,6 @@ pub trait MutMirVisitor {
             },
             StatementKind::FakeRead(_, _)
             | StatementKind::SetDiscriminant { .. }
-            | StatementKind::Deinit(_)
             | StatementKind::StorageLive(_)
             | StatementKind::StorageDead(_)
             | StatementKind::Retag(_, _)
@@ -633,7 +632,6 @@ pub trait MutMirVisitor {
             Rvalue::CopyForDeref(_) | Rvalue::Discriminant(_) | Rvalue::Len(_) => {}
             Rvalue::Ref(..) => {}
             Rvalue::ThreadLocalRef(_) => {}
-            Rvalue::NullaryOp(..) => {}
         }
     }
 }

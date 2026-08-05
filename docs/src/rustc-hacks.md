@@ -68,11 +68,11 @@ Here is an example:
 # ** At the bottom of the dependencies section: **
 # Adjust the path here to point to a local copy of the rust compiler.
 # E.g.: ~/.rustup/toolchains/<toolchain>/lib/rustlib/rustc-src/rust/compiler
-rustc_smir = { path = "<path_to_rustc>/rustc_smir", optional = true }
-stable_mir = { path = "<path_to_rustc>/stable_mir", optional = true }
+rustc_public_bridge = { path = "<path_to_rustc>/rustc_public_bridge", optional = true }
+rustc_public = { path = "<path_to_rustc>/rustc_public", optional = true }
 
 [features]
-clion = ['rustc_smir', 'stable_mir']
+clion = ['rustc_public_bridge', 'rustc_public']
 ```
 
 **Don't forget to rollback the changes before you create your PR.**

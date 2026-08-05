@@ -6,10 +6,10 @@ use crate::kani_middle::resolve::{ResolveError, resolve_path, validate_kind};
 use quote::ToTokens;
 use rustc_hir::def::DefKind;
 use rustc_middle::ty::TyCtxt;
+use rustc_public::mir::Mutability;
+use rustc_public::rustc_internal;
+use rustc_public::ty::{FloatTy, IntTy, Region, RegionKind, RigidTy, Ty, UintTy};
 use rustc_span::def_id::LocalDefId;
-use stable_mir::mir::Mutability;
-use stable_mir::rustc_internal;
-use stable_mir::ty::{FloatTy, IntTy, Region, RegionKind, RigidTy, Ty, UintTy};
 use std::str::FromStr;
 use strum_macros::{EnumString, IntoStaticStr};
 use syn::{Expr, ExprLit, Lit, Type, TypePath};
@@ -32,7 +32,9 @@ pub fn resolve_ty<'tcx>(
     #[warn(non_exhaustive_omitted_patterns)]
     match typ {
         Type::Path(TypePath { qself, path }) => {
-            assert_eq!(*qself, None, "Unexpected qualified path");
+            if (*qself).is_some() {
+                return unsupported("nested qualified paths");
+            }
             if let Some(primitive) =
                 path.get_ident().and_then(|ident| PrimitiveIdent::from_str(&ident.to_string()).ok())
             {
