@@ -58,6 +58,7 @@ fn setup_session(session: &mut KaniSession, common_autoharness_args: &CommonAuto
         &common_autoharness_args.include_pattern,
         &common_autoharness_args.exclude_pattern,
         common_autoharness_args.constructor_args,
+        common_autoharness_args.check_invariants,
     );
 }
 
@@ -167,6 +168,7 @@ impl KaniSession {
         included: &[String],
         excluded: &[String],
         constructor_args: bool,
+        check_invariants: bool,
     ) {
         let mut args = vec![];
         for pattern in included {
@@ -177,6 +179,9 @@ impl KaniSession {
         }
         if constructor_args {
             args.push("--autoharness-constructor-args".to_string());
+        }
+        if check_invariants {
+            args.push("--autoharness-check-invariants".to_string());
         }
         self.autoharness_compiler_flags = Some(args);
     }

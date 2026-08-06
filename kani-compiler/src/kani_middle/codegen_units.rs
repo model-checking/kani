@@ -9,7 +9,7 @@
 
 use crate::args::{Arguments, ReachabilityType};
 use crate::kani_middle::attributes::{KaniAttributes, is_proof_harness};
-use crate::kani_middle::kani_functions::{KaniIntrinsic, KaniModel};
+use crate::kani_middle::kani_functions::{KaniHook, KaniIntrinsic, KaniModel};
 use crate::kani_middle::metadata::{
     gen_automatic_proof_metadata, gen_contracts_metadata, gen_proof_metadata,
 };
@@ -103,6 +103,7 @@ impl CodegenUnits {
                     args,
                     &crate_info.name,
                     *kani_fns.get(&KaniModel::Any.into()).unwrap(),
+                    *kani_fns.get(&KaniHook::Assert.into()).unwrap(),
                     kani_fns.contains_key(&KaniModel::AnySliceRefUnbounded.into()),
                 );
                 AUTOHARNESS_MD
@@ -421,6 +422,7 @@ fn automatic_harness_partition(
     args: &Arguments,
     crate_name: &str,
     kani_any_def: FnDef,
+    kani_assert_def: FnDef,
     unbounded_slice_available: bool,
 ) -> (Vec<(Instance, bool)>, BTreeMap<String, AutoHarnessSkipReason>) {
     let crate_fn_defs = rustc_public::local_crate().fn_defs().into_iter().collect::<FxHashSet<_>>();
@@ -545,6 +547,7 @@ fn automatic_harness_partition(
                             tcx,
                             arg.ty,
                             kani_any_def,
+                            kani_assert_def,
                             &mut FxHashMap::default(),
                             &mut vec![],
                         )
