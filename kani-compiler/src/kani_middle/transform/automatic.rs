@@ -9,7 +9,7 @@
 use crate::args::ReachabilityType;
 use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::codegen_units::CodegenUnit;
-use crate::kani_middle::kani_functions::{KaniHook, KaniIntrinsic, KaniModel};
+use crate::kani_middle::kani_functions::{KaniFunction, KaniHook, KaniIntrinsic, KaniModel};
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_middle::{
@@ -49,6 +49,8 @@ pub struct AutomaticArbitraryPass {
     /// Whether --constructor-args is enabled: generate values of private-field types through
     /// their public constructors instead of raw field synthesis.
     constructor_args: bool,
+    /// The (optional) unbounded generation models.
+    unbounded_models: UnboundedModels,
 }
 
 impl AutomaticArbitraryPass {
@@ -58,7 +60,8 @@ impl AutomaticArbitraryPass {
         let kani_assume = *kani_fns.get(&KaniHook::Assume.into()).unwrap();
         let kani_assert = *kani_fns.get(&KaniHook::Assert.into()).unwrap();
         let constructor_args = query_db.args().autoharness_constructor_args;
-        Self { kani_any, kani_assume, kani_assert, constructor_args }
+        let unbounded_models = UnboundedModels::from_kani_functions(kani_fns);
+        Self { kani_any, kani_assume, kani_assert, constructor_args, unbounded_models }
     }
 }
 
@@ -645,20 +648,72 @@ fn assume_scalar_niche(
     );
 }
 
+/// The (optional, alloc-requiring) unbounded generation models, resolved per argument type.
+#[derive(Debug, Clone, Default)]
+pub struct UnboundedModels {
+    slice_ref: Option<FnDef>,
+    slice_mut: Option<FnDef>,
+    vec: Option<FnDef>,
+}
+
+impl UnboundedModels {
+    pub fn from_kani_functions(kani_fns: &std::collections::HashMap<KaniFunction, FnDef>) -> Self {
+        UnboundedModels {
+            slice_ref: kani_fns.get(&KaniModel::AnySliceRefUnbounded.into()).copied(),
+            slice_mut: kani_fns.get(&KaniModel::AnySliceMutUnbounded.into()).copied(),
+            vec: kani_fns.get(&KaniModel::AnyVecUnbounded.into()).copied(),
+        }
+    }
+
+    /// The model instance generating `ty` unbounded, if `ty` qualifies.
+    fn instance_for(&self, tcx: TyCtxt, ty: Ty) -> Option<Instance> {
+        let (def, elem) = match ty.kind() {
+            TyKind::RigidTy(RigidTy::Ref(_, inner, mutability)) => match inner.kind() {
+                TyKind::RigidTy(RigidTy::Slice(elem))
+                    if crate::kani_middle::slice_elem_unbounded_ok(tcx, elem) =>
+                {
+                    let def =
+                        if mutability == Mutability::Not { self.slice_ref } else { self.slice_mut };
+                    (def?, elem)
+                }
+                _ => return None,
+            },
+            _ => {
+                let elem = crate::kani_middle::vec_elem_ty(ty)?;
+                if !crate::kani_middle::slice_elem_unbounded_ok(tcx, elem) {
+                    return None;
+                }
+                (self.vec?, elem)
+            }
+        };
+        Instance::resolve(def, &GenericArgs(vec![GenericArgKind::Type(elem)])).ok()
+    }
+}
+
 fn call_kani_any_for_ty(
     tcx: TyCtxt,
     kani_any: FnDef,
     kani_assume: FnDef,
+    unbounded_models: &UnboundedModels,
     body: &mut MutableBody,
     ty: Ty,
     mutability: Mutability,
     source: &mut SourceInstruction,
 ) -> Local {
+    // Unbounded generation for slices (&[T]/&mut [T]) and Vec<T> of primitive
+    // integer/float elements: fresh allocations of nondeterministic size, so results hold
+    // for all lengths (mirrors the eligibility decision in automatic_harness_partition).
+    if let Some(model_inst) = unbounded_models.instance_for(tcx, ty) {
+        let lcl = body.new_local(ty, source.span(body.blocks()), mutability);
+        body.insert_call(&model_inst, source, InsertPosition::Before, vec![], Place::from(lcl));
+        return lcl;
+    }
     if let TyKind::RigidTy(RigidTy::Ref(region, inner_ty, inner_mutability)) = ty.kind() {
         let inner_lcl = call_kani_any_for_ty(
             tcx,
             kani_any,
             kani_assume,
+            unbounded_models,
             body,
             inner_ty,
             inner_mutability,
@@ -715,6 +770,7 @@ impl AutomaticArbitraryPass {
                 tcx,
                 self.kani_any,
                 self.kani_assume,
+                &self.unbounded_models,
                 body,
                 ty,
                 Mutability::Not,
@@ -764,6 +820,7 @@ impl AutomaticArbitraryPass {
                     tcx,
                     self.kani_any,
                     self.kani_assume,
+                    &self.unbounded_models,
                     &mut new_body,
                     *input_ty,
                     Mutability::Not,
@@ -832,6 +889,7 @@ impl AutomaticArbitraryPass {
                     tcx,
                     self.kani_any,
                     self.kani_assume,
+                    &self.unbounded_models,
                     &mut new_body,
                     *input_ty,
                     Mutability::Not,
@@ -986,6 +1044,7 @@ impl AutomaticArbitraryPass {
             tcx,
             self.kani_any,
             self.kani_assume,
+            &self.unbounded_models,
             &mut new_body,
             Ty::from_rigid_kind(RigidTy::Uint(UintTy::U128)),
             Mutability::Not,
@@ -1063,6 +1122,7 @@ pub struct AutomaticHarnessPass {
     kani_any: FnDef,
     init_contracts_hook: Instance,
     kani_autoharness_intrinsic: FnDef,
+    unbounded_models: UnboundedModels,
 }
 
 impl AutomaticHarnessPass {
@@ -1072,10 +1132,17 @@ impl AutomaticHarnessPass {
         let kani_autoharness_intrinsic =
             *kani_fns.get(&KaniIntrinsic::AutomaticHarness.into()).unwrap();
         let kani_any = *kani_fns.get(&KaniModel::Any.into()).unwrap();
+        let unbounded_models = UnboundedModels::from_kani_functions(kani_fns);
         let init_contracts_hook = *kani_fns.get(&KaniHook::InitContracts.into()).unwrap();
         let init_contracts_hook =
             Instance::resolve(init_contracts_hook, &GenericArgs(vec![])).unwrap();
-        Self { kani_assume, kani_any, init_contracts_hook, kani_autoharness_intrinsic }
+        Self {
+            kani_assume,
+            kani_any,
+            unbounded_models,
+            init_contracts_hook,
+            kani_autoharness_intrinsic,
+        }
     }
 }
 
@@ -1139,6 +1206,7 @@ impl TransformPass for AutomaticHarnessPass {
                     tcx,
                     self.kani_any,
                     self.kani_assume,
+                    &self.unbounded_models,
                     &mut harness_body,
                     local_decl.ty,
                     local_decl.mutability,

@@ -600,6 +600,53 @@ fn to_fn_def(tcx: TyCtxt, def_id: rustc_span::def_id::DefId) -> Option<FnDef> {
     }
 }
 
+/// If `ty` is `Vec<T>` with the default allocator, return `T`.
+pub fn vec_elem_ty(ty: Ty) -> Option<Ty> {
+    let TyKind::RigidTy(RigidTy::Adt(def, ref args)) = ty.kind() else { return None };
+    let name = def.name();
+    if name != "std::vec::Vec" && name != "alloc::vec::Vec" {
+        return None;
+    }
+    // Vec<T, A = Global>: only the default allocator is supported (the model allocates via
+    // the global allocator). The allocator parameter is defaulted, so a crate naming a
+    // custom allocator produces a second type argument != Global.
+    let mut ty_args = args.0.iter().filter_map(|a| match a {
+        GenericArgKind::Type(t) => Some(*t),
+        _ => None,
+    });
+    let elem = ty_args.next()?;
+    if let Some(alloc_ty) = ty_args.next()
+        && !alloc_ty.to_string().contains("Global")
+    {
+        return None;
+    }
+    Some(elem)
+}
+
+/// Whether `&[T]` arguments with this element type qualify for *unbounded* generation
+/// (`KaniModel::AnySliceRefUnbounded`): raw nondeterministic memory must be a sound AND
+/// complete model of the element's values *without any validity assumption*, i.e. every bit
+/// pattern must be a valid element. This holds exactly for the primitive integer and float
+/// types.
+///
+/// Types with validity constraints (bool, char, NonZero, ranged newtypes) are excluded even
+/// though the `SliceValidityAssume` hook can express byte-width niche constraints: CBMC's
+/// default (SAT) backend only instantiates quantifiers with *constant* bounds, and silently
+/// degrades symbolic-bound quantifiers to unconstrained free variables
+/// (`boolbvt::finish_eager_conversion_quantifiers` -> `conversion_failed`), which would make
+/// the validity assumption vacuous. SMT backends (e.g. `--solver z3`) handle the quantified
+/// assumption, including multi-byte elements; routing niched element types here can be
+/// revisited when CBMC's SAT backend learns symbolic-bound instantiation or Kani selects
+/// backends per harness.
+pub fn slice_elem_unbounded_ok(_tcx: TyCtxt, ty: Ty) -> bool {
+    matches!(
+        ty.kind(),
+        TyKind::RigidTy(RigidTy::Int(_))
+            | TyKind::RigidTy(RigidTy::Uint(_))
+            | TyKind::RigidTy(RigidTy::Float(_))
+    )
+}
+
 /// The niche constraint of a scalar-ABI type: the width of the scalar in bits, and the
 /// (possibly wrapping) inclusive range of valid bit patterns.
 /// Returns None for non-scalar ABIs, pointer/float scalars, and scalars whose valid range
