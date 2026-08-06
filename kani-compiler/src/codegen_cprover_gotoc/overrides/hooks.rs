@@ -384,7 +384,7 @@ impl GotocHook for Panic {
         &self,
         tcx: TyCtxt,
         instance: Instance,
-        _instance_name: &str,
+        instance_name: &str,
         kani_tool_attr: Option<&String>,
     ) -> bool {
         let def_id = rustc_internal::internal(tcx, instance.def.def_id());
@@ -396,6 +396,13 @@ impl GotocHook for Panic {
             || tcx.is_lang_item(def_id, LangItem::PanicDisplay)
             || Some(def_id) == tcx.lang_items().panic_fmt()
             || Some(def_id) == tcx.lang_items().begin_panic_fn()
+            // The diverging error path of string slicing. It is not a lang
+            // item, and (since nightly-2026-02-16) its message formatting
+            // uses `floor_char_boundary`/`ceil_char_boundary`, whose loops
+            // get codegen'd into every slicing call site and blow up
+            // symbolic execution. Treating it as a panic (which Kani models
+            // as `assert false` anyway) skips that dead formatting code.
+            || instance_name == "core::str::slice_error_fail"
     }
 
     fn handle(
