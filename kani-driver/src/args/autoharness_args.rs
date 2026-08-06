@@ -23,6 +23,29 @@ pub struct CommonAutoharnessArgs {
     #[arg(long = "exclude-pattern", num_args(1), value_name = "PATTERN")]
     pub exclude_pattern: Vec<String>,
 
+    /// Also create automatic harnesses for functions whose arguments require *bounded*
+    /// nondeterministic values, e.g. slice references (`&[T]`, `&str`). Such harnesses are
+    /// marked "(bounded)" in the output, and their verification results only hold up to the
+    /// bounds; a bug that requires a larger input will not be found.
+    #[arg(long)]
+    pub bounded_arguments: bool,
+
+    /// Generate nondeterministic values for types without an Arbitrary implementation by
+    /// calling one of the type's own public constructors with nondeterministic arguments
+    /// (assuming the constructor succeeds). Such harnesses are marked "(ctor)" in the output,
+    /// and their verification results only cover values reachable through that constructor;
+    /// a bug that requires a different value will not be found.
+    #[arg(long)]
+    pub constructor_args: bool,
+
+    /// Check that values returned by verified functions satisfy their type's *mined*
+    /// invariants: assertions over the type's own fields that at least two of its methods
+    /// state. Failures are reported as a distinct property class; since the mined predicate
+    /// is heuristic, a failure means the returned value would trip the type's own
+    /// assertions when used, which may or may not be a bug in the returning function.
+    #[arg(long)]
+    pub check_invariants: bool,
+
     /// Run the `list` subcommand after generating the automatic harnesses. Note that this option implies --only-codegen.
     #[arg(long)]
     pub list: bool,
