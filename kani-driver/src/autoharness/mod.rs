@@ -17,7 +17,7 @@ use crate::session::KaniSession;
 use crate::{InvocationType, print_kani_version, project, verify_project};
 use anyhow::Result;
 use comfy_table::Table as PrettyTable;
-use kani_metadata::{AutoHarnessSkipReason, KaniMetadata};
+use kani_metadata::{AutoHarnessSkipReason, HarnessMetadata, KaniMetadata};
 
 const AUTOHARNESS_TIMEOUT: &str = "60s";
 const LOOP_UNWIND_DEFAULT: u32 = 20;
@@ -57,6 +57,7 @@ fn setup_session(session: &mut KaniSession, common_autoharness_args: &CommonAuto
     session.add_auto_harness_args(
         &common_autoharness_args.include_pattern,
         &common_autoharness_args.exclude_pattern,
+        common_autoharness_args.constructor_args,
     );
 }
 
@@ -161,13 +162,21 @@ impl KaniSession {
     }
 
     /// Add the compiler arguments specific to the `autoharness` subcommand.
-    pub fn add_auto_harness_args(&mut self, included: &[String], excluded: &[String]) {
+    pub fn add_auto_harness_args(
+        &mut self,
+        included: &[String],
+        excluded: &[String],
+        constructor_args: bool,
+    ) {
         let mut args = vec![];
         for pattern in included {
             args.push(format!("--autoharness-include-pattern {pattern}"));
         }
         for pattern in excluded {
             args.push(format!("--autoharness-exclude-pattern {pattern}"));
+        }
+        if constructor_args {
+            args.push("--autoharness-constructor-args".to_string());
         }
         self.autoharness_compiler_flags = Some(args);
     }
@@ -207,26 +216,44 @@ impl KaniSession {
             "Verification Result",
         ]);
 
+        let harness_kind = |harness: &HarnessMetadata| {
+            let mut kind = harness.attributes.kind.to_string();
+            if harness.is_ctor_based {
+                kind.push_str(" (ctor)");
+            }
+            kind
+        };
+        let mut any_ctor = false;
+
         for success in successes {
+            any_ctor |= success.harness.is_ctor_based;
             verified_fns.add_row(vec![
                 success.harness.crate_name.clone(),
                 success.harness.pretty_name.clone(),
-                success.harness.attributes.kind.to_string(),
+                harness_kind(&success.harness),
                 success.result.status.to_string(),
             ]);
         }
 
         for failure in failures {
+            any_ctor |= failure.harness.is_ctor_based;
             verified_fns.add_row(vec![
                 failure.harness.crate_name.clone(),
                 failure.harness.pretty_name.clone(),
-                failure.harness.attributes.kind.to_string(),
+                harness_kind(&failure.harness),
                 failure.result.status.to_string(),
             ]);
         }
 
         if total > 0 {
             println!("{verified_fns}");
+        }
+
+        if any_ctor {
+            println!(
+                "Note: harnesses marked \"(ctor)\" generate some values through a type's public constructor (--constructor-args);\n\
+                their verification results only cover values reachable through that constructor."
+            );
         }
 
         if failing > 0 {

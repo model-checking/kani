@@ -103,12 +103,15 @@ impl CodegenUnits {
                     args,
                     &crate_info.name,
                     *kani_fns.get(&KaniModel::Any.into()).unwrap(),
+                    kani_fns.contains_key(&KaniModel::AnySliceRefUnbounded.into()),
                 );
                 AUTOHARNESS_MD
                     .set(AutoHarnessMetadata {
                         chosen: chosen
                             .iter()
-                            .map(|func| crate::kani_middle::strip_local_crate_prefix(func.name()))
+                            .map(|(func, _)| {
+                                crate::kani_middle::strip_local_crate_prefix(func.name())
+                            })
                             .collect::<BTreeSet<_>>(),
                         skipped,
                     })
@@ -361,13 +364,13 @@ fn determine_targets(
 /// the AutomaticHarnessPass will later transform the bodies of these instances to actually verify the function.
 fn get_all_automatic_harnesses(
     tcx: TyCtxt,
-    verifiable_fns: Vec<Instance>,
+    verifiable_fns: Vec<(Instance, bool)>,
     kani_harness_intrinsic: FnDef,
     base_filename: &Path,
 ) -> HashMap<Harness, HarnessMetadata> {
     verifiable_fns
         .into_iter()
-        .map(|fn_to_verify| {
+        .map(|(fn_to_verify, is_ctor_based)| {
             // Set the generic arguments of the harness to be the function it is verifying
             // so that later, in AutomaticHarnessPass, we can retrieve the function to verify
             // and generate the harness body accordingly.
@@ -381,6 +384,7 @@ fn get_all_automatic_harnesses(
                 base_filename,
                 &fn_to_verify,
                 harness.mangled_name(),
+                is_ctor_based,
             );
             (harness, metadata)
         })
@@ -417,7 +421,8 @@ fn automatic_harness_partition(
     args: &Arguments,
     crate_name: &str,
     kani_any_def: FnDef,
-) -> (Vec<Instance>, BTreeMap<String, AutoHarnessSkipReason>) {
+    unbounded_slice_available: bool,
+) -> (Vec<(Instance, bool)>, BTreeMap<String, AutoHarnessSkipReason>) {
     let crate_fn_defs = rustc_public::local_crate().fn_defs().into_iter().collect::<FxHashSet<_>>();
     // Filter out CrateItems that are functions, but not functions defined in the crate itself, i.e., rustc-inserted functions
     // (c.f. https://github.com/model-checking/kani/issues/4189)
@@ -478,6 +483,25 @@ fn automatic_harness_partition(
         // Note that we've already filtered out generic functions, so we know that each of these arguments has a concrete type.
         let mut problematic_args = vec![];
         for (idx, arg) in body.arg_locals().iter().enumerate() {
+            // Unbounded generation: slices (&[T], &mut [T]) and Vec<T> of primitive
+            // integer/float elements are generated as fresh allocations of
+            // nondeterministic size (results hold for all lengths), when the optional
+            // alloc-requiring models are present.
+            if unbounded_slice_available {
+                let slice_ok = match arg.ty.kind() {
+                    TyKind::RigidTy(RigidTy::Ref(_, inner, _)) => match inner.kind() {
+                        TyKind::RigidTy(RigidTy::Slice(elem)) => {
+                            crate::kani_middle::slice_elem_unbounded_ok(tcx, elem)
+                        }
+                        _ => false,
+                    },
+                    _ => crate::kani_middle::vec_elem_ty(arg.ty)
+                        .is_some_and(|elem| crate::kani_middle::slice_elem_unbounded_ok(tcx, elem)),
+                };
+                if slice_ok {
+                    continue;
+                }
+            }
             if !ty_arbitrary_cache.contains_key(&arg.ty) {
                 let impls_arbitrary =
                     implements_arbitrary(arg.ty, kani_any_def, &mut ty_arbitrary_cache)
@@ -513,7 +537,20 @@ fn automatic_harness_partition(
         if let Some(reason) = skip_reason(func) {
             skipped.insert(crate::kani_middle::strip_local_crate_prefix(func.name()), reason);
         } else {
-            chosen.push(Instance::try_from(func).unwrap());
+            let instance = Instance::try_from(func).unwrap();
+            let is_ctor_based = args.autoharness_constructor_args
+                && instance.body().is_some_and(|body| {
+                    body.arg_locals().iter().any(|arg| {
+                        crate::kani_middle::uses_ctor_generation(
+                            tcx,
+                            arg.ty,
+                            kani_any_def,
+                            &mut FxHashMap::default(),
+                            &mut vec![],
+                        )
+                    })
+                });
+            chosen.push((instance, is_ctor_based));
         }
     }
 
