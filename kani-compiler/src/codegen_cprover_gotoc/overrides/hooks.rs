@@ -1286,13 +1286,9 @@ impl GotocHook for AlignOffset {
             gcx.codegen_place_stable(assign_to, loc)
         )
         .goto_expr;
-        let pointer_offset = Expr::pointer_offset(ptr);
-        let trivially_aligned =
-            pointer_offset.clone().eq(Expr::int_constant(0, pointer_offset.typ().clone()));
-        let rhs = trivially_aligned.ternary(
-            Expr::int_constant(0, place_expr.typ().clone()),
-            Expr::int_constant(usize::MAX, place_expr.typ().clone()),
-        );
+        // `align_offset` is permitted to always return `usize::MAX`.
+        // This avoids modeling allocation alignment (which CBMC's memory model doesn't represent).
+        let rhs = Expr::int_constant(usize::MAX, place_expr.typ().clone());
         let assign = place_expr.assign(rhs, loc).with_location(loc);
         Stmt::block(vec![safety_check, assign, Stmt::goto(bb_label(target.unwrap()), loc)], loc)
     }
