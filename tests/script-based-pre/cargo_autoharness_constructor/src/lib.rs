@@ -81,3 +81,59 @@ pub fn wrapped_ordinal0(w: Wrapper) -> u16 {
     assert!(w.inner.value >= 1, "invariant violated");
     w.inner.value - 1
 }
+
+// REGRESSION (brotli/sharded-slab sweep ICE): a constructor with its own early-bound
+// lifetime (AtomicU8::from_ptr-style) must not break discovery for the type: it gets
+// erased-lifetime args (and is skipped here in favor of `new`, which scores more args).
+pub struct Meter {
+    level: u8,
+}
+impl Meter {
+    pub fn new(level: u8, cap: u8) -> Meter {
+        Meter { level: level.min(cap) }
+    }
+    pub fn from_ref<'a>(r: &'a u8) -> Meter {
+        Meter { level: *r }
+    }
+    pub fn level(&self) -> u8 {
+        self.level
+    }
+}
+
+// REGRESSION (regex-automata sweep ICE): impl with its own lifetime parameter FIRST and
+// the ADT generic over types; argument construction must be positional against the full
+// parent+own generics, not append lifetimes at the end.
+pub struct Tagged<T> {
+    v: T,
+    tag: u16,
+}
+impl<'h, T: Copy> Tagged<T> {
+    pub fn build(v: T, tag: u16) -> Tagged<T> {
+        Tagged { v, tag }
+    }
+    pub fn peek(&self, _probe: &'h u8) -> u16 {
+        self.tag
+    }
+}
+pub fn use_tagged(t: Tagged<u32>) -> u32 {
+    if t.tag > 0 { t.v } else { 0 }
+}
+
+// REGRESSION (async-io/js-sys/quinn-udp/wasm-bindgen sweep ICE): a candidate constructor
+// whose argument carries an escaping late-bound region inside an ADT (BorrowedFd-style)
+// must be rejected without panicking the trait solver.
+pub struct Borrowed<'a>(pub &'a u32);
+pub struct Meter2 {
+    level: u32,
+}
+impl Meter2 {
+    pub fn from_borrowed(b: Borrowed<'_>, bump: u32) -> Meter2 {
+        Meter2 { level: *b.0 + bump }
+    }
+    pub fn zero() -> Meter2 {
+        Meter2 { level: 0 }
+    }
+    pub fn level(&self) -> u32 {
+        self.level
+    }
+}
