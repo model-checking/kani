@@ -955,7 +955,19 @@ impl GotocCtx<'_, '_> {
     pub fn codegen_get_discriminant(&mut self, e: Expr, ty: Ty, res_ty: Ty) -> Expr {
         let layout = self.layout_of_stable(ty);
         match &layout.variants {
-            Variants::Empty => unreachable!("Discriminant for uninhabited enum with no variants"),
+            Variants::Empty => {
+                // No value of an uninhabited enum can exist, so this read is dynamically
+                // dead code: emit an assert(false)-guarded nondet instead of ICEing (the
+                // MIR can still contain the read, e.g. matches on a Result<_, !>-like
+                // enum in dependencies).
+                let goto_res_ty = self.codegen_ty_stable(res_ty);
+                self.codegen_unimplemented_expr(
+                    "discriminant of uninhabited enum",
+                    goto_res_ty,
+                    Location::none(),
+                    "https://github.com/model-checking/kani/issues/3832",
+                )
+            }
             Variants::Single { index } => {
                 let discr_val = layout
                     .ty
@@ -1643,7 +1655,19 @@ impl GotocCtx<'_, '_> {
                         }
                         VtblEntry::MetadataSize => Some(vt_size.clone()),
                         VtblEntry::MetadataAlign => Some(vt_align.clone()),
-                        VtblEntry::Vacant => None,
+                        VtblEntry::Vacant => {
+                            // vtable_entries with the CONCRETE self type may mark a slot
+                            // vacant where the vtable struct type (built with dyn self in
+                            // trait_vtable_field_types) declares a method pointer: e.g. a
+                            // method with an HRTB predicate a fixed-region function item
+                            // does not satisfy. rustc pads such slots with null; mirror
+                            // that, typed as the declared field. If the type side skipped
+                            // the slot too, keep skipping it.
+                            let field_name = ctx.vtable_field_name(idx);
+                            Type::struct_tag(vtable_name)
+                                .lookup_field_type(field_name, &ctx.symbol_table)
+                                .map(|field_ty| Expr::pointer_constant(0, field_ty))
+                        }
                         VtblEntry::TraitVPtr(trait_ref) => {
                             let projections = match dst_mir_type.kind() {
                                 TyKind::RigidTy(RigidTy::Dynamic(predicates, ..)) => predicates

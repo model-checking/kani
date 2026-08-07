@@ -231,24 +231,28 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                     // We could eventually expand this, but keep it simple for now. See:
                     // https://github.com/model-checking/kani/issues/2936
                     let overall_type = self.codegen_ty_stable(ty);
-                    let field_values: Vec<Expr> = field_types
-                        .iter()
-                        .map(|t| {
-                            if self.is_zst_stable(*t) {
-                                Some(Expr::init_unit(
-                                    self.codegen_ty_stable(*t),
-                                    &self.symbol_table,
-                                ))
-                            } else {
-                                self.try_codegen_constant(alloc, *t, loc)
-                            }
-                        })
-                        .collect::<Option<Vec<_>>>()?;
-                    Some(Expr::struct_expr_from_values(
-                        overall_type,
-                        field_values,
-                        &self.symbol_table,
-                    ))
+                    // Pair values with their field names (declaration indices): the goto
+                    // struct type is in LAYOUT order, which may differ from declaration
+                    // order (e.g. #[repr] optimizations reordering a (T, u16) pair), so a
+                    // positional struct_expr_from_values would mismatch.
+                    let field_values: std::collections::BTreeMap<cbmc::InternedString, Expr> =
+                        variant
+                            .fields()
+                            .iter()
+                            .zip(field_types.iter())
+                            .map(|(field, t)| {
+                                let value = if self.is_zst_stable(*t) {
+                                    Some(Expr::init_unit(
+                                        self.codegen_ty_stable(*t),
+                                        &self.symbol_table,
+                                    ))
+                                } else {
+                                    self.try_codegen_constant(alloc, *t, loc)
+                                };
+                                value.map(|v| (field.name.clone().into(), v))
+                            })
+                            .collect::<Option<_>>()?;
+                    Some(Expr::struct_expr(overall_type, field_values, &self.symbol_table))
                 } else {
                     // Structures with more than one non-ZST element are handled with an extra
                     // allocation.

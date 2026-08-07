@@ -19,11 +19,12 @@ use rustc_middle::ty::TyCtxt;
 use rustc_public::CrateDef;
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::{
-    AggregateKind, BasicBlockIdx, Body, BorrowKind, Local, MutBorrowKind, Mutability, Operand,
-    Place, Rvalue, SwitchTargets, Terminator, TerminatorKind,
+    AggregateKind, BasicBlockIdx, Body, BorrowKind, ConstOperand, Local, MutBorrowKind, Mutability,
+    Operand, Place, Rvalue, SwitchTargets, Terminator, TerminatorKind,
 };
 use rustc_public::ty::{
-    AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, RigidTy, Ty, TyKind, UintTy, VariantDef,
+    AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyKind, UintTy,
+    VariantDef,
 };
 use rustc_public_bridge::IndexedVal;
 use tracing::debug;
@@ -135,6 +136,24 @@ fn call_kani_any_for_ty(
     mutability: Mutability,
     source: &mut SourceInstruction,
 ) -> Local {
+    // Function items (Fn-bound instantiations, c.f. fn_bound_candidates) are zero-sized:
+    // materialize the value as a zero-sized constant.
+    if matches!(ty.kind(), TyKind::RigidTy(RigidTy::FnDef(..))) {
+        let span = source.span(body.blocks());
+        let lcl = body.new_local(ty, span, mutability);
+        body.assign_to(
+            Place::from(lcl),
+            Rvalue::Use(Operand::Constant(ConstOperand {
+                span,
+                user_ty: None,
+                const_: MirConst::try_new_zero_sized(ty)
+                    .expect("function item types are zero-sized"),
+            })),
+            source,
+            InsertPosition::Before,
+        );
+        return lcl;
+    }
     if let TyKind::RigidTy(RigidTy::Ref(region, inner_ty, inner_mutability)) = ty.kind() {
         let inner_lcl = call_kani_any_for_ty(kani_any, body, inner_ty, inner_mutability, source);
         let ref_lcl = body.new_local(ty, source.span(body.blocks()), mutability);
