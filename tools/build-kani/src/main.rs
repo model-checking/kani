@@ -135,6 +135,16 @@ fn bundle_cbmc(dir: &Path) -> Result<()> {
     let bin = dir.join("bin");
 
     // We use these directly
+    //
+    // NOTE: this ships whatever `cbmc` happens to be first on the builder's
+    // `PATH`, with nothing here checking it against the pin in
+    // `kani-dependencies`. `kani-driver`'s startup check
+    // (`kani-driver/src/version.rs`) can only warn about a *mismatch it can
+    // observe at verification time* -- it can't retroactively fix a release
+    // bundle that was built against the wrong CBMC in the first place. That
+    // makes this line the build-time analog of the exact defect the runtime
+    // check exists to catch, and it's out of scope for this change to also
+    // fix it here; flagging it as a known follow-up.
     cp(&which::which("cbmc")?, &bin)?;
     cp(&which::which("goto-instrument")?, &bin)?;
     cp(&which::which("goto-cc")?, &bin)?;

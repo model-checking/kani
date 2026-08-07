@@ -15,7 +15,7 @@ use crate::concrete_playback::playback::{playback_cargo, playback_standalone};
 use crate::list::collect_metadata::{list_cargo, list_standalone};
 use crate::project::Project;
 use crate::session::KaniSession;
-use crate::version::print_kani_version;
+use crate::version::{print_kani_version, print_kani_version_flag};
 use clap::Parser;
 use tracing::debug;
 
@@ -72,8 +72,31 @@ fn main() -> ExitCode {
 
 /// The main function for the `cargo kani` command.
 fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
+    // Checked against the raw, unparsed arguments and handled *before*
+    // `join_args`: `join_args` reads and parses the current Cargo project's
+    // `Cargo.toml` to merge in configured Kani arguments, which is fallible
+    // (e.g. a malformed `Cargo.toml`, or a bad `--manifest-path`). Running it
+    // first would make `--version` -- which promises to work unconditionally,
+    // like clap's built-in `--version` it replaces -- fail right alongside a
+    // real verification invocation instead of just reporting the version.
+    //
+    // Deliberately not gated on `--quiet` either: this is an explicit,
+    // one-shot query, not a verification run, so `--quiet` -- whose contract
+    // is about suppressing *verification* output -- shouldn't suppress it.
+    if args::requests_version(&input_args) {
+        print_kani_version_flag(InvocationType::CargoKani(input_args));
+        return Ok(());
+    }
+
     let input_args = join_args(input_args)?;
     let args = args::CargoKaniArgs::parse_from(&input_args);
+    if args.version {
+        // Fallback for spellings the raw scan above cannot see, e.g. `-V`
+        // combined with other short flags (`-qV`): clap still parses them
+        // into `version`, so honor the query rather than starting a run.
+        print_kani_version_flag(InvocationType::CargoKani(input_args));
+        return Ok(());
+    }
     check_is_valid(&args);
 
     let mut session = match args.command {
@@ -100,6 +123,18 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
 /// The main function for the `kani` command.
 fn standalone_main() -> Result<()> {
     let args = args::StandaloneArgs::parse();
+    if args.version {
+        // Unlike `cargokani_main`, there's no fallible pre-parsing step
+        // (no project file is read) before this point, so checking
+        // `args.version` post-parse -- rather than pre-parsing raw args like
+        // `cargokani_main` has to -- is fine here: `StandaloneArgs::parse()`
+        // has no analogous way to fail on account of something other than
+        // the arguments themselves.
+        //
+        // Intentionally not gated on `--quiet`, same as `cargokani_main`.
+        print_kani_version_flag(InvocationType::Standalone);
+        return Ok(());
+    }
     check_is_valid(&args);
 
     let (session, project) = match args.command {
