@@ -1632,7 +1632,19 @@ impl GotocCtx<'_, '_> {
                         }
                         VtblEntry::MetadataSize => Some(vt_size.clone()),
                         VtblEntry::MetadataAlign => Some(vt_align.clone()),
-                        VtblEntry::Vacant => None,
+                        VtblEntry::Vacant => {
+                            // vtable_entries with the CONCRETE self type may mark a slot
+                            // vacant where the vtable struct type (built with dyn self in
+                            // trait_vtable_field_types) declares a method pointer: e.g. a
+                            // method with an HRTB predicate a fixed-region function item
+                            // does not satisfy. rustc pads such slots with null; mirror
+                            // that, typed as the declared field. If the type side skipped
+                            // the slot too, keep skipping it.
+                            let field_name = ctx.vtable_field_name(idx);
+                            Type::struct_tag(vtable_name)
+                                .lookup_field_type(field_name, &ctx.symbol_table)
+                                .map(|field_ty| Expr::pointer_constant(0, field_ty))
+                        }
                         VtblEntry::TraitVPtr(trait_ref) => {
                             let projections = match dst_mir_type.kind() {
                                 TyKind::RigidTy(RigidTy::Dynamic(predicates, ..)) => predicates

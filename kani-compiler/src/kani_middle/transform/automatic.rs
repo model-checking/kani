@@ -1151,6 +1151,24 @@ fn call_kani_any_for_ty(
     invariant_cache: &mut FxHashMap<Ty, bool>,
     mined_cache: &mut FxHashMap<Ty, Vec<MinedConjunct>>,
 ) -> Local {
+    // Function items (Fn-bound instantiations, c.f. fn_bound_candidates) are zero-sized:
+    // materialize the value as a zero-sized constant.
+    if matches!(ty.kind(), TyKind::RigidTy(RigidTy::FnDef(..))) {
+        let span = source.span(body.blocks());
+        let lcl = body.new_local(ty, span, mutability);
+        body.assign_to(
+            Place::from(lcl),
+            Rvalue::Use(Operand::Constant(ConstOperand {
+                span,
+                user_ty: None,
+                const_: MirConst::try_new_zero_sized(ty)
+                    .expect("function item types are zero-sized"),
+            })),
+            source,
+            InsertPosition::Before,
+        );
+        return lcl;
+    }
     // Unbounded generation for slices (&[T]/&mut [T]) and Vec<T> of primitive
     // integer/float elements: fresh allocations of nondeterministic size, so results hold
     // for all lengths (mirrors the eligibility decision in automatic_harness_partition).
