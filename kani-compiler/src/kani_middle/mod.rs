@@ -410,6 +410,60 @@ pub enum CtorReturn {
 /// the nondeterministic arguments down to exactly the values the crate considers valid.
 /// Visibility is irrelevant (the body is inlined, not called). Prefers more arguments over
 /// fewer; ties broken by definition order.
+/// Build a generic-argument list for the associated item that matches its full generics
+/// (impl parameters + own parameters) positionally: lifetimes (which may appear anywhere,
+/// e.g. first on lifetime-parameterized impls like `impl<'h> Searcher<'h>`, or as the
+/// item's own early-bound lifetime like `AtomicU8::from_ptr<'a>`) get erased regions, and
+/// type/const slots are filled from `adt_args` in order. Returns None if `adt_args` does
+/// not fit the non-lifetime slots -- kind mismatches must be prevented up front because
+/// rustc's instantiation panics on them rather than returning an error.
+fn ctor_args_with_lifetimes(
+    tcx: TyCtxt,
+    item: rustc_span::def_id::DefId,
+    adt_args: &GenericArgs,
+) -> Option<GenericArgs> {
+    // Collect the full parameter list: parent (impl) generics first, then the item's own.
+    let mut chain = vec![tcx.generics_of(item)];
+    while let Some(parent) = chain.last().unwrap().parent {
+        chain.push(tcx.generics_of(parent));
+    }
+    let mut supplied = adt_args.0.iter().filter(|a| !matches!(a, GenericArgKind::Lifetime(_)));
+    let mut args = vec![];
+    for g in chain.iter().rev() {
+        for p in &g.own_params {
+            match p.kind {
+                rustc_middle::ty::GenericParamDefKind::Lifetime => {
+                    args.push(GenericArgKind::Lifetime(rustc_public::ty::Region {
+                        kind: rustc_public::ty::RegionKind::ReErased,
+                    }));
+                }
+                rustc_middle::ty::GenericParamDefKind::Type { .. } => match supplied.next() {
+                    Some(a @ GenericArgKind::Type(_)) => args.push(a.clone()),
+                    _ => return None,
+                },
+                rustc_middle::ty::GenericParamDefKind::Const { .. } => match supplied.next() {
+                    Some(a @ GenericArgKind::Const(_)) => args.push(a.clone()),
+                    _ => return None,
+                },
+            }
+        }
+    }
+    // All supplied non-lifetime arguments must have been consumed.
+    if supplied.next().is_some() {
+        return None;
+    }
+    Some(GenericArgs(args))
+}
+
+/// True if the (stable) type still carries escaping late-bound regions, e.g. an argument
+/// like `BorrowedFd<'_>` read from a skipped fn-sig binder. Such types must not reach
+/// trait-solver queries (rustc panics wrapping them in a dummy binder) and are not
+/// generatable anyway.
+fn has_escaping_bound_vars(tcx: TyCtxt, ty: Ty) -> bool {
+    use rustc_middle::ty::TypeVisitableExt;
+    rustc_internal::internal(tcx, ty).has_escaping_bound_vars()
+}
+
 pub fn find_unchecked_constructor(
     tcx: TyCtxt,
     ty: Ty,
@@ -439,7 +493,10 @@ pub fn find_unchecked_constructor(
             // constructor with the ADT's own generic arguments: for inherent impls whose
             // parameters mirror the type's, this is the correct substitution; when it is
             // not, resolution fails and the constructor is skipped.
-            let Ok(instance) = Instance::resolve(ctor_def, adt_args) else {
+            let Some(ctor_args) = ctor_args_with_lifetimes(tcx, item, adt_args) else {
+                continue;
+            };
+            let Ok(instance) = Instance::resolve(ctor_def, &ctor_args) else {
                 continue;
             };
             if !instance.has_body() {
@@ -460,10 +517,10 @@ pub fn find_unchecked_constructor(
                 continue;
             }
             if fn_sig.inputs().is_empty()
-                || !fn_sig
-                    .inputs()
-                    .iter()
-                    .all(|input| implements_arbitrary(*input, kani_any_def, ty_arbitrary_cache))
+                || !fn_sig.inputs().iter().all(|input| {
+                    !has_escaping_bound_vars(tcx, *input)
+                        && implements_arbitrary(*input, kani_any_def, ty_arbitrary_cache)
+                })
             {
                 continue;
             }
@@ -562,14 +619,16 @@ pub fn find_arbitrary_constructor(
             // Every constructor argument must be plainly generatable (implements or derives
             // Arbitrary); constructor arguments do not get the argument-position extensions
             // (slices, smart pointers, nested constructors) in phase 1.
-            if !fn_sig
-                .inputs()
-                .iter()
-                .all(|input| implements_arbitrary(*input, kani_any_def, ty_arbitrary_cache))
-            {
+            if !fn_sig.inputs().iter().all(|input| {
+                !has_escaping_bound_vars(tcx, *input)
+                    && implements_arbitrary(*input, kani_any_def, ty_arbitrary_cache)
+            }) {
                 continue;
             }
-            let Ok(instance) = Instance::resolve(ctor_def, &GenericArgs(vec![])) else {
+            let Some(ctor_args) = ctor_args_with_lifetimes(tcx, item, &GenericArgs(vec![])) else {
+                continue;
+            };
+            let Ok(instance) = Instance::resolve(ctor_def, &ctor_args) else {
                 continue;
             };
             if !instance.has_body() {
