@@ -22,6 +22,32 @@ use std::str::FromStr;
 use std::time::Duration;
 use strum::VariantNames;
 
+/// Detect `--version`/`-V` in raw, unparsed arguments, without invoking
+/// clap. Matches whole arguments only (e.g. not `--version=foo` or `-Vx`,
+/// mirroring the flag's clap-declared shape as `ArgAction::SetTrue`), and
+/// stops scanning at a `--` separator, since arguments after that point are
+/// positional, not options.
+///
+/// This exists so `cargo kani --version` can be honored *before*
+/// `args_toml::join_args` runs: `join_args` locates and parses the current
+/// Cargo project's `Cargo.toml` to merge in configured Kani arguments, so a
+/// malformed `Cargo.toml` (or a bad `--manifest-path`) would otherwise make
+/// even `--version` itself fail with a TOML parse error, instead of doing
+/// the one thing it promises to do unconditionally.
+pub fn requests_version(args: &[OsString]) -> bool {
+    for arg in args.iter().skip(1) {
+        // `--cbmc-args` consumes every remaining argument for CBMC, so a
+        // `--version` beyond either boundary is not addressed to Kani.
+        if arg == "--" || arg == "--cbmc-args" {
+            return false;
+        }
+        if arg == "--version" || arg == "-V" {
+            return true;
+        }
+    }
+    false
+}
+
 /// Trait used to perform extra validation after parsing.
 pub trait ValidateArgs {
     /// Perform post-parsing validation but do not abort.
@@ -140,7 +166,7 @@ impl From<Timeout> for Duration {
 
 #[derive(Debug, clap::Parser)]
 #[command(
-    version,
+    disable_version_flag = true,
     name = "kani",
     about = "Verify a single Rust crate. For more information, see https://github.com/model-checking/kani",
     args_override_self = true,
@@ -150,7 +176,7 @@ impl From<Timeout> for Duration {
 )]
 pub struct StandaloneArgs {
     /// Rust file to verify
-    #[arg(required = true)]
+    #[arg(required_unless_present = "version")]
     pub input: Option<PathBuf>,
 
     #[command(flatten)]
@@ -161,6 +187,16 @@ pub struct StandaloneArgs {
 
     #[arg(long, hide = true)]
     pub crate_name: Option<String>,
+
+    /// Print version information -- including the CBMC version resolved via
+    /// `PATH` and whether it matches Kani's pin -- and exit.
+    ///
+    /// This replaces clap's built-in `--version`/`-V` (via
+    /// `disable_version_flag = true` above) specifically so that this check
+    /// runs: the built-in flag prints and exits during argument parsing,
+    /// before any of our code -- including the CBMC pin check -- ever runs.
+    #[arg(short = 'V', long, action = clap::ArgAction::SetTrue)]
+    pub version: bool,
 }
 
 /// Kani takes optional subcommands to request specialized behavior.
@@ -179,7 +215,7 @@ pub enum StandaloneSubcommand {
 
 #[derive(Debug, clap::Parser)]
 #[command(
-    version,
+    disable_version_flag = true,
     name = "cargo-kani",
     about = "Verify a Rust crate. For more information, see https://github.com/model-checking/kani",
     args_override_self = true
@@ -190,6 +226,21 @@ pub struct CargoKaniArgs {
 
     #[command(flatten)]
     pub verify_opts: VerificationArgs,
+
+    /// Print version information -- including the CBMC version resolved via
+    /// `PATH` and whether it matches Kani's pin -- and exit.
+    ///
+    /// See the identically-documented field on `StandaloneArgs` for why this
+    /// replaces clap's built-in `--version`/`-V`. `cargokani_main` primarily
+    /// checks for `--version` on the raw, unparsed arguments (see
+    /// `requests_version`) rather than reading this field: parsing this far
+    /// requires `join_args`, which reads the project's `Cargo.toml` and is
+    /// fallible in ways `--version` shouldn't be. This field still serves as
+    /// the post-parse fallback for spellings the raw scan cannot see (e.g.
+    /// `-V` combined with other short flags), and documents the flag in
+    /// `--help`.
+    #[arg(short = 'V', long, action = clap::ArgAction::SetTrue)]
+    pub version: bool,
 }
 
 /// cargo-kani takes optional subcommands to request specialized behavior
@@ -982,6 +1033,21 @@ mod tests {
     use clap::Parser;
 
     use super::*;
+
+    #[test]
+    fn requests_version_matches_whole_flags_only() {
+        let to_args = |args: &[&str]| args.iter().map(OsString::from).collect::<Vec<_>>();
+        assert!(requests_version(&to_args(&["cargo-kani", "--version"])));
+        assert!(requests_version(&to_args(&["cargo-kani", "-V"])));
+        assert!(requests_version(&to_args(&["cargo-kani", "--quiet", "-V"])));
+        assert!(!requests_version(&to_args(&["cargo-kani"])));
+        // Beyond `--` or `--cbmc-args`, `--version` is not addressed to Kani.
+        assert!(!requests_version(&to_args(&["cargo-kani", "--", "--version"])));
+        assert!(!requests_version(&to_args(&["cargo-kani", "--cbmc-args", "--version"])));
+        // Clustered short flags are left to clap's parse; the post-parse
+        // fallback in `cargokani_main` handles them.
+        assert!(!requests_version(&to_args(&["cargo-kani", "-qV"])));
+    }
 
     #[test]
     fn check_arg_parsing() {
