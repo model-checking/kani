@@ -1,6 +1,6 @@
 - **Feature Name:** Structured Verification Results (`export-json`)
 - **Feature Request Issue:** [#942](https://github.com/model-checking/kani/issues/942)
-- **RFC PR:** *(to be filled)*
+- **RFC PR:** [#4727](https://github.com/model-checking/kani/pull/4727)
 - **Status:** Under Review
 - **Version:** 0
 - **Proof-of-concept:** Implemented; the schema example below is real output.
