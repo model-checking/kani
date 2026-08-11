@@ -23,7 +23,7 @@ use rustc_middle::ty::{TyCtxt, VtblEntry};
 use rustc_public::abi::{Primitive, Scalar, ValueAbi};
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::{
-    AggregateKind, BinOp, CastKind, NullOp, Operand, Place, PointerCoercion, Rvalue, UnOp,
+    AggregateKind, BinOp, CastKind, Operand, Place, PointerCoercion, Rvalue, UnOp,
 };
 use rustc_public::rustc_internal;
 use rustc_public::ty::{
@@ -824,7 +824,6 @@ impl GotocCtx<'_, '_> {
             Rvalue::CheckedBinaryOp(op, e1, e2) => {
                 self.codegen_rvalue_checked_binary_op(op, e1, e2, res_ty)
             }
-            Rvalue::NullaryOp(NullOp::RuntimeChecks(_)) => Expr::c_false(),
             Rvalue::ShallowInitBox(operand, content_ty) => {
                 // The behaviour of ShallowInitBox is simply transmuting *mut u8 to Box<T>.
                 // See https://github.com/rust-lang/compiler-team/issues/460 for more details.
@@ -956,7 +955,11 @@ impl GotocCtx<'_, '_> {
     pub fn codegen_get_discriminant(&mut self, e: Expr, ty: Ty, res_ty: Ty) -> Expr {
         let layout = self.layout_of_stable(ty);
         match &layout.variants {
-            Variants::Empty => unreachable!("Discriminant for uninhabited enum with no variants"),
+            // An uninhabited enum with no variants has no inhabitant, so reading its
+            // discriminant is unreachable at runtime. The rustc SSA backend returns a
+            // poison value for uninhabited layouts here; we mirror that with a nondet
+            // value of the target type (the surrounding code path is dead anyway).
+            Variants::Empty => Expr::nondet(self.codegen_ty_stable(res_ty)),
             Variants::Single { index } => {
                 let discr_val = layout
                     .ty
@@ -1198,7 +1201,7 @@ impl GotocCtx<'_, '_> {
         // Note: We convert the integer bounds to float for comparison.
         // For very large integer types (i128, u128), the float conversion may lose precision,
         // but this is acceptable because:
-        // 1. Any float value that's truly larger than MAX_INT will still compare as > MAX_INT
+        // 1. Any float value that's truly larger than MAX_INT will still compare as >= MAX_INT
         // 2. Any float value that's truly smaller than MIN_INT will still compare as < MIN_INT
         let int_min_as_float = self.int_bounds_as_float(dst_ty, false, src_ty);
         let int_max_as_float = self.int_bounds_as_float(dst_ty, true, src_ty);
@@ -1208,11 +1211,11 @@ impl GotocCtx<'_, '_> {
 
         // Check for special cases:
         // 1. isnan(src) -> result is 0
-        // 2. src > int_max -> result is MAX
+        // 2. src >= int_max -> result is MAX
         // 3. src < int_min -> result is MIN (or 0 for unsigned)
         // 4. Otherwise -> truncate toward zero
         let is_nan = src_expr.clone().is_nan();
-        let above_max = src_expr.clone().gt(int_max_as_float.clone());
+        let above_max = src_expr.clone().ge(int_max_as_float.clone());
         let below_min = src_expr.clone().lt(int_min_as_float);
 
         // The truncated value (normal cast behavior for values in range)
@@ -1321,7 +1324,7 @@ impl GotocCtx<'_, '_> {
     ) -> Expr {
         debug!(cast=?coercion, op=?operand, ?loc, "codegen_pointer_cast");
         match coercion {
-            PointerCoercion::ReifyFnPointer => match self.operand_ty_stable(operand).kind() {
+            PointerCoercion::ReifyFnPointer(_) => match self.operand_ty_stable(operand).kind() {
                 TyKind::RigidTy(RigidTy::FnDef(def, args)) => {
                     let instance = Instance::resolve(def, &args).unwrap();
                     // We need to handle this case in a special way because `codegen_operand_stable` compiles FnDefs to dummy structs.

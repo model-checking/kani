@@ -86,6 +86,7 @@ pub enum StmtBody {
         // applied as loop contracts in CBMC if it is a backward goto.
         loop_invariants: Option<Expr>,
         loop_modifies: Option<Vec<Expr>>,
+        loop_decreases: Option<Expr>,
     },
     /// `if (i) { t } else { e }`
     Ifthenelse {
@@ -282,7 +283,7 @@ impl Stmt {
     pub fn goto<T: Into<InternedString>>(dest: T, loc: Location) -> Self {
         let dest = dest.into();
         assert!(!dest.is_empty());
-        stmt!(Goto { dest, loop_invariants: None, loop_modifies: None }, loc)
+        stmt!(Goto { dest, loop_invariants: None, loop_modifies: None, loop_decreases: None }, loc)
     }
 
     /// `if (i) { t } else { e }` or `if (i) { t }`
@@ -327,13 +328,14 @@ impl Stmt {
 
     /// `goto dest;` with loop invariant
     pub fn with_loop_contracts(self, inv: Expr) -> Self {
-        if let Goto { dest, loop_invariants, loop_modifies } = self.body() {
+        if let Goto { dest, loop_invariants, loop_modifies, loop_decreases } = self.body() {
             assert!(loop_invariants.is_none());
             stmt!(
                 Goto {
                     dest: *dest,
                     loop_invariants: Some(inv),
-                    loop_modifies: loop_modifies.clone()
+                    loop_modifies: loop_modifies.clone(),
+                    loop_decreases: loop_decreases.clone()
                 },
                 *self.location()
             )
@@ -343,18 +345,36 @@ impl Stmt {
     }
 
     pub fn with_loop_modifies(self, asg: Vec<Expr>) -> Self {
-        if let Goto { dest, loop_invariants, loop_modifies } = self.body() {
+        if let Goto { dest, loop_invariants, loop_modifies, loop_decreases } = self.body() {
             assert!(loop_modifies.is_none());
             stmt!(
                 Goto {
                     dest: *dest,
                     loop_invariants: loop_invariants.clone(),
-                    loop_modifies: Some(asg)
+                    loop_modifies: Some(asg),
+                    loop_decreases: loop_decreases.clone()
                 },
                 *self.location()
             )
         } else {
             unreachable!("Loop assigns should be annotated only to goto stmt")
+        }
+    }
+
+    pub fn with_loop_decreases(self, decreases: Expr) -> Self {
+        if let Goto { dest, loop_invariants, loop_modifies, loop_decreases } = self.body() {
+            assert!(loop_decreases.is_none());
+            stmt!(
+                Goto {
+                    dest: *dest,
+                    loop_invariants: loop_invariants.clone(),
+                    loop_modifies: loop_modifies.clone(),
+                    loop_decreases: Some(decreases)
+                },
+                *self.location()
+            )
+        } else {
+            unreachable!("Loop decreases should be annotated only to goto stmt")
         }
     }
 }

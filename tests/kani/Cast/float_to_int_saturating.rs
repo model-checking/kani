@@ -1,6 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+#![feature(f128)]
+
 //! Regression test for float-to-int saturating cast (GitHub issue #4536).
 //! Since Rust 1.45, `as` performs saturating casts from float to int.
 
@@ -67,4 +69,18 @@ fn check_f64_to_i8_below_min() {
 fn check_f32_truncation() {
     let y: i8 = (-99.9f32) as i8;
     assert!(y == -99);
+}
+
+#[kani::proof]
+fn check_f64_to_u64_saturation() {
+    let x: f64 = u64::MAX as f64; // = 2^64 in f64
+    let y: u64 = x as u64;
+    kani::assert(y == u64::MAX, "matches");
+}
+
+#[kani::proof]
+fn check_f64_to_u128_saturation() {
+    let x: f64 = u128::MAX as f64; // = 2^128 in f64
+    let y: u128 = x as u128;
+    kani::assert(y == u128::MAX, "matches");
 }

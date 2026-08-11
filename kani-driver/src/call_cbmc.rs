@@ -349,6 +349,17 @@ impl KaniSession {
 
         if self.args.concrete_playback.is_some() {
             args.push("--trace".into());
+            // Concrete playback only consumes the values of `kani::any_raw_*`
+            // return-value assignments from the trace. CBMC's compact trace
+            // retains those (they are regular, non-hidden assignments) while
+            // dropping hidden instrumentation steps whose values can dominate
+            // the trace by orders of magnitude on contract-heavy harnesses
+            // (e.g. 427 MB -> 3 MB of JSON). Requires CBMC with
+            // https://github.com/diffblue/cbmc/pull/9135 to have an effect;
+            // CBMC versions that do not yet honor `--compact-trace` with
+            // `--json-ui` accept but ignore the option, so this is
+            // compatible either way.
+            args.push("--compact-trace".into());
         }
 
         args.extend(self.args.cbmc_args.iter().cloned());

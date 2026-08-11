@@ -1,21 +1,147 @@
 diff --git a/charon/Cargo.toml b/charon/Cargo.toml
-index 20f8a9df..a1bf1ee6 100644
+index 51a4b00d..25f528f2 100644
 --- a/charon/Cargo.toml
 +++ b/charon/Cargo.toml
 @@ -2,7 +2,7 @@
  name = "charon"
- version = "0.1.67"
- authors = ["Son Ho <hosonmarc@gmail.com>"]
+ version = "0.1.88"
+ authors = ["Son Ho <hosonmarc@gmail.com>", "Guillaume Boisseau <nadrieril+git@gmail.com>"]
 -edition = "2021"
 +edition = "2024"
  license = "Apache-2.0"
  
  [lib]
+@@ -37,7 +37,7 @@ path = "tests/cargo.rs"
+ harness = false
+ 
+ [dependencies]
+-annotate-snippets = { git = "https://github.com/rust-lang/annotate-snippets-rs", version = "0.11.5" }
++annotate-snippets = "0.11.4"
+ anstream = "0.6.18"
+ anyhow = "1.0.81"
+ assert_cmd = "2.0"
+diff --git a/charon/src/errors.rs b/charon/src/errors.rs
+index 800e8768..4bf3e6a6 100644
+--- a/charon/src/errors.rs
++++ b/charon/src/errors.rs
+@@ -13,11 +13,11 @@ use std::collections::{HashMap, HashSet};
+ macro_rules! register_error {
+     ($ctx:expr, crate($krate:expr), $span: expr, $($fmt:tt)*) => {{
+         let msg = format!($($fmt)*);
+-        $ctx.span_err($krate, $span, &msg, $crate::errors::Level::WARNING)
++        $ctx.span_err($krate, $span, &msg, $crate::errors::Level::Warning)
+     }};
+     ($ctx:expr, $span: expr, $($fmt:tt)*) => {{
+         let msg = format!($($fmt)*);
+-        $ctx.span_err($span, &msg, $crate::errors::Level::WARNING)
++        $ctx.span_err($span, &msg, $crate::errors::Level::Warning)
+     }};
+ }
+ pub use register_error;
+@@ -78,37 +78,45 @@ pub struct Error {
+ impl Error {
+     pub(crate) fn render(&self, krate: &TranslatedCrate, level: Level) -> String {
+         use annotate_snippets::*;
+-        let span = self.span.span;
++        let msg_indent = format!("{level:?}: ").len();
++        // If the message is multiline, indent the other lines to match the first line.
++        let mut msg = self
++            .msg
++            .replace('\n', &format!("\n{}", str::repeat(" ", msg_indent)));
+ 
+-        let mut group = Group::new();
++        let span = self.span.span;
+         let origin;
+-        if let Some(file) = krate.files.get(span.file_id) {
+-            origin = format!("{}", file.name);
++        let message = if let Some(file) = krate.files.get(span.file_id) {
+             if let Some(source) = &file.contents {
++                origin = format!("{}", file.name);
+                 let snippet = Snippet::source(source)
+                     .origin(&origin)
+                     .fold(true)
+-                    .annotation(AnnotationKind::Primary.span(span.to_byte_range(source)));
+-                group = group.element(snippet);
++                    .annotation(level.span(span.to_byte_range(source)));
++                level.title(&msg).snippet(snippet)
+             } else {
+                 // Show just the file and line/col.
+-                let origin = Origin::new(&origin)
+-                    .line(span.beg.line)
+-                    .char_column(span.beg.col + 1)
+-                    .primary(true);
+-                group = group.element(origin);
++                msg = format!(
++                    "{msg}\n --> {}:{}:{}",
++                    file.name,
++                    span.beg.line,
++                    span.beg.col + 1
++                );
++                level.title(&msg)
+             }
+-        }
+-        let message = level.header(&self.msg).group(group);
++        } else {
++            level.title(&msg)
++        };
+ 
+-        Renderer::styled().render(message).to_string()
++        let out = Renderer::styled().render(message).to_string();
++        out
+     }
+ }
+ 
+ /// Display an error without a specific location.
+ pub fn display_unspanned_error(level: Level, msg: &str) {
+     use annotate_snippets::*;
+-    let message = level.header(msg);
++    let message = level.title(msg);
+     let message = Renderer::styled().render(message).to_string();
+     anstream::eprintln!("{message}\n");
+ }
+@@ -232,8 +240,8 @@ impl ErrorCtx {
+         msg: &str,
+         level: Level,
+     ) -> Error {
+-        let level = if level == Level::WARNING && self.error_on_warnings {
+-            Level::ERROR
++        let level = if level == Level::Warning && self.error_on_warnings {
++            Level::Error
+         } else {
+             level
+         };
+@@ -311,7 +319,7 @@ impl ErrorCtx {
+         // Sort by file id to avoid output instability.
+         by_file.sort_by_key(|(file_id, ..)| *file_id);
+ 
+-        let level = Level::NOTE;
++        let level = Level::Note;
+         let snippets = by_file.iter().map(|(_, origin, source, spans)| {
+             Snippet::source(source)
+                 .origin(&origin)
+@@ -319,7 +327,7 @@ impl ErrorCtx {
+                 .annotations(
+                     spans
+                         .iter()
+-                        .map(|span| AnnotationKind::Context.span(span.span.to_byte_range(source))),
++                        .map(|span| level.span(span.span.to_byte_range(source))),
+                 )
+         });
+ 
+@@ -328,7 +336,7 @@ impl ErrorCtx {
+              which is (transitively) used at the following location(s):",
+             krate.into_fmt().format_object(id)
+         );
+-        let message = level.header(&msg).group(Group::new().elements(snippets));
++        let message = level.title(&msg).snippets(snippets);
+         let out = Renderer::styled().render(message).to_string();
+         anstream::eprintln!("{}", out);
+     }
 diff --git a/charon/src/ids/vector.rs b/charon/src/ids/vector.rs
-index 59f7eaab..21508e19 100644
+index d7e85c2e..5d6a0ac5 100644
 --- a/charon/src/ids/vector.rs
 +++ b/charon/src/ids/vector.rs
-@@ -217,7 +217,7 @@ where
+@@ -261,7 +261,7 @@ where
          self.iter_indexed().map(|(id, _)| id)
      }
  
@@ -24,16 +150,71 @@ index 59f7eaab..21508e19 100644
          self.vector.indices()
      }
  
+diff --git a/charon/src/options.rs b/charon/src/options.rs
+index 692680d8..af052a50 100644
+--- a/charon/src/options.rs
++++ b/charon/src/options.rs
+@@ -335,13 +335,13 @@ impl CliOpts {
+ 
+         if self.mir_optimized {
+             display_unspanned_error(
+-                Level::WARNING,
++                Level::Warning,
+                 "`--mir_optimized` is deprecated, use `--mir optimized` instead",
+             )
+         }
+         if self.mir_promoted {
+             display_unspanned_error(
+-                Level::WARNING,
++                Level::Warning,
+                 "`--mir_promoted` is deprecated, use `--mir promoted` instead",
+             )
+         }
+diff --git a/charon/src/transform/check_generics.rs b/charon/src/transform/check_generics.rs
+index cf4dad41..180adf08 100644
+--- a/charon/src/transform/check_generics.rs
++++ b/charon/src/transform/check_generics.rs
+@@ -42,7 +42,7 @@ impl CheckGenericsVisitor<'_> {
+                 .join("\n  "),
+         );
+         // This is a fatal error: the output llbc is inconsistent and should not be used.
+-        self.ctx.span_err(self.span, &msg, Level::ERROR);
++        self.ctx.span_err(self.span, &msg, Level::Error);
+     }
+ 
+     /// For pretty error printing. This can print values that we encounter because we track binders
 diff --git a/charon/src/transform/expand_associated_types.rs b/charon/src/transform/expand_associated_types.rs
-index 19978d56..c98c8e0e 100644
+index 418a1eb5..23f78c0f 100644
 --- a/charon/src/transform/expand_associated_types.rs
 +++ b/charon/src/transform/expand_associated_types.rs
-@@ -761,7 +761,7 @@ impl<'a> ComputeItemModifications<'a> {
+@@ -794,7 +794,7 @@ impl<'a> ComputeItemModifications<'a> {
          &'b mut self,
          clause: &TraitClause,
-         clause_to_path: F,
--    ) -> impl Iterator<Item = AssocTypePath> + use<'b, F>
-+    ) -> impl Iterator<Item = AssocTypePath> + use<'a, 'b, F>
-     where
-         F: Fn(TraitClauseId) -> TraitRefPath,
-     {
+         clause_to_path: fn(TraitClauseId) -> TraitRefPath,
+-    ) -> impl Iterator<Item = AssocTypePath> + use<'b> {
++    ) -> impl Iterator<Item = AssocTypePath> + use<'a, 'b> {
+         let trait_id = clause.trait_.skip_binder.trait_id;
+         let clause_path = clause_to_path(clause.clause_id);
+         self.compute_extra_params_for_trait(trait_id)
+@@ -806,7 +806,7 @@ impl<'a> ComputeItemModifications<'a> {
+     fn compute_implied_constraints_for_predicate<'b>(
+         &'b mut self,
+         pred: &'b TraitDeclRef,
+-    ) -> impl Iterator<Item = (AssocTypePath, Ty)> + use<'b> {
++    ) -> impl Iterator<Item = (AssocTypePath, Ty)> + use<'a, 'b> {
+         let _ = self.compute_extra_params_for_trait(pred.trait_id);
+         self.trait_modifications[pred.trait_id]
+             .as_processed()
+diff --git a/charon/src/transform/simplify_constants.rs b/charon/src/transform/simplify_constants.rs
+index 9a44997c..77ccece2 100644
+--- a/charon/src/transform/simplify_constants.rs
++++ b/charon/src/transform/simplify_constants.rs
+@@ -11,7 +11,7 @@
+ //! handle the globals like function calls.
+ 
+ use itertools::Itertools;
+-use std::assert_matches::assert_matches;
++use std::assert_matches;
+ 
+ use crate::transform::TransformCtx;
+ use crate::ullbc_ast::*;

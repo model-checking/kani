@@ -17,7 +17,7 @@ pub fn provide(providers: &mut Providers, queries: &QueryDb) {
     let args = queries.args();
     if should_override(args) {
         // Don't override queries if we are only compiling our dependencies.
-        providers.optimized_mir = run_mir_passes;
+        providers.queries.optimized_mir = run_mir_passes;
         providers.extern_queries.optimized_mir = run_mir_passes_extern;
     }
 }
@@ -38,7 +38,7 @@ fn run_mir_passes_extern(tcx: TyCtxt<'_>, def_id: DefId) -> &Body<'_> {
 /// running rustc's optimization passes followed by Kani-specific passes.
 fn run_mir_passes(tcx: TyCtxt<'_>, def_id: LocalDefId) -> &Body<'_> {
     tracing::debug!(?def_id, "run_mir_passes");
-    let body = (rustc_interface::DEFAULT_QUERY_PROVIDERS.optimized_mir)(tcx, def_id);
+    let body = (rustc_interface::DEFAULT_QUERY_PROVIDERS.queries.optimized_mir)(tcx, def_id);
     run_kani_mir_passes(tcx, def_id.to_def_id(), body)
 }
 

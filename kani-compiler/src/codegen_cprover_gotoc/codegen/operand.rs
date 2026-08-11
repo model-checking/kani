@@ -43,19 +43,24 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                     self,
                     self.codegen_place_stable(place, Location::none())
                 );
-                // If the operand itself is a Dynamic (like when passing a boxed closure),
-                // we need to pull off the fat pointer. In that case, the rustc kind() on
-                // both the operand and the inner type are Dynamic.
-                // Consider moving this check elsewhere in:
-                // https://github.com/model-checking/kani/issues/277
+                // If the operand is itself an unsized value passed by value (a `Dynamic` boxed
+                // closure, or a slice/`str` via `unsized_fn_params`), the value is the fat
+                // pointer, so pull it off the projection rather than the (pointee) goto_expr.
                 match self.operand_ty_stable(operand).kind() {
-                    TyKind::RigidTy(RigidTy::Dynamic(..)) => projection.fat_ptr_goto_expr.unwrap(),
+                    TyKind::RigidTy(RigidTy::Dynamic(..))
+                    | TyKind::RigidTy(RigidTy::Slice(..))
+                    | TyKind::RigidTy(RigidTy::Str) => projection.fat_ptr_goto_expr.unwrap(),
                     _ => projection.goto_expr,
                 }
             }
             Operand::Constant(constant) => {
                 self.codegen_const(&constant.const_, self.codegen_span_stable(constant.span))
             }
+            // Runtime checks (`ub_checks()`, `contract_checks()`, `overflow_checks()`) were
+            // moved from `Rvalue::NullaryOp(NullOp::RuntimeChecks(..))` to `Operand::RuntimeChecks`
+            // by rust-lang/rust#148766. Kani does not enable these source-level checks (it inserts
+            // its own), so evaluate them to `false` as before.
+            Operand::RuntimeChecks(_) => Expr::c_false(),
         }
     }
 
@@ -348,7 +353,20 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                         "https://github.com/model-checking/kani/issues/2549",
                     )
                 }
-                _ => unreachable!("{inner_ty:?}"),
+                _ => {
+                    // E.g. a constant fat pointer to a custom slice-tailed DST such as
+                    // zerovec's `&ZeroSlice<T>`: representing these requires computing the
+                    // metadata for the unsized tail, which is not implemented yet. Degrade to
+                    // an unsupported-construct check rather than crashing the compiler, so
+                    // that only harnesses that actually reach this constant fail.
+                    let typ = self.codegen_ty_stable(ty);
+                    self.codegen_unimplemented_expr(
+                        &format!("constant fat pointer to unsized type {inner_ty}"),
+                        typ,
+                        loc,
+                        "https://github.com/model-checking/kani/issues/new/choose",
+                    )
+                }
             }
         } else if !alloc.provenance.ptrs.is_empty() {
             // Codegen the provenance pointer.
