@@ -79,6 +79,22 @@ Autoharness also accepts a `--list` argument, which runs the [list subcommand](.
 
 For a full list of options, run `kani autoharness --help`.
 
+### Constructor-based generation (--constructor-args)
+
+By default, when a type does not implement `Arbitrary`, Kani synthesizes values field by field.
+For types whose private fields carry a representation invariant (e.g. a date type storing a
+packed, validated ordinal), raw field synthesis can produce values that violate the invariant,
+causing false alarms in every harness that generates the type. With `--constructor-args`, Kani
+instead generates values of private-field struct types by calling one of the type's public
+constructors with nondeterministic arguments, assuming success for constructors returning
+`Option<Self>` or `Result<Self, E>`. Constructors that are doc-hidden, unsafe, zero-argument,
+or generic are not considered.
+
+This option is opt-in because it under-approximates: harnesses whose values are generated this
+way are marked "(ctor)" in the output, and their verification results only cover values
+reachable through the chosen constructor; a bug that requires a different value will not be
+found.
+
 ## Example
 Using the `estimate_size` example from [First Steps](../../tutorial-first-steps.md) again:
 ```rust
