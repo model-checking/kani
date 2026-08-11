@@ -315,6 +315,15 @@ fn can_derive_arbitrary(
                 if let TyKind::RigidTy(RigidTy::Adt(..)) = ty.kind() {
                     fields_impl_arbitrary &=
                         can_derive_arbitrary(ty, kani_any_def, ty_arbitrary_cache);
+                } else if let TyKind::RigidTy(RigidTy::Ref(..)) = ty.kind() {
+                    // A reference *field* cannot be synthesized: the storage for the referent
+                    // would live inside the synthesized `any()` body and dangle once it
+                    // returns. (Only `&'static` fields reach this point: reference fields with
+                    // a lifetime parameter make the ADT's generic arguments contain a
+                    // lifetime, which is rejected below.)
+                    // Note that this differs from *top-level argument* references, for which
+                    // the harness itself owns the storage.
+                    fields_impl_arbitrary = false;
                 } else {
                     fields_impl_arbitrary &=
                         implements_arbitrary(ty, kani_any_def, ty_arbitrary_cache);
