@@ -172,6 +172,7 @@ pub fn process_harness_results(
                             crate::call_cbmc::FailedProperties::None => "unknown_failure",
                             crate::call_cbmc::FailedProperties::PanicsOnly => "assertion_failure",
                             crate::call_cbmc::FailedProperties::Other => "verification_failure",
+                            crate::call_cbmc::FailedProperties::Error => "property_error",
                         },
                         "failed_properties_type": format!("{:?}", result.result.failed_properties),
                         "exit_status": match &result.result.results {

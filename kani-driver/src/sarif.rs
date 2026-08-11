@@ -327,6 +327,7 @@ mod tests {
             runtime: Duration::from_secs(1),
             generated_concrete_test: false,
             coverage_results: None,
+            cbmc_stats: None,
         }
     }
 
@@ -340,6 +341,7 @@ mod tests {
             runtime: Duration::from_secs(1),
             generated_concrete_test: false,
             coverage_results: None,
+            cbmc_stats: None,
         };
         let harness_result = HarnessResult { harness: &harness, result };
 
