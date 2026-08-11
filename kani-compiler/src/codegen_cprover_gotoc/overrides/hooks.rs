@@ -899,6 +899,94 @@ impl GotocHook for LoopInvariantRegister {
     }
 }
 
+/// Lower `kani::slice_validity_assume::<T>(ptr, len)` (KaniHook::SliceValidityAssume) to a
+/// quantified assumption constraining every element's raw bits to `T`'s layout niche:
+/// `assume(forall i. i < len ==> lo <= *(uN*)ptr + i <= hi)` (wrapping ranges use `||`).
+/// A no-op for element types without a niche (every bit pattern valid).
+///
+/// This is lowered directly to pure goto expressions rather than through `kani::forall!`:
+/// the closure-based quantifier lowering cannot substitute bodies containing checked
+/// arithmetic or bounds checks (it falls back to an unconstrained predicate), whereas the
+/// expressions built here are side-effect-free by construction.
+struct SliceValidityAssume;
+impl GotocHook for SliceValidityAssume {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
+        unreachable!("{UNEXPECTED_CALL}")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        instance: Instance,
+        mut fargs: Vec<Expr>,
+        _assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 2);
+        let loc = gcx.codegen_span_stable(span);
+        let target = target.unwrap();
+        let goto_target = Stmt::goto(bb_label(target), loc);
+
+        let elem_ty = instance.args().0[0].expect_ty().to_owned();
+        let Some(niche) = crate::kani_middle::scalar_niche(gcx.tcx, elem_ty) else {
+            // Every bit pattern is valid: nothing to assume.
+            return goto_target;
+        };
+        let len = fargs.remove(1);
+        let ptr = fargs.remove(0);
+
+        // Fresh quantified variable of the same type as `len`.
+        let base_name = "kani_slice_validity_var".to_string();
+        let mut counter = 0;
+        let mut unique_name = format!("{base_name}_{counter}");
+        while gcx.symbol_table.lookup(&unique_name).is_some() {
+            counter += 1;
+            unique_name = format!("{base_name}_{counter}");
+        }
+        let qvar = {
+            let sym =
+                GotoSymbol::variable(unique_name.clone(), unique_name, len.typ().clone(), loc);
+            gcx.symbol_table.insert(sym.clone());
+            sym.to_expr()
+        };
+
+        // CBMC's quantifier handling binds byte-granularity dereferences reliably, but not
+        // wider ones (byte_extract at a symbolic index under a forall does not propagate),
+        // so the validity predicate is expressed over bytes:
+        // - 8-bit niches (bool, u8-based ranged types): direct range check on the byte;
+        // - NonZero-style niches (excluded zero, full top): OR over "some byte nonzero".
+        // Wider general ranges are not byte-decomposable this simply; the element classifier
+        // (kani_middle::slice_elem_unbounded_ok) never routes such types to this hook.
+        let byte_ty = Type::unsigned_int(8u64);
+        let byte_ptr = ptr.clone().cast_to(byte_ty.clone().to_pointer());
+        let valid = if niche.bits == 8 {
+            let elem = byte_ptr.plus(qvar.clone()).dereference();
+            let lo = Expr::int_constant(niche.start, byte_ty.clone());
+            let hi = Expr::int_constant(niche.end, byte_ty.clone());
+            if niche.start <= niche.end {
+                lo.le(elem.clone()).and(elem.le(hi))
+            } else {
+                lo.le(elem.clone()).or(elem.le(hi))
+            }
+        } else {
+            unreachable!(
+                "slice_validity_assume: element type with non-byte-decomposable niche                  should have been rejected by the classifier"
+            )
+        };
+        let domain = qvar.clone().lt(len).implies(valid);
+        let quantified = Expr::forall_expr(Type::Bool, qvar, domain);
+
+        Stmt::block(vec![gcx.codegen_assume(quantified, loc), goto_target], loc)
+    }
+}
+
 struct Forall;
 struct Exists;
 
@@ -1339,6 +1427,7 @@ pub fn fn_hooks() -> GotocHooks {
     let kani_lib_hooks = [
         (KaniHook::Assert, Rc::new(Assert) as Rc<dyn GotocHook>),
         (KaniHook::Assume, Rc::new(Assume)),
+        (KaniHook::SliceValidityAssume, Rc::new(SliceValidityAssume)),
         (KaniHook::Exists, Rc::new(Exists)),
         (KaniHook::Forall, Rc::new(Forall)),
         (KaniHook::Panic, Rc::new(Panic)),
