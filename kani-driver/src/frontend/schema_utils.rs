@@ -177,8 +177,9 @@ impl PropertyCounts {
         })
     }
 
-    /// The same shape, for a harness whose properties were never measured.
-    fn unmeasured_json() -> Value {
+    /// The same shape, for a harness whose properties were never measured, with a caller-supplied
+    /// explanation of why (e.g. a CBMC failure vs. never having run at all).
+    fn unmeasured_json_with_reason(reason: &str) -> Value {
         json!({
             "total_properties": null,
             "passed": null,
@@ -190,8 +191,15 @@ impl PropertyCounts {
             "unsatisfiable": null,
             "covered": null,
             "uncovered": null,
-            "error": "Could not extract property details due to verification failure"
+            "error": reason
         })
+    }
+
+    /// The same shape, for a harness whose properties were never measured.
+    fn unmeasured_json() -> Value {
+        Self::unmeasured_json_with_reason(
+            "Could not extract property details due to verification failure",
+        )
     }
 }
 
@@ -326,7 +334,12 @@ pub fn process_harness_results(
 ) -> Result<()> {
     // The main verification results are handled by the harness runner
     for h in harnesses {
-        let harness_result = results.iter().find(|r| r.harness.pretty_name == h.pretty_name);
+        // Joined on `mangled_name`, the unique identifier `harness_metadata` already carries,
+        // rather than `pretty_name`: two harnesses in different crates of the same workspace can
+        // share a `pretty_name`, and joining on that would attribute a result -- including a
+        // failure -- to the wrong harness. `harness_id` in the emitted JSON is unchanged; only
+        // the join predicate used to find the matching result moves to the unique key.
+        let harness_result = results.iter().find(|r| r.harness.mangled_name == h.mangled_name);
 
         // Add error details for this harness. This accumulates one entry per harness, keyed by
         // `harness_id`, the same way the `cbmc` array does: a single top-level object would let a
@@ -375,6 +388,40 @@ pub fn process_harness_results(
                         // that nothing was measured.
                         Err(_) => PropertyCounts::unmeasured_json()
                     }
+                }),
+            );
+        } else {
+            // This harness was selected (it has a `harness_metadata` entry) but has no entry in
+            // `results`. That is not always "never ran": under `--fail-fast`,
+            // `check_all_harnesses` collects harness futures into a single `Result<Vec<_>>`, and
+            // as soon as one harness fails, the whole collection short-circuits on that `Err` --
+            // discarding the `Ok` results of any other harness that had already completed
+            // (including a pass) but lost the race to be collected before the failure. So a
+            // harness landing in this branch may have genuinely been skipped, or may have run
+            // and even passed, with its result simply not retained. Without this branch the
+            // harness would be silently absent from both `error_details` and `property_details`,
+            // which a consumer correlating those arrays against `harness_metadata` (or checking
+            // "every detail entry is a Success") could easily misread as "nothing wrong with it".
+            // "skipped"/"not_run" would overclaim the former case for certain, so this reports
+            // the honest, disjunctive truth instead.
+            handler.add_harness_detail(
+                "error_details",
+                json!({
+                    "harness_id": h.pretty_name,
+                    "has_errors": true,
+                    "error_type": "not_reported",
+                    "exit_status": "unknown"
+                }),
+            );
+
+            handler.add_harness_detail(
+                "property_details",
+                json!({
+                    "harness_id": h.pretty_name,
+                    "property_details": PropertyCounts::unmeasured_json_with_reason(
+                        "No result was reported for this harness (e.g. skipped after \
+                         --fail-fast, or a completed result not retained)."
+                    )
                 }),
             );
         }
@@ -468,7 +515,10 @@ pub fn process_cbmc_results(
 ) -> Result<()> {
     let cbmc_info_opt = session.get_cbmc_info().ok();
     for h in harnesses {
-        let harness_result = results.iter().find(|r| r.harness.pretty_name == h.pretty_name);
+        // See the matching comment in `process_harness_results`: join on the unique
+        // `mangled_name` rather than `pretty_name`, which two harnesses in different crates of a
+        // workspace can share.
+        let harness_result = results.iter().find(|r| r.harness.mangled_name == h.mangled_name);
         handler.add_harness_detail("cbmc", json!({
             // basic name for harnesses
             "harness_id": h.pretty_name,

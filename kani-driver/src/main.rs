@@ -147,6 +147,23 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
     // overhead for every other run, including a `cbmc --version` probe in `process_cbmc_results`.
     let mut handler =
         session.args.export_json.as_ref().map(|path| JsonHandler::new(Some(path.clone())));
+
+    // Invalidate any stale export at the target path immediately, before verification even
+    // starts. Without this, a run that dies before reaching the final `export()` below (a
+    // compile error, OOM, Ctrl-C, or a harness-level `Err` that propagates out of this function
+    // before that export runs) would leave a *previous* run's clean, complete-looking file at
+    // the target path -- and a consumer that trusts the file would read it as this run's
+    // result. Writing this marker first means the target can never be read as a stale clean pass
+    // again: it is either this incomplete marker, a genuinely complete export from this run, or
+    // absent. `write_sarif`/`print_final_summary` below run *after* the final `export()`, using
+    // the same `results` the export was built from, so a failure there leaves behind a complete
+    // export whose verification data is already accurate -- it is not a case this marker needs
+    // to guard against.
+    if let Some(handler) = handler.as_mut() {
+        handler.add_item("run_state", json!("incomplete"));
+        handler.export()?;
+    }
+
     let harnesses = session.determine_targets(project.get_all_harnesses())?;
     debug!(n = harnesses.len(), ?harnesses, "verify_project");
 
@@ -167,6 +184,41 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
         // Add harness metadata using frontend utility
         for h in &harnesses {
             handler.add_harness_detail("harness_metadata", create_harness_metadata_json(h));
+        }
+
+        // Record what was requested and what was actually selected, so a filter typo that
+        // matches nothing is visible in the export itself rather than only in a log line the
+        // export's consumer never sees.
+        let requested_filters = &session.args.harnesses;
+        let unmatched_filters: Vec<&String> = if session.args.exact {
+            // `determine_targets` above already returns an error when an `--exact` filter
+            // matches nothing, so reaching this point means every exact filter matched.
+            vec![]
+        } else {
+            // Mirrors `find_proof_harnesses`'s non-exact matching closely enough to be a useful
+            // diagnostic (exact and unqualified-name matches are also substring matches of the
+            // full pretty name), without needing to re-run its full matching logic here.
+            requested_filters
+                .iter()
+                .filter(|filter| !harnesses.iter().any(|h| h.pretty_name.contains(filter.as_str())))
+                .collect()
+        };
+        handler.add_item(
+            "harness_selection",
+            json!({
+                "requested_filters": requested_filters,
+                "matched_count": harnesses.len(),
+                "unmatched_filters": unmatched_filters,
+            }),
+        );
+
+        if harnesses.is_empty() {
+            // A filter that matches zero harnesses must never export as a clean, completed run
+            // with `successful:0, failed:0` -- that is a vacuous pass, not evidence of anything.
+            // This overrides the "incomplete" marker written above; the final block below only
+            // promotes a run to "complete" when at least one harness was actually selected, so
+            // this state survives to the exported file.
+            handler.add_item("run_state", json!("no_harnesses_selected"));
         }
     }
 
@@ -201,6 +253,17 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
 
     if let Some(handler) = handler.as_mut() {
         handler.add_item("coverage", json!({"enabled": session.args.coverage}));
+        // The terminal `run_state` must be authoritative about whether every selected harness
+        // actually ran: a zero-match run keeps the `no_harnesses_selected` state set above, and
+        // -- critically -- a non-empty selection is only "complete" when `results` accounts for
+        // every selected harness. Under `--fail-fast`, harnesses skipped after the first failure
+        // never produce a `HarnessResult`, so `results.len() < harnesses.len()`; reporting
+        // "complete" in that case would say a run that was intentionally aborted early finished
+        // normally. That case is reported as "partial" instead.
+        if !harnesses.is_empty() {
+            let run_state = if results.len() == harnesses.len() { "complete" } else { "partial" };
+            handler.add_item("run_state", json!(run_state));
+        }
         handler.export()?;
     }
 
