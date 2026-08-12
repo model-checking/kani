@@ -1,0 +1,13 @@
+[without --bounded-arguments]
+| cargo_autoharness_bounded | packet_check                                    | Requires --bounded-arguments for argument(s) p: Packet                                |
+[with --bounded-arguments]
+| cargo_autoharness_bounded | nested_vec                                      | Missing Arbitrary implementation for argument(s) xs: std::vec::Vec<std::vec::Vec<u8>> |
+- Status: SATISFIED
+| cargo_autoharness_bounded | packet_check      | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_bounded | string_head       | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_bounded | vec_cover         | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_bounded | vec_sum           | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_bounded | string_first_byte | #[kani::proof] (bounded)  | Failure             |
+| cargo_autoharness_bounded | vec_first         | #[kani::proof] (bounded)  | Failure             |
+Note: harnesses marked "(bounded)" use bounded nondeterministic values for some arguments (--bounded-arguments);
+Complete - 4 successfully verified functions, 2 failures, 6 total.

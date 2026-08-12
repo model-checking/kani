@@ -105,6 +105,36 @@ This feature is experimental and is therefore subject to change.
 If you have ideas for improving the user experience of this feature,
 please add them to [this GitHub issue](https://github.com/model-checking/kani/issues/3832).
 
+## Bounded Arguments (opt-in: `--bounded-arguments`)
+By default, autoharness only generates harnesses whose nondeterministic inputs cover *all*
+possible values, so that a successful result carries Kani's usual guarantee. Some argument
+types (e.g. slices) can only be generated in a *bounded* fashion; because a bug that requires
+a larger input would then be missed, these are **disabled by default** and require the
+`--bounded-arguments` option. Functions that would become eligible with the option are
+reported in the skipped-functions table with reason "Requires --bounded-arguments". Harnesses
+that use bounded values are marked **"(bounded)"** in the summary table, and a note after the
+table repeats the caveat.
+
+With `--bounded-arguments`, for a function with `&[T]`/`&mut [T]` arguments (where `T`
+implements or can derive `Arbitrary`) or `&str` arguments, the generated harness produces a
+slice of nondeterministic length, backed by nondeterministic storage that lives for the entire
+harness: **up to 16 elements** for slices and **up to 8 bytes** for strings. Strings cover all
+valid UTF-8 contents up to the bound (the generated string is the longest valid-UTF-8 prefix of
+nondeterministic bytes, the same approach as `String`'s `BoundedArbitrary` implementation); the
+smaller bound reflects the cost of reasoning about UTF-8 for symbolic execution. The bounds are
+chosen to stay below the default loop-unwinding bound of 20, so that loops over the slice can
+be fully unwound by default.
+
+Additionally (also requiring `--bounded-arguments`), for arguments whose type implements
+[`BoundedArbitrary`](https://model-checking.github.io/kani/reference/experimental/bounded-arbitrary.html)
+(e.g. `Vec<T>`, `String`, or user types deriving it), the harness generates a bounded
+nondeterministic value with **bound 4** (via `kani::bounded_any`). The same caveat applies:
+verification results only hold up to the bound. The smaller bound reflects that these values are
+heap allocated and, for `String`, involve UTF-8 reasoning, both of which are costly for symbolic
+execution.
+
+Nested slice references (e.g. `&&[u8]`) and slices inside user-defined types remain unsupported.
+
 ## Limitations
 ### Arguments Implementing Arbitrary
 Kani will only generate an automatic harness for a function if it can represent each of its arguments nondeterministically, without bounds.
