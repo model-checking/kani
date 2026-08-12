@@ -1252,7 +1252,11 @@ impl GotocHook for AlignOffset {
         instance_name: &str,
         _kani_tool_attr: Option<&String>,
     ) -> bool {
+        // Every alignment helper -- the `align_offset` methods on raw pointers, `is_aligned`,
+        // `is_aligned_to` -- eventually calls this one function. Kani normally renders the path as
+        // `std::ptr`, but a `no_std` crate sees `core::ptr`, so match both.
         instance_name.starts_with("std::ptr::align_offset::<")
+            || instance_name.starts_with("core::ptr::align_offset::<")
     }
 
     fn handle(
@@ -1265,7 +1269,9 @@ impl GotocHook for AlignOffset {
         span: Span,
     ) -> Stmt {
         assert_eq!(fargs.len(), 2);
-        let ptr = fargs.remove(0);
+        // The pointer is unused: the result does not depend on it, see the note on the return value
+        // below.
+        let _ptr = fargs.remove(0);
         let align = fargs.remove(0);
         // test power-of-two: align > 0 && (align & (align - 1)) == 0
         let zero = Expr::int_constant(0, align.typ().clone());

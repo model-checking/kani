@@ -6,10 +6,12 @@
 #[kani::proof]
 fn align_offset() {
     let x = [10, 42];
+    // The hook always returns `usize::MAX`, which `align_offset` explicitly permits: "It is
+    // permissible for the implementation to always return usize::MAX." Rust's own implementation
+    // returns 0 for both of these pointers when the alignment is 1, so asserting `usize::MAX` is
+    // what shows the hook is being used rather than the real implementation.
     let base_ptr = &x[0] as *const i32;
-    let base_alignment = base_ptr.align_offset(1);
-    assert_eq!(base_alignment, 0);
+    assert_eq!(base_ptr.align_offset(1), usize::MAX);
     let offset_ptr = &x[1] as *const i32;
-    let offset_alignment = offset_ptr.align_offset(1);
-    assert_eq!(offset_alignment, usize::MAX);
+    assert_eq!(offset_ptr.align_offset(1), usize::MAX);
 }
