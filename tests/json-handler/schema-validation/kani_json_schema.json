@@ -122,6 +122,9 @@
   ],
   "cbmc": [
     {
+      "_nullable": [
+        "cbmc_stats"
+      ],
       "harness_id": "example_harness",
       "cbmc_metadata": {
         "version": "6.7.1",

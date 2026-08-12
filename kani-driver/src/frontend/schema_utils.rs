@@ -93,20 +93,14 @@ pub fn create_tool_versions_json(session: &KaniSession, harnesses: &[&HarnessMet
     // version, so they are named with a null version rather than given a misleading one.
     let mut solvers = BTreeMap::new();
     for harness in harnesses {
-        let (name, binary) = match session.resolved_solver(&harness.attributes.solver) {
-            CbmcSolver::Bitwuzla => ("bitwuzla", Some("bitwuzla")),
-            CbmcSolver::Cadical => ("cadical", None),
-            CbmcSolver::Cvc5 => ("cvc5", Some("cvc5")),
-            CbmcSolver::Kissat => ("kissat", Some("kissat")),
-            CbmcSolver::Minisat => ("minisat", None),
-            CbmcSolver::Z3 => ("z3", Some("z3")),
-            CbmcSolver::Binary(binary) => (binary.as_str(), Some(binary.as_str())),
-        };
+        let solver = effective_solver(session, &harness.attributes.solver);
+        // A run whose solver CBMC chooses for itself names no solver to report.
+        let Some(name) = solver.name else { continue };
         // Probe each binary once, however many harnesses use it. Ordered by name so two runs with
         // the same solvers produce the same document.
         solvers
-            .entry(name.to_string())
-            .or_insert_with(|| binary.and_then(|binary| tool_version(OsStr::new(binary))));
+            .entry(name)
+            .or_insert_with(|| solver.binary.and_then(|binary| tool_version(OsStr::new(&binary))));
     }
     tools.insert(
         "solvers".to_string(),
@@ -389,32 +383,62 @@ pub fn process_harness_results(
     Ok(())
 }
 
-/// The solver CBMC will actually run with, as a display string.
+/// The solver CBMC will actually run with.
+struct EffectiveSolver {
+    /// Display name, or `None` when the choice is left to CBMC -- `--smt2` on its own names no
+    /// solver, and a wrong name is worse than no name.
+    name: Option<String>,
+    /// The binary to ask for a version, when CBMC runs the solver as a separate process. `None` for
+    /// solvers built into CBMC, which would report CBMC's own version rather than one of their own.
+    binary: Option<String>,
+}
+
+/// Resolve the solver for a harness, applying every layer that can select one.
 ///
-/// `resolved_solver` covers `--solver`, the harness attribute and the default, but `--cbmc-args` is
-/// appended *after* Kani's own solver flags and CBMC takes the last one it sees, so a solver named
-/// there overrides all three. Returns `None` when `--cbmc-args` selects a solver we cannot name --
-/// `--smt2` on its own leaves the choice to CBMC -- since a wrong name is worse than no name.
-fn effective_solver(session: &KaniSession, harness_solver: &Option<CbmcSolver>) -> Option<String> {
-    let mut overridden = false;
-    let mut solver = None;
+/// `KaniSession::resolved_solver` covers `--solver`, the harness attribute and the default, but
+/// `--cbmc-args` is appended *after* Kani's own solver flags and CBMC takes the last one it sees, so
+/// a solver named there overrides all three. Everything that reports a solver must go through here,
+/// or the run's own metadata ends up contradicting itself.
+fn effective_solver(session: &KaniSession, harness_solver: &Option<CbmcSolver>) -> EffectiveSolver {
+    let mut override_seen = false;
+    let mut resolved = EffectiveSolver { name: None, binary: None };
     let mut cbmc_args = session.args.cbmc_args.iter();
     while let Some(arg) = cbmc_args.next() {
         // Last one wins, matching CBMC.
-        match arg.to_str() {
-            Some("--sat-solver") | Some("--external-sat-solver") => {
-                overridden = true;
-                solver = cbmc_args.next().and_then(|name| name.to_str()).map(str::to_string);
+        let (name, binary) = match arg.to_str() {
+            // `--sat-solver` selects a solver built into CBMC, so there is no binary to probe.
+            Some("--sat-solver") => {
+                (cbmc_args.next().and_then(|name| name.to_str()).map(str::to_string), None)
             }
-            Some("--bitwuzla") => (overridden, solver) = (true, Some("bitwuzla".to_string())),
-            Some("--cvc5") => (overridden, solver) = (true, Some("cvc5".to_string())),
-            Some("--z3") => (overridden, solver) = (true, Some("z3".to_string())),
-            Some("--smt2") => (overridden, solver) = (true, None),
-            _ => {}
-        }
+            Some("--external-sat-solver") => {
+                let binary = cbmc_args.next().and_then(|name| name.to_str()).map(str::to_string);
+                (binary.clone(), binary)
+            }
+            Some("--bitwuzla") => (Some("bitwuzla".to_string()), Some("bitwuzla".to_string())),
+            Some("--cvc5") => (Some("cvc5".to_string()), Some("cvc5".to_string())),
+            Some("--z3") => (Some("z3".to_string()), Some("z3".to_string())),
+            // `--smt2` alone leaves the choice of SMT solver to CBMC.
+            Some("--smt2") => (None, None),
+            _ => continue,
+        };
+        override_seen = true;
+        resolved = EffectiveSolver { name, binary };
     }
 
-    if overridden { solver } else { Some(format!("{:?}", session.resolved_solver(harness_solver))) }
+    if override_seen {
+        return resolved;
+    }
+
+    let (name, binary) = match session.resolved_solver(harness_solver) {
+        CbmcSolver::Bitwuzla => ("bitwuzla", Some("bitwuzla")),
+        CbmcSolver::Cadical => ("cadical", None),
+        CbmcSolver::Cvc5 => ("cvc5", Some("cvc5")),
+        CbmcSolver::Kissat => ("kissat", Some("kissat")),
+        CbmcSolver::Minisat => ("minisat", None),
+        CbmcSolver::Z3 => ("z3", Some("z3")),
+        CbmcSolver::Binary(binary) => (binary.as_str(), Some(binary.as_str())),
+    };
+    EffectiveSolver { name: Some(name.to_string()), binary: binary.map(str::to_string) }
 }
 
 /// The `--object-bits` value CBMC will actually run with.
@@ -460,7 +484,7 @@ pub fn process_cbmc_results(
             // reading the run that actually happened.
             "configuration": {
                 "object_bits": effective_object_bits(session),
-                "solver": effective_solver(session, &h.attributes.solver),
+                "solver": effective_solver(session, &h.attributes.solver).name,
             },
 
             // CBMC execution statistics extracted from messages

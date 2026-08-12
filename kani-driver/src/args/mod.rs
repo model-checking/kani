@@ -810,12 +810,17 @@ impl ValidateArgs for VerificationArgs {
                     "Conflicting options: --sarif isn't compatible with --only-codegen.",
                 ));
             }
-            // Verification never runs under `--only-codegen`, so there is nothing to export: the
-            // command would otherwise succeed without writing the file the user asked for.
-            if self.export_json.is_some() && self.only_codegen {
+            // Neither code-generation-only mode runs verification, so there is nothing to export.
+            // `--only-codegen` would otherwise succeed without writing the file the user asked for,
+            // and `--no-codegen` would write a document describing a run that never happened.
+            if self.export_json.is_some() && (self.only_codegen || self.no_codegen) {
+                let incompatible =
+                    if self.only_codegen { "--only-codegen" } else { "--no-codegen" };
                 return Err(Error::raw(
                     ErrorKind::ArgumentConflict,
-                    "Conflicting options: --export-json isn't compatible with --only-codegen.",
+                    format!(
+                        "Conflicting options: --export-json isn't compatible with {incompatible}."
+                    ),
                 ));
             }
             if self.jobs().will_multithread() && self.output_format != OutputFormat::Terse {
@@ -1169,6 +1174,10 @@ mod tests {
         );
         expect_validation_error(
             "kani file.rs -Z unstable-options --export-json out.json --only-codegen",
+            ErrorKind::ArgumentConflict,
+        );
+        expect_validation_error(
+            "kani file.rs -Z unstable-options --export-json out.json --no-codegen",
             ErrorKind::ArgumentConflict,
         );
     }

@@ -34,7 +34,7 @@ def load_schema_template():
         return json.load(f)
 
 
-def validate_structure_recursive(data, schema, path=""):
+def validate_structure_recursive(data, schema, path="", nullable=False):
     """
     Recursively validate data structure against schema template.
 
@@ -42,16 +42,35 @@ def validate_structure_recursive(data, schema, path=""):
         data: The JSON data to validate
         schema: The schema template to validate against
         path: Current path in the structure (for error messages)
+        nullable: Whether the parent declared this value may be null, via its
+            `_nullable` list. Only such values are allowed to be null where the
+            template expects an object or an array.
 
     Returns:
         (success: bool, errors: list)
     """
     errors = []
 
+    # A null where the template expects a structure is only acceptable if the parent
+    # declared it nullable; otherwise it is reported below as a type mismatch.
+    if data is None and nullable:
+        return True, errors
+
     # Handle dict validation
-    if isinstance(schema, dict) and isinstance(data, dict):
+    if isinstance(schema, dict):
+        if not isinstance(data, dict):
+            # This used to fall through to the leaf case and report success, so an export
+            # with `"metadata": null` bypassed every field required beneath it.
+            errors.append(
+                f"Expected object at {path or '<root>'}, "
+                f"got {type(data).__name__}"
+            )
+            return False, errors
+
         # Get optional fields list (fields that may or may not be present)
         optional_fields = schema.get("_optional", [])
+        # Fields whose value may legitimately be null instead of a structure.
+        nullable_fields = schema.get("_nullable", [])
 
         # All fields in schema are required except metadata fields (starting with _) and optional fields
         schema_keys = [k for k in schema.keys() if not k.startswith("_")]
@@ -69,7 +88,7 @@ def validate_structure_recursive(data, schema, path=""):
             # Recursively validate nested structure
             current_path = f"{path}.{key}" if path else key
             sub_errors = validate_structure_recursive(
-                data[key], schema[key], current_path
+                data[key], schema[key], current_path, key in nullable_fields
             )[1]
             errors.extend(sub_errors)
 

@@ -156,6 +156,14 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
         handler.add_item("project", create_project_metadata_json(&project));
         handler.add_item("tools", create_tool_versions_json(&session, &harnesses));
 
+        // The per-harness arrays are filled in lazily below and by the harness runner, so declare
+        // them up front. A run with no matching harnesses would otherwise omit them entirely and
+        // write a document missing four of its documented keys -- and the "no harnesses matched"
+        // error is only reported after the export, so a consumer sees the malformed file first.
+        for key in ["harness_metadata", "error_details", "property_details", "cbmc"] {
+            handler.add_item(key, json!([]));
+        }
+
         // Add harness metadata using frontend utility
         for h in &harnesses {
             handler.add_harness_detail("harness_metadata", create_harness_metadata_json(h));
