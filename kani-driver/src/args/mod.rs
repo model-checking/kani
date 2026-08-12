@@ -739,6 +739,12 @@ impl ValidateArgs for VerificationArgs {
                 UnstableFeature::UnstableOptions,
             )?;
 
+            self.common_args.check_unstable(
+                self.export_json.is_some(),
+                "export-json",
+                UnstableFeature::UnstableOptions,
+            )?;
+
             Ok(())
         };
 
@@ -1136,6 +1142,16 @@ mod tests {
     #[test]
     fn check_disable_slicing_unstable() {
         check_unstable_flag!("--no-slice-formula", no_slice_formula);
+    }
+
+    #[test]
+    fn check_export_json_unstable() {
+        check_opt!(
+            "--export-json results.json",
+            Some(UnstableFeature::UnstableOptions),
+            export_json,
+            Some(PathBuf::from("results.json"))
+        );
     }
 
     #[test]

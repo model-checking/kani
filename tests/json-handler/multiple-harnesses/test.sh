@@ -14,7 +14,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 VALIDATOR="$PROJECT_ROOT/scripts/validate_json_export.py"
 
 # Run Kani with JSON export
-kani test.rs --export-json "$OUTPUT_FILE"
+kani -Z unstable-options test.rs --export-json "$OUTPUT_FILE"
 
 # Check that JSON file was created
 if [ ! -f "$OUTPUT_FILE" ]; then

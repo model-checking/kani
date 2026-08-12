@@ -14,7 +14,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 # Run Kani with JSON export (expect failure, so don't use -e)
 set +e
-kani test.rs --export-json "$OUTPUT_FILE"
+kani -Z unstable-options test.rs --export-json "$OUTPUT_FILE"
 EXIT_CODE=$?
 set -e
 
