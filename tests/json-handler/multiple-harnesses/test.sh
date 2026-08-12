@@ -5,6 +5,9 @@
 # Test JSON export with multiple harnesses - validates aggregation logic
 
 set -eu
+# The validator's exit status is piped into `tail` below; without pipefail a failed
+# validation is masked by tail's success and this test passes regardless.
+set -o pipefail
 
 OUTPUT_FILE="multi_harness_output.json"
 # Remove the export on every exit path, not just the happy one: a failing

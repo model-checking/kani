@@ -218,8 +218,16 @@ pub fn process_harness_results(
                             "undetermined": count(CheckStatus::Undetermined)
                         })
                     },
+                    // CBMC produced no property results at all (timeout, out of memory, crash).
+                    // Keep every count present so the shape does not change between runs, and
+                    // report them as null: `0` would assert that nothing failed, when the truth is
+                    // that nothing was measured.
                     Err(_) => json!({
-                        "total_properties": 0,
+                        "total_properties": null,
+                        "passed": null,
+                        "failed": null,
+                        "unreachable": null,
+                        "undetermined": null,
                         "error": "Could not extract property details due to verification failure"
                     })
                 }

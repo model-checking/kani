@@ -788,6 +788,15 @@ impl ValidateArgs for VerificationArgs {
                     "Conflicting options: --sarif isn't compatible with --output-format=old.",
                 ));
             }
+            // `--output-format=old` bypasses CBMC's structured output entirely: `run_cbmc` mocks a
+            // result with no properties, and treats a timeout as success. An export produced from
+            // that would be indistinguishable from a real clean run.
+            if self.export_json.is_some() && self.output_format == OutputFormat::Old {
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    "Conflicting options: --export-json isn't compatible with --output-format=old.",
+                ));
+            }
             if self.concrete_playback.is_some() && self.jobs().will_multithread() {
                 // Concrete playback currently embeds a lot of assumptions about the order in which harnesses get called.
                 return Err(Error::raw(
@@ -799,6 +808,14 @@ impl ValidateArgs for VerificationArgs {
                 return Err(Error::raw(
                     ErrorKind::ArgumentConflict,
                     "Conflicting options: --sarif isn't compatible with --only-codegen.",
+                ));
+            }
+            // Verification never runs under `--only-codegen`, so there is nothing to export: the
+            // command would otherwise succeed without writing the file the user asked for.
+            if self.export_json.is_some() && self.only_codegen {
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    "Conflicting options: --export-json isn't compatible with --only-codegen.",
                 ));
             }
             if self.jobs().will_multithread() && self.output_format != OutputFormat::Terse {
@@ -1142,6 +1159,18 @@ mod tests {
     #[test]
     fn check_disable_slicing_unstable() {
         check_unstable_flag!("--no-slice-formula", no_slice_formula);
+    }
+
+    #[test]
+    fn check_export_json_conflicts() {
+        expect_validation_error(
+            "kani file.rs -Z unstable-options --export-json out.json --output-format=old",
+            ErrorKind::ArgumentConflict,
+        );
+        expect_validation_error(
+            "kani file.rs -Z unstable-options --export-json out.json --only-codegen",
+            ErrorKind::ArgumentConflict,
+        );
     }
 
     #[test]

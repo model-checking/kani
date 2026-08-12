@@ -85,11 +85,15 @@
     {
       "harness_id": "example_harness",
       "property_details": {
+        "_optional": [
+          "error"
+        ],
         "total_properties": 1,
         "passed": 1,
         "failed": 0,
         "unreachable": 0,
-        "undetermined": 0
+        "undetermined": 0,
+        "error": null
       }
     }
   ],
