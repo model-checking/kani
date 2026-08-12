@@ -365,12 +365,12 @@ impl GotocCtx<'_, '_> {
             Intrinsic::FaddFast => {
                 let fargs_clone = fargs.clone();
                 let binop_stmt = codegen_intrinsic_binop!(plus);
-                self.add_finite_args_checks(intrinsic_str, fargs_clone, binop_stmt, span)
+                self.add_finite_args_checks(intrinsic_str, fargs_clone, place, binop_stmt, span)
             }
             Intrinsic::FdivFast => {
                 let fargs_clone = fargs.clone();
                 let binop_stmt = codegen_intrinsic_binop!(div);
-                self.add_finite_args_checks(intrinsic_str, fargs_clone, binop_stmt, span)
+                self.add_finite_args_checks(intrinsic_str, fargs_clone, place, binop_stmt, span)
             }
             Intrinsic::FloatToIntUnchecked => self.codegen_float_to_int_unchecked(
                 intrinsic_str,
@@ -387,13 +387,13 @@ impl GotocCtx<'_, '_> {
             Intrinsic::FmulFast => {
                 let fargs_clone = fargs.clone();
                 let binop_stmt = codegen_intrinsic_binop!(mul);
-                self.add_finite_args_checks(intrinsic_str, fargs_clone, binop_stmt, span)
+                self.add_finite_args_checks(intrinsic_str, fargs_clone, place, binop_stmt, span)
             }
             Intrinsic::Forget => Stmt::skip(loc),
             Intrinsic::FsubFast => {
                 let fargs_clone = fargs.clone();
                 let binop_stmt = codegen_intrinsic_binop!(sub);
-                self.add_finite_args_checks(intrinsic_str, fargs_clone, binop_stmt, span)
+                self.add_finite_args_checks(intrinsic_str, fargs_clone, place, binop_stmt, span)
             }
             Intrinsic::IsValStaticallyKnown => {
                 // Returning false is sound according do this intrinsic's documentation:
@@ -692,14 +692,16 @@ impl GotocCtx<'_, '_> {
     }
 
     // Fast math intrinsics for floating point operations like `fadd_fast`
-    // assume that their inputs are finite:
+    // require that both their inputs AND their result are finite:
     // https://doc.rust-lang.org/std/intrinsics/fn.fadd_fast.html
-    // This function adds assertions to the statement which performs the
-    // operation and checks for overflow failures.
+    // This function adds assertions to check that the arguments are finite
+    // (precondition) and that the result is also finite (postcondition).
+    // Producing a non-finite result (e.g., overflow to infinity) is UB.
     fn add_finite_args_checks(
         &mut self,
         intrinsic: &str,
         mut fargs: Vec<Expr>,
+        place: &Place,
         stmt: Stmt,
         span: Span,
     ) -> Stmt {
@@ -707,6 +709,7 @@ impl GotocCtx<'_, '_> {
         let arg2 = fargs.remove(0);
         let msg1 = format!("first argument for {intrinsic} is finite");
         let msg2 = format!("second argument for {intrinsic} is finite");
+        let msg_result = format!("result of {intrinsic} is finite");
         let loc = self.codegen_span_stable(span);
         let finite_check1 = self.codegen_assert_assume(
             arg1.is_finite(),
@@ -720,7 +723,20 @@ impl GotocCtx<'_, '_> {
             msg2.as_str(),
             loc,
         );
-        Stmt::block(vec![finite_check1, finite_check2, stmt], loc)
+        // Check that the result is also finite (it's UB if the result overflows
+        // to infinity or produces NaN).
+        let result_expr = unwrap_or_return_codegen_unimplemented_stmt!(
+            self,
+            self.codegen_place_stable(place, loc)
+        )
+        .goto_expr;
+        let finite_check_result = self.codegen_assert_assume(
+            result_expr.is_finite(),
+            PropertyClass::FiniteCheck,
+            msg_result.as_str(),
+            loc,
+        );
+        Stmt::block(vec![finite_check1, finite_check2, stmt, finite_check_result], loc)
     }
 
     fn div_does_not_overflow(&self, a: Expr, b: Expr) -> Expr {
