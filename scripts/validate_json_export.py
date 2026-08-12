@@ -77,12 +77,15 @@ def validate_structure_recursive(data, schema, path=""):
     elif isinstance(schema, list) and len(schema) > 0:
         if not isinstance(data, list):
             errors.append(f"Expected array at {path}, got {type(data).__name__}")
-        elif len(data) > 0:
-            # Validate first item against schema template
-            sub_errors = validate_structure_recursive(data[0], schema[0], f"{path}[0]")[
-                1
-            ]
-            errors.extend(sub_errors)
+        else:
+            # Validate every item against the schema template. Checking only the first
+            # element let malformed data in every later harness pass validation, which
+            # defeats the purpose on exactly the multi-harness runs this validates.
+            for index, item in enumerate(data):
+                sub_errors = validate_structure_recursive(
+                    item, schema[0], f"{path}[{index}]"
+                )[1]
+                errors.extend(sub_errors)
 
     # Leaf values - no validation needed
 

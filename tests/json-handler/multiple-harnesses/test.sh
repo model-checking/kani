@@ -31,14 +31,72 @@ fi
 # Validate JSON structure (suppress verbose output)
 python3 "$VALIDATOR" "$OUTPUT_FILE" 2>&1 | tail -1
 
-# Check that JSON contains all 3 harnesses
-HARNESS_COUNT=$(python3 -c "import json; data=json.load(open('$OUTPUT_FILE')); print(len(data['harness_metadata']))")
+# Check that the export accounts for all three harnesses: not just that the metadata
+# lists them, but that the summary counters, the per-harness results, and the
+# per-harness detail arrays all agree with each other and with the harnesses that ran.
+python3 << EOF
+import json
+import sys
 
-if [ "$HARNESS_COUNT" != "3" ]; then
-    echo "ERROR: Expected 3 harnesses in JSON, found $HARNESS_COUNT"
-    exit 1
-fi
+with open('$OUTPUT_FILE', 'r') as f:
+    data = json.load(f)
 
-echo "Found 3 harnesses in JSON"
+expected = {
+    'verify_multiply_positive',
+    'verify_multiply_zero',
+    'verify_divide_nonzero',
+}
+
+failures = []
+
+
+def check(condition, message):
+    if not condition:
+        failures.append(message)
+
+
+metadata_names = {h.get('pretty_name') for h in data['harness_metadata']}
+check(metadata_names == expected,
+      f"harness_metadata should list {sorted(expected)}, got {sorted(map(str, metadata_names))}")
+
+summary = data['verification_results']['summary']
+for field, want in [('total_harnesses', 3), ('executed', 3),
+                    ('successful', 3), ('failed', 0)]:
+    check(summary[field] == want,
+          f"summary.{field} should be {want}, got {summary[field]}")
+
+results = data['verification_results']['results']
+check(len(results) == 3, f"expected 3 results, got {len(results)}")
+result_names = {r.get('harness_id') for r in results}
+check(result_names == expected,
+      f"results should cover {sorted(expected)}, got {sorted(map(str, result_names))}")
+check(all(r.get('status') == 'Success' for r in results),
+      "every harness should report Success")
+
+# Each per-harness array must cover every harness exactly once. These arrays are built
+# in a different order from `results`, so identity has to come from harness_id.
+for key in ['error_details', 'property_details', 'cbmc']:
+    entries = data[key]
+    check(len(entries) == 3, f"expected 3 {key} entries, got {len(entries)}")
+    names = {e.get('harness_id') for e in entries}
+    check(names == expected,
+          f"{key} should cover {sorted(expected)}, got {sorted(map(str, names))}")
+
+check(not any(e.get('has_errors') for e in data['error_details']),
+      "no harness should report errors")
+
+for entry in data['property_details']:
+    details = entry['property_details']
+    check(details.get('failed') == 0,
+          f"{entry.get('harness_id')} should have 0 failed properties, "
+          f"got {details.get('failed')}")
+
+if failures:
+    for failure in failures:
+        print(f"ERROR: {failure}")
+    sys.exit(1)
+
+print("All three harnesses are accounted for and consistent")
+EOF
 
 
