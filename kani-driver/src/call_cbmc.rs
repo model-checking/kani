@@ -37,10 +37,14 @@ pub struct CbmcInfo {
 #[derive(Debug, Clone, Default)]
 pub struct CbmcStats {
     pub runtime_symex_s: Option<f64>,
-    pub size_program_expression: Option<u32>,
-    pub slicing_removed_assignments: Option<u32>,
-    pub vccs_generated: Option<u32>,
-    pub vccs_remaining: Option<u32>,
+    // `u64`, not `u32`: these are unbounded counts scraped from CBMC's own text output (program
+    // expression size, VCCs, sliced assignments), and a sufficiently large real run overflowing
+    // `u32` used to collapse silently to `null` via `parse::<u32>().ok()` -- indistinguishable
+    // from "not measured".
+    pub size_program_expression: Option<u64>,
+    pub slicing_removed_assignments: Option<u64>,
+    pub vccs_generated: Option<u64>,
+    pub vccs_remaining: Option<u64>,
     pub runtime_postprocess_equation_s: Option<f64>,
     pub runtime_convert_ssa_s: Option<f64>,
     pub runtime_post_process_s: Option<f64>,
@@ -107,6 +111,12 @@ fn merge_cbmc_stats(items: &[ParserItem]) -> Option<CbmcStats> {
 /// Record the statistic a single CBMC status message carries, if it carries one. Later messages win,
 /// matching CBMC's own behaviour of reporting a running figure more than once.
 /// Returns whether this message was recognized.
+///
+/// Every field assignment below goes through [`record_stat`], which only overwrites a field when
+/// parsing succeeds. Without that, a later message that merely *resembles* a recognized label but
+/// fails to parse (a wording tweak, an unexpected unit, a truncated line) would silently erase an
+/// already-recorded valid measurement by assigning it `None` -- indistinguishable from "never
+/// measured" to a consumer of the export.
 fn record_cbmc_stat(message: &str, stats: &mut CbmcStats) -> bool {
     // "Generated 1 VCC(s), 1 remaining after simplification"
     if let Some(counts) = message
@@ -114,9 +124,9 @@ fn record_cbmc_stat(message: &str, stats: &mut CbmcStats) -> bool {
         .and_then(|rest| rest.strip_suffix(" remaining after simplification"))
         && let Some((generated, remaining)) = counts.split_once(" VCC(s), ")
     {
-        stats.vccs_generated = generated.parse().ok();
-        stats.vccs_remaining = remaining.parse().ok();
-        return stats.vccs_generated.is_some() || stats.vccs_remaining.is_some();
+        let generated_ok = record_stat(&mut stats.vccs_generated, parse_leading_number(generated));
+        let remaining_ok = record_stat(&mut stats.vccs_remaining, parse_leading_number(remaining));
+        return generated_ok || remaining_ok;
     }
 
     // "slicing removed 81 assignments", or "simple slicing removed 5 assignments" when only the
@@ -126,8 +136,7 @@ fn record_cbmc_stat(message: &str, stats: &mut CbmcStats) -> bool {
             .strip_prefix("slicing removed ")
             .or_else(|| rest.strip_prefix("simple slicing removed "))
     {
-        stats.slicing_removed_assignments = count.parse().ok();
-        return stats.slicing_removed_assignments.is_some();
+        return record_stat(&mut stats.slicing_removed_assignments, parse_leading_number(count));
     }
 
     // Everything else is reported as "<label>: <value>".
@@ -137,9 +146,7 @@ fn record_cbmc_stat(message: &str, stats: &mut CbmcStats) -> bool {
     match label {
         // "150 steps"
         "size of program expression" => {
-            stats.size_program_expression =
-                value.strip_suffix(" steps").and_then(|steps| steps.parse().ok());
-            stats.size_program_expression.is_some()
+            record_stat(&mut stats.size_program_expression, parse_leading_number(value))
         }
         "Runtime Symex" => record_seconds(value, &mut stats.runtime_symex_s),
         "Runtime Postprocess Equation" => {
@@ -155,10 +162,60 @@ fn record_cbmc_stat(message: &str, stats: &mut CbmcStats) -> bool {
     }
 }
 
+/// Assign a freshly parsed value to `field` only when parsing succeeded. Never clobbers a
+/// previously recorded valid value with `None` -- a `parse` failure simply leaves whatever `field`
+/// already held. Returns whether this update recognized a value.
+fn record_stat<T>(field: &mut Option<T>, parsed: Option<T>) -> bool {
+    match parsed {
+        Some(value) => {
+            *field = Some(value);
+            true
+        }
+        None => false,
+    }
+}
+
+/// Parse the leading numeric token of `s` (optionally signed, with an optional decimal point and
+/// exponent), together with whatever non-numeric text remains afterwards, trimmed. A caller that
+/// does not care about the trailing text (a count, where the label alone already disambiguates
+/// the unit) can use [`parse_leading_number`]; a caller for which the unit is meaningful -- see
+/// [`record_seconds`] -- can inspect the remainder before trusting the value.
+fn parse_leading_number_with_remainder<T: std::str::FromStr>(s: &str) -> Option<(T, &str)> {
+    let s = s.trim();
+    let end = s
+        .find(|c: char| !(c.is_ascii_digit() || matches!(c, '.' | '-' | '+' | 'e' | 'E')))
+        .unwrap_or(s.len());
+    if end == 0 {
+        return None;
+    }
+    let value = s[..end].parse().ok()?;
+    Some((value, s[end..].trim()))
+}
+
+/// Parse the leading numeric token of `s`, ignoring anything that follows -- a trailing unit like
+/// `" steps"`, or any other suffix. This is more robust than matching an exact suffix: a harmless
+/// CBMC wording change to the text *after* the number (a new unit, a pluralization change, extra
+/// trailing detail) still lets the number itself be recovered, rather than silently collapsing
+/// the whole measurement to `null`. Only use this where the unit doesn't affect the *meaning* of
+/// the number -- for durations, see [`record_seconds`], which does check the unit.
+fn parse_leading_number<T: std::str::FromStr>(s: &str) -> Option<T> {
+    parse_leading_number_with_remainder(s).map(|(value, _)| value)
+}
+
 /// Record a duration CBMC reports as "0.00408627s" or "1.5416e-05s".
+///
+/// Unlike the count fields (see [`parse_leading_number`]), the unit here is meaningful: a value
+/// CBMC reported in another unit -- "5ms", say -- would have its leading number "5" extracted
+/// just as readily as "5s", but recording it as 5 *seconds* would silently misreport it by three
+/// orders of magnitude. So the value is only accepted when the text remaining after the leading
+/// number is exactly "s"; any other unit, or any other trailing text, is treated as a parse
+/// failure -- never as a number recorded in the wrong scale. See [`record_stat`] for why a parse
+/// failure never clobbers a previously recorded valid value.
 fn record_seconds(value: &str, field: &mut Option<f64>) -> bool {
-    *field = value.strip_suffix('s').and_then(|seconds| seconds.parse().ok());
-    field.is_some()
+    let parsed = parse_leading_number_with_remainder::<f64>(value)
+        .filter(|(_, remainder)| *remainder == "s")
+        .map(|(seconds, _)| seconds);
+    record_stat(field, parsed)
 }
 
 /// We will use Cadical by default since it performed better than MiniSAT in our analysis.
@@ -785,6 +842,56 @@ mod tests {
             message_type: "WARNING".to_string(),
         }];
         assert!(merge_cbmc_stats(&warning).is_none());
+    }
+
+    /// A later message that fails to parse must never erase an already-recorded valid value: the
+    /// gap between "not measured" and "we saw a value we couldn't parse" must stay visible as
+    /// "we kept the value we did successfully parse", not collapse to `null`.
+    #[test]
+    fn check_cbmc_stats_never_clobbers_valid_value() {
+        let mut stats = CbmcStats::default();
+        assert!(record_cbmc_stat("Runtime Solver: 4.1167e-05s", &mut stats));
+        assert_eq!(stats.runtime_solver_s, Some(4.1167e-05));
+
+        // A later malformed duplicate of the same label must not erase the value already
+        // recorded above.
+        assert!(!record_cbmc_stat("Runtime Solver: not-a-number", &mut stats));
+        assert_eq!(stats.runtime_solver_s, Some(4.1167e-05));
+    }
+
+    /// Parsing the leading numeric token (rather than requiring an exact suffix match) tolerates
+    /// harmless trailing text a suffix-based parser would reject outright.
+    #[test]
+    fn check_cbmc_stats_leading_number_tolerates_trailing_text() {
+        let mut stats = CbmcStats::default();
+        assert!(record_cbmc_stat(
+            "size of program expression: 21 steps (post-slicing)",
+            &mut stats
+        ));
+        assert_eq!(stats.size_program_expression, Some(21));
+    }
+
+    /// `record_seconds` must not mistake a value reported in another unit for seconds: the
+    /// leading number "5" is just as extractable from "5ms" as from "5s", but recording it as 5
+    /// seconds would misreport it by three orders of magnitude. Only an exact "s" suffix is
+    /// accepted; genuine second values, including exponent notation, still parse.
+    #[test]
+    fn check_record_seconds_is_unit_safe() {
+        let mut none = None;
+        assert!(!record_seconds("5ms", &mut none));
+        assert_eq!(none, None);
+
+        let mut none = None;
+        assert!(!record_seconds("5", &mut none));
+        assert_eq!(none, None);
+
+        let mut seconds = None;
+        assert!(record_seconds("0.004s", &mut seconds));
+        assert_eq!(seconds, Some(0.004));
+
+        let mut seconds = None;
+        assert!(record_seconds("1.5e-05s", &mut seconds));
+        assert_eq!(seconds, Some(1.5e-05));
     }
 
     /// No statistics at all (CBMC died early, or verbosity hid them) must not fabricate a record.
