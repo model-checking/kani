@@ -79,12 +79,24 @@ impl KaniSession {
 
     /// Extract CBMC statistics from a message
     fn extract_cbmc_stats_from_message(message: &str) -> Option<CbmcStats> {
+        // Each pattern is compiled once on first use. Compiling them per message (CBMC emits many
+        // per harness) is pure overhead, and it was paid on every run.
+        static RUNTIME_SYMEX: OnceLock<Regex> = OnceLock::new();
+        static PROGRAM_EXPRESSION: OnceLock<Regex> = OnceLock::new();
+        static SLICING_REMOVED: OnceLock<Regex> = OnceLock::new();
+        static VCCS: OnceLock<Regex> = OnceLock::new();
+        static POSTPROCESS_EQUATION: OnceLock<Regex> = OnceLock::new();
+        static CONVERT_SSA: OnceLock<Regex> = OnceLock::new();
+        static POST_PROCESS: OnceLock<Regex> = OnceLock::new();
+        static SOLVER: OnceLock<Regex> = OnceLock::new();
+        static DECISION_PROCEDURE: OnceLock<Regex> = OnceLock::new();
+
         let mut stats = CbmcStats::default();
         let mut found_any = false;
 
         // Example: "Runtime Symex: 0.00408627s"
         if let Some(captures) =
-            regex::Regex::new(r"Runtime Symex: ([-e\d\.]+)s").ok()?.captures(message)
+            stat_regex(&RUNTIME_SYMEX, r"Runtime Symex: ([-e\d\.]+)s").captures(message)
             && let Ok(val) = captures[1].parse::<f64>()
         {
             stats.runtime_symex_s = Some(val);
@@ -93,7 +105,8 @@ impl KaniSession {
 
         // Example: "size of program expression: 150 steps"
         if let Some(captures) =
-            regex::Regex::new(r"size of program expression: (\d+) steps").ok()?.captures(message)
+            stat_regex(&PROGRAM_EXPRESSION, r"size of program expression: (\d+) steps")
+                .captures(message)
             && let Ok(val) = captures[1].parse::<u32>()
         {
             stats.size_program_expression = Some(val);
@@ -102,7 +115,7 @@ impl KaniSession {
 
         // Example: "slicing removed 81 assignments"
         if let Some(captures) =
-            regex::Regex::new(r"slicing removed (\d+) assignments").ok()?.captures(message)
+            stat_regex(&SLICING_REMOVED, r"slicing removed (\d+) assignments").captures(message)
             && let Ok(val) = captures[1].parse::<u32>()
         {
             stats.slicing_removed_assignments = Some(val);
@@ -111,8 +124,7 @@ impl KaniSession {
 
         // Example: "Generated 1 VCC(s), 1 remaining after simplification"
         if let Some(captures) =
-            regex::Regex::new(r"Generated (\d+) VCC\(s\), (\d+) remaining after simplification")
-                .ok()?
+            stat_regex(&VCCS, r"Generated (\d+) VCC\(s\), (\d+) remaining after simplification")
                 .captures(message)
         {
             if let Ok(generated) = captures[1].parse::<u32>() {
@@ -127,7 +139,8 @@ impl KaniSession {
 
         // Example: "Runtime Postprocess Equation: 0.000767182s"
         if let Some(captures) =
-            regex::Regex::new(r"Runtime Postprocess Equation: ([-e\d\.]+)s").ok()?.captures(message)
+            stat_regex(&POSTPROCESS_EQUATION, r"Runtime Postprocess Equation: ([-e\d\.]+)s")
+                .captures(message)
             && let Ok(val) = captures[1].parse::<f64>()
         {
             stats.runtime_postprocess_equation_s = Some(val);
@@ -136,7 +149,7 @@ impl KaniSession {
 
         // Example: "Runtime Convert SSA: 0.000516981s"
         if let Some(captures) =
-            regex::Regex::new(r"Runtime Convert SSA: ([-e\d\.]+)s").ok()?.captures(message)
+            stat_regex(&CONVERT_SSA, r"Runtime Convert SSA: ([-e\d\.]+)s").captures(message)
             && let Ok(val) = captures[1].parse::<f64>()
         {
             stats.runtime_convert_ssa_s = Some(val);
@@ -145,7 +158,7 @@ impl KaniSession {
 
         // Example: "Runtime Post-process: 0.000189636s"
         if let Some(captures) =
-            regex::Regex::new(r"Runtime Post-process: ([-e\d\.]+)s").ok()?.captures(message)
+            stat_regex(&POST_PROCESS, r"Runtime Post-process: ([-e\d\.]+)s").captures(message)
             && let Ok(val) = captures[1].parse::<f64>()
         {
             stats.runtime_post_process_s = Some(val);
@@ -154,7 +167,7 @@ impl KaniSession {
 
         // Example: "Runtime Solver: 0.00167592s"
         if let Some(captures) =
-            regex::Regex::new(r"Runtime Solver: ([-e\d\.]+)s").ok()?.captures(message)
+            stat_regex(&SOLVER, r"Runtime Solver: ([-e\d\.]+)s").captures(message)
             && let Ok(val) = captures[1].parse::<f64>()
         {
             stats.runtime_solver_s = Some(val);
@@ -163,7 +176,8 @@ impl KaniSession {
 
         // Example: "Runtime decision procedure: 0.00452419s"
         if let Some(captures) =
-            regex::Regex::new(r"Runtime decision procedure: ([-e\d\.]+)s").ok()?.captures(message)
+            stat_regex(&DECISION_PROCEDURE, r"Runtime decision procedure: ([-e\d\.]+)s")
+                .captures(message)
             && let Ok(val) = captures[1].parse::<f64>()
         {
             stats.runtime_decision_procedure_s = Some(val);
@@ -171,6 +185,63 @@ impl KaniSession {
         }
 
         if found_any { Some(stats) } else { None }
+    }
+}
+
+/// Compile a CBMC statistics pattern on first use and reuse it afterwards. The patterns are
+/// compile-time constants, so a failure to compile is a bug in the pattern rather than a runtime
+/// condition.
+fn stat_regex(cell: &'static OnceLock<Regex>, pattern: &str) -> &'static Regex {
+    cell.get_or_init(|| Regex::new(pattern).unwrap())
+}
+
+/// Merge the CBMC statistics scattered across CBMC's messages into a single record.
+/// Returns `None` when no message carried the statistics we look for, which is the case whenever
+/// CBMC was not asked for them or did not get far enough to report any.
+fn merge_cbmc_stats(items: &[crate::cbmc_output_parser::ParserItem]) -> Option<CbmcStats> {
+    let mut cbmc_stats = CbmcStats::default();
+    for item in items {
+        if let crate::cbmc_output_parser::ParserItem::Message { message_text, .. } = item
+            && let Some(stats) = KaniSession::extract_cbmc_stats_from_message(message_text)
+        {
+            // Merge stats (later messages may have more complete info)
+            if stats.runtime_symex_s.is_some() {
+                cbmc_stats.runtime_symex_s = stats.runtime_symex_s;
+            }
+            if stats.size_program_expression.is_some() {
+                cbmc_stats.size_program_expression = stats.size_program_expression;
+            }
+            if stats.slicing_removed_assignments.is_some() {
+                cbmc_stats.slicing_removed_assignments = stats.slicing_removed_assignments;
+            }
+            if stats.vccs_generated.is_some() {
+                cbmc_stats.vccs_generated = stats.vccs_generated;
+            }
+            if stats.vccs_remaining.is_some() {
+                cbmc_stats.vccs_remaining = stats.vccs_remaining;
+            }
+            if stats.runtime_postprocess_equation_s.is_some() {
+                cbmc_stats.runtime_postprocess_equation_s = stats.runtime_postprocess_equation_s;
+            }
+            if stats.runtime_convert_ssa_s.is_some() {
+                cbmc_stats.runtime_convert_ssa_s = stats.runtime_convert_ssa_s;
+            }
+            if stats.runtime_post_process_s.is_some() {
+                cbmc_stats.runtime_post_process_s = stats.runtime_post_process_s;
+            }
+            if stats.runtime_solver_s.is_some() {
+                cbmc_stats.runtime_solver_s = stats.runtime_solver_s;
+            }
+            if stats.runtime_decision_procedure_s.is_some() {
+                cbmc_stats.runtime_decision_procedure_s = stats.runtime_decision_procedure_s;
+            }
+        }
+    }
+
+    if cbmc_stats.runtime_symex_s.is_some() || cbmc_stats.size_program_expression.is_some() {
+        Some(cbmc_stats)
+    } else {
+        None
     }
 }
 
@@ -299,7 +370,12 @@ impl KaniSession {
 
         if let Ok(output) = res {
             // The timeout wasn't reached
-            Ok(VerificationResult::from(output?, harness.attributes.should_panic, start_time))
+            Ok(VerificationResult::from(
+                output?,
+                harness.attributes.should_panic,
+                start_time,
+                self.args.export_json.is_some(),
+            ))
         } else {
             // An error occurs if the timeout was reached
 
@@ -487,58 +563,14 @@ impl VerificationResult {
         output: VerificationOutput,
         should_panic: bool,
         start_time: Instant,
+        collect_cbmc_stats: bool,
     ) -> VerificationResult {
         let runtime = start_time.elapsed();
         let (remaining_items, results) = extract_results(output.processed_items);
 
-        // Collect CBMC stats from messages
-        let mut cbmc_stats = CbmcStats::default();
-        for item in &remaining_items {
-            if let crate::cbmc_output_parser::ParserItem::Message { message_text, .. } = item
-                && let Some(stats) = KaniSession::extract_cbmc_stats_from_message(message_text)
-            {
-                // Merge stats (later messages may have more complete info)
-                if stats.runtime_symex_s.is_some() {
-                    cbmc_stats.runtime_symex_s = stats.runtime_symex_s;
-                }
-                if stats.size_program_expression.is_some() {
-                    cbmc_stats.size_program_expression = stats.size_program_expression;
-                }
-                if stats.slicing_removed_assignments.is_some() {
-                    cbmc_stats.slicing_removed_assignments = stats.slicing_removed_assignments;
-                }
-                if stats.vccs_generated.is_some() {
-                    cbmc_stats.vccs_generated = stats.vccs_generated;
-                }
-                if stats.vccs_remaining.is_some() {
-                    cbmc_stats.vccs_remaining = stats.vccs_remaining;
-                }
-                if stats.runtime_postprocess_equation_s.is_some() {
-                    cbmc_stats.runtime_postprocess_equation_s =
-                        stats.runtime_postprocess_equation_s;
-                }
-                if stats.runtime_convert_ssa_s.is_some() {
-                    cbmc_stats.runtime_convert_ssa_s = stats.runtime_convert_ssa_s;
-                }
-                if stats.runtime_post_process_s.is_some() {
-                    cbmc_stats.runtime_post_process_s = stats.runtime_post_process_s;
-                }
-                if stats.runtime_solver_s.is_some() {
-                    cbmc_stats.runtime_solver_s = stats.runtime_solver_s;
-                }
-                if stats.runtime_decision_procedure_s.is_some() {
-                    cbmc_stats.runtime_decision_procedure_s = stats.runtime_decision_procedure_s;
-                }
-            }
-        }
-
-        let cbmc_stats = if cbmc_stats.runtime_symex_s.is_some()
-            || cbmc_stats.size_program_expression.is_some()
-        {
-            Some(cbmc_stats)
-        } else {
-            None
-        };
+        // Only `--export-json` consumes these, and collecting them means running several regexes
+        // over every message CBMC emitted, so skip the work entirely when nothing will read it.
+        let cbmc_stats = if collect_cbmc_stats { merge_cbmc_stats(&remaining_items) } else { None };
 
         if let Some(results) = results {
             let (status, failed_properties) =
