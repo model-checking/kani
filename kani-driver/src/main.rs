@@ -14,7 +14,7 @@ use crate::args::StandaloneSubcommand;
 use crate::concrete_playback::playback::{playback_cargo, playback_standalone};
 use crate::frontend::{
     JsonHandler, create_harness_metadata_json, create_metadata_json, create_project_metadata_json,
-    process_cbmc_results, process_harness_results,
+    create_tool_versions_json, process_cbmc_results, process_harness_results,
 };
 use crate::list::collect_metadata::{list_cargo, list_standalone};
 use crate::project::Project;
@@ -154,6 +154,7 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
         // Add project and export run metadata using frontend utility
         handler.add_item("metadata", create_metadata_json());
         handler.add_item("project", create_project_metadata_json(&project));
+        handler.add_item("tools", create_tool_versions_json(&session, &harnesses));
 
         // Add harness metadata using frontend utility
         for h in &harnesses {

@@ -10,9 +10,12 @@ use crate::harness_runner::HarnessResult;
 use crate::project::Project;
 use crate::session::KaniSession;
 use anyhow::Result;
-use kani_metadata::HarnessMetadata;
+use kani_metadata::{CbmcSolver, HarnessMetadata};
 use serde::Serialize;
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
+use std::ffi::OsStr;
+use std::process::Command;
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
@@ -34,6 +37,87 @@ pub fn create_metadata_json() -> Value {
     "target": target,
     "build_mode": build_mode,
     })
+}
+
+/// Ask a tool for its version, returning the first line of its `--version` output.
+///
+/// Returns `None` if the tool cannot be run or says nothing: a version we could not determine is
+/// reported as null rather than guessed, and never fails the run.
+fn tool_version(binary: &OsStr) -> Option<String> {
+    let output = Command::new(binary).arg("--version").output().ok()?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let first_line = stdout.lines().next()?.trim();
+    (!first_line.is_empty()).then(|| first_line.to_string())
+}
+
+/// The version of every tool this run relies on, addressing part of
+/// <https://github.com/model-checking/kani/issues/942>'s sibling request
+/// <https://github.com/model-checking/kani/issues/2572>.
+///
+/// A key is present only if the run uses that tool, so an absent key means "not part of this run"
+/// while a present null means "used, but its version could not be determined". The versions are
+/// verbatim first lines of `--version` output, so they are display strings rather than parseable
+/// values.
+///
+/// This spawns a process per tool. That is only paid when `--export-json` is requested, and once per
+/// run rather than per harness.
+pub fn create_tool_versions_json(session: &KaniSession, harnesses: &[&HarnessMetadata]) -> Value {
+    let mut tools = serde_json::Map::new();
+
+    tools.insert("kani".to_string(), json!(env!("CARGO_PKG_VERSION")));
+
+    // `kani-compiler` is a rustc driver, so `--version` reports the toolchain it was built against.
+    // That is the version that decides how Rust is translated, which makes it the interesting one.
+    // Asking the binary beats reading a `rustc` from PATH, which need not be the same toolchain.
+    tools.insert("rustc".to_string(), json!(tool_version(session.kani_compiler.as_os_str())));
+
+    // The CBMC suite. `cbmc` and `goto-cc` run for every verification; `goto-instrument` runs to
+    // instrument the goto program; `goto-synthesizer` only for loop-contract synthesis.
+    for (key, binary) in
+        [("cbmc", "cbmc"), ("goto_cc", "goto-cc"), ("goto_instrument", "goto-instrument")]
+    {
+        tools.insert(key.to_string(), json!(tool_version(OsStr::new(binary))));
+    }
+    if session.args.synthesize_loop_contracts {
+        tools.insert(
+            "goto_synthesizer".to_string(),
+            json!(tool_version(OsStr::new("goto-synthesizer"))),
+        );
+    }
+
+    // Solvers, which can differ per harness, so this is every distinct solver the run resolves to.
+    // A list rather than a map keyed by name, because the set varies per run and consumers should
+    // not have to discover which keys might appear. Only solvers CBMC invokes as separate binaries
+    // have a version of their own: CaDiCaL and MiniSAT are built into CBMC and would report its
+    // version, so they are named with a null version rather than given a misleading one.
+    let mut solvers = BTreeMap::new();
+    for harness in harnesses {
+        let (name, binary) = match session.resolved_solver(&harness.attributes.solver) {
+            CbmcSolver::Bitwuzla => ("bitwuzla", Some("bitwuzla")),
+            CbmcSolver::Cadical => ("cadical", None),
+            CbmcSolver::Cvc5 => ("cvc5", Some("cvc5")),
+            CbmcSolver::Kissat => ("kissat", Some("kissat")),
+            CbmcSolver::Minisat => ("minisat", None),
+            CbmcSolver::Z3 => ("z3", Some("z3")),
+            CbmcSolver::Binary(binary) => (binary.as_str(), Some(binary.as_str())),
+        };
+        // Probe each binary once, however many harnesses use it. Ordered by name so two runs with
+        // the same solvers produce the same document.
+        solvers
+            .entry(name.to_string())
+            .or_insert_with(|| binary.and_then(|binary| tool_version(OsStr::new(binary))));
+    }
+    tools.insert(
+        "solvers".to_string(),
+        json!(
+            solvers
+                .into_iter()
+                .map(|(name, version)| json!({"name": name, "version": version}))
+                .collect::<Vec<_>>()
+        ),
+    );
+
+    Value::Object(tools)
 }
 
 /// Creates structured JSON metadata for the project

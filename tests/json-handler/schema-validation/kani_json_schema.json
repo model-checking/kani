@@ -14,6 +14,23 @@
     "workspace_root": "/path/to/workspace",
     "output_dir": "/path/to/workspace/target/x86_64-unknown-linux-gnu/debug/deps"
   },
+  "tools": {
+    "_optional": [
+      "goto_synthesizer"
+    ],
+    "kani": "0.67.0",
+    "rustc": "rustc 1.95.0-nightly (838709580 2026-02-17)",
+    "cbmc": "6.10.0 (cbmc-6.10.0)",
+    "goto_cc": "clang version 21.0.0 (goto-cc 6.10.0 (cbmc-6.10.0))",
+    "goto_instrument": "6.10.0 (cbmc-6.10.0)",
+    "goto_synthesizer": null,
+    "solvers": [
+      {
+        "name": "cadical",
+        "version": null
+      }
+    ]
+  },
   "harness_metadata": [
     {
       "pretty_name": "example_harness",
