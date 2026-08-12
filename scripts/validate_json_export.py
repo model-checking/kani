@@ -100,16 +100,133 @@ def validate_structure_recursive(data, schema, path="", nullable=False):
             # Validate every item against the schema template. Checking only the first
             # element let malformed data in every later harness pass validation, which
             # defeats the purpose on exactly the multi-harness runs this validates.
+            #
+            # An empty array is *not* treated as an error here: some arrays are legitimately
+            # empty (e.g. `checks` for a harness with no properties). What used to make an empty
+            # array a vacuous pass was that it skips the loop below with zero iterations and
+            # zero errors -- exactly like a real, correctly-validated array. The distinction
+            # this function draws is between "validated everything present" (this) and
+            # "nothing was present to check" (a caller-level semantic question, e.g. whether
+            # `results` should be empty -- see `validate_semantic_checks`).
             for index, item in enumerate(data):
                 sub_errors = validate_structure_recursive(
                     item, schema[0], f"{path}[{index}]"
                 )[1]
                 errors.extend(sub_errors)
 
-    # Leaf values - no validation needed
+    # Leaf values. A `None` schema leaf means the template does not commit to a type at this
+    # position (e.g. `contract.contracted_function_name`, which is only ever populated from real
+    # data) -- there's nothing to check against, so it is left unvalidated exactly as before.
+    # A non-`None` schema leaf, on the other hand, is a definite type (bool / number / string),
+    # and the data must match it. Before this, `"failed": -100`, `"successful": "yes"`, or any
+    # other leaf of the wrong type validated as OK, because leaves were never inspected at all.
+    elif schema is not None:
+        if isinstance(schema, bool):
+            # Must come before the `int`/`float` branch: in Python, `bool` is a subclass of
+            # `int`, so `isinstance(True, int)` is true and would otherwise let a bool through
+            # a numeric check (and vice versa below).
+            if not isinstance(data, bool):
+                errors.append(
+                    f"Type mismatch at {path}: expected bool, got {type(data).__name__}"
+                )
+        elif isinstance(schema, (int, float)):
+            if isinstance(data, bool) or not isinstance(data, (int, float)):
+                errors.append(
+                    f"Type mismatch at {path}: expected a number, got {type(data).__name__}"
+                )
+        elif isinstance(schema, str):
+            if not isinstance(data, str):
+                errors.append(
+                    f"Type mismatch at {path}: expected str, got {type(data).__name__}"
+                )
 
     success = len(errors) == 0
     return success, errors
+
+
+def validate_semantic_checks(data):
+    """
+    A small set of semantic checks on `verification_results.summary` beyond structure and leaf
+    types: a document can be perfectly well-typed and still lie about what happened, e.g.
+    `executed` disagreeing with the number of results actually reported, or a negative count that
+    is well-typed (a valid JSON integer) but meaningless. Kept deliberately narrow -- this is not
+    a general semantic validator, just the reconciliation checks a mutated count can defeat.
+
+    Returns a list of error strings; an empty list means the semantic checks found nothing wrong.
+    """
+    errors = []
+
+    verification_results = data.get("verification_results")
+    if not isinstance(verification_results, dict):
+        # Already reported (or not applicable) by the structural check; nothing more to say here.
+        return errors
+
+    summary = verification_results.get("summary")
+    results = verification_results.get("results")
+    if not isinstance(summary, dict) or not isinstance(results, list):
+        return errors
+
+    def as_int(value):
+        # Excludes `bool`: a `True`/`False` count is a type error the structural check already
+        # reports, not a value this function should reason about numerically.
+        return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+    executed = as_int(summary.get("executed"))
+    successful = as_int(summary.get("successful"))
+    failed = as_int(summary.get("failed"))
+
+    for field in ("total_harnesses", "executed", "successful", "failed", "duration_ms"):
+        value = as_int(summary.get(field))
+        if value is not None and value < 0:
+            errors.append(
+                f"verification_results.summary.{field} is negative: {value}"
+            )
+
+    if executed is not None and executed != len(results):
+        errors.append(
+            f"verification_results.summary.executed ({executed}) does not match "
+            f"the number of entries in verification_results.results ({len(results)})"
+        )
+
+    if executed is not None and successful is not None and failed is not None:
+        if successful + failed != executed:
+            errors.append(
+                f"verification_results.summary.successful ({successful}) + "
+                f"failed ({failed}) does not equal executed ({executed})"
+            )
+
+    # `run_state` is the field a consumer is meant to trust as the run's bottom line, so its
+    # value must both be one of the states the exporter actually emits, and must agree with what
+    # the rest of the document says happened -- otherwise a mislabeled `run_state` is a more
+    # dangerous lie than no `run_state` at all.
+    run_state = data.get("run_state")
+    if run_state is not None:
+        valid_run_states = {"incomplete", "no_harnesses_selected", "partial", "complete"}
+        if run_state not in valid_run_states:
+            errors.append(
+                f"run_state has an unrecognized value: {run_state!r} "
+                f"(expected one of {sorted(valid_run_states)})"
+            )
+        elif run_state == "complete":
+            if len(results) == 0:
+                errors.append(
+                    'run_state is "complete" but verification_results.results is empty'
+                )
+            # `executed == len(results)` is already enforced unconditionally above, so a
+            # "complete" run that disagrees is already reported there.
+        elif run_state == "no_harnesses_selected":
+            if executed is not None and executed != 0:
+                errors.append(
+                    'run_state is "no_harnesses_selected" but '
+                    f"verification_results.summary.executed is {executed}, expected 0"
+                )
+            if len(results) != 0:
+                errors.append(
+                    'run_state is "no_harnesses_selected" but '
+                    f"verification_results.results is not empty (len={len(results)})"
+                )
+
+    return errors
 
 
 def validate_json_structure(json_file, schema=None):
@@ -134,9 +251,13 @@ def validate_json_structure(json_file, schema=None):
 
     # All schema fields are required - validate structure recursively
     # The recursive validator will catch any missing required fields
-    success, all_errors = validate_structure_recursive(data, schema, "")
+    _, structural_errors = validate_structure_recursive(data, schema, "")
 
-    if not success or all_errors:
+    # Structural/type validation and semantic validation are independent: run both and report
+    # everything found, rather than short-circuiting on the first kind of failure.
+    all_errors = structural_errors + validate_semantic_checks(data)
+
+    if all_errors:
         print(f"ERROR: Validation failed for {json_file}:")
         for error in all_errors:
             print(f"  - {error}")

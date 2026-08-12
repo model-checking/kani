@@ -54,6 +54,13 @@
       "is_automatically_generated": false
     }
   ],
+  "harness_selection": {
+    "requested_filters": [
+      "example_harness"
+    ],
+    "matched_count": 1,
+    "unmatched_filters": []
+  },
   "verification_results": {
     "summary": {
       "total_harnesses": 1,
@@ -150,5 +157,6 @@
   ],
   "coverage": {
     "enabled": false
-  }
+  },
+  "run_state": "complete"
 }
