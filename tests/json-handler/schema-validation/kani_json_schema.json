@@ -111,6 +111,11 @@
         "failed": 0,
         "unreachable": 0,
         "undetermined": 0,
+        "solver_error": 0,
+        "satisfied": 0,
+        "unsatisfiable": 0,
+        "covered": 0,
+        "uncovered": 0,
         "error": null
       }
     }

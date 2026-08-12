@@ -85,11 +85,20 @@ for key in ['error_details', 'property_details', 'cbmc']:
 check(not any(e.get('has_errors') for e in data['error_details']),
       "no harness should report errors")
 
+counted = ['passed', 'failed', 'unreachable', 'undetermined', 'solver_error',
+           'satisfied', 'unsatisfiable', 'covered', 'uncovered']
+
 for entry in data['property_details']:
     details = entry['property_details']
+    harness = entry.get('harness_id')
     check(details.get('failed') == 0,
-          f"{entry.get('harness_id')} should have 0 failed properties, "
-          f"got {details.get('failed')}")
+          f"{harness} should have 0 failed properties, got {details.get('failed')}")
+    # The per-status counts must account for every property, or a consumer cannot tell a
+    # complete breakdown from one that quietly dropped a status it did not know about.
+    total = sum(details.get(field) or 0 for field in counted)
+    check(total == details.get('total_properties'),
+          f"{harness} status counts sum to {total} but total_properties is "
+          f"{details.get('total_properties')}")
 
 if failures:
     for failure in failures:

@@ -5,6 +5,7 @@
 // This module contains helper functions to convert Kani internal structures to JSON
 
 use crate::call_cbmc::VerificationStatus;
+use crate::cbmc_output_parser::{CheckStatus, Property};
 use crate::frontend::JsonHandler;
 use crate::harness_runner::HarnessResult;
 use crate::project::Project;
@@ -118,6 +119,86 @@ pub fn create_tool_versions_json(session: &KaniSession, harnesses: &[&HarnessMet
     );
 
     Value::Object(tools)
+}
+
+/// Every property of a harness, counted by status.
+///
+/// The counts partition the properties exhaustively, so
+/// `passed + failed + unreachable + undetermined + error + satisfied + unsatisfiable + covered +
+/// uncovered == total_properties` always holds. Counting only a few statuses meant the numbers
+/// silently failed to reconcile whenever a run had cover statements, coverage properties, or a
+/// solver error, and a consumer had no way to tell that from a run where they genuinely summed.
+///
+/// The match below is deliberately exhaustive: a new `CheckStatus` should fail to compile here
+/// rather than quietly go uncounted.
+#[derive(Default)]
+struct PropertyCounts {
+    passed: usize,
+    failed: usize,
+    unreachable: usize,
+    undetermined: usize,
+    error: usize,
+    satisfied: usize,
+    unsatisfiable: usize,
+    covered: usize,
+    uncovered: usize,
+}
+
+impl PropertyCounts {
+    fn of(properties: &[Property]) -> Self {
+        let mut counts = Self::default();
+        for property in properties {
+            let counter = match property.status {
+                CheckStatus::Success => &mut counts.passed,
+                CheckStatus::Failure => &mut counts.failed,
+                CheckStatus::Unreachable => &mut counts.unreachable,
+                // Kani renders both of these as UNDETERMINED, so they are grouped here to keep the
+                // export agreeing with the text output. CBMC 6+ reports UNKNOWN when another
+                // property's failure makes this one impossible to conclude either way.
+                CheckStatus::Undetermined | CheckStatus::Unknown => &mut counts.undetermined,
+                CheckStatus::Error => &mut counts.error,
+                CheckStatus::Satisfied => &mut counts.satisfied,
+                CheckStatus::Unsatisfiable => &mut counts.unsatisfiable,
+                CheckStatus::Covered => &mut counts.covered,
+                CheckStatus::Uncovered => &mut counts.uncovered,
+            };
+            *counter += 1;
+        }
+        counts
+    }
+
+    fn to_json(&self) -> Value {
+        json!({
+            "total_properties": self.passed + self.failed + self.unreachable + self.undetermined
+                + self.error + self.satisfied + self.unsatisfiable + self.covered + self.uncovered,
+            "passed": self.passed,
+            "failed": self.failed,
+            "unreachable": self.unreachable,
+            "undetermined": self.undetermined,
+            "solver_error": self.error,
+            "satisfied": self.satisfied,
+            "unsatisfiable": self.unsatisfiable,
+            "covered": self.covered,
+            "uncovered": self.uncovered,
+        })
+    }
+
+    /// The same shape, for a harness whose properties were never measured.
+    fn unmeasured_json() -> Value {
+        json!({
+            "total_properties": null,
+            "passed": null,
+            "failed": null,
+            "unreachable": null,
+            "undetermined": null,
+            "solver_error": null,
+            "satisfied": null,
+            "unsatisfiable": null,
+            "covered": null,
+            "uncovered": null,
+            "error": "Could not extract property details due to verification failure"
+        })
+    }
 }
 
 /// Creates structured JSON metadata for the project
@@ -288,43 +369,52 @@ pub fn process_harness_results(
             // attributable: this array is built in harness-metadata order while
             // `verification_results.results` is in completion order, so the two cannot be
             // correlated by position.
-            handler.add_harness_detail("property_details", json!({
-                "harness_id": h.pretty_name,
-                "property_details": match &result.result.results {
-                    Ok(properties) => {
-                        use crate::cbmc_output_parser::CheckStatus;
-                        let count = |status: CheckStatus| {
-                            properties.iter().filter(|p| p.status == status).count()
-                        };
-
-                        json!({
-                            "total_properties": properties.len(),
-                            "passed": count(CheckStatus::Success),
-                            "failed": count(CheckStatus::Failure),
-                            // Counted directly rather than derived by subtraction, which silently
-                            // reported undetermined and error properties as unreachable.
-                            "unreachable": count(CheckStatus::Unreachable),
-                            "undetermined": count(CheckStatus::Undetermined)
-                        })
-                    },
-                    // CBMC produced no property results at all (timeout, out of memory, crash).
-                    // Keep every count present so the shape does not change between runs, and
-                    // report them as null: `0` would assert that nothing failed, when the truth is
-                    // that nothing was measured.
-                    Err(_) => json!({
-                        "total_properties": null,
-                        "passed": null,
-                        "failed": null,
-                        "unreachable": null,
-                        "undetermined": null,
-                        "error": "Could not extract property details due to verification failure"
-                    })
-                }
-            }));
+            handler.add_harness_detail(
+                "property_details",
+                json!({
+                    "harness_id": h.pretty_name,
+                    "property_details": match &result.result.results {
+                        Ok(properties) => PropertyCounts::of(properties).to_json(),
+                        // CBMC produced no property results at all (timeout, out of memory, crash).
+                        // Keep every count present so the shape does not change between runs, and
+                        // report them as null: `0` would assert that nothing failed, when the truth is
+                        // that nothing was measured.
+                        Err(_) => PropertyCounts::unmeasured_json()
+                    }
+                }),
+            );
         }
     }
 
     Ok(())
+}
+
+/// The solver CBMC will actually run with, as a display string.
+///
+/// `resolved_solver` covers `--solver`, the harness attribute and the default, but `--cbmc-args` is
+/// appended *after* Kani's own solver flags and CBMC takes the last one it sees, so a solver named
+/// there overrides all three. Returns `None` when `--cbmc-args` selects a solver we cannot name --
+/// `--smt2` on its own leaves the choice to CBMC -- since a wrong name is worse than no name.
+fn effective_solver(session: &KaniSession, harness_solver: &Option<CbmcSolver>) -> Option<String> {
+    let mut overridden = false;
+    let mut solver = None;
+    let mut cbmc_args = session.args.cbmc_args.iter();
+    while let Some(arg) = cbmc_args.next() {
+        // Last one wins, matching CBMC.
+        match arg.to_str() {
+            Some("--sat-solver") | Some("--external-sat-solver") => {
+                overridden = true;
+                solver = cbmc_args.next().and_then(|name| name.to_str()).map(str::to_string);
+            }
+            Some("--bitwuzla") => (overridden, solver) = (true, Some("bitwuzla".to_string())),
+            Some("--cvc5") => (overridden, solver) = (true, Some("cvc5".to_string())),
+            Some("--z3") => (overridden, solver) = (true, Some("z3".to_string())),
+            Some("--smt2") => (overridden, solver) = (true, None),
+            _ => {}
+        }
+    }
+
+    if overridden { solver } else { Some(format!("{:?}", session.resolved_solver(harness_solver))) }
 }
 
 /// The `--object-bits` value CBMC will actually run with.
@@ -370,7 +460,7 @@ pub fn process_cbmc_results(
             // reading the run that actually happened.
             "configuration": {
                 "object_bits": effective_object_bits(session),
-                "solver": format!("{:?}", session.resolved_solver(&h.attributes.solver)),
+                "solver": effective_solver(session, &h.attributes.solver),
             },
 
             // CBMC execution statistics extracted from messages
