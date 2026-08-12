@@ -18,7 +18,7 @@ use tokio::process::Command as TokioCommand;
 use crate::args::common::Verbosity;
 use crate::args::{OutputFormat, VerificationArgs};
 use crate::cbmc_output_parser::{
-    CheckStatus, Property, VerificationOutput, extract_results, process_cbmc_output,
+    CheckStatus, ParserItem, Property, VerificationOutput, extract_results, process_cbmc_output,
 };
 use crate::cbmc_property_renderer::{format_coverage, format_result, kani_cbmc_output_filter};
 use crate::coverage::cov_results::{CoverageCheck, CoverageResults};
@@ -76,173 +76,89 @@ impl KaniSession {
 
         Ok(CbmcInfo { version, os_info })
     }
-
-    /// Extract CBMC statistics from a message
-    fn extract_cbmc_stats_from_message(message: &str) -> Option<CbmcStats> {
-        // Each pattern is compiled once on first use. Compiling them per message (CBMC emits many
-        // per harness) is pure overhead, and it was paid on every run.
-        static RUNTIME_SYMEX: OnceLock<Regex> = OnceLock::new();
-        static PROGRAM_EXPRESSION: OnceLock<Regex> = OnceLock::new();
-        static SLICING_REMOVED: OnceLock<Regex> = OnceLock::new();
-        static VCCS: OnceLock<Regex> = OnceLock::new();
-        static POSTPROCESS_EQUATION: OnceLock<Regex> = OnceLock::new();
-        static CONVERT_SSA: OnceLock<Regex> = OnceLock::new();
-        static POST_PROCESS: OnceLock<Regex> = OnceLock::new();
-        static SOLVER: OnceLock<Regex> = OnceLock::new();
-        static DECISION_PROCEDURE: OnceLock<Regex> = OnceLock::new();
-
-        let mut stats = CbmcStats::default();
-        let mut found_any = false;
-
-        // Example: "Runtime Symex: 0.00408627s"
-        if let Some(captures) =
-            stat_regex(&RUNTIME_SYMEX, r"Runtime Symex: ([-e\d\.]+)s").captures(message)
-            && let Ok(val) = captures[1].parse::<f64>()
-        {
-            stats.runtime_symex_s = Some(val);
-            found_any = true;
-        }
-
-        // Example: "size of program expression: 150 steps"
-        if let Some(captures) =
-            stat_regex(&PROGRAM_EXPRESSION, r"size of program expression: (\d+) steps")
-                .captures(message)
-            && let Ok(val) = captures[1].parse::<u32>()
-        {
-            stats.size_program_expression = Some(val);
-            found_any = true;
-        }
-
-        // Example: "slicing removed 81 assignments"
-        if let Some(captures) =
-            stat_regex(&SLICING_REMOVED, r"slicing removed (\d+) assignments").captures(message)
-            && let Ok(val) = captures[1].parse::<u32>()
-        {
-            stats.slicing_removed_assignments = Some(val);
-            found_any = true;
-        }
-
-        // Example: "Generated 1 VCC(s), 1 remaining after simplification"
-        if let Some(captures) =
-            stat_regex(&VCCS, r"Generated (\d+) VCC\(s\), (\d+) remaining after simplification")
-                .captures(message)
-        {
-            if let Ok(generated) = captures[1].parse::<u32>() {
-                stats.vccs_generated = Some(generated);
-                found_any = true;
-            }
-            if let Ok(remaining) = captures[2].parse::<u32>() {
-                stats.vccs_remaining = Some(remaining);
-                found_any = true;
-            }
-        }
-
-        // Example: "Runtime Postprocess Equation: 0.000767182s"
-        if let Some(captures) =
-            stat_regex(&POSTPROCESS_EQUATION, r"Runtime Postprocess Equation: ([-e\d\.]+)s")
-                .captures(message)
-            && let Ok(val) = captures[1].parse::<f64>()
-        {
-            stats.runtime_postprocess_equation_s = Some(val);
-            found_any = true;
-        }
-
-        // Example: "Runtime Convert SSA: 0.000516981s"
-        if let Some(captures) =
-            stat_regex(&CONVERT_SSA, r"Runtime Convert SSA: ([-e\d\.]+)s").captures(message)
-            && let Ok(val) = captures[1].parse::<f64>()
-        {
-            stats.runtime_convert_ssa_s = Some(val);
-            found_any = true;
-        }
-
-        // Example: "Runtime Post-process: 0.000189636s"
-        if let Some(captures) =
-            stat_regex(&POST_PROCESS, r"Runtime Post-process: ([-e\d\.]+)s").captures(message)
-            && let Ok(val) = captures[1].parse::<f64>()
-        {
-            stats.runtime_post_process_s = Some(val);
-            found_any = true;
-        }
-
-        // Example: "Runtime Solver: 0.00167592s"
-        if let Some(captures) =
-            stat_regex(&SOLVER, r"Runtime Solver: ([-e\d\.]+)s").captures(message)
-            && let Ok(val) = captures[1].parse::<f64>()
-        {
-            stats.runtime_solver_s = Some(val);
-            found_any = true;
-        }
-
-        // Example: "Runtime decision procedure: 0.00452419s"
-        if let Some(captures) =
-            stat_regex(&DECISION_PROCEDURE, r"Runtime decision procedure: ([-e\d\.]+)s")
-                .captures(message)
-            && let Ok(val) = captures[1].parse::<f64>()
-        {
-            stats.runtime_decision_procedure_s = Some(val);
-            found_any = true;
-        }
-
-        if found_any { Some(stats) } else { None }
-    }
 }
 
-/// Compile a CBMC statistics pattern on first use and reuse it afterwards. The patterns are
-/// compile-time constants, so a failure to compile is a bug in the pattern rather than a runtime
-/// condition.
-fn stat_regex(cell: &'static OnceLock<Regex>, pattern: &str) -> &'static Regex {
-    cell.get_or_init(|| Regex::new(pattern).unwrap())
-}
+/// Collect the statistics CBMC reports for a single verification run.
+///
+/// CBMC reports these as free-text status messages. `--json-ui`, which Kani always passes, wraps
+/// each message in a JSON envelope carrying `messageType` and `messageText`, but it does not break
+/// the numbers out into fields of their own, so the message text remains the only source available
+/// (CBMC's `structured_datat` mechanism, which would render as real JSON fields, is not used by
+/// these call sites). What the envelope does buy us is the ability to require a status message and
+/// to anchor on CBMC's exact label, rather than searching arbitrary output for a loose pattern.
+///
+/// Returns `None` when no message carried statistics, which is the case whenever CBMC did not get
+/// far enough to report any.
+fn merge_cbmc_stats(items: &[ParserItem]) -> Option<CbmcStats> {
+    let mut stats = CbmcStats::default();
+    let mut found_any = false;
 
-/// Merge the CBMC statistics scattered across CBMC's messages into a single record.
-/// Returns `None` when no message carried the statistics we look for, which is the case whenever
-/// CBMC was not asked for them or did not get far enough to report any.
-fn merge_cbmc_stats(items: &[crate::cbmc_output_parser::ParserItem]) -> Option<CbmcStats> {
-    let mut cbmc_stats = CbmcStats::default();
     for item in items {
-        if let crate::cbmc_output_parser::ParserItem::Message { message_text, .. } = item
-            && let Some(stats) = KaniSession::extract_cbmc_stats_from_message(message_text)
+        if let ParserItem::Message { message_text, message_type } = item
+            && message_type == "STATUS-MESSAGE"
         {
-            // Merge stats (later messages may have more complete info)
-            if stats.runtime_symex_s.is_some() {
-                cbmc_stats.runtime_symex_s = stats.runtime_symex_s;
-            }
-            if stats.size_program_expression.is_some() {
-                cbmc_stats.size_program_expression = stats.size_program_expression;
-            }
-            if stats.slicing_removed_assignments.is_some() {
-                cbmc_stats.slicing_removed_assignments = stats.slicing_removed_assignments;
-            }
-            if stats.vccs_generated.is_some() {
-                cbmc_stats.vccs_generated = stats.vccs_generated;
-            }
-            if stats.vccs_remaining.is_some() {
-                cbmc_stats.vccs_remaining = stats.vccs_remaining;
-            }
-            if stats.runtime_postprocess_equation_s.is_some() {
-                cbmc_stats.runtime_postprocess_equation_s = stats.runtime_postprocess_equation_s;
-            }
-            if stats.runtime_convert_ssa_s.is_some() {
-                cbmc_stats.runtime_convert_ssa_s = stats.runtime_convert_ssa_s;
-            }
-            if stats.runtime_post_process_s.is_some() {
-                cbmc_stats.runtime_post_process_s = stats.runtime_post_process_s;
-            }
-            if stats.runtime_solver_s.is_some() {
-                cbmc_stats.runtime_solver_s = stats.runtime_solver_s;
-            }
-            if stats.runtime_decision_procedure_s.is_some() {
-                cbmc_stats.runtime_decision_procedure_s = stats.runtime_decision_procedure_s;
-            }
+            found_any |= record_cbmc_stat(message_text, &mut stats);
         }
     }
 
-    if cbmc_stats.runtime_symex_s.is_some() || cbmc_stats.size_program_expression.is_some() {
-        Some(cbmc_stats)
-    } else {
-        None
+    found_any.then_some(stats)
+}
+
+/// Record the statistic a single CBMC status message carries, if it carries one. Later messages win,
+/// matching CBMC's own behaviour of reporting a running figure more than once.
+/// Returns whether this message was recognized.
+fn record_cbmc_stat(message: &str, stats: &mut CbmcStats) -> bool {
+    // "Generated 1 VCC(s), 1 remaining after simplification"
+    if let Some(counts) = message
+        .strip_prefix("Generated ")
+        .and_then(|rest| rest.strip_suffix(" remaining after simplification"))
+        && let Some((generated, remaining)) = counts.split_once(" VCC(s), ")
+    {
+        stats.vccs_generated = generated.parse().ok();
+        stats.vccs_remaining = remaining.parse().ok();
+        return stats.vccs_generated.is_some() || stats.vccs_remaining.is_some();
     }
+
+    // "slicing removed 81 assignments", or "simple slicing removed 5 assignments" when only the
+    // simple slicer ran. CBMC emits one or the other; our schema has a single field for both.
+    if let Some(rest) = message.strip_suffix(" assignments")
+        && let Some(count) = rest
+            .strip_prefix("slicing removed ")
+            .or_else(|| rest.strip_prefix("simple slicing removed "))
+    {
+        stats.slicing_removed_assignments = count.parse().ok();
+        return stats.slicing_removed_assignments.is_some();
+    }
+
+    // Everything else is reported as "<label>: <value>".
+    let Some((label, value)) = message.split_once(": ") else {
+        return false;
+    };
+    match label {
+        // "150 steps"
+        "size of program expression" => {
+            stats.size_program_expression =
+                value.strip_suffix(" steps").and_then(|steps| steps.parse().ok());
+            stats.size_program_expression.is_some()
+        }
+        "Runtime Symex" => record_seconds(value, &mut stats.runtime_symex_s),
+        "Runtime Postprocess Equation" => {
+            record_seconds(value, &mut stats.runtime_postprocess_equation_s)
+        }
+        "Runtime Convert SSA" => record_seconds(value, &mut stats.runtime_convert_ssa_s),
+        "Runtime Post-process" => record_seconds(value, &mut stats.runtime_post_process_s),
+        "Runtime Solver" => record_seconds(value, &mut stats.runtime_solver_s),
+        "Runtime decision procedure" => {
+            record_seconds(value, &mut stats.runtime_decision_procedure_s)
+        }
+        _ => false,
+    }
+}
+
+/// Record a duration CBMC reports as "0.00408627s" or "1.5416e-05s".
+fn record_seconds(value: &str, field: &mut Option<f64>) -> bool {
+    *field = value.strip_suffix('s').and_then(|seconds| seconds.parse().ok());
+    field.is_some()
 }
 
 /// We will use Cadical by default since it performed better than MiniSAT in our analysis.
@@ -805,6 +721,74 @@ mod tests {
     use clap::Parser;
 
     use super::*;
+
+    /// The statistics messages below are verbatim CBMC 6.x `--json-ui` output, so a CBMC change to
+    /// any of these labels shows up here as a test failure rather than as silently missing data.
+    #[test]
+    fn check_cbmc_stats_from_status_messages() {
+        let messages = [
+            "Runtime Symex: 0.00049675s",
+            "size of program expression: 21 steps",
+            "simple slicing removed 5 assignments",
+            "Generated 1 VCC(s), 1 remaining after simplification",
+            "Runtime Postprocess Equation: 1.5416e-05s",
+            "Runtime Convert SSA: 0.00012525s",
+            "Runtime Post-process: 2.0292e-05s",
+            "Runtime Solver: 4.1167e-05s",
+            "Runtime decision procedure: 0.000193542s",
+        ];
+        let items: Vec<ParserItem> = messages
+            .iter()
+            .map(|text| ParserItem::Message {
+                message_text: text.to_string(),
+                message_type: "STATUS-MESSAGE".to_string(),
+            })
+            .collect();
+
+        let stats = merge_cbmc_stats(&items).expect("statistics should be recognized");
+        assert_eq!(stats.runtime_symex_s, Some(0.00049675));
+        assert_eq!(stats.size_program_expression, Some(21));
+        assert_eq!(stats.slicing_removed_assignments, Some(5));
+        assert_eq!(stats.vccs_generated, Some(1));
+        assert_eq!(stats.vccs_remaining, Some(1));
+        assert_eq!(stats.runtime_postprocess_equation_s, Some(1.5416e-05));
+        assert_eq!(stats.runtime_convert_ssa_s, Some(0.00012525));
+        assert_eq!(stats.runtime_post_process_s, Some(2.0292e-05));
+        assert_eq!(stats.runtime_solver_s, Some(4.1167e-05));
+        assert_eq!(stats.runtime_decision_procedure_s, Some(0.000193542));
+    }
+
+    /// The full slicer reports without the "simple" prefix.
+    #[test]
+    fn check_cbmc_stats_full_slicer() {
+        let mut stats = CbmcStats::default();
+        assert!(record_cbmc_stat("slicing removed 81 assignments", &mut stats));
+        assert_eq!(stats.slicing_removed_assignments, Some(81));
+    }
+
+    /// Anchoring on the label is what the message type and exact-match parsing buy us: text that
+    /// merely mentions a statistic, or that CBMC reports as a warning rather than a status message,
+    /// must not be mistaken for a measurement.
+    #[test]
+    fn check_cbmc_stats_ignore_unrelated_text() {
+        let mut stats = CbmcStats::default();
+        assert!(!record_cbmc_stat("assertion failed: Runtime Solver: 1s is too slow", &mut stats));
+        assert!(!record_cbmc_stat("Runtime Solver: not-a-number", &mut stats));
+        assert!(!record_cbmc_stat("VERIFICATION FAILED", &mut stats));
+        assert_eq!(stats.runtime_solver_s, None);
+
+        let warning = [ParserItem::Message {
+            message_text: "Runtime Solver: 4.1167e-05s".to_string(),
+            message_type: "WARNING".to_string(),
+        }];
+        assert!(merge_cbmc_stats(&warning).is_none());
+    }
+
+    /// No statistics at all (CBMC died early, or verbosity hid them) must not fabricate a record.
+    #[test]
+    fn check_cbmc_stats_absent() {
+        assert!(merge_cbmc_stats(&[]).is_none());
+    }
 
     #[test]
     fn check_resolve_unwind_value() {
