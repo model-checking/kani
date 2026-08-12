@@ -7,6 +7,9 @@
 set -eu
 
 OUTPUT_FILE="failed_output.json"
+# Remove the export on every exit path, not just the happy one: a failing
+# validation step exits early under `set -e` and would otherwise leave it behind.
+trap 'rm -f "$OUTPUT_FILE"' EXIT
 
 # Find the project root (where scripts/ directory is)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -73,16 +76,30 @@ if 'error_details' not in data:
     print("ERROR: error_details field missing")
     sys.exit(1)
 
-# error_details is an object (single harness)
+# error_details is an array with one entry per harness, each identified by harness_id
 error_details = data['error_details']
-if not error_details.get('has_errors'):
+if not isinstance(error_details, list):
+    print(f"ERROR: error_details should be a list, got {type(error_details).__name__}")
+    sys.exit(1)
+
+if len(error_details) != 1:
+    print(f"ERROR: Expected 1 error_details entry, got {len(error_details)}")
+    sys.exit(1)
+
+entry = error_details[0]
+
+if 'harness_id' not in entry:
+    print("ERROR: harness_id field missing")
+    sys.exit(1)
+
+if not entry.get('has_errors'):
     print("ERROR: has_errors should be true")
     sys.exit(1)
 
 print("error_details.has_errors is true")
 
 # Verify error_type is present
-if 'error_type' not in error_details:
+if 'error_type' not in entry:
     print("ERROR: error_type field missing")
     sys.exit(1)
 
@@ -92,6 +109,4 @@ EOF
 
 echo "All failure validation checks passed!"
 
-# Clean up
-rm -f "$OUTPUT_FILE"
 

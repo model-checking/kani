@@ -67,24 +67,29 @@
       }
     ]
   },
-  "error_details": {
-    "_optional": [
-      "error_type",
-      "failed_properties_type",
-      "exit_status"
-    ],
-    "has_errors": false,
-    "error_type": null,
-    "failed_properties_type": null,
-    "exit_status": "success"
-  },
+  "error_details": [
+    {
+      "_optional": [
+        "error_type",
+        "failed_properties_type",
+        "exit_status"
+      ],
+      "harness_id": "example_harness",
+      "has_errors": false,
+      "error_type": null,
+      "failed_properties_type": null,
+      "exit_status": "success"
+    }
+  ],
   "property_details": [
     {
+      "harness_id": "example_harness",
       "property_details": {
         "total_properties": 1,
         "passed": 1,
         "failed": 0,
-        "unreachable": 0
+        "unreachable": 0,
+        "undetermined": 0
       }
     }
   ],
@@ -105,9 +110,9 @@
         "slicing_removed_assignments": 80,
         "vccs_generated": 1,
         "vccs_remaining": 1,
-        "runtime_postprocess_equation_s": 0.00002,
+        "runtime_postprocess_equation_s": 2e-05,
         "runtime_convert_ssa_s": 0.002,
-        "runtime_post_process_s": 0.000005,
+        "runtime_post_process_s": 5e-06,
         "runtime_solver_s": 0.0003,
         "runtime_decision_procedure_s": 0.003
       }

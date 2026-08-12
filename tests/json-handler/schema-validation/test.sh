@@ -8,6 +8,9 @@
 set -eu
 
 OUTPUT_FILE="schema_output.json"
+# Remove the export on every exit path, not just the happy one: a failing
+# validation step exits early under `set -e` and would otherwise leave it behind.
+trap 'rm -f "$OUTPUT_FILE"' EXIT
 
 # Find the project root (where scripts/ directory is)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -69,8 +72,6 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Clean up
-rm -f "$OUTPUT_FILE"
 
 echo ""
 echo "All validations passed"

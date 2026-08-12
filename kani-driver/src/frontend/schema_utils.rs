@@ -80,22 +80,24 @@ pub fn create_harness_metadata_json(h: &HarnessMetadata) -> Value {
 pub fn create_verification_result_json(result: &HarnessResult) -> Value {
     // Extract detailed verification results as "checks"
     let checks = match &result.result.results {
-        Ok(properties) => {
-            properties.iter().enumerate().map(|(i, prop)| {
+        Ok(properties) => properties
+            .iter()
+            .enumerate()
+            .map(|(i, prop)| {
                 json!({
                     "id": i + 1,
-                    "function": prop.property_id.fn_name.as_ref().unwrap_or(&"unknown".to_string()),
+                    "function": prop.property_id.fn_name.as_deref().unwrap_or("unknown"),
                     "status": format!("{:?}", prop.status),
                     "description": prop.description,
                     "location": {
-                        "file": prop.source_location.file.as_ref().unwrap_or(&"unknown".to_string()),
-                        "line": prop.source_location.line.as_ref().unwrap_or(&"unknown".to_string()),
-                        "column": prop.source_location.column.as_ref().unwrap_or(&"unknown".to_string()),
+                        "file": prop.source_location.file.as_deref().unwrap_or("unknown"),
+                        "line": prop.source_location.line.as_deref().unwrap_or("unknown"),
+                        "column": prop.source_location.column.as_deref().unwrap_or("unknown"),
                     },
                     "category": prop.property_id.class,
                 })
-            }).collect::<Vec<_>>()
-        },
+            })
+            .collect::<Vec<_>>(),
         Err(_) => vec![],
     };
 
@@ -162,11 +164,15 @@ pub fn process_harness_results(
     for h in harnesses {
         let harness_result = results.iter().find(|r| r.harness.pretty_name == h.pretty_name);
 
-        // Add error details for this harness
+        // Add error details for this harness. This accumulates one entry per harness, keyed by
+        // `harness_id`, the same way the `cbmc` array does: a single top-level object would let a
+        // later successful harness overwrite an earlier failure, and report a run containing a
+        // failing harness as having no errors at all.
         if let Some(result) = harness_result {
-            handler.add_item("error_details", match result.result.status {
+            handler.add_harness_detail("error_details", match result.result.status {
                 VerificationStatus::Failure => {
                     json!({
+                        "harness_id": h.pretty_name,
                         "has_errors": true,
                         "error_type": match result.result.failed_properties {
                             crate::call_cbmc::FailedProperties::None => "unknown_failure",
@@ -184,23 +190,32 @@ pub fn process_harness_results(
                     })
                 },
                 VerificationStatus::Success => json!({
+                    "harness_id": h.pretty_name,
                     "has_errors": false
                 })
             });
 
-            // Add property details for this harness
+            // Add property details for this harness. `harness_id` is what makes an entry
+            // attributable: this array is built in harness-metadata order while
+            // `verification_results.results` is in completion order, so the two cannot be
+            // correlated by position.
             handler.add_harness_detail("property_details", json!({
+                "harness_id": h.pretty_name,
                 "property_details": match &result.result.results {
                     Ok(properties) => {
-                        let total_properties = properties.len();
-                        let passed_properties = properties.iter().filter(|p| matches!(p.status, crate::cbmc_output_parser::CheckStatus::Success)).count();
-                        let failed_properties = properties.iter().filter(|p| matches!(p.status, crate::cbmc_output_parser::CheckStatus::Failure)).count();
+                        use crate::cbmc_output_parser::CheckStatus;
+                        let count = |status: CheckStatus| {
+                            properties.iter().filter(|p| p.status == status).count()
+                        };
 
                         json!({
-                            "total_properties": total_properties,
-                            "passed": passed_properties,
-                            "failed": failed_properties,
-                            "unreachable": total_properties - passed_properties - failed_properties
+                            "total_properties": properties.len(),
+                            "passed": count(CheckStatus::Success),
+                            "failed": count(CheckStatus::Failure),
+                            // Counted directly rather than derived by subtraction, which silently
+                            // reported undetermined and error properties as unreachable.
+                            "unreachable": count(CheckStatus::Unreachable),
+                            "undetermined": count(CheckStatus::Undetermined)
                         })
                     },
                     Err(_) => json!({

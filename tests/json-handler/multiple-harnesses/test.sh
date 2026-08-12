@@ -7,6 +7,9 @@
 set -eu
 
 OUTPUT_FILE="multi_harness_output.json"
+# Remove the export on every exit path, not just the happy one: a failing
+# validation step exits early under `set -e` and would otherwise leave it behind.
+trap 'rm -f "$OUTPUT_FILE"' EXIT
 
 # Find the project root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -35,6 +38,4 @@ fi
 
 echo "Found 3 harnesses in JSON"
 
-# Clean up
-rm -f "$OUTPUT_FILE"
 

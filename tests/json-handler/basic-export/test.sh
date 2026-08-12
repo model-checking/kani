@@ -7,6 +7,9 @@
 set -eu
 
 OUTPUT_FILE="test_output.json"
+# Remove the export on every exit path, not just the happy one: a failing
+# validation step exits early under `set -e` and would otherwise leave it behind.
+trap 'rm -f "$OUTPUT_FILE"' EXIT
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 VALIDATOR="$PROJECT_ROOT/scripts/validate_json_export.py"
@@ -23,6 +26,4 @@ fi
 # Validate JSON structure using the validation script (suppress verbose output)
 python3 "$VALIDATOR" "$OUTPUT_FILE" 2>&1 | tail -1
 
-# Clean up
-rm -f "$OUTPUT_FILE"
 
