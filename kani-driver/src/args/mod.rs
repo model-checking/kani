@@ -242,6 +242,11 @@ pub struct VerificationArgs {
     #[arg(long)]
     pub default_unwind: Option<u32>,
 
+    /// Output the verification results to a JSON file at the specified path.
+    /// This feature is unstable and it requires `-Z unstable-options` to be used
+    #[arg(long)]
+    pub export_json: Option<PathBuf>,
+
     /// When specified, the harness filter will only match the exact fully qualified name of a harness
     #[arg(long, requires("harnesses"))]
     pub exact: bool,
@@ -734,6 +739,12 @@ impl ValidateArgs for VerificationArgs {
                 UnstableFeature::UnstableOptions,
             )?;
 
+            self.common_args.check_unstable(
+                self.export_json.is_some(),
+                "export-json",
+                UnstableFeature::UnstableOptions,
+            )?;
+
             Ok(())
         };
 
@@ -777,6 +788,15 @@ impl ValidateArgs for VerificationArgs {
                     "Conflicting options: --sarif isn't compatible with --output-format=old.",
                 ));
             }
+            // `--output-format=old` bypasses CBMC's structured output entirely: `run_cbmc` mocks a
+            // result with no properties, and treats a timeout as success. An export produced from
+            // that would be indistinguishable from a real clean run.
+            if self.export_json.is_some() && self.output_format == OutputFormat::Old {
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    "Conflicting options: --export-json isn't compatible with --output-format=old.",
+                ));
+            }
             if self.concrete_playback.is_some() && self.jobs().will_multithread() {
                 // Concrete playback currently embeds a lot of assumptions about the order in which harnesses get called.
                 return Err(Error::raw(
@@ -788,6 +808,19 @@ impl ValidateArgs for VerificationArgs {
                 return Err(Error::raw(
                     ErrorKind::ArgumentConflict,
                     "Conflicting options: --sarif isn't compatible with --only-codegen.",
+                ));
+            }
+            // Neither code-generation-only mode runs verification, so there is nothing to export.
+            // `--only-codegen` would otherwise succeed without writing the file the user asked for,
+            // and `--no-codegen` would write a document describing a run that never happened.
+            if self.export_json.is_some() && (self.only_codegen || self.no_codegen) {
+                let incompatible =
+                    if self.only_codegen { "--only-codegen" } else { "--no-codegen" };
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    format!(
+                        "Conflicting options: --export-json isn't compatible with {incompatible}."
+                    ),
                 ));
             }
             if self.jobs().will_multithread() && self.output_format != OutputFormat::Terse {
@@ -1131,6 +1164,32 @@ mod tests {
     #[test]
     fn check_disable_slicing_unstable() {
         check_unstable_flag!("--no-slice-formula", no_slice_formula);
+    }
+
+    #[test]
+    fn check_export_json_conflicts() {
+        expect_validation_error(
+            "kani file.rs -Z unstable-options --export-json out.json --output-format=old",
+            ErrorKind::ArgumentConflict,
+        );
+        expect_validation_error(
+            "kani file.rs -Z unstable-options --export-json out.json --only-codegen",
+            ErrorKind::ArgumentConflict,
+        );
+        expect_validation_error(
+            "kani file.rs -Z unstable-options --export-json out.json --no-codegen",
+            ErrorKind::ArgumentConflict,
+        );
+    }
+
+    #[test]
+    fn check_export_json_unstable() {
+        check_opt!(
+            "--export-json results.json",
+            Some(UnstableFeature::UnstableOptions),
+            export_json,
+            Some(PathBuf::from("results.json"))
+        );
     }
 
     #[test]
