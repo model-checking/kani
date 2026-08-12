@@ -43,7 +43,12 @@ pub fn create_project_metadata_json(project: &Project) -> Value {
     "crate_name": project.metadata.iter()
     .map(|m| m.crate_name.clone())
     .collect::<Vec<String>>(),
-    "workspace_root": project.outdir.clone(),
+    // The real workspace root, which only exists for Cargo projects; null for a standalone run.
+    // `Project::outdir` is the compiler output directory -- for Cargo it sits under
+    // `target/<triple>/debug/deps` -- so reporting it as the workspace root was simply wrong.
+    "workspace_root": project.cargo_metadata.as_ref()
+    .map(|metadata| metadata.workspace_root.clone()),
+    "output_dir": project.outdir.clone(),
     })
 }
 /// Creates structured JSON metadata for a harness
@@ -238,6 +243,25 @@ pub fn process_harness_results(
     Ok(())
 }
 
+/// The `--object-bits` value CBMC will actually run with.
+///
+/// `VerificationArgs::cbmc_object_bits` reports nothing once the user supplies `--object-bits`
+/// through `--cbmc-args`, because Kani then stops passing its own default. That is the right answer
+/// for building the command line and the wrong one for describing it: the run does have a value, so
+/// take it from `--cbmc-args` instead of exporting null for an explicitly configured run.
+fn effective_object_bits(session: &KaniSession) -> Option<u32> {
+    if let Some(bits) = session.args.cbmc_object_bits() {
+        return Some(bits);
+    }
+    let mut cbmc_args = session.args.cbmc_args.iter();
+    while let Some(arg) = cbmc_args.next() {
+        if arg == "--object-bits" {
+            return cbmc_args.next().and_then(|bits| bits.to_str()?.parse().ok());
+        }
+    }
+    None
+}
+
 pub fn process_cbmc_results(
     handler: &mut JsonHandler,
     harnesses: &[&HarnessMetadata],
@@ -257,10 +281,12 @@ pub fn process_cbmc_results(
                 "version": cbmc_info_opt.as_ref().map(|i| i.version.clone()),
                 "os_info": cbmc_info_opt.as_ref().map(|i| i.os_info.clone()),
             },
-            // Configuration passed to CBMC for this harness
+            // Configuration passed to CBMC for this harness. Both values are resolved the same way
+            // the CBMC command line itself resolves them, so that a consumer reading this is
+            // reading the run that actually happened.
             "configuration": {
-                "object_bits": session.args.cbmc_object_bits(),
-                "solver": h.attributes.solver.as_ref().map(|s| format!("{:?}", s)).unwrap_or_else(|| "Cadical".to_string()),
+                "object_bits": effective_object_bits(session),
+                "solver": format!("{:?}", session.resolved_solver(&h.attributes.solver)),
             },
 
             // CBMC execution statistics extracted from messages

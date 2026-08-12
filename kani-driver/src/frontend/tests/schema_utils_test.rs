@@ -43,7 +43,9 @@ fn test_create_project_metadata_json() {
 
     let json = create_project_metadata_json(&project);
     assert_eq!(json["crate_name"][0], "sample_crate");
-    assert_eq!(json["workspace_root"], "/tmp/outdir");
+    assert_eq!(json["output_dir"], "/tmp/outdir");
+    // No Cargo metadata on a standalone project, so there is no workspace root to report.
+    assert!(json["workspace_root"].is_null());
 }
 
 #[test]

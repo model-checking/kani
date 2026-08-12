@@ -417,19 +417,22 @@ impl KaniSession {
         args
     }
 
+    /// The solver this run will actually use for a harness: `--solver` takes precedence over the
+    /// harness attribute, which takes precedence over the default.
+    ///
+    /// Anything reporting the configuration of a run must resolve it through here rather than
+    /// reading the harness attribute directly, or it will describe a different run than the one
+    /// `handle_solver_args` builds.
+    pub fn resolved_solver<'a>(&'a self, harness_solver: &'a Option<CbmcSolver>) -> &'a CbmcSolver {
+        self.args.solver.as_ref().or(harness_solver.as_ref()).unwrap_or(&DEFAULT_SOLVER)
+    }
+
     pub fn handle_solver_args(
         &self,
         harness_solver: &Option<CbmcSolver>,
         args: &mut Vec<OsString>,
     ) -> Result<()> {
-        let solver = if let Some(solver) = &self.args.solver {
-            // `--solver` option takes precedence over attributes
-            solver
-        } else if let Some(solver) = harness_solver {
-            solver
-        } else {
-            &DEFAULT_SOLVER
-        };
+        let solver = self.resolved_solver(harness_solver);
 
         match solver {
             CbmcSolver::Bitwuzla => {

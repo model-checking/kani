@@ -11,7 +11,8 @@
     "crate_name": [
       "example_crate"
     ],
-    "workspace_root": "/path/to/workspace"
+    "workspace_root": "/path/to/workspace",
+    "output_dir": "/path/to/workspace/target/x86_64-unknown-linux-gnu/debug/deps"
   },
   "harness_metadata": [
     {
