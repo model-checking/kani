@@ -8,6 +8,9 @@
     "build_mode": "debug"
   },
   "project": {
+    "_nullable": [
+      "workspace_root"
+    ],
     "crate_name": [
       "example_crate"
     ],
