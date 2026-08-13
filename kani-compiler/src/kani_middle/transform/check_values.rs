@@ -657,10 +657,6 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                 | CastKind::IntToFloat
                 | CastKind::FnPtrToPtr => {}
             },
-            Rvalue::ShallowInitBox(_, _) => {
-                // The contents of the box is considered uninitialized.
-                // This should already be covered by the Assign detection.
-            }
             Rvalue::Aggregate(kind, operands) => match kind {
                 // If the aggregated structure has invalid value, this could generate invalid value.
                 // But only if the operands don't have the exact same restrictions.

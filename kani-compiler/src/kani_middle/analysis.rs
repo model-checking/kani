@@ -171,7 +171,6 @@ impl From<&Rvalue> for Key {
             Rvalue::UnaryOp(_, _) => Key("UnaryOp"),
             Rvalue::Discriminant(_) => Key("Discriminant"),
             Rvalue::Aggregate(_, _) => Key("Aggregate"),
-            Rvalue::ShallowInitBox(_, _) => Key("ShallowInitBox"),
             Rvalue::CopyForDeref(_) => Key("CopyForDeref"),
         }
     }
