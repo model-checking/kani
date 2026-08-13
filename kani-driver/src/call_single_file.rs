@@ -273,6 +273,12 @@ pub fn base_rustc_flags(lib_config: LibConfig) -> Vec<RustcArg> {
         "crate-attr=feature(register_tool)",
         "-Z",
         "crate-attr=register_tool(kanitool)",
+        // Kani injects unstable features (`register_tool` above) into every crate it compiles,
+        // so crates that `forbid(unstable_features)` (e.g. rustls) would fail to build through
+        // no fault of their own. Downgrade that lint to a warning; `--force-warn` overrides
+        // even a `forbid` in the crate source.
+        "--force-warn",
+        "unstable_features",
     ]
     .map(RustcArg::from)
     .to_vec();
