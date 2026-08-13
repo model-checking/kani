@@ -55,7 +55,7 @@ pub fn process_metadata(metadata: Vec<KaniMetadata>) -> BTreeSet<ListMetadata> {
             }
         }
 
-        contracted_functions.extend(kani_meta.contracted_functions.into_iter());
+        contracted_functions.extend(kani_meta.contracted_functions);
 
         list_metadata.insert(ListMetadata {
             crate_name: kani_meta.crate_name,
