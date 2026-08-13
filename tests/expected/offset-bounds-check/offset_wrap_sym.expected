@@ -2,15 +2,15 @@ Checking harness check_valid_negative_offset...
 VERIFICATION:- SUCCESSFUL
 
 Checking harness check_ub_sym_wrap_min...
-Failed Checks: Offset result and original pointer must point to the same allocation
+Failed Checks: Offset result address must equal original pointer address plus offset
 VERIFICATION:- FAILED
 
 Checking harness check_ub_sym_wrap_negative...
-Failed Checks: Offset result and original pointer must point to the same allocation
+Failed Checks: Offset result address must equal original pointer address plus offset
 VERIFICATION:- FAILED
 
 Checking harness check_ub_sym_wrap_positive...
-Failed Checks: Offset result and original pointer must point to the same allocation
+Failed Checks: Offset result address must equal original pointer address plus offset
 VERIFICATION:- FAILED
 
 Complete - 1 successfully verified harnesses, 3 failures, 4 total.

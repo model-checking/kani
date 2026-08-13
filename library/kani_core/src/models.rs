@@ -154,9 +154,13 @@ macro_rules! generate_models {
                 //   address over every object and blow up, e.g., on harnesses using
                 //   `sort()`).
                 let new_ptr = orig_ptr.wrapping_byte_offset(byte_offset);
-                let no_wrap = new_ptr.addr() == orig_ptr.addr().wrapping_add(byte_offset as usize);
+                let no_wrap = new_ptr.addr() == orig_ptr.addr().wrapping_add_signed(byte_offset);
                 kani::safety_check(
-                    no_wrap && kani::mem::same_allocation_internal(orig_ptr, new_ptr),
+                    no_wrap,
+                    "Offset result address must equal original pointer address plus offset",
+                );
+                kani::safety_check(
+                    kani::mem::same_allocation_internal(orig_ptr, new_ptr),
                     "Offset result and original pointer must point to the same allocation",
                 );
                 P::from_const_ptr(new_ptr)
