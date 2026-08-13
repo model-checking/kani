@@ -265,8 +265,8 @@ fn compute_capture_ref_locals(
         return HashSet::new();
     };
     let captures = tcx.closure_captures(local_def_id);
-    let is_safe_capture_field = |idx: &rustc_public::mir::FieldIdx| -> bool {
-        captures.get((*idx).as_usize()).is_some_and(|capture| {
+    let is_safe_capture_field = |idx: rustc_public::mir::FieldIdx| -> bool {
+        captures.get(idx).is_some_and(|capture| {
             matches!(capture.info.capture_kind, UpvarCapture::ByRef(_))
                 && capture.place.projections.is_empty()
         })

@@ -73,7 +73,7 @@ impl GotocCtx<'_, '_> {
                         let arg = parse_word(attr).expect(
                             "incorrect value passed to `disable_checks`, expected a single identifier",
                         );
-                        *PRAGMAS.get(arg.as_str()).unwrap_or_else(|| panic!("attempting to disable an unexisting check, the possible options are {:?}",
+                        *PRAGMAS.get(arg.as_str()).unwrap_or_else(|| panic!("attempting to disable a nonexistent check, the possible options are {:?}",
                             PRAGMAS.keys()))
                     })
                     .chain(extra_pragmas.iter().copied())
