@@ -365,12 +365,24 @@ impl GotocCtx<'_, '_> {
             Intrinsic::FaddFast => {
                 let fargs_clone = fargs.clone();
                 let binop_stmt = codegen_intrinsic_binop!(plus);
-                self.add_finite_args_checks(intrinsic_str, fargs_clone, place, binop_stmt, span)
+                self.add_fast_math_finiteness_checks(
+                    intrinsic_str,
+                    fargs_clone,
+                    place,
+                    binop_stmt,
+                    span,
+                )
             }
             Intrinsic::FdivFast => {
                 let fargs_clone = fargs.clone();
                 let binop_stmt = codegen_intrinsic_binop!(div);
-                self.add_finite_args_checks(intrinsic_str, fargs_clone, place, binop_stmt, span)
+                self.add_fast_math_finiteness_checks(
+                    intrinsic_str,
+                    fargs_clone,
+                    place,
+                    binop_stmt,
+                    span,
+                )
             }
             Intrinsic::FloatToIntUnchecked => self.codegen_float_to_int_unchecked(
                 intrinsic_str,
@@ -387,13 +399,25 @@ impl GotocCtx<'_, '_> {
             Intrinsic::FmulFast => {
                 let fargs_clone = fargs.clone();
                 let binop_stmt = codegen_intrinsic_binop!(mul);
-                self.add_finite_args_checks(intrinsic_str, fargs_clone, place, binop_stmt, span)
+                self.add_fast_math_finiteness_checks(
+                    intrinsic_str,
+                    fargs_clone,
+                    place,
+                    binop_stmt,
+                    span,
+                )
             }
             Intrinsic::Forget => Stmt::skip(loc),
             Intrinsic::FsubFast => {
                 let fargs_clone = fargs.clone();
                 let binop_stmt = codegen_intrinsic_binop!(sub);
-                self.add_finite_args_checks(intrinsic_str, fargs_clone, place, binop_stmt, span)
+                self.add_fast_math_finiteness_checks(
+                    intrinsic_str,
+                    fargs_clone,
+                    place,
+                    binop_stmt,
+                    span,
+                )
             }
             Intrinsic::IsValStaticallyKnown => {
                 // Returning false is sound according do this intrinsic's documentation:
@@ -697,7 +721,7 @@ impl GotocCtx<'_, '_> {
     // This function adds assertions to check that the arguments are finite
     // (precondition) and that the result is also finite (postcondition).
     // Producing a non-finite result (e.g., overflow to infinity) is UB.
-    fn add_finite_args_checks(
+    fn add_fast_math_finiteness_checks(
         &mut self,
         intrinsic: &str,
         mut fargs: Vec<Expr>,
