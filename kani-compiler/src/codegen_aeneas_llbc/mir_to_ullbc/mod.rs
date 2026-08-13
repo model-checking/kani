@@ -86,8 +86,9 @@ pub struct Context<'a, 'tcx> {
     errors: &'a mut CharonErrorCtx,
     local_names: FxHashMap<Local, String>,
     file_to_id: HashMap<CharonFileName, CharonFileId>,
-    /// Block ID of the synthetic unwind block (kani does not model unwinding).
-    unwind_block: CharonBlockId,
+    /// Block ID of the synthetic block that aborts. It is the target of every call's unwind edge
+    /// (Kani does not model unwinding) and of the return edge of calls that never return.
+    abort_block: CharonBlockId,
 }
 
 impl<'a, 'tcx> Context<'a, 'tcx> {
@@ -110,8 +111,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             }
         }
         let file_to_id: HashMap<CharonFileName, CharonFileId> = HashMap::new();
-        let unwind_block = CharonBlockId::from_usize(0);
-        Self { tcx, instance, translated, id_map, errors, local_names, file_to_id, unwind_block }
+        let abort_block = CharonBlockId::from_usize(0);
+        Self { tcx, instance, translated, id_map, errors, local_names, file_to_id, abort_block }
     }
 
     fn tcx(&self) -> TyCtxt<'tcx> {
@@ -1205,16 +1206,17 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         let arg_count = self.instance.fn_abi().unwrap().args.len();
         let vars = self.translate_body_locals(&mir_body);
         let locals = CharonLocals { locals: vars, arg_count };
-        // The synthetic unwind block (see below) is appended after the translated
+        // The synthetic abort block (see below) is appended after the translated
         // blocks, so its ID is the number of MIR blocks. It must be assigned
         // *before* translating the blocks: `Call` terminators reference it as
-        // their `on_unwind` target.
-        self.unwind_block = CharonBlockId::from_usize(mir_body.blocks.len());
+        // their `on_unwind` target, and as their return target when the callee
+        // never returns.
+        self.abort_block = CharonBlockId::from_usize(mir_body.blocks.len());
         let mut body: CharonBodyContents =
             mir_body.blocks.iter().map(|bb| self.translate_block(bb)).collect();
 
-        // Add a synthetic unwind block that aborts (kani does not model unwinding).
-        let unwind_block = CharonBlockData {
+        // Add the synthetic block that aborts (Kani does not model unwinding).
+        let abort_block = CharonBlockData {
             statements: Vec::new(),
             terminator: CharonTerminator {
                 span: span.clone(),
@@ -1222,8 +1224,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 comments_before: Vec::new(),
             },
         };
-        body.push(unwind_block);
-        assert_eq!(self.unwind_block.index(), body.elem_count() - 1);
+        body.push(abort_block);
+        assert_eq!(self.abort_block.index(), body.elem_count() - 1);
 
         let body_expr = CharonExprBody { span, locals, body, comments: Vec::new() };
         CharonBody::Unstructured(body_expr)
@@ -1588,8 +1590,15 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     None,
                     CharonRawTerminator::Call {
                         call,
-                        target: CharonBlockId::from_usize(target.unwrap()),
-                        on_unwind: self.unwind_block,
+                        // A call to a diverging function has no return target in MIR. ULLBC
+                        // requires one, so point it at the synthetic abort block: control cannot
+                        // reach it, and aborting if it somehow did matches how the CBMC backend
+                        // models the same case ("Unexpected return from Never function").
+                        // Unwrapping here turned any program containing such a call -- a call to
+                        // `panic!`, `process::exit`, or any `-> !` function -- into a compiler
+                        // crash.
+                        target: target.map_or(self.abort_block, CharonBlockId::from_usize),
+                        on_unwind: self.abort_block,
                     },
                 )
             }
