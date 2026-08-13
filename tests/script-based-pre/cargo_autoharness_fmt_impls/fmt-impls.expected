@@ -1,0 +1,5 @@
+| cargo_autoharness_fmt_impls | <NotGen as std::fmt::Debug>::fmt | Missing Arbitrary implementation for argument(s) self: NotGen |
+Failed Checks: "invalid percent"
+| cargo_autoharness_fmt_impls | <Safe as std::fmt::Display>::fmt  | #[kani::proof]            | Success             |
+| cargo_autoharness_fmt_impls | <Percent as std::fmt::Debug>::fmt | #[kani::proof]            | Failure             |
+Complete - 1 successfully verified functions, 1 failures, 2 total.

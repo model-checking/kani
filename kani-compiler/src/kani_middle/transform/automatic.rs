@@ -9,10 +9,10 @@
 use crate::args::ReachabilityType;
 use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::codegen_units::CodegenUnit;
-use crate::kani_middle::implements_arbitrary;
 use crate::kani_middle::kani_functions::{KaniHook, KaniIntrinsic, KaniModel};
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
+use crate::kani_middle::{FmtTrait, fmt_impl_self_ty, implements_arbitrary};
 use crate::kani_queries::QueryDb;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::ty::TyCtxt;
@@ -23,7 +23,8 @@ use rustc_public::mir::{
     Place, Rvalue, SwitchTargets, Terminator, TerminatorKind,
 };
 use rustc_public::ty::{
-    AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, RigidTy, Ty, TyKind, UintTy, VariantDef,
+    AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, Region, RegionKind, RigidTy, Ty, TyKind,
+    UintTy, VariantDef,
 };
 use rustc_public_bridge::IndexedVal;
 use tracing::debug;
@@ -285,6 +286,8 @@ impl AutomaticArbitraryPass {
 #[derive(Debug, Clone)]
 pub struct AutomaticHarnessPass {
     kani_any: FnDef,
+    kani_check_debug_fmt: FnDef,
+    kani_check_display_fmt: FnDef,
     init_contracts_hook: Instance,
     kani_autoharness_intrinsic: FnDef,
 }
@@ -295,10 +298,18 @@ impl AutomaticHarnessPass {
         let kani_autoharness_intrinsic =
             *kani_fns.get(&KaniIntrinsic::AutomaticHarness.into()).unwrap();
         let kani_any = *kani_fns.get(&KaniModel::Any.into()).unwrap();
+        let kani_check_debug_fmt = *kani_fns.get(&KaniModel::CheckDebugFmt.into()).unwrap();
+        let kani_check_display_fmt = *kani_fns.get(&KaniModel::CheckDisplayFmt.into()).unwrap();
         let init_contracts_hook = *kani_fns.get(&KaniHook::InitContracts.into()).unwrap();
         let init_contracts_hook =
             Instance::resolve(init_contracts_hook, &GenericArgs(vec![])).unwrap();
-        Self { kani_any, init_contracts_hook, kani_autoharness_intrinsic }
+        Self {
+            kani_any,
+            kani_check_debug_fmt,
+            kani_check_display_fmt,
+            init_contracts_hook,
+            kani_autoharness_intrinsic,
+        }
     }
 }
 
@@ -334,6 +345,51 @@ impl TransformPass for AutomaticHarnessPass {
         let mut harness_body = MutableBody::from(body);
         harness_body.clear_body(TerminatorKind::Return);
         let mut source = SourceInstruction::Terminator { bb: 0 };
+
+        // Debug/Display fmt implementations are exercised through the corresponding check
+        // model, which formats a nondeterministic value of the self type into a discarding
+        // sink: their `&mut Formatter` argument cannot be generated nondeterministically,
+        // and the model reaches `fn_to_verify` through the core formatting machinery with a
+        // real `Formatter`.
+        if let Some((fmt_trait, self_ty)) = fmt_impl_self_ty(tcx, fn_to_verify) {
+            let value_lcl = call_kani_any_for_ty(
+                self.kani_any,
+                &mut harness_body,
+                self_ty,
+                Mutability::Not,
+                &mut source,
+            );
+            let region = Region { kind: RegionKind::ReErased };
+            let ref_ty = Ty::new_ref(region.clone(), self_ty, Mutability::Not);
+            let ref_lcl =
+                harness_body.new_local(ref_ty, source.span(harness_body.blocks()), Mutability::Not);
+            harness_body.assign_to(
+                Place::from(ref_lcl),
+                Rvalue::Ref(region, BorrowKind::Shared, value_lcl.into()),
+                &mut source,
+                InsertPosition::Before,
+            );
+            let model = match fmt_trait {
+                FmtTrait::Debug => self.kani_check_debug_fmt,
+                FmtTrait::Display => self.kani_check_display_fmt,
+            };
+            let model_inst =
+                Instance::resolve(model, &GenericArgs(vec![GenericArgKind::Type(self_ty)]))
+                    .unwrap();
+            let ret_lcl = harness_body.new_local(
+                Ty::from_rigid_kind(RigidTy::Tuple(vec![])),
+                source.span(harness_body.blocks()),
+                Mutability::Not,
+            );
+            harness_body.insert_call(
+                &model_inst,
+                &mut source,
+                InsertPosition::Before,
+                vec![Operand::Move(Place::from(ref_lcl))],
+                Place::from(ret_lcl),
+            );
+            return (true, harness_body.into());
+        }
 
         // Contract harnesses need a free(NULL) statement, c.f. kani_core::init_contracts().
         let attrs = KaniAttributes::for_def_id(tcx, def.def_id());
