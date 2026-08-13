@@ -71,6 +71,65 @@ def main():
     summary["failed"] = 0
     write(out_dir, "malformed_complete_with_empty_results.json", complete_with_empty_results)
 
+    # The nulls that `--export-json` legitimately emits on degraded runs -- these must
+    # *validate*, not be rejected. Each mirrors a real degraded case the schema's `_nullable`
+    # markers were added for.
+
+    # A harness that timed out or was OOM-killed before its properties were ever counted: the
+    # exporter reports the counts as `null`, not `0`, so a degraded run is never mistaken for
+    # "nothing failed".
+    nullable_timeout = copy.deepcopy(valid)
+    counts = nullable_timeout["property_details"][0]["property_details"]
+    for field in (
+        "total_properties",
+        "passed",
+        "failed",
+        "unreachable",
+        "undetermined",
+        "solver_error",
+        "satisfied",
+        "unsatisfiable",
+        "covered",
+        "uncovered",
+    ):
+        counts[field] = None
+    counts["error"] = "harness timed out before properties were measured"
+    write(out_dir, "nullable_timeout.json", nullable_timeout)
+
+    # An `--smt2` run names no solver and has no notion of object bits.
+    nullable_smt2 = copy.deepcopy(valid)
+    configuration = nullable_smt2["cbmc"][0]["configuration"]
+    configuration["solver"] = None
+    configuration["object_bits"] = None
+    write(out_dir, "nullable_smt2.json", nullable_smt2)
+
+    # Partial `cbmc_stats`: some statistics are unavailable (e.g. the run never reached the
+    # decision procedure), while the rest of the stats are still reported normally.
+    nullable_partial_stats = copy.deepcopy(valid)
+    cbmc_stats = nullable_partial_stats["cbmc"][0]["cbmc_stats"]
+    cbmc_stats["runtime_solver_s"] = None
+    cbmc_stats["vccs_remaining"] = None
+    cbmc_stats["runtime_decision_procedure_s"] = None
+    write(out_dir, "nullable_partial_stats.json", nullable_partial_stats)
+
+    # Failed version/info probes: the tool ran, but querying its version failed.
+    nullable_missing_versions = copy.deepcopy(valid)
+    tools = nullable_missing_versions["tools"]
+    tools["rustc"] = None
+    tools["cbmc"] = None
+    tools["goto_cc"] = None
+    tools["goto_instrument"] = None
+    cbmc_metadata = nullable_missing_versions["cbmc"][0]["cbmc_metadata"]
+    cbmc_metadata["version"] = None
+    cbmc_metadata["os_info"] = None
+    write(out_dir, "nullable_missing_versions.json", nullable_missing_versions)
+
+    # A negative fixture proving `_nullable` is targeted, not blanket: a `null` in a field the
+    # schema does *not* mark nullable must still be rejected.
+    null_in_required_field = copy.deepcopy(valid)
+    null_in_required_field["verification_results"]["summary"]["executed"] = None
+    write(out_dir, "null_in_required_field.json", null_in_required_field)
+
 
 if __name__ == "__main__":
     main()

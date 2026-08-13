@@ -21,6 +21,13 @@
     "_optional": [
       "goto_synthesizer"
     ],
+    "_nullable": [
+      "rustc",
+      "cbmc",
+      "goto_cc",
+      "goto_instrument",
+      "goto_synthesizer"
+    ],
     "kani": "0.67.0",
     "rustc": "rustc 1.95.0-nightly (838709580 2026-02-17)",
     "cbmc": "6.10.0 (cbmc-6.10.0)",
@@ -116,6 +123,18 @@
         "_optional": [
           "error"
         ],
+        "_nullable": [
+          "total_properties",
+          "passed",
+          "failed",
+          "unreachable",
+          "undetermined",
+          "solver_error",
+          "satisfied",
+          "unsatisfiable",
+          "covered",
+          "uncovered"
+        ],
         "total_properties": 1,
         "passed": 1,
         "failed": 0,
@@ -137,14 +156,34 @@
       ],
       "harness_id": "example_harness",
       "cbmc_metadata": {
+        "_nullable": [
+          "version",
+          "os_info"
+        ],
         "version": "6.7.1",
         "os_info": "x86_64 linux unix"
       },
       "configuration": {
+        "_nullable": [
+          "object_bits",
+          "solver"
+        ],
         "object_bits": 16,
         "solver": "Cadical"
       },
       "cbmc_stats": {
+        "_nullable": [
+          "runtime_symex_s",
+          "size_program_expression",
+          "slicing_removed_assignments",
+          "vccs_generated",
+          "vccs_remaining",
+          "runtime_postprocess_equation_s",
+          "runtime_convert_ssa_s",
+          "runtime_post_process_s",
+          "runtime_solver_s",
+          "runtime_decision_procedure_s"
+        ],
         "runtime_symex_s": 0.005,
         "size_program_expression": 150,
         "slicing_removed_assignments": 80,

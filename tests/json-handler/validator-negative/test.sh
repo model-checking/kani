@@ -58,4 +58,27 @@ if python3 "$VALIDATOR" "$WORK_DIR/malformed_complete_with_empty_results.json"; 
 fi
 
 echo ""
+echo "Checking a degraded export (timed-out harness, property counts: null) still validates..."
+python3 "$VALIDATOR" "$WORK_DIR/nullable_timeout.json"
+
+echo ""
+echo "Checking a degraded export (--smt2 run, no solver/object_bits) still validates..."
+python3 "$VALIDATOR" "$WORK_DIR/nullable_smt2.json"
+
+echo ""
+echo "Checking a degraded export (partial cbmc_stats) still validates..."
+python3 "$VALIDATOR" "$WORK_DIR/nullable_partial_stats.json"
+
+echo ""
+echo "Checking a degraded export (failed tool/CBMC version probes) still validates..."
+python3 "$VALIDATOR" "$WORK_DIR/nullable_missing_versions.json"
+
+echo ""
+echo "Checking a malformed export (verification_results.summary.executed: null) is rejected..."
+if python3 "$VALIDATOR" "$WORK_DIR/null_in_required_field.json"; then
+    echo "ERROR: validator accepted a null in a non-nullable required field"
+    exit 1
+fi
+
+echo ""
 echo "All validator negative-test checks passed"
