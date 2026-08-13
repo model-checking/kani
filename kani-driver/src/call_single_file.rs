@@ -28,8 +28,13 @@ impl LibConfig {
             sysroot.to_str().unwrap(),
             "-L",
             path.to_str().unwrap(),
+            // Use the `force` modifier so that the `kani` crate is resolved even if the code
+            // under verification never references it. `#[no_std]` crates do not link Kani's
+            // `std` (which would otherwise pull in `kani`), so without `force` the Kani
+            // library and its functions would be missing entirely, c.f.
+            // https://github.com/model-checking/kani/issues/3906.
             "--extern",
-            "kani",
+            "force:kani",
             "--extern",
             kani_std_wrapper.as_str(),
         ]
