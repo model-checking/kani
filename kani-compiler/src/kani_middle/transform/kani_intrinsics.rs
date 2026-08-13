@@ -29,8 +29,9 @@ use rustc_public::mir::{
 };
 use rustc_public::target::MachineInfo;
 use rustc_public::ty::{
-    AdtDef, FnDef, GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyKind, UintTy,
+    AdtDef, FnDef, GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyKind, UintTy, VariantIdx,
 };
+use rustc_public_bridge::IndexedVal;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::str::FromStr;
@@ -587,7 +588,8 @@ impl IntrinsicGeneratorPass {
 fn build_some(option: AdtDef, args: GenericArgs, val_op: Operand) -> Rvalue {
     let var_idx = option
         .variants_iter()
-        .find_map(|var| (!var.fields().is_empty()).then_some(var.idx))
+        .enumerate()
+        .find_map(|(idx, var)| (!var.fields().is_empty()).then_some(VariantIdx::to_val(idx)))
         .unwrap();
     Rvalue::Aggregate(AggregateKind::Adt(option, var_idx, args, None, None), vec![val_op])
 }
@@ -595,7 +597,10 @@ fn build_some(option: AdtDef, args: GenericArgs, val_op: Operand) -> Rvalue {
 /// Build an Rvalue `None`.
 /// Since the variants of `Option` are `Some(val)` and `None`, we know we've found the `None` variant when we find the first variant without fields.
 fn build_none(option: AdtDef, args: GenericArgs) -> Rvalue {
-    let var_idx =
-        option.variants_iter().find_map(|var| var.fields().is_empty().then_some(var.idx)).unwrap();
+    let var_idx = option
+        .variants_iter()
+        .enumerate()
+        .find_map(|(idx, var)| var.fields().is_empty().then_some(VariantIdx::to_val(idx)))
+        .unwrap();
     Rvalue::Aggregate(AggregateKind::Adt(option, var_idx, args, None, None), vec![])
 }
