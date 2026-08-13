@@ -11,6 +11,7 @@ use std::collections::HashSet;
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::codegen_cprover_gotoc::codegen::PropertyClass;
+use crate::kani_middle::nonnull_pointee;
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use cbmc::{InternString, InternedString};
@@ -168,7 +169,7 @@ impl GotocCtx<'_, '_> {
             .map(|(idx, arg)| {
                 let arg_name = format!("{fn_name}::param_{idx}");
                 let base_name = format!("param_{idx}");
-                // `core::ptr::Alignment` is `repr(transparent)` over a `repr(usize)`
+                // `core::mem::Alignment` is `repr(transparent)` over a `repr(usize)`
                 // enum (ABI-identical to `usize`). As of nightly-2026-02-16 the Rust
                 // allocation shims (`__rust_alloc` etc.) take their alignment argument
                 // as `Alignment` rather than `usize`. Its goto type is not `size_t`,
@@ -176,8 +177,10 @@ impl GotocCtx<'_, '_> {
                 // `kani_lib.c` at link time, leaving the allocator body unlinked (so it
                 // havocs and may "fail", making the OOM path reachable). Represent it as
                 // `size_t` for FFI so the definitions link.
-                let arg_type = if is_ptr_alignment(arg.ty) {
+                let arg_type = if is_alignment(arg.ty) {
                     Type::size_t()
+                } else if let Some(pointee) = nonnull_pointee(arg.ty) {
+                    self.codegen_ty_stable(pointee).to_pointer()
                 } else {
                     self.codegen_ty_stable(arg.ty)
                 };
@@ -230,10 +233,18 @@ impl GotocCtx<'_, '_> {
 /// ABI-identical to `usize`, but its goto type is not `size_t`. We treat it as
 /// `size_t` in foreign (FFI) signatures so that Rust's allocation shims match the
 /// `size_t`-typed definitions in `kani_lib.c`.
-fn is_ptr_alignment(ty: rustc_public::ty::Ty) -> bool {
+fn is_alignment(ty: rustc_public::ty::Ty) -> bool {
     matches!(
         ty.kind(),
         TyKind::RigidTy(RigidTy::Adt(def, _))
-            if matches!(def.name().as_str(), "core::ptr::Alignment" | "std::ptr::Alignment")
+            if matches!(
+                def.name().as_str(),
+                // The type moved from `ptr` to `mem` in nightly-2026-03-21; both paths are matched
+                // so that this keeps working across the move.
+                "core::mem::Alignment"
+                    | "std::mem::Alignment"
+                    | "core::ptr::Alignment"
+                    | "std::ptr::Alignment"
+            )
     )
 }

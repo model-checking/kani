@@ -30,6 +30,23 @@ use self::attributes::KaniAttributes;
 /// symbol pretty-names ("in function ...") historically used the crate-relative
 /// form, and tests and users rely on it, so strip the local crate prefix.
 /// Non-local items (e.g. `std::...`) keep their fully-qualified names.
+/// If `ty` is `NonNull<T>`, return `T`.
+///
+/// `NonNull<T>` is `repr(transparent)` over `*const T`, so it holds exactly the same address. The
+/// Rust allocation shims (`__rust_dealloc`, `__rust_realloc`) took their pointer arguments as
+/// `*mut u8` until nightly-2026-03-21 and as `NonNull<u8>` afterwards, so code that reasons about
+/// those arguments as pointers has to see through the wrapper.
+pub fn nonnull_pointee(ty: Ty) -> Option<Ty> {
+    let TyKind::RigidTy(RigidTy::Adt(def, args)) = ty.kind() else { return None };
+    if !matches!(def.name().as_str(), "core::ptr::NonNull" | "std::ptr::NonNull") {
+        return None;
+    }
+    args.0.first().and_then(|arg| match arg {
+        GenericArgKind::Type(ty) => Some(*ty),
+        _ => None,
+    })
+}
+
 pub fn readable_name(instance: Instance) -> String {
     strip_local_crate_prefix(instance.name())
 }

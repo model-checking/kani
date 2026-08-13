@@ -1,8 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-#![feature(exit_status_error)]
-
 use crate::common::{AggrResult, Stats, aggregate_aggregates, krate_trimmed_path};
 use clap::Parser;
 use serde::Serialize;
