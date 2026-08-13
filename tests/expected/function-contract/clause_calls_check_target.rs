@@ -5,11 +5,10 @@
 //! When checking the contract of a function F, other functions' contract
 //! clauses in the harness's call graph may themselves call F (here:
 //! `make_positive`'s postcondition calls `get`, while `get` is the target of
-//! proof_for_contract). Such calls must be dispatched to F's contract
-//! *replacement*, not its contract *check*: they must neither consume the
-//! single top-level contract check nor be write-set-checked in the clause's
-//! context. See https://github.com/model-checking/kani/issues/... (clause
-//! dispatch) and diffblue/cbmc#9149 (sequential top-level calls).
+//! proof_for_contract). Such calls must be dispatched to F's *original body*,
+//! not its contract *check*: they would otherwise consume the single
+//! top-level contract check and run write-set instrumentation in the
+//! clause's context. See diffblue/cbmc#9149 (sequential top-level calls).
 
 #[derive(Copy, Clone)]
 struct Wrapper {

@@ -623,6 +623,15 @@ macro_rules! kani_intrinsics {
             /// possible when a clause calls a function whose own contract
             /// clauses are evaluated, hence a depth counter rather than a
             /// flag. Verification is single-threaded, so a static is sound.
+            ///
+            /// The `__CPROVER_` linker-symbol prefix marks the storage as a
+            /// verifier-internal object. This mirrors the naming applied to
+            /// `enter_contract_clause` / `exit_contract_clause` below and is
+            /// the reason `in_contract_clause` can be queried at every call
+            /// dispatch (including OUTSIDE any enter/exit bracket) without
+            /// risking a spuriously-nonzero havocked value causing a call to
+            /// be mis-dispatched to the original body.
+            #[unsafe(export_name = "__CPROVER_kani_contract_clause_depth")]
             static mut CONTRACT_CLAUSE_DEPTH: usize = 0;
 
             /// Resets the clause-depth counter at harness entry. Static
@@ -651,13 +660,13 @@ macro_rules! kani_intrinsics {
             #[inline(never)]
             #[unsafe(export_name = "__VERIFIER_kani_enter_contract_clause")]
             pub fn enter_contract_clause() {
-                // Saturating arithmetic: when a contract check is enforced,
-                // CBMC havocs static state, so the counter value inside the
-                // enforced region is arbitrary. Saturation avoids spurious
-                // overflow failures while keeping `in_contract_clause`
-                // correct at every read (all reads occur between an
-                // enter/exit pair, where the depth is at least 1 regardless
-                // of the havocked base value).
+                // Saturating arithmetic is used defensively so that even if
+                // the underlying static were to be havocked (which the
+                // `__CPROVER_` symbol prefix on `CONTRACT_CLAUSE_DEPTH`
+                // aims to prevent), enter/exit calls remain well-defined
+                // and cannot silently wrap. Within an enter/exit bracket
+                // the depth is guaranteed >= 1 regardless of the initial
+                // value.
                 unsafe {
                     CONTRACT_CLAUSE_DEPTH = CONTRACT_CLAUSE_DEPTH.saturating_add(1);
                 }
@@ -673,6 +682,33 @@ macro_rules! kani_intrinsics {
                 unsafe {
                     CONTRACT_CLAUSE_DEPTH = CONTRACT_CLAUSE_DEPTH.saturating_sub(1);
                 }
+            }
+
+            /// RAII guard returned by [enter_contract_clause_guard]. Its
+            /// `Drop` impl calls [exit_contract_clause] so the counter is
+            /// balanced even when the bracketed expression exits its
+            /// enclosing function early (via `?` / `return`) or panics-
+            /// unwinds. This prevents the depth from leaking to a nonzero
+            /// value outside a clause and mis-dispatching later calls.
+            #[doc(hidden)]
+            pub struct ContractClauseGuard;
+
+            impl Drop for ContractClauseGuard {
+                #[inline(never)]
+                fn drop(&mut self) {
+                    exit_contract_clause();
+                }
+            }
+
+            /// Increments the clause-depth counter and returns a guard whose
+            /// `Drop` decrements it. Used by the contract macros to bracket
+            /// clause expressions; see `bracket_clause_expr` in
+            /// `library/kani_macros/src/sysroot/contracts/helpers.rs`.
+            #[doc(hidden)]
+            #[inline(never)]
+            pub fn enter_contract_clause_guard() -> ContractClauseGuard {
+                enter_contract_clause();
+                ContractClauseGuard
             }
 
             /// Whether execution is currently evaluating a contract clause.

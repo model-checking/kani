@@ -210,15 +210,21 @@ macro_rules! assert_spanned_err {
 /// kani_core clause-depth counter is incremented around it.
 ///
 /// While a clause is being evaluated, calls to the function whose contract is
-/// currently under verification are dispatched to its contract *replacement*
-/// instead of its contract *check* (see `FunctionWithContractPass::set_mode`
-/// in the Kani compiler). The linear `let` form (rather than a closure)
-/// avoids altering the borrow semantics of the expression.
+/// currently under verification are dispatched to its *original body* instead
+/// of its contract *check* (see `FunctionWithContractPass::set_mode` in the
+/// Kani compiler). The linear `let` form (rather than a closure) preserves
+/// the original borrow / temporary-lifetime semantics of the expression.
+///
+/// The counter is decremented via an RAII guard rather than a direct call so
+/// the balancing `exit_contract_clause()` also runs on early exit from the
+/// enclosing function (e.g. an `?` or `return` inside `#expr`) and on
+/// unwinding panics; otherwise the counter could stay nonzero and mis-
+/// dispatch subsequent calls.
 pub fn bracket_clause_expr(expr: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
     quote::quote!({
-        kani::internal::enter_contract_clause();
+        let __kani_clause_guard = kani::internal::enter_contract_clause_guard();
         let __kani_clause_value = #expr;
-        kani::internal::exit_contract_clause();
+        drop(__kani_clause_guard);
         __kani_clause_value
     })
 }
