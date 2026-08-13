@@ -227,7 +227,8 @@ impl GotocCtx<'_, '_> {
     }
 }
 
-/// Returns `true` if `ty` is `core::ptr::Alignment`.
+/// Returns `true` if `ty` is the standard library's `Alignment`, under either the `core` or `std`
+/// path and under either the `mem` module (as of nightly-2026-03-21) or the `ptr` module (before).
 ///
 /// That type is `repr(transparent)` over a `repr(usize)` enum and is therefore
 /// ABI-identical to `usize`, but its goto type is not `size_t`. We treat it as

@@ -30,6 +30,10 @@ use self::attributes::KaniAttributes;
 /// symbol pretty-names ("in function ...") historically used the crate-relative
 /// form, and tests and users rely on it, so strip the local crate prefix.
 /// Non-local items (e.g. `std::...`) keep their fully-qualified names.
+pub fn readable_name(instance: Instance) -> String {
+    strip_local_crate_prefix(instance.name())
+}
+
 /// If `ty` is `NonNull<T>`, return `T`.
 ///
 /// `NonNull<T>` is `repr(transparent)` over `*const T`, so it holds exactly the same address. The
@@ -45,10 +49,6 @@ pub fn nonnull_pointee(ty: Ty) -> Option<Ty> {
         GenericArgKind::Type(ty) => Some(*ty),
         _ => None,
     })
-}
-
-pub fn readable_name(instance: Instance) -> String {
-    strip_local_crate_prefix(instance.name())
 }
 
 /// Strip the local crate name from an absolute item path, restoring the
