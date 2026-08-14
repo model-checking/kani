@@ -95,12 +95,15 @@ struct KaniCompiler {
     /// macro overrides are not injected (the macros are defined in the standard
     /// library being built, and `kani` is not available).
     build_std: bool,
+    /// Whether the user requested to skip injecting Kani's macro overrides
+    /// (`--no-assert-overrides`).
+    no_assert_overrides: bool,
 }
 
 impl KaniCompiler {
     /// Create a new [KaniCompiler] instance.
     pub fn new() -> KaniCompiler {
-        KaniCompiler { build_std: false }
+        KaniCompiler { build_std: false, no_assert_overrides: false }
     }
 
     /// Compile the current crate with the given arguments.
@@ -126,6 +129,7 @@ impl Callbacks for KaniCompiler {
         // Remember whether we are building the standard library so that
         // `after_crate_root_parsing` can decide whether to inject Kani's macro overrides.
         self.build_std = args.build_std;
+        self.no_assert_overrides = args.no_assert_overrides;
 
         // Capture args in the closure so they're available when the backend is created
         // (potentially on a different thread).
@@ -163,6 +167,7 @@ impl Callbacks for KaniCompiler {
         krate: &mut ast::Crate,
     ) -> Compilation {
         if !self.build_std
+            && !self.no_assert_overrides
             && !attr::contains_name(&krate.attrs, sym::no_std)
             && !attr::contains_name(&krate.attrs, sym::no_core)
             // Only inject when an external `std` is available to import. The

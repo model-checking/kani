@@ -32,6 +32,7 @@ use rustc_public::target::MachineInfo;
 use rustc_public::ty::{
     AdtDef, FnDef, GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyKind, UintTy, VariantIdx,
 };
+use rustc_public_bridge::IndexedVal;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::str::FromStr;
