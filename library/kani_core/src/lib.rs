@@ -658,6 +658,7 @@ macro_rules! kani_intrinsics {
             /// checking.
             #[doc(hidden)]
             #[inline(never)]
+            #[kanitool::fn_marker = "EnterContractClauseModel"]
             #[unsafe(export_name = "__VERIFIER_kani_enter_contract_clause")]
             pub fn enter_contract_clause() {
                 // Saturating arithmetic is used defensively so that even if
@@ -677,6 +678,7 @@ macro_rules! kani_intrinsics {
             /// See [enter_contract_clause] regarding the symbol name.
             #[doc(hidden)]
             #[inline(never)]
+            #[kanitool::fn_marker = "ExitContractClauseModel"]
             #[unsafe(export_name = "__VERIFIER_kani_exit_contract_clause")]
             pub fn exit_contract_clause() {
                 unsafe {

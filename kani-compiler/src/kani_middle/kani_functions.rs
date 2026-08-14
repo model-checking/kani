@@ -75,6 +75,10 @@ pub enum KaniModel {
     LoadArgument,
     #[strum(serialize = "InitializeMemoryInitializationStateModel")]
     InitializeMemoryInitializationState,
+    #[strum(serialize = "EnterContractClauseModel")]
+    EnterContractClause,
+    #[strum(serialize = "ExitContractClauseModel")]
+    ExitContractClause,
     #[strum(serialize = "InContractClauseModel")]
     InContractClause,
     #[strum(serialize = "IsPtrInitializedModel")]
