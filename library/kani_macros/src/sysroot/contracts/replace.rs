@@ -85,9 +85,10 @@ impl<'a> ContractConditionsHandler<'a> {
             ContractConditionsData::Requires { attr } => {
                 let Self { attr_copy, .. } = self;
                 let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
-                let attr_bracketed = bracket_clause_expr(quote!(#attr));
+                let assert_bracketed =
+                    bracket_clause_stmt(quote!(kani::assert(#attr, stringify!(#attr_copy));));
                 quote!({
-                    kani::assert(#attr_bracketed, stringify!(#attr_copy));
+                    #assert_bracketed
                     #(#before)*
                     #(#after)*
                     #result
