@@ -12,11 +12,16 @@ use args_toml::join_args;
 
 use crate::args::StandaloneSubcommand;
 use crate::concrete_playback::playback::{playback_cargo, playback_standalone};
+use crate::frontend::{
+    JsonHandler, create_harness_metadata_json, create_metadata_json, create_project_metadata_json,
+    create_tool_versions_json, process_cbmc_results, process_harness_results,
+};
 use crate::list::collect_metadata::{list_cargo, list_standalone};
 use crate::project::Project;
 use crate::session::KaniSession;
 use crate::version::print_kani_version;
 use clap::Parser;
+use serde_json::json;
 use tracing::debug;
 
 mod args;
@@ -36,6 +41,8 @@ mod harness_runner;
 mod list;
 mod metadata;
 mod project;
+
+mod frontend;
 mod sarif;
 mod session;
 mod util;
@@ -136,12 +143,42 @@ fn standalone_main() -> Result<()> {
 /// Run verification on the given project.
 fn verify_project(project: Project, session: KaniSession) -> Result<()> {
     debug!(?project, "verify_project");
+    // Only build the JSON document when `--export-json` asks for one. Everything below it is
+    // overhead for every other run, including a `cbmc --version` probe in `process_cbmc_results`.
+    let mut handler =
+        session.args.export_json.as_ref().map(|path| JsonHandler::new(Some(path.clone())));
     let harnesses = session.determine_targets(project.get_all_harnesses())?;
     debug!(n = harnesses.len(), ?harnesses, "verify_project");
 
+    if let Some(handler) = handler.as_mut() {
+        // Add project and export run metadata using frontend utility
+        handler.add_item("metadata", create_metadata_json());
+        handler.add_item("project", create_project_metadata_json(&project));
+        handler.add_item("tools", create_tool_versions_json(&session, &harnesses));
+
+        // The per-harness arrays are filled in lazily below and by the harness runner, so declare
+        // them up front. A run with no matching harnesses would otherwise omit them entirely and
+        // write a document missing four of its documented keys -- and the "no harnesses matched"
+        // error is only reported after the export, so a consumer sees the malformed file first.
+        for key in ["harness_metadata", "error_details", "property_details", "cbmc"] {
+            handler.add_item(key, json!([]));
+        }
+
+        // Add harness metadata using frontend utility
+        for h in &harnesses {
+            handler.add_harness_detail("harness_metadata", create_harness_metadata_json(h));
+        }
+    }
+
     // Verification
     let runner = harness_runner::HarnessRunner { sess: &session, project: &project };
-    let results = runner.check_all_harnesses(&harnesses)?;
+    let results = runner.check_all_harnesses(&harnesses, handler.as_mut())?;
+
+    if let Some(handler) = handler.as_mut() {
+        // Process harness results and add additional metadata using frontend utility function
+        process_harness_results(handler, &harnesses, &results)?;
+        process_cbmc_results(handler, &harnesses, &results, &session)?;
+    }
 
     if session.args.coverage {
         // We generate a timestamp to save the coverage data in a folder named
@@ -160,6 +197,11 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
 
         session.save_coverage_metadata(&project, &timestamp)?;
         session.save_coverage_results(&project, &results, &timestamp)?;
+    }
+
+    if let Some(handler) = handler.as_mut() {
+        handler.add_item("coverage", json!({"enabled": session.args.coverage}));
+        handler.export()?;
     }
 
     session.write_sarif(&results)?;
