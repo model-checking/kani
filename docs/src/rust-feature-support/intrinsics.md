@@ -220,8 +220,8 @@ try | No | [#267](https://github.com/model-checking/kani/issues/267) |
 type_id | Yes | |
 type_name | Yes | |
 typed_swap_nonoverlapping | Yes | |
-unaligned_volatile_load | No | See [Notes - Concurrency](#concurrency) |
-unaligned_volatile_store | No | See [Notes - Concurrency](#concurrency) |
+unaligned_volatile_load | Partial | See [Notes - Concurrency](#concurrency) |
+unaligned_volatile_store | Partial | See [Notes - Concurrency](#concurrency) |
 unchecked_add | Yes | |
 unchecked_div | Yes | |
 unchecked_mul | Yes | |

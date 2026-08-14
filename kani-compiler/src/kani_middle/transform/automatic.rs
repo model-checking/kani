@@ -24,6 +24,7 @@ use rustc_public::mir::{
 };
 use rustc_public::ty::{
     AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, RigidTy, Ty, TyKind, UintTy, VariantDef,
+    VariantIdx,
 };
 use rustc_public_bridge::IndexedVal;
 use tracing::debug;
@@ -174,6 +175,7 @@ impl AutomaticArbitraryPass {
         adt_args: &GenericArgs,
         body: &mut MutableBody,
         source: &mut SourceInstruction,
+        variant_idx: VariantIdx,
         variant: VariantDef,
     ) -> BasicBlockIdx {
         let fields = variant.fields();
@@ -193,7 +195,7 @@ impl AutomaticArbitraryPass {
         );
         let mut assign_instr = SourceInstruction::Terminator { bb: source.bb() - 1 };
         let rvalue = Rvalue::Aggregate(
-            AggregateKind::Adt(adt_def, variant.idx, adt_args.clone(), None, None),
+            AggregateKind::Adt(adt_def, variant_idx, adt_args.clone(), None, None),
             field_locals.into_iter().map(|lcl| Operand::Move(lcl.into())).collect(),
         );
         body.assign_to(Place::from(0), rvalue, &mut assign_instr, InsertPosition::Before);
@@ -240,10 +242,20 @@ impl AutomaticArbitraryPass {
         let switch_int_instr = SourceInstruction::Terminator { bb: source.bb() - 1 };
 
         let mut branches: Vec<(u128, BasicBlockIdx)> = vec![];
-        for variant in def.variants_iter() {
-            let target_bb =
-                self.call_kani_any_for_variant(def, &args, &mut new_body, &mut source, variant);
-            branches.push((variant.idx.to_index() as u128, target_bb));
+        // `variants_iter` yields variants in source-declaration order, so the
+        // enumeration index is the variant's `VariantIdx` (see `AdtDef::variant`).
+        // `VariantDef::idx` is no longer publicly accessible, so reconstruct it.
+        for (idx, variant) in def.variants_iter().enumerate() {
+            let variant_idx = VariantIdx::to_val(idx);
+            let target_bb = self.call_kani_any_for_variant(
+                def,
+                &args,
+                &mut new_body,
+                &mut source,
+                variant_idx,
+                variant,
+            );
+            branches.push((idx as u128, target_bb));
         }
 
         let otherwise = branches.pop().unwrap().1;
@@ -276,7 +288,15 @@ impl AutomaticArbitraryPass {
         let mut source = SourceInstruction::Terminator { bb: 0 };
 
         let variant = def.variants()[0];
-        self.call_kani_any_for_variant(def, &args, &mut new_body, &mut source, variant);
+        // A struct has a single variant at index 0.
+        self.call_kani_any_for_variant(
+            def,
+            &args,
+            &mut new_body,
+            &mut source,
+            VariantIdx::to_val(0),
+            variant,
+        );
 
         new_body.into()
     }
