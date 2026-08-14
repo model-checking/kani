@@ -567,9 +567,7 @@ impl RustcInternalMir for TerminatorKind {
                 rustc_middle::mir::TerminatorKind::Call {
                     func: func.internal_mir(tcx),
                     args: Box::from_iter(
-                        args.iter().map(|arg| {
-                            rustc_span::source_map::dummy_spanned(arg.internal_mir(tcx))
-                        }),
+                        args.iter().map(|arg| rustc_span::dummy_spanned(arg.internal_mir(tcx))),
                     ),
                     destination: internal(tcx, destination),
                     target: target.map(|basic_block_idx| {

@@ -34,6 +34,23 @@ pub fn readable_name(instance: Instance) -> String {
     strip_local_crate_prefix(instance.name())
 }
 
+/// If `ty` is `NonNull<T>`, return `T`.
+///
+/// `NonNull<T>` is `repr(transparent)` over `*const T`, so it holds exactly the same address. The
+/// Rust allocation shims (`__rust_dealloc`, `__rust_realloc`) took their pointer arguments as
+/// `*mut u8` until nightly-2026-03-21 and as `NonNull<u8>` afterwards, so code that reasons about
+/// those arguments as pointers has to see through the wrapper.
+pub fn nonnull_pointee(ty: Ty) -> Option<Ty> {
+    let TyKind::RigidTy(RigidTy::Adt(def, args)) = ty.kind() else { return None };
+    if !matches!(def.name().as_str(), "core::ptr::NonNull" | "std::ptr::NonNull") {
+        return None;
+    }
+    args.0.first().and_then(|arg| match arg {
+        GenericArgKind::Type(ty) => Some(*ty),
+        _ => None,
+    })
+}
+
 /// Strip the local crate name from an absolute item path, restoring the
 /// crate-relative form Kani used before rust-lang/rust#149401. That change made
 /// `def_path_str` prefix the local crate name at *every* local path component,

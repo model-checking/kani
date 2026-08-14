@@ -10,7 +10,6 @@
 #![recursion_limit = "256"]
 #![feature(box_patterns)]
 #![feature(rustc_private)]
-#![feature(more_qualified_paths)]
 #![feature(iter_intersperse)]
 #![feature(f128)]
 #![feature(f16)]

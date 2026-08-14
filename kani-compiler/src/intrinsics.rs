@@ -462,6 +462,16 @@ impl Intrinsic {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), RigidTy::Uint(UintTy::U8), RigidTy::Uint(UintTy::Usize) => RigidTy::Tuple(_));
                 Self::WriteBytes
             }
+            // `fabs` is generic over the float type as of nightly-2026-03-21, where it used to be
+            // one intrinsic per width (`fabsf32` and friends). Recover the width from the signature
+            // so that codegen can keep using the width-specific CBMC builtins.
+            "fabs" => match sig.inputs()[0].kind() {
+                TyKind::RigidTy(RigidTy::Float(FloatTy::F16)) => Self::FabsF16,
+                TyKind::RigidTy(RigidTy::Float(FloatTy::F32)) => Self::FabsF32,
+                TyKind::RigidTy(RigidTy::Float(FloatTy::F64)) => Self::FabsF64,
+                TyKind::RigidTy(RigidTy::Float(FloatTy::F128)) => Self::FabsF128,
+                other => unreachable!("Unexpected `fabs` argument type: {other:?}"),
+            },
             _ => try_match_atomic(intrinsic_instance)
                 .or_else(|| try_match_simd(intrinsic_instance))
                 .or_else(|| try_match_f32(intrinsic_instance))
@@ -675,14 +685,6 @@ fn try_match_f32(intrinsic_instance: &Instance) -> Option<Intrinsic> {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
             Some(Intrinsic::ExpF32)
         }
-        "fabsf16" => {
-            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F16) => RigidTy::Float(FloatTy::F16));
-            Some(Intrinsic::FabsF16)
-        }
-        "fabsf32" => {
-            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
-            Some(Intrinsic::FabsF32)
-        }
         "floorf32" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
             Some(Intrinsic::FloorF32)
@@ -703,11 +705,11 @@ fn try_match_f32(intrinsic_instance: &Instance) -> Option<Intrinsic> {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
             Some(Intrinsic::LogF32)
         }
-        "maxnumf32" => {
+        "maximum_number_nsz_f32" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
             Some(Intrinsic::MaxNumF32)
         }
-        "minnumf32" => {
+        "minimum_number_nsz_f32" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
             Some(Intrinsic::MinNumF32)
         }
@@ -769,14 +771,6 @@ fn try_match_f64(intrinsic_instance: &Instance) -> Option<Intrinsic> {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
             Some(Intrinsic::ExpF64)
         }
-        "fabsf64" => {
-            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
-            Some(Intrinsic::FabsF64)
-        }
-        "fabsf128" => {
-            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F128) => RigidTy::Float(FloatTy::F128));
-            Some(Intrinsic::FabsF128)
-        }
         "floorf64" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
             Some(Intrinsic::FloorF64)
@@ -797,11 +791,11 @@ fn try_match_f64(intrinsic_instance: &Instance) -> Option<Intrinsic> {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
             Some(Intrinsic::LogF64)
         }
-        "maxnumf64" => {
+        "maximum_number_nsz_f64" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
             Some(Intrinsic::MaxNumF64)
         }
-        "minnumf64" => {
+        "minimum_number_nsz_f64" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
             Some(Intrinsic::MinNumF64)
         }
