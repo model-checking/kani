@@ -296,9 +296,17 @@ impl GotocCtx<'_, '_> {
                         )
                     }
                     TyKind::RigidTy(RigidTy::Pat(..)) => {
-                        // See https://github.com/rust-lang/types-team/issues/126
-                        // for what is currently supported.
-                        unreachable!("projection inside a pattern is not supported, only transmute")
+                        // Rust itself does not allow projecting inside a pattern type, only
+                        // transmuting it: see https://github.com/rust-lang/types-team/issues/126
+                        // for what is currently supported. Kani does synthesize such a projection to
+                        // see through the pattern type that `NonNull` wraps its address in, and
+                        // codegens a pattern type as a struct with a single tuple-like field
+                        // holding the constrained type, so read that field.
+                        assert_eq!(
+                            field_idx, 0,
+                            "a pattern type only has field 0, but found {field_idx}"
+                        );
+                        Ok(parent_expr.member(Self::tuple_fld_name(field_idx), &self.symbol_table))
                     }
                 }
             }
