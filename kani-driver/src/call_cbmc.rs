@@ -456,8 +456,18 @@ impl VerificationResult {
                     format_result(results, status, should_panic, failed_properties, show_checks)
                 };
                 if self.ignored_quantifiers > 0 {
-                    result.push('\n');
-                    result.push_str(&ignored_quantifiers_warning(self.ignored_quantifiers));
+                    let warning = ignored_quantifiers_warning(self.ignored_quantifiers);
+                    // Surface the reliability warning immediately before the overall
+                    // `VERIFICATION:- ...` line, so it is not missed when the run otherwise
+                    // reports success. Fall back to appending it (e.g. coverage output, which
+                    // has no such line) if the marker isn't present.
+                    match result.find("\nVERIFICATION:- ") {
+                        Some(pos) => result.insert_str(pos + 1, &warning),
+                        None => {
+                            result.push('\n');
+                            result.push_str(&warning);
+                        }
+                    }
                 }
                 writeln!(result, "Verification Time: {}s", self.runtime.as_secs_f32()).unwrap();
                 result
