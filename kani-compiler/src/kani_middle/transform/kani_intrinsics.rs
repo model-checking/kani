@@ -639,9 +639,16 @@ fn checked_intrinsic_sig(body: &Body) -> Option<CheckedIntrinsicSig> {
     } else {
         None
     }?;
-    let (some_variants, none_variants): (Vec<_>, Vec<_>) =
-        option_def.variants_iter().partition(|variant| !variant.fields().is_empty());
-    let (some_variant, none_variant) = single(&some_variants).zip(single(&none_variants))?;
+    // `variants_iter` yields variants in source-declaration order, so the enumeration index is
+    // the variant's `VariantIdx` (see `AdtDef::variant`). `VariantDef::idx` is no longer publicly
+    // accessible, so reconstruct it.
+    let (some_variants, none_variants): (Vec<_>, Vec<_>) = option_def
+        .variants_iter()
+        .enumerate()
+        .map(|(idx, variant)| (VariantIdx::to_val(idx), variant))
+        .partition(|(_, variant)| !variant.fields().is_empty());
+    let ((some_idx, some_variant), (none_idx, _)) =
+        single(&some_variants).zip(single(&none_variants))?;
     let some_fields = some_variant.fields();
     let some_field = single(&some_fields)?;
     matches!(
@@ -652,8 +659,8 @@ fn checked_intrinsic_sig(body: &Body) -> Option<CheckedIntrinsicSig> {
         pointee_ty,
         option_def,
         option_args,
-        some_idx: some_variant.idx,
-        none_idx: none_variant.idx,
+        some_idx: *some_idx,
+        none_idx: *none_idx,
     })
 }
 
