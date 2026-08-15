@@ -11,7 +11,6 @@ use crate::session::{
 use crate::util;
 use crate::util::args::{CargoArg, CommandWrapper as _, KaniArg, PassTo, encode_as_rustc_arg};
 use anyhow::{Context, Result, bail};
-use build_kani::built_info;
 use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
 use cargo_metadata::{
     Artifact as RustcArtifact, CrateType, Message, Metadata, MetadataCommand, Package, PackageId,
@@ -134,7 +133,7 @@ crate-type = ["lib"]
 
     /// Calls `cargo_build` to generate `*.symtab.json` files in `target_dir`
     pub fn cargo_build(&mut self, keep_going: bool) -> Result<CargoOutputs> {
-        let build_target = built_info::TARGET;
+        let build_target = env!("TARGET"); // see build.rs
         let metadata = self.cargo_metadata(build_target)?;
         let target_dir = self
             .args
@@ -486,7 +485,7 @@ crate-type = ["lib"]
 pub fn cargo_config_args() -> Vec<CargoArg> {
     [
         "--target",
-        built_info::TARGET,
+        env!("TARGET"),
         // Propagate `--cfg=kani_host` to build scripts.
         "-Zhost-config",
         "-Ztarget-applies-to-host",

@@ -9,7 +9,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Context, Result, bail};
-use build_kani::built_info;
 
 use crate::cmd::AutoRun;
 use crate::os_hacks;
@@ -17,7 +16,7 @@ use crate::os_hacks;
 /// Comes from our Cargo.toml manifest file. Must correspond to our release verion.
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Set by our `build.rs`, reflects the Rust target triple we're building for
-const TARGET: &str = built_info::TARGET;
+const TARGET: &str = env!("TARGET");
 
 /// The directory where Kani is installed, either:
 ///  * (custom) `${KANI_HOME}/kani-<VERSION>` if the environment variable

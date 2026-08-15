@@ -9,7 +9,6 @@ use crate::KaniSession;
 use crate::harness_runner::HarnessResult;
 use crate::project::Project;
 use anyhow::{Result, bail};
-use build_kani::built_info;
 
 impl KaniSession {
     /// Saves metadata required for coverage-related features.
@@ -27,7 +26,7 @@ impl KaniSession {
     }
 
     fn save_coverage_metadata_cargo(&self, project: &Project, stamp: &String) -> Result<()> {
-        let build_target = built_info::TARGET;
+        let build_target = env!("TARGET");
         let metadata = self.cargo_metadata(build_target)?;
         let target_dir = self
             .args
@@ -110,7 +109,7 @@ impl KaniSession {
         results: &Vec<HarnessResult>,
         stamp: &String,
     ) -> Result<()> {
-        let build_target = built_info::TARGET;
+        let build_target = env!("TARGET");
         let metadata = self.cargo_metadata(build_target)?;
         let target_dir = self
             .args
