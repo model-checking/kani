@@ -513,9 +513,10 @@ serialize as *objects*, not strings — a consumer must not assume otherwise:
 - `harnesses[].attributes.solver` is `"Cadical"`, `"Z3"`, etc. for a named solver, but `{"Binary": "…"}`
   for a custom solver path.
 
-These are the *requested* attributes, carried verbatim from `.kani-metadata.json`; the resolved,
-always-string counterparts (`resolved_solver`, `resolved_unwind`) sit at the top level of each harness
-for a consumer that only wants what actually ran.
+These are the *requested* attributes, carried verbatim from `.kani-metadata.json`; the resolved
+counterparts (`resolved_solver`, `resolved_unwind`) are plain scalars — a string or number, or `null`
+when not applicable (as the example's `resolved_unwind` shows) — never the object forms above, and sit
+at the top level of each harness for a consumer that only wants what actually ran.
 
 What is worth adopting from `kani list` is the *substance* of its versioning idiom — a tool version and
 a schema version as separate fields — and this proposal does that; see **Compatibility policy** below.
