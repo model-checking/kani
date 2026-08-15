@@ -1,44 +1,57 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Serialized appends to the `--log-file` destination.
+//! Serialized writes to the `--log-file` destination.
 //!
 //! Harnesses run in parallel (see [`crate::harness_runner`]), and both the
 //! per-harness summaries and the per-property CBMC output are written from
-//! whichever rayon worker produced them. Two properties keep a line intact:
+//! whichever rayon worker produced them. Three properties matter:
 //!
 //! 1. One `write` call per line, enforced by [`write_line`]. The line is
 //!    assembled in memory, newline included, then handed to a single
-//!    [`Write::write_all`]. Formatting into the [`std::fs::File`] instead would
-//!    not do: `File` is unbuffered, so `writeln!(file, "{content}")` issues a
-//!    separate write per format fragment, letting another thread's line land
-//!    between a line and its own newline.
-//! 2. A process-wide lock, so the append is serialized rather than relying on
+//!    [`Write::write_all`]. Formatting into the [`File`] instead would not do:
+//!    `File` is unbuffered, so `writeln!(file, "{content}")` issues a separate
+//!    write per format fragment, letting another thread's line land between a
+//!    line and its own newline.
+//! 2. A process-wide lock, so writes are serialized rather than relying on
 //!    `O_APPEND` atomicity, which holds for the offset update on POSIX but is
 //!    not guaranteed for an arbitrarily large write or on every platform Kani
 //!    supports.
+//! 3. The file holds one run. It is truncated when first opened and the handle
+//!    is then reused, so a re-run replaces the previous log instead of appending
+//!    to it. This matches `--output-into-files`, whose per-harness files are
+//!    written with `File::create`. Appending would leave a reader grepping a
+//!    file that silently mixes runs, where a stale `VERIFICATION:- FAILED` from
+//!    an earlier run reads as a result of the current one.
 //!
-//! The lock is process-wide rather than per-path because a run has a single
-//! `--log-file`; serializing the rare case of two paths costs nothing.
+//! A run has a single `--log-file`, so one cached handle suffices; a caller that
+//! alternated between two paths would truncate on each switch.
 
-use std::fs::OpenOptions;
+use std::fs::{File, OpenOptions};
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-static LOG_FILE_LOCK: Mutex<()> = Mutex::new(());
+/// The open log file, with the path it was opened for. `None` until the first write.
+static LOG_FILE: Mutex<Option<(PathBuf, File)>> = Mutex::new(None);
 
-/// Append `content` and a newline to `path`, creating the file if needed.
-/// Serialized against every other caller.
+/// Write `content` and a newline to `path`, truncating the file on the first
+/// write of the run and creating it if needed. Serialized against every other
+/// caller.
 pub(crate) fn append_line(path: &Path, content: &str) -> std::io::Result<()> {
     // Recover from poisoning rather than propagating: a panic while holding this
     // guard could only have come from the file operations below, which leave no
     // shared state behind, and propagating would turn one failed log write into a
     // panic on every subsequent one.
-    let _guard = LOG_FILE_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut open_file = LOG_FILE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
 
-    let mut file = OpenOptions::new().create(true).append(true).open(path)?;
-    write_line(&mut file, content)
+    if !matches!(open_file.as_ref(), Some((opened_for, _)) if opened_for == path) {
+        let file = OpenOptions::new().create(true).write(true).truncate(true).open(path)?;
+        *open_file = Some((path.to_path_buf(), file));
+    }
+    let (_, file) = open_file.as_mut().expect("log file was just opened");
+
+    write_line(file, content)
 }
 
 /// Write `content` plus a newline as a single `write_all`.
@@ -52,10 +65,22 @@ fn write_line(out: &mut impl Write, content: &str) -> std::io::Result<()> {
     out.write_all(line.as_bytes())
 }
 
+/// Drop the cached handle, so the next [`append_line`] opens (and truncates) afresh.
+/// Only a new process does this in practice; tests use it to act as a second run.
+#[cfg(test)]
+fn forget_open_file() {
+    *LOG_FILE.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{append_line, write_line};
+    use super::{append_line, forget_open_file, write_line};
     use std::io::Write;
+    use std::sync::Mutex;
+
+    /// `append_line` caches one handle in a process-wide static, so the tests that
+    /// go through it must not run concurrently with each other.
+    static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
 
     /// Counts the `write` calls made through it.
     struct CountingWriter {
@@ -114,6 +139,9 @@ mod tests {
     /// `write_line_issues_exactly_one_write` above.
     #[test]
     fn concurrent_appends_arrive_whole() {
+        let _one_at_a_time = ONE_AT_A_TIME.lock().unwrap_or_else(|p| p.into_inner());
+        forget_open_file();
+
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("concurrent.log");
         let lines: Vec<String> =
@@ -131,5 +159,31 @@ mod tests {
         let mut expected: Vec<&str> = lines.iter().map(String::as_str).collect();
         expected.sort_unstable();
         assert_eq!(observed, expected, "lines were lost, duplicated, or torn");
+    }
+
+    /// Within a run, successive lines accumulate; a new run replaces the file
+    /// rather than appending, so a reader never sees two runs spliced together.
+    #[test]
+    fn a_new_run_replaces_the_previous_log() {
+        let _one_at_a_time = ONE_AT_A_TIME.lock().unwrap_or_else(|p| p.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("run.log");
+
+        forget_open_file(); // first run
+        append_line(&path, "first run, line one").unwrap();
+        append_line(&path, "first run, line two").unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "first run, line one\nfirst run, line two\n",
+            "lines within one run must accumulate"
+        );
+
+        forget_open_file(); // as a second process would
+        append_line(&path, "second run").unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "second run\n",
+            "a new run must replace the previous log, not append to it"
+        );
     }
 }
