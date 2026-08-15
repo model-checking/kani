@@ -261,13 +261,11 @@ pub fn format_result(
     let mut number_covers_unreachable = 0;
     let mut number_covers_unsatisfiable = 0;
 
-    let mut index = 1;
-
     if show_checks {
         result_str.push_str("\nRESULTS:\n");
     }
 
-    for prop in properties {
+    for (index, prop) in (1..).zip(properties) {
         let name = prop.property_name();
         let status = &prop.status;
         let description = &prop.description;
@@ -318,8 +316,6 @@ pub fn format_result(
             }
             result_str.push('\n');
         }
-
-        index += 1;
     }
 
     if show_checks {

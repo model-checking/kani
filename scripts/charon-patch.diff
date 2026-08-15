@@ -1,17 +1,17 @@
 diff --git a/charon/Cargo.toml b/charon/Cargo.toml
-index 51a4b00d..25f528f2 100644
+index 15fbfe00..ba534a33 100644
 --- a/charon/Cargo.toml
 +++ b/charon/Cargo.toml
-@@ -2,7 +2,7 @@
- name = "charon"
- version = "0.1.88"
- authors = ["Son Ho <hosonmarc@gmail.com>", "Guillaume Boisseau <nadrieril+git@gmail.com>"]
+@@ -5,7 +5,7 @@ authors = [
+     "Son Ho <hosonmarc@gmail.com>",
+     "Guillaume Boisseau <nadrieril+git@gmail.com>",
+ ]
 -edition = "2021"
 +edition = "2024"
  license = "Apache-2.0"
  
  [lib]
-@@ -37,7 +37,7 @@ path = "tests/cargo.rs"
+@@ -40,7 +40,7 @@ path = "tests/cargo.rs"
  harness = false
  
  [dependencies]
@@ -138,7 +138,7 @@ index 800e8768..4bf3e6a6 100644
          anstream::eprintln!("{}", out);
      }
 diff --git a/charon/src/ids/vector.rs b/charon/src/ids/vector.rs
-index d7e85c2e..5d6a0ac5 100644
+index 3cb58353..0d5f88f9 100644
 --- a/charon/src/ids/vector.rs
 +++ b/charon/src/ids/vector.rs
 @@ -261,7 +261,7 @@ where
@@ -151,11 +151,39 @@ index d7e85c2e..5d6a0ac5 100644
      }
  
 diff --git a/charon/src/options.rs b/charon/src/options.rs
-index 692680d8..af052a50 100644
+index 5f2960d1..99008474 100644
 --- a/charon/src/options.rs
 +++ b/charon/src/options.rs
-@@ -335,13 +335,13 @@ impl CliOpts {
+@@ -290,55 +290,55 @@ impl CliOpts {
  
+         if self.input_file.is_some() {
+             display_unspanned_error(
+-                Level::WARNING,
++                Level::Warning,
+                 "`--input` is deprecated, use `charon rustc [charon options] -- [rustc options] <input file>` instead",
+             )
+         }
+         if self.no_cargo {
+             display_unspanned_error(
+-                Level::WARNING,
++                Level::Warning,
+                 "`--no-cargo` is deprecated, use `charon rustc [charon options] -- [rustc options] <input file>` instead",
+             )
+         }
+         if self.read_llbc.is_some() {
+             display_unspanned_error(
+-                Level::WARNING,
++                Level::Warning,
+                 "`--read_llbc` is deprecated, use `charon pretty-print <input file>` instead",
+             )
+         }
+         if self.use_polonius {
+             display_unspanned_error(
+-                Level::WARNING,
++                Level::Warning,
+                 "`--polonius` is deprecated, use `--rustc-arg=-Zpolonius` instead",
+             )
+         }
          if self.mir_optimized {
              display_unspanned_error(
 -                Level::WARNING,
@@ -168,6 +196,27 @@ index 692680d8..af052a50 100644
 -                Level::WARNING,
 +                Level::Warning,
                  "`--mir_promoted` is deprecated, use `--mir promoted` instead",
+             )
+         }
+         if self.lib {
+             display_unspanned_error(
+-                Level::WARNING,
++                Level::Warning,
+                 "`--lib` is deprecated, use `charon cargo -- --lib` instead",
+             )
+         }
+         if self.bin.is_some() {
+             display_unspanned_error(
+-                Level::WARNING,
++                Level::Warning,
+                 "`--bin` is deprecated, use `charon cargo -- --bin <name>` instead",
+             )
+         }
+         if self.dest_dir.is_some() {
+             display_unspanned_error(
+-                Level::WARNING,
++                Level::Warning,
+                 "`--dest` is deprecated, use `--dest-file` instead",
              )
          }
 diff --git a/charon/src/transform/check_generics.rs b/charon/src/transform/check_generics.rs
@@ -184,7 +233,7 @@ index cf4dad41..180adf08 100644
  
      /// For pretty error printing. This can print values that we encounter because we track binders
 diff --git a/charon/src/transform/expand_associated_types.rs b/charon/src/transform/expand_associated_types.rs
-index 418a1eb5..23f78c0f 100644
+index c6140aa0..781c109a 100644
 --- a/charon/src/transform/expand_associated_types.rs
 +++ b/charon/src/transform/expand_associated_types.rs
 @@ -794,7 +794,7 @@ impl<'a> ComputeItemModifications<'a> {
@@ -206,7 +255,7 @@ index 418a1eb5..23f78c0f 100644
          self.trait_modifications[pred.trait_id]
              .as_processed()
 diff --git a/charon/src/transform/simplify_constants.rs b/charon/src/transform/simplify_constants.rs
-index 9a44997c..77ccece2 100644
+index 3664f51b..1c535677 100644
 --- a/charon/src/transform/simplify_constants.rs
 +++ b/charon/src/transform/simplify_constants.rs
 @@ -11,7 +11,7 @@

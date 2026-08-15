@@ -976,8 +976,7 @@ fn collect_rvalue_places<'a>(rvalue: &'a Rvalue, places: &mut Vec<&'a Place>) {
         Rvalue::Use(op)
         | Rvalue::Repeat(op, _)
         | Rvalue::Cast(_, op, _)
-        | Rvalue::UnaryOp(_, op)
-        | Rvalue::ShallowInitBox(op, _) => push_operand(op, places),
+        | Rvalue::UnaryOp(_, op) => push_operand(op, places),
         Rvalue::BinaryOp(_, op1, op2) | Rvalue::CheckedBinaryOp(_, op1, op2) => {
             push_operand(op1, places);
             push_operand(op2, places);

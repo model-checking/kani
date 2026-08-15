@@ -1,0 +1,5 @@
+[without flag]
+error[E0659]: `assert` is ambiguous
+[with flag]
+Verification failed for - verify::check_assert_still_fails
+Complete - 1 successfully verified harnesses, 1 failures, 2 total.

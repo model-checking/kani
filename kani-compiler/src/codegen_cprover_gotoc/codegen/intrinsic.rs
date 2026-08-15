@@ -254,18 +254,6 @@ impl GotocCtx<'_, '_> {
             }};
         }
 
-        macro_rules! unstable_codegen {
-            ($($tt:tt)*) => {{
-                let expr = self.codegen_unimplemented_expr(
-                    &format!("'{}' intrinsic", intrinsic_str),
-                    cbmc_ret_ty,
-                    loc,
-                    "https://github.com/model-checking/kani/issues/new/choose",
-                );
-                self.codegen_expr_to_place_stable(place, expr, loc)
-            }};
-        }
-
         let intrinsic = Intrinsic::from_instance(&instance);
 
         match intrinsic {
@@ -566,12 +554,31 @@ impl GotocCtx<'_, '_> {
             Intrinsic::TruncF32 => codegen_simple_intrinsic!(Truncf),
             Intrinsic::TruncF64 => codegen_simple_intrinsic!(Trunc),
             Intrinsic::TypedSwap => self.codegen_swap(fargs, farg_types, loc),
+            // No alignment assertion for these two, by design: tolerating a
+            // misaligned pointer is the entire purpose of the `unaligned_*`
+            // variants. CBMC models the misaligned typed access byte-precisely,
+            // so the plain dereference is faithful -- see the byte-wise oracle
+            // tests in `tests/kani/Intrinsics/Volatile/unaligned.rs`, which
+            // compare the loaded value against `u32::from_ne_bytes` at every
+            // offset -- native order, so the oracle stays byte-precise without
+            // assuming an endianness. Dereferenceability itself is still checked
+            // by `--pointer-check`, as for the aligned variants.
             Intrinsic::UnalignedVolatileLoad => {
-                unstable_codegen!(self.codegen_expr_to_place_stable(
-                    place,
-                    fargs.remove(0).dereference(),
-                    loc
-                ))
+                self.codegen_expr_to_place_stable(place, fargs.remove(0).dereference(), loc)
+            }
+            Intrinsic::UnalignedVolatileStore => {
+                assert!(self.place_ty_stable(place).kind().is_unit());
+                let dst = fargs.remove(0);
+                let src = fargs.remove(0);
+                let dst_typ = farg_types[0];
+                if self.is_zst_stable(pointee_type_stable(dst_typ).unwrap()) {
+                    // Do not dereference (and assign) a ZST -- same guard as
+                    // `codegen_volatile_store`. A ZST pointer may legally be
+                    // dangling-but-aligned, so this path is reachable.
+                    Stmt::skip(loc)
+                } else {
+                    dst.dereference().assign(src, loc)
+                }
             }
             Intrinsic::UncheckedDiv => codegen_op_with_div_overflow_check!(div),
             Intrinsic::UncheckedRem => codegen_op_with_div_overflow_check!(rem),

@@ -67,7 +67,7 @@ use rustc_public::rustc_internal;
 use rustc_public::ty::{
     AdtDef, AdtKind, Allocation, ConstantKind, FnDef, GenericArgKind, GenericArgs,
     GenericParamDefKind, IntTy, MirConst, Region, RegionKind, RigidTy, Span, TraitDecl, TraitDef,
-    Ty, TyConst, TyConstKind, TyKind, UintTy,
+    Ty, TyConst, TyConstKind, TyKind, UintTy, VariantIdx,
 };
 use rustc_public::{CrateDef, CrateDefType, DefId};
 use rustc_public_bridge::IndexedVal;
@@ -86,6 +86,9 @@ pub struct Context<'a, 'tcx> {
     errors: &'a mut CharonErrorCtx,
     local_names: FxHashMap<Local, String>,
     file_to_id: HashMap<CharonFileName, CharonFileId>,
+    /// Block ID of the synthetic block that aborts. It is the target of every call's unwind edge
+    /// (Kani does not model unwinding) and of the return edge of calls that never return.
+    abort_block: CharonBlockId,
 }
 
 impl<'a, 'tcx> Context<'a, 'tcx> {
@@ -108,7 +111,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             }
         }
         let file_to_id: HashMap<CharonFileName, CharonFileId> = HashMap::new();
-        Self { tcx, instance, translated, id_map, errors, local_names, file_to_id }
+        let abort_block = CharonBlockId::from_usize(0);
+        Self { tcx, instance, translated, id_map, errors, local_names, file_to_id, abort_block }
     }
 
     fn tcx(&self) -> TyCtxt<'tcx> {
@@ -606,7 +610,11 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 let c_typedeclid = self.register_type_decl_id(def_id);
                 let mut c_variants: CharonVector<CharonVariantId, CharonVariant> =
                     CharonVector::new();
-                for var_def in adt_def.variants_iter() {
+                for (var_idx, var_def) in adt_def.variants_iter().enumerate() {
+                    // `variants_iter` yields variants in source-declaration order,
+                    // so the enumeration index is the variant's `VariantIdx`.
+                    // `VariantDef::idx` is no longer publicly accessible.
+                    let variant_idx = VariantIdx::to_val(var_idx);
                     let mut c_fields: CharonVector<CharonFieldId, CharonField> =
                         CharonVector::new();
                     for field_def in var_def.fields() {
@@ -630,7 +638,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     let span = self.translate_span(adt_def.span());
 
                     let adtdef_internal = rustc_internal::internal(self.tcx, adt_def);
-                    let variant_index_internal = rustc_internal::internal(self.tcx, var_def.idx);
+                    let variant_index_internal = rustc_internal::internal(self.tcx, variant_idx);
                     let discr =
                         adtdef_internal.discriminant_for_variant(self.tcx, variant_index_internal);
                     let discr_val = discr.val;
@@ -650,7 +658,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                         discriminant: c_discr,
                     };
                     let c_varidx = c_variants.push(c_variant);
-                    assert_eq!(c_varidx.index(), var_def.idx.to_index());
+                    assert_eq!(c_varidx.index(), var_idx);
                 }
                 let typedecl = CharonTypeDecl {
                     def_id: c_typedeclid,
@@ -1198,8 +1206,26 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         let arg_count = self.instance.fn_abi().unwrap().args.len();
         let vars = self.translate_body_locals(&mir_body);
         let locals = CharonLocals { locals: vars, arg_count };
-        let body: CharonBodyContents =
+        // The synthetic abort block (see below) is appended after the translated
+        // blocks, so its ID is the number of MIR blocks. It must be assigned
+        // *before* translating the blocks: `Call` terminators reference it as
+        // their `on_unwind` target, and as their return target when the callee
+        // never returns.
+        self.abort_block = CharonBlockId::from_usize(mir_body.blocks.len());
+        let mut body: CharonBodyContents =
             mir_body.blocks.iter().map(|bb| self.translate_block(bb)).collect();
+
+        // Add the synthetic block that aborts (Kani does not model unwinding).
+        let abort_block = CharonBlockData {
+            statements: Vec::new(),
+            terminator: CharonTerminator {
+                span: span.clone(),
+                content: CharonRawTerminator::Abort(CharonAbortKind::UndefinedBehavior),
+                comments_before: Vec::new(),
+            },
+        };
+        body.push(abort_block);
+        assert_eq!(self.abort_block.index(), body.elem_count() - 1);
 
         let body_expr = CharonExprBody { span, locals, body, comments: Vec::new() };
         CharonBody::Unstructured(body_expr)
@@ -1564,7 +1590,15 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     None,
                     CharonRawTerminator::Call {
                         call,
-                        target: CharonBlockId::from_usize(target.unwrap()),
+                        // A call to a diverging function has no return target in MIR. ULLBC
+                        // requires one, so point it at the synthetic abort block: control cannot
+                        // reach it, and aborting if it somehow did matches how the CBMC backend
+                        // models the same case ("Unexpected return from Never function").
+                        // Unwrapping here turned any program containing such a call -- a call to
+                        // `panic!`, `process::exit`, or any `-> !` function -- into a compiler
+                        // crash.
+                        target: target.map_or(self.abort_block, CharonBlockId::from_usize),
+                        on_unwind: self.abort_block,
                     },
                 )
             }
@@ -1714,7 +1748,6 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 }
             }
 
-            Rvalue::ShallowInitBox(_, _) => todo!(),
             Rvalue::CopyForDeref(_) => todo!(),
             Rvalue::ThreadLocalRef(_) => todo!(),
             _ => todo!(),
