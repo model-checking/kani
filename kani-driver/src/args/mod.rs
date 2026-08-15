@@ -140,17 +140,17 @@ impl From<Timeout> for Duration {
 
 #[derive(Debug, clap::Parser)]
 #[command(
-    version,
     name = "kani",
     about = "Verify a single Rust crate. For more information, see https://github.com/model-checking/kani",
     args_override_self = true,
     subcommand_negates_reqs = true,
     subcommand_precedence_over_arg = true,
-    args_conflicts_with_subcommands = true
+    args_conflicts_with_subcommands = true,
+    disable_version_flag = true
 )]
 pub struct StandaloneArgs {
     /// Rust file to verify
-    #[arg(required = true)]
+    #[arg(required_unless_present = "version")]
     pub input: Option<PathBuf>,
 
     #[command(flatten)]
@@ -161,6 +161,10 @@ pub struct StandaloneArgs {
 
     #[arg(long, hide = true)]
     pub crate_name: Option<String>,
+
+    /// Print version information
+    #[arg(long, short = 'V')]
+    pub version: bool,
 }
 
 /// Kani takes optional subcommands to request specialized behavior.
@@ -179,10 +183,10 @@ pub enum StandaloneSubcommand {
 
 #[derive(Debug, clap::Parser)]
 #[command(
-    version,
     name = "cargo-kani",
     about = "Verify a Rust crate. For more information, see https://github.com/model-checking/kani",
-    args_override_self = true
+    args_override_self = true,
+    disable_version_flag = true
 )]
 pub struct CargoKaniArgs {
     #[command(subcommand)]
@@ -190,6 +194,10 @@ pub struct CargoKaniArgs {
 
     #[command(flatten)]
     pub verify_opts: VerificationArgs,
+
+    /// Print version information
+    #[arg(long, short = 'V')]
+    pub version: bool,
 }
 
 /// cargo-kani takes optional subcommands to request specialized behavior
