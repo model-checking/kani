@@ -254,18 +254,6 @@ impl GotocCtx<'_, '_> {
             }};
         }
 
-        macro_rules! unstable_codegen {
-            ($($tt:tt)*) => {{
-                let expr = self.codegen_unimplemented_expr(
-                    &format!("'{}' intrinsic", intrinsic_str),
-                    cbmc_ret_ty,
-                    loc,
-                    "https://github.com/model-checking/kani/issues/new/choose",
-                );
-                self.codegen_expr_to_place_stable(place, expr, loc)
-            }};
-        }
-
         let intrinsic = Intrinsic::from_instance(&instance);
 
         match intrinsic {
@@ -354,6 +342,24 @@ impl GotocCtx<'_, '_> {
             Intrinsic::Exp2F64 => codegen_simple_intrinsic!(Exp2),
             Intrinsic::ExpF32 => codegen_simple_intrinsic!(Expf),
             Intrinsic::ExpF64 => codegen_simple_intrinsic!(Exp),
+            // CBMC models neither `fabsf16` nor `fabsf128`, so compute the absolute
+            // value by clearing the IEEE sign bit. This is exactly `fabs` for every
+            // input (NaN, +/-0, and +/-inf included).
+            Intrinsic::FabsF16 => {
+                let arg = fargs.remove(0);
+                let bits = arg.transmute_to(Type::unsigned_int(16), &self.symbol_table);
+                let abs_bits = bits.bitand(Expr::int_constant(0x7fff, Type::unsigned_int(16)));
+                let result = abs_bits.transmute_to(Type::float16(), &self.symbol_table);
+                self.codegen_expr_to_place_stable(place, result, loc)
+            }
+            Intrinsic::FabsF128 => {
+                let arg = fargs.remove(0);
+                let bits = arg.transmute_to(Type::unsigned_int(128), &self.symbol_table);
+                // `i128::MAX` (== `u128::MAX >> 1`) clears only the sign bit (bit 127).
+                let abs_bits = bits.bitand(Expr::int_constant(i128::MAX, Type::unsigned_int(128)));
+                let result = abs_bits.transmute_to(Type::float128(), &self.symbol_table);
+                self.codegen_expr_to_place_stable(place, result, loc)
+            }
             Intrinsic::FabsF32 => codegen_simple_intrinsic!(Fabsf),
             Intrinsic::FabsF64 => codegen_simple_intrinsic!(Fabs),
             Intrinsic::FaddFast => {
@@ -443,6 +449,24 @@ impl GotocCtx<'_, '_> {
             Intrinsic::SimdEq => {
                 self.codegen_simd_cmp(Expr::vector_eq, fargs, place, span, farg_types, ret_ty)
             }
+            Intrinsic::SimdReduceAll => {
+                // Boolean AND-reduction: returns whether every lane is "true". The
+                // argument is a mask-like integer vector (lanes are 0 or all-ones),
+                // so a lane is true iff it is non-zero.
+                let vec = fargs.remove(0);
+                let (size, _) = self.simd_size_and_type(farg_types[0]);
+                let lane =
+                    |v: &Expr, i: u64| v.clone().index_array(Expr::int_constant(i, Type::size_t()));
+                let lane_true = |l: Expr| {
+                    let zero = Expr::int_constant(0, l.typ().clone());
+                    l.neq(zero)
+                };
+                let mut acc = lane_true(lane(&vec, 0));
+                for i in 1..size {
+                    acc = acc.and(lane_true(lane(&vec, i)));
+                }
+                self.codegen_expr_to_place_stable(place, acc.cast_to(cbmc_ret_ty), loc)
+            }
             Intrinsic::SimdExtract => {
                 self.codegen_intrinsic_simd_extract(fargs, place, farg_types, ret_ty, span)
             }
@@ -480,6 +504,26 @@ impl GotocCtx<'_, '_> {
                 let n: u64 = self.simd_shuffle_length(stripped.as_str(), farg_types, span);
                 self.codegen_intrinsic_simd_shuffle(fargs, place, farg_types, ret_ty, n, span)
             }
+            Intrinsic::SimdSplat => {
+                // Broadcast the scalar argument to every lane of the result vector.
+                let val = fargs.remove(0);
+                let (size, ret_base_type) = self.simd_size_and_type(ret_ty);
+                // `simd_splat<T, U>(value: U) -> T` has independent generic parameters,
+                // so a monomorphization where `U` is not `T`'s element type can reach
+                // codegen. Emit an error like rustc's backends (and like `simd_extract`
+                // and `simd_insert` above) rather than silently casting the value.
+                if farg_types[0] != ret_base_type {
+                    let err_msg = format!(
+                        "expected argument type `{ret_base_type}` (element of output `{ret_ty}`), found `{}`",
+                        farg_types[0]
+                    );
+                    utils::span_err(self.tcx, span, err_msg);
+                }
+                self.tcx.dcx().abort_if_errors();
+                let elem_ty = cbmc_ret_ty.base_type().unwrap().clone();
+                let elems = vec![val.cast_to(elem_ty); size as usize];
+                self.codegen_expr_to_place_stable(place, Expr::vector_expr(cbmc_ret_ty, elems), loc)
+            }
             Intrinsic::SimdSub => self.codegen_simd_op_with_overflow(
                 Expr::sub,
                 Expr::sub_overflow_p,
@@ -510,21 +554,79 @@ impl GotocCtx<'_, '_> {
             Intrinsic::TruncF32 => codegen_simple_intrinsic!(Truncf),
             Intrinsic::TruncF64 => codegen_simple_intrinsic!(Trunc),
             Intrinsic::TypedSwap => self.codegen_swap(fargs, farg_types, loc),
+            // No alignment assertion for these two, by design: tolerating a
+            // misaligned pointer is the entire purpose of the `unaligned_*`
+            // variants. CBMC models the misaligned typed access byte-precisely,
+            // so the plain dereference is faithful -- see the byte-wise oracle
+            // tests in `tests/kani/Intrinsics/Volatile/unaligned.rs`, which
+            // compare the loaded value against `u32::from_ne_bytes` at every
+            // offset -- native order, so the oracle stays byte-precise without
+            // assuming an endianness. Dereferenceability itself is still checked
+            // by `--pointer-check`, as for the aligned variants.
             Intrinsic::UnalignedVolatileLoad => {
-                unstable_codegen!(self.codegen_expr_to_place_stable(
-                    place,
-                    fargs.remove(0).dereference(),
-                    loc
-                ))
+                self.codegen_expr_to_place_stable(place, fargs.remove(0).dereference(), loc)
+            }
+            Intrinsic::UnalignedVolatileStore => {
+                assert!(self.place_ty_stable(place).kind().is_unit());
+                let dst = fargs.remove(0);
+                let src = fargs.remove(0);
+                let dst_typ = farg_types[0];
+                if self.is_zst_stable(pointee_type_stable(dst_typ).unwrap()) {
+                    // Do not dereference (and assign) a ZST -- same guard as
+                    // `codegen_volatile_store`. A ZST pointer may legally be
+                    // dangling-but-aligned, so this path is reachable.
+                    Stmt::skip(loc)
+                } else {
+                    dst.dereference().assign(src, loc)
+                }
             }
             Intrinsic::UncheckedDiv => codegen_op_with_div_overflow_check!(div),
             Intrinsic::UncheckedRem => codegen_op_with_div_overflow_check!(rem),
             Intrinsic::Unlikely => self.codegen_expr_to_place_stable(place, fargs.remove(0), loc),
-            Intrinsic::VolatileCopyMemory => unstable_codegen!(codegen_intrinsic_copy!(Memmove)),
+            // These two document their safety requirements as "consistent
+            // with `copy`" / "consistent with `copy_nonoverlapping`", so
+            // reusing `codegen_copy` checks the conditions their own docs
+            // state. Volatility itself constrains the optimizer (the access
+            // must not be elided or reordered), which Kani has no need to
+            // model since it performs no such optimization.
+            //
+            // One direction is worth being explicit about: the volatile
+            // family's docs additionally permit pointers *outside* any Rust
+            // allocation (the MMIO carve-out on `ptr::read_volatile`), which
+            // the non-volatile counterparts do not. Reusing `codegen_copy`
+            // therefore checks *at least* the documented UB conditions and is
+            // conservative rather than exact -- a legal MMIO access may be
+            // rejected by `--pointer-check`. That is incompleteness, never a
+            // missed UB, which is the safe direction for a verifier.
+            //
+            // Both intrinsics are declared as `(dst, src, count)`, but
+            // `codegen_copy` expects `fargs`/`farg_types` ordered as
+            // `[src, dst, ..]` (it does `fargs.remove(0)` for `src` followed
+            // by `fargs.remove(0)` for `dst`). So we swap the first two
+            // entries of `fargs`, and build a `farg_types` slice with the
+            // first two entries swapped as well, before delegating.
+            Intrinsic::VolatileCopyMemory => {
+                fargs.swap(0, 1);
+                let swapped_types = [farg_types[1], farg_types[0]];
+                self.codegen_copy(intrinsic_str, false, fargs, &swapped_types, Some(place), loc)
+            }
             Intrinsic::VolatileCopyNonOverlappingMemory => {
-                unstable_codegen!(codegen_intrinsic_copy!(Memcpy))
+                fargs.swap(0, 1);
+                let swapped_types = [farg_types[1], farg_types[0]];
+                self.codegen_copy(intrinsic_str, true, fargs, &swapped_types, Some(place), loc)
             }
             Intrinsic::VolatileLoad => self.codegen_volatile_load(fargs, farg_types, place, loc),
+            // `volatile_set_memory(dst, val, count)` has the same argument
+            // order as `write_bytes(dst, val, count)` (no `dst`/`src` swap is
+            // needed, unlike the two copy intrinsics above), and its docs
+            // state its safety requirements as "consistent with
+            // `write_bytes`", so `codegen_write_bytes` checks the conditions
+            // its own docs state. The same conservative-direction caveat as
+            // the copy intrinsics above applies to the MMIO carve-out.
+            Intrinsic::VolatileSetMemory => {
+                assert!(self.place_ty_stable(place).kind().is_unit());
+                self.codegen_write_bytes(fargs, farg_types, loc)
+            }
             Intrinsic::VolatileStore => {
                 assert!(self.place_ty_stable(place).kind().is_unit());
                 self.codegen_volatile_store(fargs, farg_types, loc)
@@ -805,16 +907,15 @@ impl GotocCtx<'_, '_> {
     /// its primary argument and returns a tuple that contains:
     ///  * the previous value
     ///  * a boolean value indicating whether the operation was successful or not
-    ///
-    /// In a sequential context, the update is always sucessful so we assume the
-    /// second value to be true.
     /// -------------------------
     /// var = atomic_cxchg(var1, var2, var3)
     /// -------------------------
     /// unsigned char tmp;
+    /// bool success;
     /// tmp = *var1;
-    /// if (*var1 == var2) *var1 = var3;
-    /// var = (tmp, true);
+    /// success = (*var1 == var2);
+    /// if (success) *var1 = var3;
+    /// var = (tmp, success);
     /// -------------------------
     fn codegen_atomic_cxchg(
         &mut self,
@@ -830,16 +931,21 @@ impl GotocCtx<'_, '_> {
             self.decl_temp_variable(var1.typ().clone(), Some(var1.to_owned()), loc);
         let var2 = fargs.remove(0).with_location(loc);
         let var3 = fargs.remove(0).with_location(loc);
-        let eq_expr = (var1.clone()).eq(var2);
+        let eq_expr = var1.clone().eq(var2);
+        // Store the comparison result so we can use it both for the condition and the return value
+        let (success, success_decl) = self.decl_temp_variable(Type::bool(), Some(eq_expr), loc);
         let assign_stmt = var1.assign(var3, loc);
-        let cond_update_stmt = Stmt::if_then_else(eq_expr, assign_stmt, None, loc);
+        let cond_update_stmt = Stmt::if_then_else(success.clone(), assign_stmt, None, loc);
         let place_type = self.place_ty_stable(p);
         let res_type = self.codegen_ty_stable(place_type);
-        let tuple_expr =
-            Expr::struct_expr_from_values(res_type, vec![tmp, Expr::c_true()], &self.symbol_table)
-                .with_location(loc);
+        let tuple_expr = Expr::struct_expr_from_values(
+            res_type,
+            vec![tmp, success.cast_to(Type::c_bool())],
+            &self.symbol_table,
+        )
+        .with_location(loc);
         let res_stmt = self.codegen_expr_to_place_stable(p, tuple_expr, loc);
-        Stmt::atomic_block(vec![decl_stmt, cond_update_stmt, res_stmt], loc)
+        Stmt::atomic_block(vec![decl_stmt, success_decl, cond_update_stmt, res_stmt], loc)
     }
 
     /// An atomic store updates the value referenced in

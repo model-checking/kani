@@ -250,6 +250,11 @@ pub struct VerificationArgs {
     #[arg(long)]
     pub default_unwind: Option<u32>,
 
+    /// Output the verification results to a JSON file at the specified path.
+    /// This feature is unstable and it requires `-Z unstable-options` to be used
+    #[arg(long)]
+    pub export_json: Option<PathBuf>,
+
     /// When specified, the harness filter will only match the exact fully qualified name of a harness
     #[arg(long, requires("harnesses"))]
     pub exact: bool,
@@ -288,6 +293,13 @@ pub struct VerificationArgs {
     /// This option may impact the soundness of the analysis and may cause false proofs and/or counterexamples
     #[arg(long, hide_short_help = true)]
     pub ignore_global_asm: bool,
+
+    /// Do not replace `assert!`, `panic!`, and related macros with Kani's versions.
+    /// Assertion failures are then reported as generic panics, without the original condition
+    /// or message. Use this as an escape hatch if your crate's macro imports conflict with
+    /// Kani's injected overrides (error E0659: `assert` is ambiguous).
+    #[arg(long, hide_short_help = true)]
+    pub no_assert_overrides: bool,
 
     /// Number of threads to spawn to verify harnesses in parallel.
     /// Omit the flag entirely to run sequentially (i.e. one thread).
@@ -358,6 +370,10 @@ pub struct VerificationArgs {
     /// Execute CBMC's sanity checks to ensure the goto-program we generate is correct.
     #[arg(long, hide_short_help = true)]
     pub run_sanity_checks: bool,
+
+    /// Write SARIF output (Static Analysis Results Interchange Format) to the given path.
+    #[arg(long, value_name = "PATH")]
+    pub sarif: Option<PathBuf>,
 
     /// Specify the CBMC solver to use. Overrides the harness `solver` attribute.
     /// If no solver is specified (with --solver or harness attribute), Kani will use CaDiCaL.
@@ -738,6 +754,12 @@ impl ValidateArgs for VerificationArgs {
                 UnstableFeature::UnstableOptions,
             )?;
 
+            self.common_args.check_unstable(
+                self.export_json.is_some(),
+                "export-json",
+                UnstableFeature::UnstableOptions,
+            )?;
+
             Ok(())
         };
 
@@ -775,11 +797,45 @@ impl ValidateArgs for VerificationArgs {
                 --output-format=old.",
                 ));
             }
+            if self.sarif.is_some() && self.output_format == OutputFormat::Old {
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    "Conflicting options: --sarif isn't compatible with --output-format=old.",
+                ));
+            }
+            // `--output-format=old` bypasses CBMC's structured output entirely: `run_cbmc` mocks a
+            // result with no properties, and treats a timeout as success. An export produced from
+            // that would be indistinguishable from a real clean run.
+            if self.export_json.is_some() && self.output_format == OutputFormat::Old {
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    "Conflicting options: --export-json isn't compatible with --output-format=old.",
+                ));
+            }
             if self.concrete_playback.is_some() && self.jobs().will_multithread() {
                 // Concrete playback currently embeds a lot of assumptions about the order in which harnesses get called.
                 return Err(Error::raw(
                     ErrorKind::ArgumentConflict,
                     "Conflicting options: --concrete-playback isn't compatible with --jobs specifying multiple threads.",
+                ));
+            }
+            if self.sarif.is_some() && self.only_codegen {
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    "Conflicting options: --sarif isn't compatible with --only-codegen.",
+                ));
+            }
+            // Neither code-generation-only mode runs verification, so there is nothing to export.
+            // `--only-codegen` would otherwise succeed without writing the file the user asked for,
+            // and `--no-codegen` would write a document describing a run that never happened.
+            if self.export_json.is_some() && (self.only_codegen || self.no_codegen) {
+                let incompatible =
+                    if self.only_codegen { "--only-codegen" } else { "--no-codegen" };
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    format!(
+                        "Conflicting options: --export-json isn't compatible with {incompatible}."
+                    ),
                 ));
             }
             if self.jobs().will_multithread() && self.output_format != OutputFormat::Terse {
@@ -833,8 +889,10 @@ impl ValidateArgs for VerificationArgs {
         deprecated_stabilized_obsolete()?;
 
         // Bespoke validations that don't fit into any of the categories above.
-        if self.randomize_layout.is_some() && self.concrete_playback.is_some() {
-            let random_seed = if let Some(seed) = self.randomize_layout.unwrap() {
+        if let Some(randomize_layout) = self.randomize_layout
+            && self.concrete_playback.is_some()
+        {
+            let random_seed = if let Some(seed) = randomize_layout {
                 format!(" -Z layout-seed={seed}")
             } else {
                 String::new()
@@ -856,6 +914,18 @@ impl ValidateArgs for VerificationArgs {
                 format!(
                     "Invalid argument: `--target-dir` argument `{}` is not a directory",
                     out_dir.display()
+                ),
+            ));
+        }
+        if let Some(out_file) = &self.sarif
+            && out_file.exists()
+            && out_file.is_dir()
+        {
+            return Err(Error::raw(
+                ErrorKind::InvalidValue,
+                format!(
+                    "Invalid argument: `--sarif` argument `{}` is a directory",
+                    out_file.display()
                 ),
             ));
         }
@@ -1112,6 +1182,32 @@ mod tests {
     }
 
     #[test]
+    fn check_export_json_conflicts() {
+        expect_validation_error(
+            "kani file.rs -Z unstable-options --export-json out.json --output-format=old",
+            ErrorKind::ArgumentConflict,
+        );
+        expect_validation_error(
+            "kani file.rs -Z unstable-options --export-json out.json --only-codegen",
+            ErrorKind::ArgumentConflict,
+        );
+        expect_validation_error(
+            "kani file.rs -Z unstable-options --export-json out.json --no-codegen",
+            ErrorKind::ArgumentConflict,
+        );
+    }
+
+    #[test]
+    fn check_export_json_unstable() {
+        check_opt!(
+            "--export-json results.json",
+            Some(UnstableFeature::UnstableOptions),
+            export_json,
+            Some(PathBuf::from("results.json"))
+        );
+    }
+
+    #[test]
     fn check_concrete_playback_unstable() {
         let check = |input: &str| {
             let args = input.split_whitespace();
@@ -1140,6 +1236,24 @@ mod tests {
         );
         expect_validation_error(
             "kani --concrete-playback=inplace --output-format=old -Z concrete-playback test.rs",
+            ErrorKind::ArgumentConflict,
+        );
+    }
+
+    #[test]
+    fn check_sarif_parsing() {
+        let args = parse_unstable_disabled("--sarif out.sarif").unwrap();
+        assert_eq!(args.verify_opts.sarif, Some(PathBuf::from("out.sarif")));
+    }
+
+    #[test]
+    fn check_sarif_conflicts() {
+        expect_validation_error(
+            "kani file.rs --sarif out.sarif --output-format=old",
+            ErrorKind::ArgumentConflict,
+        );
+        expect_validation_error(
+            "kani file.rs --sarif out.sarif --only-codegen",
             ErrorKind::ArgumentConflict,
         );
     }

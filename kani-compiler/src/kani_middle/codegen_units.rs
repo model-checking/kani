@@ -106,7 +106,10 @@ impl CodegenUnits {
                 );
                 AUTOHARNESS_MD
                     .set(AutoHarnessMetadata {
-                        chosen: chosen.iter().map(|func| func.name()).collect::<BTreeSet<_>>(),
+                        chosen: chosen
+                            .iter()
+                            .map(|func| crate::kani_middle::strip_local_crate_prefix(func.name()))
+                            .collect::<BTreeSet<_>>(),
                         skipped,
                     })
                     .expect("Initializing the autoharness metadata failed");
@@ -301,7 +304,7 @@ fn apply_transitivity(tcx: TyCtxt, harness: Harness, stubs: Stubs) -> Stubs {
                     format!(
                         "Cannot stub `{}`. Stub configuration for harness `{}` has a cycle",
                         orig.name(),
-                        harness.def.name(),
+                        crate::kani_middle::strip_local_crate_prefix(harness.def.name()),
                     ),
                 );
                 break;
@@ -452,7 +455,12 @@ fn automatic_harness_partition(
         }
 
         // Preprend the crate name so that users can filter out entire crates using the existing function filter flags.
-        let name = format!("{crate_name}::{}", instance.name());
+        // `instance.name()` is already crate-qualified for local items (rust-lang/rust#149401),
+        // so strip that prefix first to avoid double-qualifying (`crate::crate::fn`).
+        let name = format!(
+            "{crate_name}::{}",
+            crate::kani_middle::strip_local_crate_prefix(instance.name())
+        );
         let body = instance.body().unwrap();
 
         if is_proof_harness(tcx, instance)
@@ -503,7 +511,7 @@ fn automatic_harness_partition(
 
     for func in crate_fns {
         if let Some(reason) = skip_reason(func) {
-            skipped.insert(func.name(), reason);
+            skipped.insert(crate::kani_middle::strip_local_crate_prefix(func.name()), reason);
         } else {
             chosen.push(Instance::try_from(func).unwrap());
         }

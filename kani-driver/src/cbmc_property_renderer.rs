@@ -261,13 +261,11 @@ pub fn format_result(
     let mut number_covers_unreachable = 0;
     let mut number_covers_unsatisfiable = 0;
 
-    let mut index = 1;
-
     if show_checks {
         result_str.push_str("\nRESULTS:\n");
     }
 
-    for prop in properties {
+    for (index, prop) in (1..).zip(properties) {
         let name = prop.property_name();
         let status = &prop.status;
         let description = &prop.description;
@@ -318,8 +316,6 @@ pub fn format_result(
             }
             result_str.push('\n');
         }
-
-        index += 1;
     }
 
     if show_checks {
@@ -395,6 +391,7 @@ pub fn format_result(
             FailedProperties::Other => {
                 " (encountered failures other than panics, which were unexpected)"
             }
+            FailedProperties::Error => " (encountered a solver error)",
         }
     } else {
         ""
@@ -461,13 +458,10 @@ fn build_failure_message(description: String, trace: &Option<Vec<TraceItem>>) ->
     }
     let failure_source = failure_source_wrap.unwrap();
 
-    if failure_source.file.is_some()
-        && failure_source.function.is_some()
-        && failure_source.line.is_some()
+    if let Some(failure_file) = failure_source.file
+        && let Some(failure_function) = failure_source.function
+        && let Some(failure_line) = failure_source.line
     {
-        let failure_file = failure_source.file.unwrap();
-        let failure_function = failure_source.function.unwrap();
-        let failure_line = failure_source.line.unwrap();
         return format!(
             "Failed Checks: {description}\n File: \"{failure_file}\", line {failure_line}, in {failure_function}\n"
         );

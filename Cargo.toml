@@ -3,7 +3,7 @@
 
 [package]
 name = "kani-verifier"
-version = "0.66.0"
+version = "0.67.0"
 edition = "2024"
 description = "A bit-precise model checker for Rust."
 readme = "README.md"
@@ -86,3 +86,12 @@ exclude = [
 
 [workspace.lints.clippy]
 too_long_first_doc_paragraph = "allow"
+
+# The pinned Charon sources request `annotate-snippets` from its upstream git
+# repository (an unreleased 0.11.5 at the time; since published). Kani forbids
+# git dependencies (`deny.toml`: sources.unknown-git = "deny"), so redirect the
+# git source to the crates.io release. This only affects dependency resolution:
+# the charon-patch.diff applied in the llbc CI job additionally adapts Charon's
+# error-rendering code, which was written against the pre-release git API.
+[patch."https://github.com/rust-lang/annotate-snippets-rs"]
+annotate-snippets = "0.11.5"

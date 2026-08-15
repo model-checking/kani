@@ -11,12 +11,13 @@ use crate::kani_middle::codegen_units::{CodegenUnit, CodegenUnits};
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
 use crate::kani_middle::transform::{BodyTransformation, GlobalPasses};
-use crate::kani_queries::QueryDb;
+use crate::kani_queries::QUERY_DB;
 use charon_lib::ast::{AnyTransId, TranslatedCrate, meta::ItemOpacity::*, meta::Span};
-use charon_lib::errors::ErrorCtx;
+use charon_lib::errors::{ErrorCtx, Level};
 use charon_lib::name_matcher::NamePattern;
+use charon_lib::options::{MirLevel, TranslateOptions};
 use charon_lib::transform::TransformCtx;
-use charon_lib::transform::ctx::{TransformOptions, TransformPass};
+use charon_lib::transform::ctx::TransformPass;
 use kani_metadata::ArtifactType;
 use kani_metadata::{AssignsContract, CompilerArtifactStub};
 use rustc_codegen_ssa::back::archive::{
@@ -26,7 +27,7 @@ use rustc_codegen_ssa::back::link::link_binary;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CodegenResults, CrateInfo};
 use rustc_data_structures::fx::{FxHashMap, FxIndexMap};
-use rustc_errors::{DEFAULT_LOCALE_RESOURCE, ErrorGuaranteed};
+use rustc_errors::ErrorGuaranteed;
 use rustc_hir::def_id::{DefId as InternalDefId, LOCAL_CRATE};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
@@ -39,25 +40,19 @@ use rustc_public::{CrateDef, DefId};
 use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
+use rustc_target::spec::Arch;
 use std::any::Any;
 use std::fs::File;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tracing::{debug, info, trace};
 
 #[derive(Clone)]
-pub struct LlbcCodegenBackend {
-    /// The query is shared with `KaniCompiler` and it is initialized as part of `rustc`
-    /// initialization, which may happen after this object is created.
-    /// Since we don't have any guarantees on when the compiler creates the Backend object, neither
-    /// in which thread it will be used, we prefer to explicitly synchronize any query access.
-    queries: Arc<Mutex<QueryDb>>,
-}
+pub struct LlbcCodegenBackend {}
 
 impl LlbcCodegenBackend {
-    pub fn new(queries: Arc<Mutex<QueryDb>>) -> Self {
-        LlbcCodegenBackend { queries }
+    pub fn new() -> Self {
+        LlbcCodegenBackend {}
     }
 
     /// Generate code that is reachable from the given starting points.
@@ -90,16 +85,18 @@ impl LlbcCodegenBackend {
             .collect();
 
         // Apply all transformation passes, including global passes.
-        let mut global_passes = GlobalPasses::new(&self.queries.lock().unwrap(), tcx);
-        global_passes.run_global_passes(
-            &mut transformer,
-            tcx,
-            starting_items,
-            instances,
-            call_graph,
-        );
+        QUERY_DB.with(|db| {
+            let mut global_passes = GlobalPasses::new(&db.borrow(), tcx);
+            global_passes.run_global_passes(
+                &mut transformer,
+                tcx,
+                starting_items,
+                instances,
+                call_graph,
+            );
+        });
 
-        let queries = self.queries.lock().unwrap().clone();
+        let queries = QUERY_DB.with(|db| db.borrow().clone());
         check_reachable_items(tcx, &queries, &items);
 
         // Follow rustc naming convention (cx is abbrev for context).
@@ -171,7 +168,7 @@ impl LlbcCodegenBackend {
             todo!()
         }
 
-        let crate_data: charon_lib::export::CrateData = charon_lib::export::CrateData::new(&ccx);
+        let crate_data: charon_lib::export::CrateData = charon_lib::export::CrateData::new(ccx);
 
         // No output should be generated if user selected no_codegen.
         if !tcx.sess.opts.unstable_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
@@ -191,7 +188,7 @@ impl LlbcCodegenBackend {
 
 impl CodegenBackend for LlbcCodegenBackend {
     fn provide(&self, providers: &mut Providers) {
-        provide::provide(providers, &self.queries.lock().unwrap());
+        QUERY_DB.with(|db| provide::provide(providers, &db.borrow()));
     }
 
     fn print_version(&self) {
@@ -202,15 +199,10 @@ impl CodegenBackend for LlbcCodegenBackend {
         "kani-llbc"
     }
 
-    fn locale_resource(&self) -> &'static str {
-        // We don't currently support multiple languages.
-        DEFAULT_LOCALE_RESOURCE
-    }
-
     fn codegen_crate(&self, tcx: TyCtxt) -> Box<dyn Any> {
         let ret_val = rustc_internal::run(tcx, || {
             // Queries shouldn't change today once codegen starts.
-            let queries = self.queries.lock().unwrap().clone();
+            let queries = QUERY_DB.with(|db| db.borrow().clone());
 
             // Codegen all items that need to be processed according to the selected reachability mode:
             //
@@ -376,7 +368,14 @@ fn codegen_results(tcx: TyCtxt) -> Box<dyn Any> {
         CodegenResults {
             modules: vec![],
             allocator_module: None,
-            crate_info: CrateInfo::new(tcx, tcx.sess.target.arch.clone().to_string()),
+            crate_info: CrateInfo::new(
+                tcx,
+                match tcx.sess.target.arch {
+                    Arch::X86_64 => "x86_64".to_string(),
+                    Arch::AArch64 => "aarch64".to_string(),
+                    _ => format!("{:?}", tcx.sess.target.arch).to_lowercase(),
+                },
+            ),
         },
         work_products,
     ))
@@ -395,12 +394,12 @@ where
     ret
 }
 
-fn get_transform_options(tcx: &TranslatedCrate, error_ctx: &mut ErrorCtx) -> TransformOptions {
+fn get_translate_options(tcx: &TranslatedCrate, error_ctx: &mut ErrorCtx) -> TranslateOptions {
     let mut parse_pattern = |s: &str| match NamePattern::parse(s) {
         Ok(p) => Ok(p),
         Err(e) => {
             let msg = format!("failed to parse pattern `{s}` ({e})");
-            Err(error_ctx.span_err(&TranslatedCrate::default(), Span::dummy(), &msg))
+            Err(error_ctx.span_err(&TranslatedCrate::default(), Span::dummy(), &msg, Level::Error))
         }
     };
     let options = tcx.options.clone();
@@ -437,8 +436,11 @@ fn get_transform_options(tcx: &TranslatedCrate, error_ctx: &mut ErrorCtx) -> Tra
             .filter_map(|(s, opacity)| parse_pattern(&s).ok().map(|pat| (pat, opacity)))
             .collect()
     };
-    TransformOptions {
-        no_code_duplication: false,
+    TranslateOptions {
+        mir_level: MirLevel::Built,
+        translate_all_methods: false,
+        monomorphize: false,
+        no_ops_to_function_calls: false,
         hide_marker_traits: true,
         no_merge_goto_chains: false,
         item_opacities,
@@ -451,6 +453,6 @@ fn create_charon_transformation_context(tcx: TyCtxt) -> TransformCtx {
     let crate_name = tcx.crate_name(LOCAL_CRATE).as_str().into();
     let translated = TranslatedCrate { crate_name, ..TranslatedCrate::default() };
     let mut errors = ErrorCtx::new(true, false);
-    let options = get_transform_options(&translated, &mut errors);
+    let options = get_translate_options(&translated, &mut errors);
     TransformCtx { options, translated, errors: std::cell::RefCell::new(errors) }
 }

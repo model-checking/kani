@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
@@ -69,7 +69,7 @@ jobs:
 
       - name: Create Pull Request
         if: ${{ env.next_step == 'create_pr' }}
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           commit-message: Upgrade CBMC from ${{ env.CBMC_VERSION }} to ${{ env.CBMC_LATEST }}
           branch: cbmc-${{ env.CBMC_LATEST }}

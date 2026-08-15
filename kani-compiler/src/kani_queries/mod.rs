@@ -7,11 +7,14 @@ use crate::kani_middle::kani_functions::{
     KaniFunction, find_kani_functions, validate_kani_functions,
 };
 use rustc_public::ty::FnDef;
-use std::cell::OnceCell;
+use std::cell::{OnceCell, RefCell};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 
-/// This structure should only be used behind a synchronized reference or a snapshot.
+thread_local! {
+    pub static QUERY_DB: RefCell<QueryDb> = RefCell::new(QueryDb::default());
+}
+
+/// This structure is only accessed via thread_local storage to ensure thread safety.
 ///
 /// TODO: Merge this with arguments
 #[derive(Debug, Default, Clone)]
@@ -21,10 +24,6 @@ pub struct QueryDb {
 }
 
 impl QueryDb {
-    pub fn new() -> Arc<Mutex<QueryDb>> {
-        Arc::new(Mutex::new(QueryDb::default()))
-    }
-
     pub fn set_args(&mut self, args: Arguments) {
         self.args = Some(args);
     }

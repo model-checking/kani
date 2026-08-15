@@ -61,6 +61,8 @@ pub enum Intrinsic {
     Exp2F64,
     ExpF32,
     ExpF64,
+    FabsF128,
+    FabsF16,
     FabsF32,
     FabsF64,
     FaddFast,
@@ -108,6 +110,7 @@ pub enum Intrinsic {
     SimdAdd,
     SimdAnd,
     SimdDiv,
+    SimdReduceAll,
     SimdRem,
     SimdEq,
     SimdExtract,
@@ -122,6 +125,7 @@ pub enum Intrinsic {
     SimdShl,
     SimdShr,
     SimdShuffle(String),
+    SimdSplat,
     SimdSub,
     SimdXor,
     SizeOf,
@@ -134,12 +138,14 @@ pub enum Intrinsic {
     TruncF64,
     TypedSwap,
     UnalignedVolatileLoad,
+    UnalignedVolatileStore,
     UncheckedDiv,
     UncheckedRem,
     Unlikely,
     VolatileCopyMemory,
     VolatileCopyNonOverlappingMemory,
     VolatileLoad,
+    VolatileSetMemory,
     VolatileStore,
     VtableSize,
     VtableAlign,
@@ -386,6 +392,10 @@ impl Intrinsic {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => _);
                 Self::UnalignedVolatileLoad
             }
+            "unaligned_volatile_store" => {
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => RigidTy::Tuple(_));
+                Self::UnalignedVolatileStore
+            }
             "unchecked_add" | "unchecked_mul" | "unchecked_shl" | "unchecked_shr"
             | "unchecked_sub" => {
                 unreachable!("Expected intrinsic `{intrinsic_str}` to be lowered before codegen")
@@ -419,6 +429,10 @@ impl Intrinsic {
             "volatile_load" => {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => _);
                 Self::VolatileLoad
+            }
+            "volatile_set_memory" => {
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), RigidTy::Uint(UintTy::U8), RigidTy::Uint(UintTy::Usize) => RigidTy::Tuple(_));
+                Self::VolatileSetMemory
             }
             "volatile_store" => {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => RigidTy::Tuple(_));
@@ -556,6 +570,10 @@ fn try_match_simd(intrinsic_instance: &Instance) -> Option<Intrinsic> {
             assert_sig_matches!(sig, _, _ => _);
             Some(Intrinsic::SimdDiv)
         }
+        "simd_reduce_all" => {
+            assert_sig_matches!(sig, _ => RigidTy::Bool);
+            Some(Intrinsic::SimdReduceAll)
+        }
         "simd_rem" => {
             assert_sig_matches!(sig, _, _ => _);
             Some(Intrinsic::SimdRem)
@@ -608,6 +626,10 @@ fn try_match_simd(intrinsic_instance: &Instance) -> Option<Intrinsic> {
             assert_sig_matches!(sig, _, _ => _);
             Some(Intrinsic::SimdShr)
         }
+        "simd_splat" => {
+            assert_sig_matches!(sig, _ => _);
+            Some(Intrinsic::SimdSplat)
+        }
         "simd_sub" => {
             assert_sig_matches!(sig, _, _ => _);
             Some(Intrinsic::SimdSub)
@@ -652,6 +674,10 @@ fn try_match_f32(intrinsic_instance: &Instance) -> Option<Intrinsic> {
         "expf32" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
             Some(Intrinsic::ExpF32)
+        }
+        "fabsf16" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F16) => RigidTy::Float(FloatTy::F16));
+            Some(Intrinsic::FabsF16)
         }
         "fabsf32" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
@@ -746,6 +772,10 @@ fn try_match_f64(intrinsic_instance: &Instance) -> Option<Intrinsic> {
         "fabsf64" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
             Some(Intrinsic::FabsF64)
+        }
+        "fabsf128" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F128) => RigidTy::Float(FloatTy::F128));
+            Some(Intrinsic::FabsF128)
         }
         "floorf64" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));

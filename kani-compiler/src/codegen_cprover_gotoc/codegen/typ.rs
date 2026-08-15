@@ -771,9 +771,9 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
         initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
         match &layout.fields {
-            FieldsShape::Arbitrary { offsets, memory_index } => {
+            FieldsShape::Arbitrary { offsets, in_memory_order } => {
                 assert_eq!(flds.len(), offsets.len());
-                assert_eq!(offsets.len(), memory_index.len());
+                assert_eq!(offsets.len(), in_memory_order.len());
                 let mut final_fields = Vec::with_capacity(flds.len());
                 let mut offset = initial_offset;
                 for idx in layout.fields.index_by_increasing_offset() {
@@ -808,7 +808,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
         let flds: Vec<_> =
             tys.iter().enumerate().map(|(i, t)| (GotocCtx::tuple_fld_name(i), *t)).collect();
         // tuple cannot have other initial offset
-        self.codegen_struct_fields(flds, &layout.layout.0, Size::ZERO)
+        self.codegen_struct_fields(flds, &layout.layout, Size::ZERO)
     }
 
     /// A closure is a struct of all its environments. That is, a closure is
@@ -980,7 +980,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             }
             fields.extend(ctx.codegen_alignment_padding(
                 offset,
-                &type_and_layout.layout.0,
+                &type_and_layout.layout,
                 fields.len(),
             ));
             fields
@@ -1175,7 +1175,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
         self.ensure_struct(self.ty_mangled_name(ty), self.ty_pretty_name(ty), |ctx, _| {
             let variant = &def.variants().raw[0];
             let layout = ctx.layout_of(ty);
-            ctx.codegen_variant_struct_fields(variant, subst, &layout.layout.0, Size::ZERO)
+            ctx.codegen_variant_struct_fields(variant, subst, &layout.layout, Size::ZERO)
         })
     }
 
@@ -1293,7 +1293,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                         Some(variant) => {
                             // a single enum is pretty much like a struct
                             let layout = gcx.layout_of(ty).layout;
-                            gcx.codegen_variant_struct_fields(variant, subst, &layout.0, Size::ZERO)
+                            gcx.codegen_variant_struct_fields(variant, subst, &layout, Size::ZERO)
                         }
                     }
                 })
@@ -1591,10 +1591,16 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                         let (name, _) = self.codegen_spread_arg_name(&lc);
                         ident = name;
                     }
-                    Some(
+                    // Unsized-by-value arguments (`unsized_fn_params`, e.g. `fn f(self: [T])`)
+                    // cannot be a parameter of their (incomplete) unsized type, and the length /
+                    // vtable metadata must be carried somewhere, so represent them as fat pointers.
+                    // `codegen_local` / `codegen_place_stable` recover the pointee accordingly.
+                    let param_ty = if self.is_unsized(rustc_internal::internal(self.tcx, ty)) {
+                        self.codegen_ty_ref_stable(ty)
+                    } else {
                         self.codegen_ty_stable(ty)
-                            .as_parameter(Some(ident.clone().into()), Some(ident.into())),
-                    )
+                    };
+                    Some(param_ty.as_parameter(Some(ident.clone().into()), Some(ident.into())))
                 }
             })
             .collect();

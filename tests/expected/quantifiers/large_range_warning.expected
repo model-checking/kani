@@ -1,0 +1,2 @@
+`kani::forall` has an unbounded (~2^64) range; SAT solvers (the default backend) expand quantifiers over every value and may exhaust memory or diverge. Consider adding tighter bounds or using an SMT solver
+`kani::exists` has an unbounded (~2^64) range; SAT solvers (the default backend) expand quantifiers over every value and may exhaust memory or diverge. Consider adding tighter bounds or using an SMT solver

@@ -13,10 +13,13 @@ use rustc_middle::ty::TyCtxt;
 use rustc_public::CrateDef;
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::{
-    Body, ConstOperand, Operand, Rvalue, Terminator, TerminatorKind, VarDebugInfoContents,
+    BinOp, Body, CastKind, ConstOperand, Mutability, Operand, Place, Rvalue, Terminator,
+    TerminatorKind, VarDebugInfoContents,
 };
 use rustc_public::rustc_internal;
-use rustc_public::ty::{ClosureDef, FnDef, MirConst, RigidTy, TyKind, TypeAndMut, UintTy};
+use rustc_public::ty::{
+    ClosureDef, FnDef, GenericArgs, MirConst, RigidTy, Ty, TyKind, TypeAndMut, UintTy,
+};
 use rustc_span::Symbol;
 use std::collections::HashSet;
 use std::fmt::Debug;
@@ -183,11 +186,11 @@ impl AnyModifiesPass {
                         valid = false;
                         debug!(?e, "AnyModifiesPass::any_body failed");
                         let receiver_ty = args.0[0].expect_ty();
-                        let msg = if self.target_fn.is_some() {
+                        let msg = if let Some(target_fn) = self.target_fn {
                             format!(
                                 "`{receiver_ty}` doesn't implement `kani::Arbitrary`.\
                                         Please, check `{}` contract.",
-                                self.target_fn.unwrap(),
+                                target_fn,
                             )
                         } else {
                             format!("`{receiver_ty}` doesn't implement `kani::Arbitrary`.")
@@ -279,6 +282,10 @@ pub struct FunctionWithContractPass {
     unused_closures: HashSet<ClosureDef>,
     /// Cache KaniRunContract function used to implement contracts.
     run_contract_fn: Option<FnDef>,
+    /// Cache of the InContractClauseModel function used to dispatch calls to
+    /// the function under contract verification to its contract replacement
+    /// when they occur during evaluation of another contract's clauses.
+    in_clause_fn: Option<FnDef>,
 }
 
 impl TransformPass for FunctionWithContractPass {
@@ -302,6 +309,9 @@ impl TransformPass for FunctionWithContractPass {
         match instance.ty().kind().rigid().unwrap() {
             RigidTy::FnDef(def, args) => {
                 if let Some(mode) = self.contract_mode(tcx, *def) {
+                    if mode == ContractMode::RecursiveCheck {
+                        check_mutual_recursion(tcx, *def, &body);
+                    }
                     self.mark_unused(tcx, *def, &body, mode);
                     let new_body = self.set_mode(tcx, body, mode);
                     (true, new_body)
@@ -362,12 +372,16 @@ impl FunctionWithContractPass {
             let run_contract_fn =
                 queries.kani_functions().get(&KaniModel::RunContract.into()).copied();
             assert!(run_contract_fn.is_some(), "Failed to find Kani run contract function");
+            let in_clause_fn =
+                queries.kani_functions().get(&KaniModel::InContractClause.into()).copied();
+            assert!(in_clause_fn.is_some(), "Failed to find Kani in-contract-clause function");
             FunctionWithContractPass {
                 check_fn,
                 replace_fns,
                 assert_contracts: !queries.args().no_assert_contracts,
                 unused_closures: Default::default(),
                 run_contract_fn,
+                in_clause_fn,
             }
         } else {
             // If reachability mode is PubFns or Tests, we just remove any contract logic.
@@ -439,12 +453,62 @@ impl FunctionWithContractPass {
 
         let span = mode_call.span(new_body.blocks());
         let mode_const = new_body.new_uint_operand(mode as _, UintTy::U8, span);
-        new_body.assign_to(
-            ret.clone(),
-            Rvalue::Use(mode_const),
-            &mut mode_call,
-            InsertPosition::Before,
-        );
+        if matches!(mode, ContractMode::SimpleCheck | ContractMode::RecursiveCheck) {
+            // While the harness is checking the contract of this function,
+            // the function may also be called from *contract clauses* of
+            // other functions in the harness's call graph (e.g. a
+            // postcondition mentioning `NonNull::as_ptr` evaluated while
+            // `as_ptr` itself is under verification). Such calls must not be
+            // dispatched to the check closure: they would consume the single
+            // top-level contract check and run write-set instrumentation in
+            // the clause's context. Dispatch them to the original body
+            // instead (exact semantics; unlike dispatching to the contract
+            // replacement this does not require the return type to implement
+            // Arbitrary), by computing the mode at runtime as
+            // `mode * (1 - in_contract_clause())`, which yields
+            // `ORIGINAL` (0) during clause evaluation and `mode` otherwise.
+            let in_clause_instance =
+                Instance::resolve(self.in_clause_fn.unwrap(), &GenericArgs(vec![])).unwrap();
+            let in_clause_local = new_body.new_local(Ty::bool_ty(), span, Mutability::Mut);
+            new_body.insert_call(
+                &in_clause_instance,
+                &mut mode_call,
+                InsertPosition::Before,
+                vec![],
+                Place::from(in_clause_local),
+            );
+            let u8_ty = Ty::from_rigid_kind(RigidTy::Uint(UintTy::U8));
+            let in_clause_u8 = new_body.insert_assignment(
+                Rvalue::Cast(
+                    CastKind::IntToInt,
+                    Operand::Move(Place::from(in_clause_local)),
+                    u8_ty,
+                ),
+                &mut mode_call,
+                InsertPosition::Before,
+            );
+            let one_const = new_body.new_uint_operand(1, UintTy::U8, span);
+            let not_in_clause = new_body.insert_binary_op(
+                BinOp::Sub,
+                one_const,
+                Operand::Move(Place::from(in_clause_u8)),
+                &mut mode_call,
+                InsertPosition::Before,
+            );
+            new_body.assign_to(
+                ret.clone(),
+                Rvalue::BinaryOp(BinOp::Mul, mode_const, Operand::Move(Place::from(not_in_clause))),
+                &mut mode_call,
+                InsertPosition::Before,
+            );
+        } else {
+            new_body.assign_to(
+                ret.clone(),
+                Rvalue::Use(mode_const),
+                &mut mode_call,
+                InsertPosition::Before,
+            );
+        }
         new_body.replace_terminator(
             &mode_call,
             Terminator { kind: TerminatorKind::Goto { target }, span },
@@ -551,4 +615,75 @@ fn find_closure(tcx: TyCtxt, fn_def: FnDef, body: &Body, name: &str) -> ClosureD
             tcx.sess.dcx().abort_if_errors();
             unreachable!()
         })
+}
+
+/// Check if a function with `#[kani::recursion]` is involved in mutual recursion.
+///
+/// Scans the function's MIR body for calls to other functions that also have
+/// `#[kani::recursion]`. For each such callee, checks if the callee's body calls
+/// back to the original function (one level of indirection). If so, emits a
+/// compilation error because the per-function REENTRY mechanism only handles
+/// direct recursion soundly.
+///
+/// We require both `has_contract()` and `has_recursion()` on the callee because
+/// if the callee has a contract but no `#[kani::recursion]`, Kani replaces the
+/// callee with its contract abstraction — no mutual recursion occurs.
+///
+/// Limitations:
+/// - Only detects one level of indirection (f→g→f), not deeper chains (f→g→h→f).
+///   TODO(#3316): Extend to detect deeper mutual recursion chains.
+fn check_mutual_recursion(tcx: TyCtxt, fn_def: FnDef, body: &Body) {
+    let fn_name = tcx.def_path_str(rustc_internal::internal(tcx, fn_def.def_id()));
+
+    for bb in body.blocks.iter() {
+        let TerminatorKind::Call { func, .. } = &bb.terminator.kind else { continue };
+        let Ok(func_ty) = func.ty(body.locals()) else { continue };
+        let TyKind::RigidTy(RigidTy::FnDef(callee_def, callee_args)) = func_ty.kind() else {
+            continue;
+        };
+
+        // Skip direct recursion (that's handled correctly by REENTRY).
+        if callee_def.def_id() == fn_def.def_id() {
+            continue;
+        }
+
+        // Only error when the callee also uses #[kani::recursion] with a contract.
+        // If the callee has a contract but no #[kani::recursion], Kani replaces
+        // the call with the contract abstraction, so no mutual recursion occurs.
+        let callee_attrs = KaniAttributes::for_def_id(tcx, callee_def.def_id());
+        if !callee_attrs.has_contract() || !callee_attrs.has_recursion() {
+            continue;
+        }
+
+        // Check if the callee calls back to us (one level deep).
+        let Ok(callee_instance) = Instance::resolve(callee_def, &callee_args) else { continue };
+        let Some(callee_body) = callee_instance.body() else { continue };
+
+        for callee_bb in callee_body.blocks.iter() {
+            let TerminatorKind::Call { func: callee_func, .. } = &callee_bb.terminator.kind else {
+                continue;
+            };
+            let Ok(callee_func_ty) = callee_func.ty(callee_body.locals()) else { continue };
+            let TyKind::RigidTy(RigidTy::FnDef(transitive_def, _)) = callee_func_ty.kind() else {
+                continue;
+            };
+
+            if transitive_def.def_id() == fn_def.def_id() {
+                let callee_name =
+                    tcx.def_path_str(rustc_internal::internal(tcx, callee_def.def_id()));
+                let span = rustc_internal::internal(tcx, bb.terminator.span);
+                tcx.dcx().span_err(
+                    span,
+                    format!(
+                        "`#[kani::recursion]` is used on `{fn_name}`, which calls \
+                         `{callee_name}` that calls back to `{fn_name}`. \
+                         Mutual recursion is not supported by contract verification \
+                         and produces unsound results. Only direct recursion \
+                         (a function calling itself) is handled correctly."
+                    ),
+                );
+                break; // One error per callee is enough; continue checking other callees.
+            }
+        }
+    }
 }
