@@ -60,10 +60,17 @@ impl<'pr> HarnessRunner<'_, 'pr> {
     ) -> Result<Vec<HarnessResult<'pr>>> {
         let sorted_harnesses = crate::metadata::sort_harnesses_by_loc(harnesses);
 
-        // Determine if we should show progress indicator
+        // Determine if we should show progress indicator.
+        //
+        // Test stderr, not stdout: `ProgressBar::new` draws to stderr
+        // (`ProgressDrawTarget::stderr()`), so gating on stdout meant
+        // `kani --log-file log.txt > out.txt` from a terminal lost the progress bar
+        // even though stderr was still interactive — the very case where redirecting
+        // stdout makes the bar most useful. indicatif hides a non-terminal target
+        // itself, so this is about not suppressing a bar that would render fine.
         let show_progress = self.sess.args.log_file.is_some()
             && !self.sess.args.common_args.quiet
-            && std::io::stdout().is_terminal();
+            && std::io::stderr().is_terminal();
 
         // Create progress indicator
         let progress_indicator = ProgressIndicator::new(sorted_harnesses.len(), show_progress);
