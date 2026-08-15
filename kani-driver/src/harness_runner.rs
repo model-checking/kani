@@ -169,36 +169,26 @@ impl KaniSession {
 
             let output = result.render(&self.args.output_format, harness.attributes.should_panic);
 
-            // If log file is specified, write to log file instead of stdout
-            if let Some(ref log_file_path) = self.args.log_file {
-                self.write_to_log_file(log_file_path, &output, thread_index);
+            if rayon::current_num_threads() > 1 {
+                self.emit_line(&format!("Thread {thread_index}: {output}"));
             } else {
-                // Normal stdout output
-                if rayon::current_num_threads() > 1 {
-                    println!("Thread {thread_index}: {output}");
-                } else {
-                    println!("{output}");
-                }
+                self.emit_line(&output);
             }
         }
     }
 
-    fn write_to_log_file(&self, log_file_path: &PathBuf, output: &str, thread_index: usize) {
-        use std::fs::OpenOptions;
-
-        let result = OpenOptions::new().create(true).append(true).open(log_file_path).and_then(
-            |mut file| {
-                let formatted_output = if rayon::current_num_threads() > 1 {
-                    format!("Thread {thread_index}: {output}\n")
-                } else {
-                    format!("{output}\n")
-                };
-                file.write_all(formatted_output.as_bytes())
-            },
-        );
-
-        if let Err(e) = result {
-            eprintln!("Failed to write to log file {}: {}", log_file_path.display(), e);
+    /// Emit one line of harness output: to `--log-file` when one is configured, so the
+    /// terminal is left to the progress indicator, and to stdout otherwise.
+    ///
+    /// `line` is emitted as given. Callers own any `Thread N:` prefix, so that the
+    /// log file and stdout carry identical text.
+    fn emit_line(&self, line: &str) {
+        if let Some(ref log_file_path) = self.args.log_file {
+            if let Err(e) = crate::log_file::append_line(log_file_path, line) {
+                eprintln!("Failed to write to log file {}: {}", log_file_path.display(), e);
+            }
+        } else {
+            println!("{line}");
         }
     }
 
@@ -268,23 +258,16 @@ impl KaniSession {
                 msg = format!("Thread {thread_index}: {msg}");
             }
 
-            // Write to log file if specified, otherwise to stdout
-            if let Some(ref log_file_path) = self.args.log_file {
-                self.write_to_log_file(log_file_path, &msg, thread_index);
-            } else {
-                println!("{msg}");
-            }
+            self.emit_line(&msg);
 
             // Print stubs applied to this harness so users know which
             // assumptions are in effect.
             let multi = rayon::current_num_threads() > 1;
             let print_line = |line: String| {
-                if let Some(ref log_file_path) = self.args.log_file {
-                    self.write_to_log_file(log_file_path, &line, thread_index);
-                } else if multi {
-                    println!("Thread {thread_index}: {line}");
+                if multi {
+                    self.emit_line(&format!("Thread {thread_index}: {line}"));
                 } else {
-                    println!("{line}");
+                    self.emit_line(&line);
                 }
             };
             for stub in &harness.attributes.stubs {

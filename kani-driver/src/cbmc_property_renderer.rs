@@ -10,8 +10,6 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use rustc_demangle::demangle;
 use std::collections::HashMap;
-use std::fs::OpenOptions;
-use std::io::Write;
 use std::path::PathBuf;
 
 type CbmcAltDescriptions = HashMap<&'static str, Vec<(&'static str, Option<&'static str>)>>;
@@ -189,7 +187,7 @@ pub fn kani_cbmc_output_filter(
         let formatted_item = format_item(&processed_item, output_format);
         if let Some(fmt_item) = formatted_item {
             if let Some(log_path) = log_file {
-                if let Err(e) = write_to_log_file(log_path, &fmt_item) {
+                if let Err(e) = crate::log_file::append_line(log_path, &fmt_item) {
                     eprintln!(
                         "Failed to write CBMC output to log file {}: {}",
                         log_path.display(),
@@ -204,12 +202,6 @@ pub fn kani_cbmc_output_filter(
     // TODO: Record processed items and dump them into a JSON file
     // <https://github.com/model-checking/kani/issues/942>
     Some(processed_item)
-}
-
-/// Helper function to write output to log file
-fn write_to_log_file(log_file_path: &PathBuf, content: &str) -> std::io::Result<()> {
-    let mut file = OpenOptions::new().create(true).append(true).open(log_file_path)?;
-    writeln!(file, "{}", content)
 }
 
 /// Processes a `ParserItem`. In general, all items are returned as they are,
