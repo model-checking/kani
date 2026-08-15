@@ -306,6 +306,7 @@ impl AutomaticArbitraryPass {
 pub struct AutomaticHarnessPass {
     kani_any: FnDef,
     init_contracts_hook: Instance,
+    reset_clause_depth: Instance,
     kani_autoharness_intrinsic: FnDef,
 }
 
@@ -318,7 +319,11 @@ impl AutomaticHarnessPass {
         let init_contracts_hook = *kani_fns.get(&KaniHook::InitContracts.into()).unwrap();
         let init_contracts_hook =
             Instance::resolve(init_contracts_hook, &GenericArgs(vec![])).unwrap();
-        Self { kani_any, init_contracts_hook, kani_autoharness_intrinsic }
+        let reset_clause_depth =
+            *kani_fns.get(&KaniModel::ResetContractClauseDepth.into()).unwrap();
+        let reset_clause_depth =
+            Instance::resolve(reset_clause_depth, &GenericArgs(vec![])).unwrap();
+        Self { kani_any, init_contracts_hook, reset_clause_depth, kani_autoharness_intrinsic }
     }
 }
 
@@ -356,8 +361,31 @@ impl TransformPass for AutomaticHarnessPass {
         let mut source = SourceInstruction::Terminator { bb: 0 };
 
         // Contract harnesses need a free(NULL) statement, c.f. kani_core::init_contracts().
+        //
+        // Order matters: `reset_contract_clause_depth` must execute BEFORE
+        // `init_contracts` (which triggers the first contract dispatch that
+        // reads the counter). Because `insert_call(..., Before, ...)`
+        // splits the block so that the newly-inserted call runs FIRST (and
+        // then advances `source` past it), we insert `reset` first (so it
+        // becomes the current first call) and `init_contracts` second (so
+        // it runs after `reset`). The manual `proof_for_contract` path in
+        // `library/kani_macros/src/sysroot/contracts/mod.rs` produces the
+        // same final order (two `stmts.insert(0, ...)` calls with reset
+        // inserted last so it ends up first).
         let attrs = KaniAttributes::for_def_id(tcx, def.def_id());
         if attrs.has_contract() {
+            let reset_ret = harness_body.new_local(
+                Ty::new_tuple(&[]),
+                source.span(harness_body.blocks()),
+                Mutability::Not,
+            );
+            harness_body.insert_call(
+                &self.reset_clause_depth,
+                &mut source,
+                InsertPosition::Before,
+                vec![],
+                Place::from(reset_ret),
+            );
             let ret_local = harness_body.new_local(
                 Ty::from_rigid_kind(RigidTy::Tuple(vec![])),
                 source.span(harness_body.blocks()),
