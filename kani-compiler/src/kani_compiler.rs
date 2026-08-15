@@ -301,13 +301,44 @@ fn inject_kani_macro_overrides(compiler: &Compiler, krate: &mut ast::Crate) {
 mod tests {
     use super::KANI_REQUIRED_RUSTC_ARGS;
 
+    /// Join the two-token `-C opt=val` / `-Z opt=val` / `--cfg val` encodings into single
+    /// logical flags, so the invariants below hold no matter which encoding
+    /// `KANI_REQUIRED_RUSTC_ARGS` uses. rustc's getopts CLI accepts both forms
+    /// interchangeably, so a future edit could switch encodings without changing behavior;
+    /// these assertions must not silently stop applying if it does.
+    fn logical_flags() -> Vec<String> {
+        normalize_encodings(KANI_REQUIRED_RUSTC_ARGS)
+    }
+
+    /// Bare `-C`/`-Z` take their value as the next token and join without a separator
+    /// (`-C` + `linker=echo` == `-Clinker=echo`); bare long options join with `=`
+    /// (`--cfg` + `kani` == `--cfg=kani`).
+    fn normalize_encodings(args: &[&str]) -> Vec<String> {
+        let mut flags = Vec::new();
+        let mut args = args.iter();
+        while let Some(arg) = args.next() {
+            match *arg {
+                "-C" | "-Z" => {
+                    let value = args.next().expect("`-C`/`-Z` must be followed by a value");
+                    flags.push(format!("{arg}{value}"));
+                }
+                "--cfg" | "--check-cfg" => {
+                    let value = args.next().expect("`--cfg` must be followed by a value");
+                    flags.push(format!("{arg}={value}"));
+                }
+                single_token => flags.push(single_token.to_string()),
+            }
+        }
+        flags
+    }
+
     /// The required-flags list must never include a linker override — a build
     /// system that needs a real linker for rlib output would have it silently
     /// clobbered (last-flag-wins).
     #[test]
     fn required_args_do_not_clobber_linker() {
         assert!(
-            !KANI_REQUIRED_RUSTC_ARGS.iter().any(|f| f.starts_with("-Clinker")),
+            !logical_flags().iter().any(|f| f.starts_with("-Clinker")),
             "KANI_REQUIRED_RUSTC_ARGS must not set -Clinker (build systems own that)"
         );
     }
@@ -315,11 +346,12 @@ mod tests {
     /// The soundness invariants kani's MIR analysis assumes.
     #[test]
     fn required_args_cover_soundness_invariants() {
+        let flags = logical_flags();
         for must_have in
             ["-Cpanic=abort", "-Coverflow-checks=on", "-Zalways-encode-mir", "--cfg=kani"]
         {
             assert!(
-                KANI_REQUIRED_RUSTC_ARGS.contains(&must_have),
+                flags.iter().any(|f| f == must_have),
                 "missing soundness-critical flag: {must_have}"
             );
         }
@@ -331,8 +363,31 @@ mod tests {
     #[test]
     fn required_args_do_not_duplicate_crate_attr() {
         assert!(
-            !KANI_REQUIRED_RUSTC_ARGS.iter().any(|f| f.contains("crate-attr")),
+            !logical_flags().iter().any(|f| f.starts_with("-Zcrate-attr")),
             "KANI_REQUIRED_RUSTC_ARGS must not include -Zcrate-attr (cargo kani passes it; rustc errors on duplicate)"
+        );
+    }
+
+    /// The invariants above are only meaningful if `normalize_encodings` really does join
+    /// the two-token forms; a silent regression there would defeat all three.
+    #[test]
+    fn normalize_encodings_joins_both_forms() {
+        assert_eq!(
+            normalize_encodings(&[
+                "-C",
+                "linker=echo",
+                "-Z",
+                "crate-attr=register_tool(kanitool)",
+                "--cfg",
+                "kani",
+                "-Cpanic=abort",
+            ]),
+            [
+                "-Clinker=echo",
+                "-Zcrate-attr=register_tool(kanitool)",
+                "--cfg=kani",
+                "-Cpanic=abort"
+            ]
         );
     }
 }
