@@ -10,6 +10,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use rustc_demangle::demangle;
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 type CbmcAltDescriptions = HashMap<&'static str, Vec<(&'static str, Option<&'static str>)>>;
 
@@ -165,12 +166,14 @@ impl ParserItem {
 /// filter and transform it into the format we expect.
 ///
 /// This will output "messages" live as they stream in if `output_format` is
-/// set to `regular` but will otherwise not print.
+/// set to `regular` but will otherwise not print. When a log file path is provided, output is
+/// redirected to the log file instead.
 pub fn kani_cbmc_output_filter(
     item: ParserItem,
     extra_ptr_checks: bool,
     quiet: bool,
     output_format: &OutputFormat,
+    log_file: Option<&PathBuf>,
 ) -> Option<ParserItem> {
     // Some items (e.g., messages) are skipped.
     // We could also process them and decide to skip later.
@@ -183,7 +186,17 @@ pub fn kani_cbmc_output_filter(
     if !quiet {
         let formatted_item = format_item(&processed_item, output_format);
         if let Some(fmt_item) = formatted_item {
-            println!("{fmt_item}");
+            if let Some(log_path) = log_file {
+                if let Err(e) = crate::log_file::append_line(log_path, &fmt_item) {
+                    eprintln!(
+                        "Failed to write CBMC output to log file {}: {}",
+                        log_path.display(),
+                        e
+                    );
+                }
+            } else {
+                println!("{fmt_item}");
+            }
         }
     }
     // TODO: Record processed items and dump them into a JSON file

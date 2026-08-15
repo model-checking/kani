@@ -338,6 +338,12 @@ pub struct VerificationArgs {
     #[arg(long, hide_short_help = true)]
     pub output_into_files: bool,
 
+    /// Write verbose and terse log output to the specified file.
+    /// When enabled with an interactive terminal, progress indicator will be shown on terminal
+    /// while detailed logs are written to the file.
+    #[arg(long, value_name = "PATH")]
+    pub log_file: Option<PathBuf>,
+
     /// Print final LLBC for Lean backend. This requires the `-Z lean` option.
     #[arg(long, hide = true)]
     pub print_llbc: bool,
@@ -838,6 +844,17 @@ impl ValidateArgs for VerificationArgs {
                     "Conflicting options: --jobs requires `--output-format=terse`",
                 ));
             }
+            if self.log_file.is_some() && self.output_format == OutputFormat::Old {
+                // `old` runs CBMC with inherited stdio instead of piping it, so neither
+                // `kani_cbmc_output_filter` nor `process_output` runs and nothing but the
+                // per-harness "Checking harness ..." lines reaches the log. Accepting the
+                // combination would promise a verbose log and deliver an almost empty one,
+                // while the raw CBMC output went to the terminal the log exists to keep clear.
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    "Conflicting options: --log-file is not compatible with `--output-format=old`",
+                ));
+            }
             // TODO: error out for other CBMC-backend-specific arguments
             if self.common_args.unstable_features.contains(UnstableFeature::Lean)
                 && !self.cbmc_args.is_empty()
@@ -1187,6 +1204,43 @@ mod tests {
             "kani file.rs -Z unstable-options --export-json out.json --no-codegen",
             ErrorKind::ArgumentConflict,
         );
+    }
+
+    #[test]
+    fn check_log_file_conflicts() {
+        // `old` bypasses the piped-output path that populates the log, so the
+        // combination would silently produce an almost empty log file.
+        expect_validation_error(
+            "kani file.rs --log-file out.log --output-format=old",
+            ErrorKind::ArgumentConflict,
+        );
+    }
+
+    #[test]
+    fn check_log_file_allowed_formats() {
+        // The formats that do go through the piped-output path must keep working.
+        // `validate` also checks the input is a regular file, so use a real one.
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("file.rs");
+        std::fs::write(&input, "fn main() {}").unwrap();
+
+        for format in ["terse", "regular"] {
+            let args = StandaloneArgs::try_parse_from([
+                "kani",
+                input.to_str().unwrap(),
+                "--log-file",
+                "out.log",
+                "--output-format",
+                format,
+            ])
+            .unwrap();
+            let result = args.validate();
+            assert!(
+                result.is_ok(),
+                "--log-file should be accepted with --output-format={format}, got {:?}",
+                result.err().map(|e| e.to_string())
+            );
+        }
     }
 
     #[test]

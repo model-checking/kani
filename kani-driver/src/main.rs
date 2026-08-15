@@ -39,7 +39,9 @@ mod concrete_playback;
 mod coverage;
 mod harness_runner;
 mod list;
+mod log_file;
 mod metadata;
+mod progress_indicator;
 mod project;
 
 mod frontend;
