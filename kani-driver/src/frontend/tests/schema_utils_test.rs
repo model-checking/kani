@@ -134,6 +134,7 @@ fn test_create_verification_result_json() {
         results: Ok(properties),
         runtime: Duration::from_millis(120),
         generated_concrete_test: false,
+        ignored_quantifiers: 0,
         coverage_results: None,
         cbmc_stats: None,
     };
@@ -207,6 +208,7 @@ fn test_add_runner_results_to_json_real() {
         results: Err(ExitStatus::Other(42)),
         runtime: Duration::from_millis(120),
         generated_concrete_test: false,
+        ignored_quantifiers: 0,
         coverage_results: None,
         cbmc_stats: None,
     };
