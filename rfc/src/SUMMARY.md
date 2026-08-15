@@ -19,4 +19,5 @@
 - [0011-source-coverage](rfcs/0011-source-coverage.md)
 - [0012-loop-contracts](rfcs/0012-loop-contracts.md)
 - [0013-list](rfcs/0013-list.md)
-- [0016-export-json](rfcs/0016-export-json.md)
+- [0014-harness-partition](rfcs/0014-harness-partition.md)
+- [0015-export-json](rfcs/0015-export-json.md)
