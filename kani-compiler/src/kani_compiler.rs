@@ -43,17 +43,36 @@ use tracing::debug;
 /// goto-c codegen assume abort-on-panic, checked overflow, v0 mangling,
 /// encoded MIR, storage markers, and `cfg(kani)`. `cargo kani` already passes
 /// these (`kani_rustc_flags()` in kani-driver); for that path appending is
-/// idempotent — scalar `-C`/`-Z` flags are last-flag-wins and `--cfg`/
-/// `--check-cfg` are additive. For any other caller — a build system that
-/// drives kani-compiler directly, or a contributor running
+/// idempotent — see "Override semantics" below. For any other caller — a build
+/// system that drives kani-compiler directly, or a contributor running
 /// `RUSTC=kani-compiler cargo build` to debug — omitting one of these flags
 /// previously produced an incorrect or failed verification: missing
 /// `--cfg=kani` is a vacuous 0-harness pass, missing `-Coverflow-checks=on`
 /// or `-Zmir-enable-passes` proves a different program (silent), and the
 /// rest are hard errors. Now the compiler enforces the correct values.
 ///
-/// Appended (not prepended): rustc is last-flag-wins for scalar `-C`/`-Z`
-/// options, so appending after the caller's args makes these non-overridable.
+/// Override semantics. These are appended, not prepended, and the three
+/// relevant rustc behaviors are not uniform:
+/// - Scalar `-C`/`-Z` options (`panic`, `overflow-checks`,
+///   `symbol-mangling-version`, `always-encode-mir`, `panic_abort_tests`) are
+///   last-flag-wins, so appending makes them non-overridable by the caller.
+///   That is the point: the caller cannot weaken a verification invariant.
+///   The cost is that a future Kani feature wanting one of these *off* has to
+///   change this list, not just kani-driver — compare `--prove-safety-only`,
+///   which sets `-Cdebug-assertions=off` in the driver alone.
+/// - `-Zmir-enable-passes` ACCUMULATES rather than overriding: each occurrence
+///   pushes onto one list. So appending `-RemoveStorageMarkers` does not
+///   discard a caller's earlier entry. This matters for `--coverage`, which
+///   adds `-Zmir-enable-passes=-SingleUseConsts` in `kani_rustc_flags()`: both
+///   disables survive. Were it last-flag-wins, appending here would silently
+///   re-enable `SingleUseConsts` under `--coverage`.
+/// - `--cfg`/`--check-cfg` are additive.
+///
+/// One caveat for direct callers: appending `--check-cfg` *enables* cfg
+/// checking for a caller that passed none, so that crate's own undeclared cfgs
+/// begin emitting `unexpected_cfgs` warnings. Warnings only, never a build
+/// failure, and `cargo kani` is unaffected because kani-driver already passes
+/// `--check-cfg=cfg(kani)`.
 ///
 /// Single-token `--flag=value` encoding: rustc's getopts-based CLI parses
 /// `--cfg=kani` and `--cfg kani` identically, and this is the same encoding
