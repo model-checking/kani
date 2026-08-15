@@ -4,8 +4,10 @@
 
 set -eu
 
+# `kani --version` now prints the same `Kani Rust Verifier <version> (<mode>)`
+# line as the standalone run header, so the version is the 4th field in both.
 KANI_VERSION_CMD=`kani --version`
-KANI_VERSION_CMD_VERSION=`echo ${KANI_VERSION_CMD} | awk '{print $2}'`
+KANI_VERSION_CMD_VERSION=`echo ${KANI_VERSION_CMD} | awk '{print $4}'`
 
 # Check that the version printed is the same. Note: We use `sed -n '1p'` instead
 # of `head -n 1` to avoid https://github.com/model-checking/kani/issues/2618
