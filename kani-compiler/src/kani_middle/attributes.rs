@@ -188,6 +188,10 @@ impl<'tcx> KaniAttributes<'tcx> {
     }
 
     pub fn for_item(tcx: TyCtxt<'tcx>, def_id: DefId) -> Self {
+        // `get_all_attrs` is deprecated in favor of `rustc_hir::find_attr!`, but that
+        // macro only matches parsed built-in attributes. Kani inspects `kanitool::*`
+        // tool attributes, which are unparsed, so `get_all_attrs` is the correct API.
+        #[allow(deprecated)]
         let all_attributes = tcx.get_all_attrs(def_id);
         let map = all_attributes.iter().fold(
             <BTreeMap<KaniAttributeKind, Vec<&'tcx Attribute>>>::default(),
@@ -748,7 +752,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                     ));
                 }
                 ResolveError::MissingTraitImpl { tcx: _, trait_fn_id, ty: _ } => {
-                    let generics = self.tcx.generics_of(trait_fn_id);
+                    let generics = self.tcx.generics_of(*trait_fn_id);
                     let parent_generics =
                         generics.parent.map(|parent| self.tcx.generics_of(parent));
                     if !generics.own_params.is_empty()
@@ -939,6 +943,8 @@ impl<'tcx> KaniAttributes<'tcx> {
             self.tcx.parent_module_from_def_id(self.item.expect_local()).to_local_def_id();
 
         // Find the kanitool::stub_set attribute on this item.
+        // See `for_item` for why the deprecated `get_all_attrs` is the right API here.
+        #[allow(deprecated)]
         let attrs = self.tcx.get_all_attrs(def_id);
         let stub_set_attr = attrs.iter().find(|a| {
             if let Attribute::Unparsed(normal) = a {
@@ -1060,7 +1066,10 @@ fn has_kani_attribute<F: Fn(KaniAttributeKind) -> bool>(
     def_id: DefId,
     predicate: F,
 ) -> bool {
-    tcx.get_all_attrs(def_id).iter().filter_map(|a| attr_kind(tcx, a)).any(predicate)
+    // See `KaniAttributes::for_item` for why the deprecated `get_all_attrs` is used here.
+    #[allow(deprecated)]
+    let attrs = tcx.get_all_attrs(def_id);
+    attrs.iter().filter_map(|a| attr_kind(tcx, a)).any(predicate)
 }
 
 /// Same as [`KaniAttributes::is_proof_harness`] but more efficient because less
@@ -1151,10 +1160,8 @@ impl<'a> TryFrom<&'a Attribute> for UnstableAttribute {
         let build_error = |reason: String| Self::Error { reason, attr };
         let args = parse_key_values(attr).map_err(build_error)?;
         let invalid_keys = args
-            .iter()
-            .filter_map(|(key, _)| {
-                (!matches!(key.as_str(), "feature" | "issue" | "reason")).then_some(key)
-            })
+            .keys()
+            .filter(|key| !matches!(key.as_str(), "feature" | "issue" | "reason"))
             .cloned()
             .collect::<Vec<_>>();
 

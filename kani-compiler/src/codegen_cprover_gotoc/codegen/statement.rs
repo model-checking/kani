@@ -791,7 +791,7 @@ impl GotocCtx<'_, '_> {
                 Stmt::block(
                     vec![
                         self.codegen_expr_to_place_stable(destination, func_expr.call(fargs), loc),
-                        Stmt::goto(bb_label(target.unwrap()), loc),
+                        self.codegen_end_call(*target, loc),
                     ],
                     loc,
                 )

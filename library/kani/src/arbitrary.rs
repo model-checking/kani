@@ -15,6 +15,24 @@ where
     }
 }
 
+impl<T> Arbitrary for std::rc::Rc<T>
+where
+    T: Arbitrary,
+{
+    fn any() -> Self {
+        std::rc::Rc::new(T::any())
+    }
+}
+
+impl<T> Arbitrary for std::sync::Arc<T>
+where
+    T: Arbitrary,
+{
+    fn any() -> Self {
+        std::sync::Arc::new(T::any())
+    }
+}
+
 impl Arbitrary for std::time::Duration {
     fn any() -> Self {
         const NANOS_PER_SEC: u32 = 1_000_000_000;

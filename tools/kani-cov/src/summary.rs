@@ -135,8 +135,8 @@ pub fn line_coverage_results(
 
     if let Some(res) = fun_results {
         let mut cur_results = res.1.clone();
-        // Sort the results by row
-        cur_results.sort_by(|a, b| b.region.start.0.cmp(&a.region.start.0));
+        // Sort the results by row (descending).
+        cur_results.sort_by_key(|a| std::cmp::Reverse(a.region.start.0));
 
         /// Checks if a line is relevant to a region.
         /// Here, we define "relevant" as the line appearing after/at the start

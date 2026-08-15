@@ -44,7 +44,7 @@ use charon_lib::ast::{
     TypeVarId as CharonTypeVarId, UnOp as CharonUnOp, Var as CharonVar, VarId as CharonVarId,
     Variant as CharonVariant, VariantId as CharonVariantId,
 };
-use charon_lib::errors::{Error as CharonError, ErrorCtx as CharonErrorCtx};
+use charon_lib::errors::{Error as CharonError, ErrorCtx as CharonErrorCtx, Level as CharonLevel};
 use charon_lib::ids::Vector as CharonVector;
 use charon_lib::ullbc_ast::{
     BlockData as CharonBlockData, BlockId as CharonBlockId, BodyContents as CharonBodyContents,
@@ -67,7 +67,7 @@ use rustc_public::rustc_internal;
 use rustc_public::ty::{
     AdtDef, AdtKind, Allocation, ConstantKind, FnDef, GenericArgKind, GenericArgs,
     GenericParamDefKind, IntTy, MirConst, Region, RegionKind, RigidTy, Span, TraitDecl, TraitDef,
-    Ty, TyConst, TyConstKind, TyKind, UintTy,
+    Ty, TyConst, TyConstKind, TyKind, UintTy, VariantIdx,
 };
 use rustc_public::{CrateDef, CrateDefType, DefId};
 use rustc_public_bridge::IndexedVal;
@@ -86,6 +86,9 @@ pub struct Context<'a, 'tcx> {
     errors: &'a mut CharonErrorCtx,
     local_names: FxHashMap<Local, String>,
     file_to_id: HashMap<CharonFileName, CharonFileId>,
+    /// Block ID of the synthetic block that aborts. It is the target of every call's unwind edge
+    /// (Kani does not model unwinding) and of the return edge of calls that never return.
+    abort_block: CharonBlockId,
 }
 
 impl<'a, 'tcx> Context<'a, 'tcx> {
@@ -108,15 +111,16 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             }
         }
         let file_to_id: HashMap<CharonFileName, CharonFileId> = HashMap::new();
-        Self { tcx, instance, translated, id_map, errors, local_names, file_to_id }
+        let abort_block = CharonBlockId::from_usize(0);
+        Self { tcx, instance, translated, id_map, errors, local_names, file_to_id, abort_block }
     }
 
     fn tcx(&self) -> TyCtxt<'tcx> {
         self.tcx
     }
 
-    fn span_err(&mut self, span: CharonSpan, msg: &str) -> CharonError {
-        self.errors.span_err(self.translated, span, msg)
+    fn span_err(&mut self, span: CharonSpan, msg: &str, level: CharonLevel) -> CharonError {
+        self.errors.span_err(self.translated, span, msg, level)
     }
 
     fn translate_traitdecl(&mut self, trait_def: TraitDef) -> CharonTraitDeclId {
@@ -130,8 +134,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 let types = Vec::new();
                 let type_clauses = Vec::new();
                 let type_defaults = IndexMap::new();
-                let required_methods = Vec::new();
-                let provided_methods = Vec::new();
+                let methods = Vec::new();
                 let parent_clauses = CharonVector::new();
                 let c_traitdecl = CharonTraitDecl {
                     def_id: trait_decl_id,
@@ -143,8 +146,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     const_defaults,
                     types,
                     type_defaults,
-                    required_methods,
-                    provided_methods,
+                    methods,
                 };
                 self.translated.trait_decls.set_slot(trait_decl_id, c_traitdecl);
                 trait_decl_id
@@ -184,7 +186,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 regions: CharonVector::new(),
                 skip_binder: CharonTraitDeclRef {
                     trait_id: c_traitdecl_id,
-                    generics: c_genarg.clone(),
+                    generics: Box::new(c_genarg.clone()),
                 },
             };
             let debr = CharonDeBruijnVar::free(CharonTraitClauseId::from_usize(i));
@@ -224,7 +226,10 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 .translate_generic_args_without_trait(trait_ref.args().clone(), trait_def.def_id());
             let c_polytrait = CharonPolyTraitDeclRef {
                 regions: CharonVector::new(),
-                skip_binder: CharonTraitDeclRef { trait_id: c_traitdecl_id, generics: c_genarg },
+                skip_binder: CharonTraitDeclRef {
+                    trait_id: c_traitdecl_id,
+                    generics: Box::new(c_genarg),
+                },
             };
             let c_traitclause = CharonTraitClause {
                 clause_id: CharonTraitClauseId::from_usize(i),
@@ -605,7 +610,11 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 let c_typedeclid = self.register_type_decl_id(def_id);
                 let mut c_variants: CharonVector<CharonVariantId, CharonVariant> =
                     CharonVector::new();
-                for var_def in adt_def.variants_iter() {
+                for (var_idx, var_def) in adt_def.variants_iter().enumerate() {
+                    // `variants_iter` yields variants in source-declaration order,
+                    // so the enumeration index is the variant's `VariantIdx`.
+                    // `VariantDef::idx` is no longer publicly accessible.
+                    let variant_idx = VariantIdx::to_val(var_idx);
                     let mut c_fields: CharonVector<CharonFieldId, CharonField> =
                         CharonVector::new();
                     for field_def in var_def.fields() {
@@ -629,7 +638,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     let span = self.translate_span(adt_def.span());
 
                     let adtdef_internal = rustc_internal::internal(self.tcx, adt_def);
-                    let variant_index_internal = rustc_internal::internal(self.tcx, var_def.idx);
+                    let variant_index_internal = rustc_internal::internal(self.tcx, variant_idx);
                     let discr =
                         adtdef_internal.discriminant_for_variant(self.tcx, variant_index_internal);
                     let discr_val = discr.val;
@@ -649,7 +658,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                         discriminant: c_discr,
                     };
                     let c_varidx = c_variants.push(c_variant);
-                    assert_eq!(c_varidx.index(), var_def.idx.to_index());
+                    assert_eq!(c_varidx.index(), var_idx);
                 }
                 let typedecl = CharonTypeDecl {
                     def_id: c_typedeclid,
@@ -717,7 +726,15 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         // For now, assume all items are transparent
         let opacity = CharonItemOpacity::Transparent;
 
-        Ok(CharonItemMeta { span, source_text, attr_info, name, is_local, opacity })
+        Ok(CharonItemMeta {
+            span,
+            source_text,
+            attr_info,
+            name,
+            is_local,
+            opacity,
+            lang_item: None,
+        })
     }
 
     fn translate_item_meta_from_defid(&mut self, defid: DefId) -> CharonItemMeta {
@@ -738,7 +755,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         // For now, assume all items are transparent
         let opacity = CharonItemOpacity::Transparent;
 
-        CharonItemMeta { span, source_text, attr_info, name, is_local, opacity }
+        CharonItemMeta { span, source_text, attr_info, name, is_local, opacity, lang_item: None }
     }
 
     fn translate_item_meta_adt(&mut self, adt: AdtDef) -> Result<CharonItemMeta, CharonError> {
@@ -758,7 +775,15 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         // For now, assume all items are transparent
         let opacity = CharonItemOpacity::Transparent;
 
-        Ok(CharonItemMeta { span, source_text, attr_info, name, is_local, opacity })
+        Ok(CharonItemMeta {
+            span,
+            source_text,
+            attr_info,
+            name,
+            is_local,
+            opacity,
+            lang_item: None,
+        })
     }
 
     fn is_builtin_fun(&mut self, func_def: InstanceDef) -> bool {
@@ -1180,9 +1205,27 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         let span = self.translate_span(mir_body.span);
         let arg_count = self.instance.fn_abi().unwrap().args.len();
         let vars = self.translate_body_locals(&mir_body);
-        let locals = CharonLocals { vars, arg_count };
-        let body: CharonBodyContents =
+        let locals = CharonLocals { locals: vars, arg_count };
+        // The synthetic abort block (see below) is appended after the translated
+        // blocks, so its ID is the number of MIR blocks. It must be assigned
+        // *before* translating the blocks: `Call` terminators reference it as
+        // their `on_unwind` target, and as their return target when the callee
+        // never returns.
+        self.abort_block = CharonBlockId::from_usize(mir_body.blocks.len());
+        let mut body: CharonBodyContents =
             mir_body.blocks.iter().map(|bb| self.translate_block(bb)).collect();
+
+        // Add the synthetic block that aborts (Kani does not model unwinding).
+        let abort_block = CharonBlockData {
+            statements: Vec::new(),
+            terminator: CharonTerminator {
+                span: span.clone(),
+                content: CharonRawTerminator::Abort(CharonAbortKind::UndefinedBehavior),
+                comments_before: Vec::new(),
+            },
+        };
+        body.push(abort_block);
+        assert_eq!(self.abort_block.index(), body.elem_count() - 1);
 
         let body_expr = CharonExprBody { span, locals, body, comments: Vec::new() };
         CharonBody::Unstructured(body_expr)
@@ -1246,7 +1289,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 regions: trait_ref.trait_decl_ref.regions.clone(),
                 skip_binder: CharonTraitDeclRef {
                     trait_id: traitdecl_id,
-                    generics: generics.clone(),
+                    generics: Box::new(generics.clone()),
                 },
             };
             let subs_traitref = CharonTraitRef {
@@ -1529,7 +1572,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                         };
                         let funcid = CharonFunIdOrTraitMethodRef::Fun(CharonFunId::Regular(fid));
                         let generics = self.translate_generic_args(genarg_resolve, def_id);
-                        CharonFnPtr { func: funcid, generics }
+                        CharonFnPtr { func: Box::new(funcid), generics: Box::new(generics) }
                     }
                     TyKind::RigidTy(RigidTy::FnPtr(..)) => todo!(),
                     x => unreachable!(
@@ -1544,9 +1587,18 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     dest: self.translate_place(destination),
                 };
                 (
-                    Some(CharonRawStatement::Call(call)),
-                    CharonRawTerminator::Goto {
-                        target: CharonBlockId::from_usize(target.unwrap()),
+                    None,
+                    CharonRawTerminator::Call {
+                        call,
+                        // A call to a diverging function has no return target in MIR. ULLBC
+                        // requires one, so point it at the synthetic abort block: control cannot
+                        // reach it, and aborting if it somehow did matches how the CBMC backend
+                        // models the same case ("Unexpected return from Never function").
+                        // Unwrapping here turned any program containing such a call -- a call to
+                        // `panic!`, `process::exit`, or any `-> !` function -- into a compiler
+                        // crash.
+                        target: target.map_or(self.abort_block, CharonBlockId::from_usize),
+                        on_unwind: self.abort_block,
                     },
                 )
             }
@@ -1554,6 +1606,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 Some(CharonRawStatement::Assert(CharonAssert {
                     cond: self.translate_operand(cond),
                     expected: *expected,
+                    on_failure: CharonAbortKind::Panic(None),
                 })),
                 CharonRawTerminator::Goto { target: CharonBlockId::from_usize(*target) },
             ),
@@ -1652,7 +1705,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                                     c_type_id,
                                     c_variant_id,
                                     c_field_id,
-                                    c_generic_args,
+                                    Box::new(c_generic_args),
                                 );
                                 CharonRvalue::Aggregate(c_agg_kind, c_operands)
                             }
@@ -1668,7 +1721,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                                     c_type_id,
                                     c_variant_id,
                                     c_field_id,
-                                    c_generic_args,
+                                    Box::new(c_generic_args),
                                 );
                                 CharonRvalue::Aggregate(c_agg_kind, c_operands)
                             }
@@ -1680,7 +1733,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                             CharonTypeId::Tuple,
                             None,
                             None,
-                            CharonGenericArgs::empty(CharonGenericsSource::Builtin),
+                            Box::new(CharonGenericArgs::empty(CharonGenericsSource::Builtin)),
                         ),
                         c_operands,
                     ),
@@ -1695,7 +1748,6 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 }
             }
 
-            Rvalue::ShallowInitBox(_, _) => todo!(),
             Rvalue::CopyForDeref(_) => todo!(),
             Rvalue::ThreadLocalRef(_) => todo!(),
             _ => todo!(),
@@ -1705,7 +1757,9 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     fn translate_operand(&mut self, operand: &Operand) -> CharonOperand {
         trace!("translate_operand: {operand:?}");
         match operand {
-            Operand::Constant(constant) => CharonOperand::Const(self.translate_constant(constant)),
+            Operand::Constant(constant) => {
+                CharonOperand::Const(Box::new(self.translate_constant(constant)))
+            }
             Operand::Copy(place) => CharonOperand::Copy(self.translate_place(&place)),
             Operand::Move(place) => CharonOperand::Move(self.translate_place(&place)),
             // `Operand::RuntimeChecks` (rust-lang/rust#148766) is not yet modeled by the
@@ -1732,7 +1786,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 let c_genarg = self.translate_generic_args(uc.args.clone(), defid);
                 CharonRawConstantExpr::Global(CharonGlobalDeclRef {
                     id: c_defid,
-                    generics: c_genarg,
+                    generics: Box::new(c_genarg),
                 })
             }
             ConstantKind::Param(_) => todo!(),
@@ -1875,7 +1929,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                             }
                         }
                         CharonTyKind::Adt(CharonTypeId::Tuple, genargs) => {
-                            let c_fprj = CharonFieldProjKind::Tuple(genargs.types.len());
+                            let c_fprj = CharonFieldProjKind::Tuple(genargs.types.elem_count());
                             current_ty = self.translate_ty(*ty);
                             c_provec.push((
                                 CharonProjectionElem::Field(c_fprj, c_fieldid),
