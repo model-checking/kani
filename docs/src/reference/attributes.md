@@ -248,6 +248,6 @@ There are numerous attributes for function and loop contracts. At present, these
 - Proof harness for contracts: `#[kani::proof_for_contract(name-of-function)]`
 - Verified stubbing: `#[kani::stub_verified]`
 - Function contract specification: `#[kani::requires]`, `#[kani::modifies]`, `#[kani::ensures]`, `#[kani::recursion]`
-- Loop contract specification: `#[kani::loop_invariant]`, `#[kani::loop_modifies]`.
+- Loop contract specification: `#[kani::loop_invariant]`, `#[kani::loop_modifies]`, `#[kani::loop_decreases]`.
 
 See the documentation on [function contracts](./experimental/contracts.md) and [loop contracts](./experimental/loop-contracts.md) for details.

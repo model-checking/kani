@@ -18,13 +18,148 @@ use tokio::process::Command as TokioCommand;
 use crate::args::common::Verbosity;
 use crate::args::{OutputFormat, VerificationArgs};
 use crate::cbmc_output_parser::{
-    CheckStatus, Property, VerificationOutput, extract_results, process_cbmc_output,
+    CheckStatus, ParserItem, Property, VerificationOutput, extract_results, process_cbmc_output,
 };
 use crate::cbmc_property_renderer::{format_coverage, format_result, kani_cbmc_output_filter};
 use crate::coverage::cov_results::{CoverageCheck, CoverageResults};
 use crate::coverage::cov_results::{CoverageRegion, CoverageTerm};
 use crate::session::KaniSession;
 use crate::util::render_command;
+
+/// CBMC version and system information
+#[derive(Debug, Clone)]
+pub struct CbmcInfo {
+    pub version: String,
+    pub os_info: String,
+}
+
+/// CBMC runtime and execution statistics
+#[derive(Debug, Clone, Default)]
+pub struct CbmcStats {
+    pub runtime_symex_s: Option<f64>,
+    pub size_program_expression: Option<u32>,
+    pub slicing_removed_assignments: Option<u32>,
+    pub vccs_generated: Option<u32>,
+    pub vccs_remaining: Option<u32>,
+    pub runtime_postprocess_equation_s: Option<f64>,
+    pub runtime_convert_ssa_s: Option<f64>,
+    pub runtime_post_process_s: Option<f64>,
+    pub runtime_solver_s: Option<f64>,
+    pub runtime_decision_procedure_s: Option<f64>,
+}
+
+impl KaniSession {
+    /// Get CBMC version and system information
+    pub fn get_cbmc_info(&self) -> Result<CbmcInfo> {
+        let output = std::process::Command::new("cbmc")
+            .arg("--version")
+            .output()
+            .map_err(|_| anyhow::Error::msg("Failed to run cbmc --version"))?;
+
+        let version_output = String::from_utf8_lossy(&output.stdout);
+        let lines: Vec<&str> = version_output.lines().collect();
+
+        // Extract version from first line (e.g., "6.7.1 (cbmc-6.7.1)")
+        let version = lines
+            .first()
+            .and_then(|line| line.split_whitespace().next())
+            .unwrap_or("unknown")
+            .to_string();
+
+        // For OS info, we'll use the system information since CBMC --version doesn't provide it
+        let os_info = format!(
+            "{} {} {}",
+            std::env::consts::ARCH,
+            std::env::consts::OS,
+            std::env::consts::FAMILY
+        );
+
+        Ok(CbmcInfo { version, os_info })
+    }
+}
+
+/// Collect the statistics CBMC reports for a single verification run.
+///
+/// CBMC reports these as free-text status messages. `--json-ui`, which Kani always passes, wraps
+/// each message in a JSON envelope carrying `messageType` and `messageText`, but it does not break
+/// the numbers out into fields of their own, so the message text remains the only source available
+/// (CBMC's `structured_datat` mechanism, which would render as real JSON fields, is not used by
+/// these call sites). What the envelope does buy us is the ability to require a status message and
+/// to anchor on CBMC's exact label, rather than searching arbitrary output for a loose pattern.
+///
+/// Returns `None` when no message carried statistics, which is the case whenever CBMC did not get
+/// far enough to report any.
+fn merge_cbmc_stats(items: &[ParserItem]) -> Option<CbmcStats> {
+    let mut stats = CbmcStats::default();
+    let mut found_any = false;
+
+    for item in items {
+        if let ParserItem::Message { message_text, message_type } = item
+            && message_type == "STATUS-MESSAGE"
+        {
+            found_any |= record_cbmc_stat(message_text, &mut stats);
+        }
+    }
+
+    found_any.then_some(stats)
+}
+
+/// Record the statistic a single CBMC status message carries, if it carries one. Later messages win,
+/// matching CBMC's own behaviour of reporting a running figure more than once.
+/// Returns whether this message was recognized.
+fn record_cbmc_stat(message: &str, stats: &mut CbmcStats) -> bool {
+    // "Generated 1 VCC(s), 1 remaining after simplification"
+    if let Some(counts) = message
+        .strip_prefix("Generated ")
+        .and_then(|rest| rest.strip_suffix(" remaining after simplification"))
+        && let Some((generated, remaining)) = counts.split_once(" VCC(s), ")
+    {
+        stats.vccs_generated = generated.parse().ok();
+        stats.vccs_remaining = remaining.parse().ok();
+        return stats.vccs_generated.is_some() || stats.vccs_remaining.is_some();
+    }
+
+    // "slicing removed 81 assignments", or "simple slicing removed 5 assignments" when only the
+    // simple slicer ran. CBMC emits one or the other; our schema has a single field for both.
+    if let Some(rest) = message.strip_suffix(" assignments")
+        && let Some(count) = rest
+            .strip_prefix("slicing removed ")
+            .or_else(|| rest.strip_prefix("simple slicing removed "))
+    {
+        stats.slicing_removed_assignments = count.parse().ok();
+        return stats.slicing_removed_assignments.is_some();
+    }
+
+    // Everything else is reported as "<label>: <value>".
+    let Some((label, value)) = message.split_once(": ") else {
+        return false;
+    };
+    match label {
+        // "150 steps"
+        "size of program expression" => {
+            stats.size_program_expression =
+                value.strip_suffix(" steps").and_then(|steps| steps.parse().ok());
+            stats.size_program_expression.is_some()
+        }
+        "Runtime Symex" => record_seconds(value, &mut stats.runtime_symex_s),
+        "Runtime Postprocess Equation" => {
+            record_seconds(value, &mut stats.runtime_postprocess_equation_s)
+        }
+        "Runtime Convert SSA" => record_seconds(value, &mut stats.runtime_convert_ssa_s),
+        "Runtime Post-process" => record_seconds(value, &mut stats.runtime_post_process_s),
+        "Runtime Solver" => record_seconds(value, &mut stats.runtime_solver_s),
+        "Runtime decision procedure" => {
+            record_seconds(value, &mut stats.runtime_decision_procedure_s)
+        }
+        _ => false,
+    }
+}
+
+/// Record a duration CBMC reports as "0.00408627s" or "1.5416e-05s".
+fn record_seconds(value: &str, field: &mut Option<f64>) -> bool {
+    *field = value.strip_suffix('s').and_then(|seconds| seconds.parse().ok());
+    field.is_some()
+}
 
 /// We will use Cadical by default since it performed better than MiniSAT in our analysis.
 /// Note: Kissat was marginally better, but it is an external solver which could be more unstable.
@@ -46,6 +181,8 @@ pub enum FailedProperties {
     PanicsOnly,
     // One or more failures that aren't panic-related
     Other,
+    // One or more properties resulted in an ERROR rather than a failing/successful verification
+    Error,
 }
 
 /// The possible CBMC exit statuses
@@ -75,6 +212,8 @@ pub struct VerificationResult {
     pub generated_concrete_test: bool,
     /// The coverage results
     pub coverage_results: Option<CoverageResults>,
+    /// CBMC execution statistics extracted from messages
+    pub cbmc_stats: Option<CbmcStats>,
 }
 
 impl KaniSession {
@@ -149,7 +288,12 @@ impl KaniSession {
 
         if let Ok(output) = res {
             // The timeout wasn't reached
-            Ok(VerificationResult::from(output?, harness.attributes.should_panic, start_time))
+            Ok(VerificationResult::from(
+                output?,
+                harness.attributes.should_panic,
+                start_time,
+                self.args.export_json.is_some(),
+            ))
         } else {
             // An error occurs if the timeout was reached
 
@@ -163,6 +307,7 @@ impl KaniSession {
                 runtime: start_time.elapsed(),
                 generated_concrete_test: false,
                 coverage_results: None,
+                cbmc_stats: None,
             })
         }
     }
@@ -198,6 +343,17 @@ impl KaniSession {
 
         if self.args.concrete_playback.is_some() {
             args.push("--trace".into());
+            // Concrete playback only consumes the values of `kani::any_raw_*`
+            // return-value assignments from the trace. CBMC's compact trace
+            // retains those (they are regular, non-hidden assignments) while
+            // dropping hidden instrumentation steps whose values can dominate
+            // the trace by orders of magnitude on contract-heavy harnesses
+            // (e.g. 427 MB -> 3 MB of JSON). Requires CBMC with
+            // https://github.com/diffblue/cbmc/pull/9135 to have an effect;
+            // CBMC versions that do not yet honor `--compact-trace` with
+            // `--json-ui` accept but ignore the option, so this is
+            // compatible either way.
+            args.push("--compact-trace".into());
         }
 
         args.extend(self.args.cbmc_args.iter().cloned());
@@ -263,19 +419,22 @@ impl KaniSession {
         args
     }
 
+    /// The solver this run will actually use for a harness: `--solver` takes precedence over the
+    /// harness attribute, which takes precedence over the default.
+    ///
+    /// Anything reporting the configuration of a run must resolve it through here rather than
+    /// reading the harness attribute directly, or it will describe a different run than the one
+    /// `handle_solver_args` builds.
+    pub fn resolved_solver<'a>(&'a self, harness_solver: &'a Option<CbmcSolver>) -> &'a CbmcSolver {
+        self.args.solver.as_ref().or(harness_solver.as_ref()).unwrap_or(&DEFAULT_SOLVER)
+    }
+
     pub fn handle_solver_args(
         &self,
         harness_solver: &Option<CbmcSolver>,
         args: &mut Vec<OsString>,
     ) -> Result<()> {
-        let solver = if let Some(solver) = &self.args.solver {
-            // `--solver` option takes precedence over attributes
-            solver
-        } else if let Some(solver) = harness_solver {
-            solver
-        } else {
-            &DEFAULT_SOLVER
-        };
+        let solver = self.resolved_solver(harness_solver);
 
         match solver {
             CbmcSolver::Bitwuzla => {
@@ -325,9 +484,14 @@ impl VerificationResult {
         output: VerificationOutput,
         should_panic: bool,
         start_time: Instant,
+        collect_cbmc_stats: bool,
     ) -> VerificationResult {
         let runtime = start_time.elapsed();
-        let (_, results) = extract_results(output.processed_items);
+        let (remaining_items, results) = extract_results(output.processed_items);
+
+        // Only `--export-json` consumes these, and collecting them means running several regexes
+        // over every message CBMC emitted, so skip the work entirely when nothing will read it.
+        let cbmc_stats = if collect_cbmc_stats { merge_cbmc_stats(&remaining_items) } else { None };
 
         if let Some(results) = results {
             let (status, failed_properties) =
@@ -340,6 +504,7 @@ impl VerificationResult {
                 runtime,
                 generated_concrete_test: false,
                 coverage_results,
+                cbmc_stats,
             }
         } else {
             // We never got results from CBMC - something went wrong (e.g. crash) so it's failure
@@ -355,6 +520,7 @@ impl VerificationResult {
                 runtime,
                 generated_concrete_test: false,
                 coverage_results: None,
+                cbmc_stats,
             }
         }
     }
@@ -367,6 +533,7 @@ impl VerificationResult {
             runtime: Duration::from_secs(0),
             generated_concrete_test: false,
             coverage_results: None,
+            cbmc_stats: None,
         }
     }
 
@@ -381,6 +548,7 @@ impl VerificationResult {
             runtime: Duration::from_secs(0),
             generated_concrete_test: false,
             coverage_results: None,
+            cbmc_stats: None,
         }
     }
 
@@ -442,11 +610,13 @@ fn verification_outcome_from_properties(
     let failed_properties = determine_failed_properties(properties);
     let status = if should_panic {
         match failed_properties {
+            FailedProperties::Error => VerificationStatus::Failure,
             FailedProperties::None | FailedProperties::Other => VerificationStatus::Failure,
             FailedProperties::PanicsOnly => VerificationStatus::Success,
         }
     } else {
         match failed_properties {
+            FailedProperties::Error => VerificationStatus::Failure,
             FailedProperties::None => VerificationStatus::Success,
             FailedProperties::PanicsOnly | FailedProperties::Other => VerificationStatus::Failure,
         }
@@ -456,6 +626,9 @@ fn verification_outcome_from_properties(
 
 /// Determines the `FailedProperties` variant that corresponds to an array of properties
 fn determine_failed_properties(properties: &[Property]) -> FailedProperties {
+    if properties.iter().any(|prop| prop.status == CheckStatus::Error) {
+        return FailedProperties::Error;
+    };
     let failed_properties: Vec<&Property> =
         properties.iter().filter(|prop| prop.status == CheckStatus::Failure).collect();
     // Return `FAILURE` if there isn't at least one failed property
@@ -553,6 +726,74 @@ mod tests {
     use clap::Parser;
 
     use super::*;
+
+    /// The statistics messages below are verbatim CBMC 6.x `--json-ui` output, so a CBMC change to
+    /// any of these labels shows up here as a test failure rather than as silently missing data.
+    #[test]
+    fn check_cbmc_stats_from_status_messages() {
+        let messages = [
+            "Runtime Symex: 0.00049675s",
+            "size of program expression: 21 steps",
+            "simple slicing removed 5 assignments",
+            "Generated 1 VCC(s), 1 remaining after simplification",
+            "Runtime Postprocess Equation: 1.5416e-05s",
+            "Runtime Convert SSA: 0.00012525s",
+            "Runtime Post-process: 2.0292e-05s",
+            "Runtime Solver: 4.1167e-05s",
+            "Runtime decision procedure: 0.000193542s",
+        ];
+        let items: Vec<ParserItem> = messages
+            .iter()
+            .map(|text| ParserItem::Message {
+                message_text: text.to_string(),
+                message_type: "STATUS-MESSAGE".to_string(),
+            })
+            .collect();
+
+        let stats = merge_cbmc_stats(&items).expect("statistics should be recognized");
+        assert_eq!(stats.runtime_symex_s, Some(0.00049675));
+        assert_eq!(stats.size_program_expression, Some(21));
+        assert_eq!(stats.slicing_removed_assignments, Some(5));
+        assert_eq!(stats.vccs_generated, Some(1));
+        assert_eq!(stats.vccs_remaining, Some(1));
+        assert_eq!(stats.runtime_postprocess_equation_s, Some(1.5416e-05));
+        assert_eq!(stats.runtime_convert_ssa_s, Some(0.00012525));
+        assert_eq!(stats.runtime_post_process_s, Some(2.0292e-05));
+        assert_eq!(stats.runtime_solver_s, Some(4.1167e-05));
+        assert_eq!(stats.runtime_decision_procedure_s, Some(0.000193542));
+    }
+
+    /// The full slicer reports without the "simple" prefix.
+    #[test]
+    fn check_cbmc_stats_full_slicer() {
+        let mut stats = CbmcStats::default();
+        assert!(record_cbmc_stat("slicing removed 81 assignments", &mut stats));
+        assert_eq!(stats.slicing_removed_assignments, Some(81));
+    }
+
+    /// Anchoring on the label is what the message type and exact-match parsing buy us: text that
+    /// merely mentions a statistic, or that CBMC reports as a warning rather than a status message,
+    /// must not be mistaken for a measurement.
+    #[test]
+    fn check_cbmc_stats_ignore_unrelated_text() {
+        let mut stats = CbmcStats::default();
+        assert!(!record_cbmc_stat("assertion failed: Runtime Solver: 1s is too slow", &mut stats));
+        assert!(!record_cbmc_stat("Runtime Solver: not-a-number", &mut stats));
+        assert!(!record_cbmc_stat("VERIFICATION FAILED", &mut stats));
+        assert_eq!(stats.runtime_solver_s, None);
+
+        let warning = [ParserItem::Message {
+            message_text: "Runtime Solver: 4.1167e-05s".to_string(),
+            message_type: "WARNING".to_string(),
+        }];
+        assert!(merge_cbmc_stats(&warning).is_none());
+    }
+
+    /// No statistics at all (CBMC died early, or verbosity hid them) must not fabricate a record.
+    #[test]
+    fn check_cbmc_stats_absent() {
+        assert!(merge_cbmc_stats(&[]).is_none());
+    }
 
     #[test]
     fn check_resolve_unwind_value() {

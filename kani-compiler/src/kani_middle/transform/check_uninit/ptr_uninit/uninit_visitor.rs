@@ -329,21 +329,23 @@ impl MirVisitor for CheckUninitVisitor {
                             Intrinsic::VolatileLoad | Intrinsic::UnalignedVolatileLoad => {
                                 self.push_target(MemoryInitOp::Check { operand: args[0].clone() });
                             }
-                            Intrinsic::VolatileStore => {
+                            Intrinsic::VolatileStore | Intrinsic::UnalignedVolatileStore => {
                                 self.push_target(MemoryInitOp::Set {
                                     operand: args[0].clone(),
                                     value: true,
                                     position: InsertPosition::After,
                                 });
                             }
-                            Intrinsic::WriteBytes => {
-                                self.push_target(MemoryInitOp::SetSliceChunk {
+                            // `volatile_set_memory(dst, val, count)` has the same shape and the
+                            // same memory-initialization effect as `write_bytes(dst, val, count)`;
+                            // volatility does not change which bytes become initialized.
+                            Intrinsic::WriteBytes | Intrinsic::VolatileSetMemory => self
+                                .push_target(MemoryInitOp::SetSliceChunk {
                                     operand: args[0].clone(),
                                     count: args[2].clone(),
                                     value: true,
                                     position: InsertPosition::After,
-                                })
-                            }
+                                }),
                             intrinsic => {
                                 self.push_target(MemoryInitOp::Unsupported {
                                     reason: format!("Kani does not support reasoning about memory initialization of intrinsic `{intrinsic:?}`."),
@@ -590,6 +592,8 @@ fn can_skip_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::Exp2F64
         | Intrinsic::ExpF32
         | Intrinsic::ExpF64
+        | Intrinsic::FabsF128
+        | Intrinsic::FabsF16
         | Intrinsic::FabsF32
         | Intrinsic::FabsF64
         | Intrinsic::FaddFast
@@ -654,6 +658,7 @@ fn can_skip_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::SimdAnd
         | Intrinsic::SimdDiv
         | Intrinsic::SimdRem
+        | Intrinsic::SimdReduceAll
         | Intrinsic::SimdEq
         | Intrinsic::SimdExtract
         | Intrinsic::SimdGe
@@ -667,6 +672,7 @@ fn can_skip_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::SimdShl
         | Intrinsic::SimdShr
         | Intrinsic::SimdShuffle(_)
+        | Intrinsic::SimdSplat
         | Intrinsic::SimdSub
         | Intrinsic::SimdXor => {
             /* SIMD operations */

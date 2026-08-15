@@ -23,12 +23,12 @@ use rustc_middle::ty::{TyCtxt, VtblEntry};
 use rustc_public::abi::{Primitive, Scalar, ValueAbi};
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::{
-    AggregateKind, BinOp, CastKind, NullOp, Operand, Place, PointerCoercion, Rvalue, UnOp,
+    AggregateKind, BinOp, CastKind, Operand, Place, PointerCoercion, Rvalue, UnOp,
 };
 use rustc_public::rustc_internal;
 use rustc_public::ty::{
-    Binder, ClosureKind, ExistentialPredicate, IntTy, RigidTy, Size, Ty, TyConst, TyKind, UintTy,
-    VariantIdx,
+    Binder, ClosureKind, ExistentialPredicate, FloatTy, IntTy, RigidTy, Size, Ty, TyConst, TyKind,
+    UintTy, VariantIdx,
 };
 use std::collections::BTreeMap;
 use tracing::{debug, trace, warn};
@@ -824,17 +824,6 @@ impl GotocCtx<'_, '_> {
             Rvalue::CheckedBinaryOp(op, e1, e2) => {
                 self.codegen_rvalue_checked_binary_op(op, e1, e2, res_ty)
             }
-            Rvalue::NullaryOp(NullOp::RuntimeChecks(_)) => Expr::c_false(),
-            Rvalue::ShallowInitBox(operand, content_ty) => {
-                // The behaviour of ShallowInitBox is simply transmuting *mut u8 to Box<T>.
-                // See https://github.com/rust-lang/compiler-team/issues/460 for more details.
-                let operand = self.codegen_operand_stable(operand);
-                let box_ty = Ty::new_box(*content_ty);
-                let box_ty = self.codegen_ty_stable(box_ty);
-                let cbmc_t = self.codegen_ty_stable(*content_ty);
-                let box_contents = operand.cast_to(cbmc_t.to_pointer());
-                self.box_value(box_contents, box_ty)
-            }
             Rvalue::UnaryOp(op, e) => match op {
                 UnOp::Not => {
                     if self.operand_ty_stable(e).kind().is_bool() {
@@ -956,7 +945,11 @@ impl GotocCtx<'_, '_> {
     pub fn codegen_get_discriminant(&mut self, e: Expr, ty: Ty, res_ty: Ty) -> Expr {
         let layout = self.layout_of_stable(ty);
         match &layout.variants {
-            Variants::Empty => unreachable!("Discriminant for uninhabited enum with no variants"),
+            // An uninhabited enum with no variants has no inhabitant, so reading its
+            // discriminant is unreachable at runtime. The rustc SSA backend returns a
+            // poison value for uninhabited layouts here; we mirror that with a nondet
+            // value of the target type (the surrounding code path is dead anyway).
+            Variants::Empty => Expr::nondet(self.codegen_ty_stable(res_ty)),
             Variants::Single { index } => {
                 let discr_val = layout
                     .ty
@@ -1086,6 +1079,15 @@ impl GotocCtx<'_, '_> {
         let src_ty_kind = src_ty.kind();
         let dst_ty_kind = dst_ty.kind();
 
+        // Float to integer casting requires special handling for saturating semantics.
+        // Since Rust 1.45, the `as` keyword performs a saturating cast when casting
+        // from float to int. See https://doc.rust-lang.org/reference/expressions/operator-expr.html#numeric-cast
+        if let TyKind::RigidTy(RigidTy::Float(_)) = src_ty_kind
+            && dst_ty_kind.is_integral()
+        {
+            return self.codegen_float_to_int_saturating_cast(src, dst_ty);
+        }
+
         // number casting
         if src_ty_kind.is_numeric() && dst_ty_kind.is_numeric() {
             return self.codegen_operand_stable(src).cast_to(self.codegen_ty_stable(dst_ty));
@@ -1162,6 +1164,143 @@ impl GotocCtx<'_, '_> {
         }
     }
 
+    /// Codegen a float-to-int cast with Rust's saturating semantics.
+    ///
+    /// Since Rust 1.45, the `as` keyword performs a *saturating cast* when casting from float to int:
+    /// - If the value is NaN, the result is 0
+    /// - If the value exceeds the upper bound, the result is MAX
+    /// - If the value is below the lower bound, the result is MIN (or 0 for unsigned types)
+    /// - If the value is positive infinity, the result is MAX
+    /// - If the value is negative infinity, the result is MIN (or 0 for unsigned types)
+    /// - Otherwise, the value is truncated toward zero
+    ///
+    /// See: https://doc.rust-lang.org/reference/expressions/operator-expr.html#numeric-cast
+    fn codegen_float_to_int_saturating_cast(&mut self, src: &Operand, dst_ty: Ty) -> Expr {
+        let src_expr = self.codegen_operand_stable(src);
+        let dst_goto_ty = self.codegen_ty_stable(dst_ty);
+        let mm = self.symbol_table.machine_model();
+
+        // Get the integer type bounds
+        let int_min = dst_goto_ty.min_int_expr(mm);
+        let int_max = dst_goto_ty.max_int_expr(mm);
+
+        // Get the source float type for creating bound constants
+        let src_ty = self.operand_ty_stable(src);
+
+        // Get the integer bounds as float constants for comparison.
+        // Note: We convert the integer bounds to float for comparison.
+        // For very large integer types (i128, u128), the float conversion may lose precision,
+        // but this is acceptable because:
+        // 1. Any float value that's truly larger than MAX_INT will still compare as >= MAX_INT
+        // 2. Any float value that's truly smaller than MIN_INT will still compare as < MIN_INT
+        let int_min_as_float = self.int_bounds_as_float(dst_ty, false, src_ty);
+        let int_max_as_float = self.int_bounds_as_float(dst_ty, true, src_ty);
+
+        // Determine if the destination type is signed
+        let dst_is_signed = matches!(dst_ty.kind(), TyKind::RigidTy(RigidTy::Int(_)));
+
+        // Check for special cases:
+        // 1. isnan(src) -> result is 0
+        // 2. src >= int_max -> result is MAX
+        // 3. src < int_min -> result is MIN (or 0 for unsigned)
+        // 4. Otherwise -> truncate toward zero
+        let is_nan = src_expr.clone().is_nan();
+        let above_max = src_expr.clone().ge(int_max_as_float.clone());
+        let below_min = src_expr.clone().lt(int_min_as_float);
+
+        // The truncated value (normal cast behavior for values in range)
+        let truncated = src_expr.cast_to(dst_goto_ty.clone());
+
+        // Build the nested ternary expression:
+        // below_min ? MIN : (above_max ? MAX : (isnan ? 0 : truncated))
+        let int_zero = dst_goto_ty.zero();
+        let min_value = if dst_is_signed { int_min } else { int_zero.clone() };
+
+        // Note: For positive infinity, above_max will be true.
+        // For negative infinity, below_min will be true.
+        // So infinity cases are handled by the bounds checks.
+        below_min
+            .ternary(min_value, above_max.ternary(int_max, is_nan.ternary(int_zero, truncated)))
+    }
+
+    /// Convert an integer bound (min or max) to a float constant for the given float type.
+    fn int_bounds_as_float(&self, int_ty: Ty, is_max: bool, float_ty: Ty) -> Expr {
+        let mm = self.symbol_table.machine_model();
+
+        // Get the integer bound value
+        let bound_value: f64 = match int_ty.kind() {
+            TyKind::RigidTy(RigidTy::Int(int_kind)) => {
+                if is_max {
+                    match int_kind {
+                        IntTy::I8 => i8::MAX as f64,
+                        IntTy::I16 => i16::MAX as f64,
+                        IntTy::I32 => i32::MAX as f64,
+                        IntTy::I64 => i64::MAX as f64,
+                        IntTy::I128 => i128::MAX as f64,
+                        IntTy::Isize => {
+                            if mm.pointer_width == 32 {
+                                i32::MAX as f64
+                            } else {
+                                i64::MAX as f64
+                            }
+                        }
+                    }
+                } else {
+                    match int_kind {
+                        IntTy::I8 => i8::MIN as f64,
+                        IntTy::I16 => i16::MIN as f64,
+                        IntTy::I32 => i32::MIN as f64,
+                        IntTy::I64 => i64::MIN as f64,
+                        IntTy::I128 => i128::MIN as f64,
+                        IntTy::Isize => {
+                            if mm.pointer_width == 32 {
+                                i32::MIN as f64
+                            } else {
+                                i64::MIN as f64
+                            }
+                        }
+                    }
+                }
+            }
+            TyKind::RigidTy(RigidTy::Uint(uint_kind)) => {
+                if is_max {
+                    match uint_kind {
+                        UintTy::U8 => u8::MAX as f64,
+                        UintTy::U16 => u16::MAX as f64,
+                        UintTy::U32 => u32::MAX as f64,
+                        UintTy::U64 => u64::MAX as f64,
+                        UintTy::U128 => u128::MAX as f64,
+                        UintTy::Usize => {
+                            if mm.pointer_width == 32 {
+                                u32::MAX as f64
+                            } else {
+                                u64::MAX as f64
+                            }
+                        }
+                    }
+                } else {
+                    0.0 // MIN for unsigned is always 0
+                }
+            }
+            _ => unreachable!("Expected integer type"),
+        };
+
+        // Create the float constant in the appropriate float type
+        match float_ty.kind() {
+            TyKind::RigidTy(RigidTy::Float(FloatTy::F16)) => {
+                Expr::float16_constant(bound_value as f16)
+            }
+            TyKind::RigidTy(RigidTy::Float(FloatTy::F32)) => {
+                Expr::float_constant(bound_value as f32)
+            }
+            TyKind::RigidTy(RigidTy::Float(FloatTy::F64)) => Expr::double_constant(bound_value),
+            TyKind::RigidTy(RigidTy::Float(FloatTy::F128)) => {
+                Expr::float128_constant(bound_value as f128)
+            }
+            _ => unreachable!("Expected float type"),
+        }
+    }
+
     /// "Pointer casts" are particular kinds of pointer-to-pointer casts.
     /// See the [`PointerCoercion`] type for specifics.
     /// Note that this does not include all casts involving pointers,
@@ -1175,7 +1314,7 @@ impl GotocCtx<'_, '_> {
     ) -> Expr {
         debug!(cast=?coercion, op=?operand, ?loc, "codegen_pointer_cast");
         match coercion {
-            PointerCoercion::ReifyFnPointer => match self.operand_ty_stable(operand).kind() {
+            PointerCoercion::ReifyFnPointer(_) => match self.operand_ty_stable(operand).kind() {
                 TyKind::RigidTy(RigidTy::FnDef(def, args)) => {
                     let instance = Instance::resolve(def, &args).unwrap();
                     // We need to handle this case in a special way because `codegen_operand_stable` compiles FnDefs to dummy structs.

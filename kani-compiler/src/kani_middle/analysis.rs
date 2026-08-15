@@ -168,11 +168,9 @@ impl From<&Rvalue> for Key {
             Rvalue::Cast(_, _, _) => Key("Cast"),
             Rvalue::BinaryOp(..) => Key("BinaryOp"),
             Rvalue::CheckedBinaryOp(..) => Key("CheckedBinaryOp"),
-            Rvalue::NullaryOp(_) => Key("NullaryOp"),
             Rvalue::UnaryOp(_, _) => Key("UnaryOp"),
             Rvalue::Discriminant(_) => Key("Discriminant"),
             Rvalue::Aggregate(_, _) => Key("Aggregate"),
-            Rvalue::ShallowInitBox(_, _) => Key("ShallowInitBox"),
             Rvalue::CopyForDeref(_) => Key("CopyForDeref"),
         }
     }

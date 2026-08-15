@@ -10,6 +10,7 @@ use std::path::Path;
 
 use crate::args::{NumThreads, OutputFormat};
 use crate::call_cbmc::{VerificationResult, VerificationStatus};
+use crate::frontend::{JsonHandler, schema_utils::add_runner_results_to_json};
 use crate::progress_indicator::ProgressIndicator;
 use crate::project::Project;
 use crate::session::{BUG_REPORT_URL, KaniSession};
@@ -55,6 +56,7 @@ impl<'pr> HarnessRunner<'_, 'pr> {
     pub(crate) fn check_all_harnesses(
         &self,
         harnesses: &'pr [&HarnessMetadata],
+        mut json_handler: Option<&mut JsonHandler>,
     ) -> Result<Vec<HarnessResult<'pr>>> {
         let sorted_harnesses = crate::metadata::sort_harnesses_by_loc(harnesses);
 
@@ -121,14 +123,30 @@ impl<'pr> HarnessRunner<'_, 'pr> {
         progress_indicator.finish();
 
         match results {
-            Ok(results) => Ok(results),
+            Ok(results) => {
+                if let Some(handler) = json_handler.as_deref_mut() {
+                    add_runner_results_to_json(handler, &results, harnesses.len(), "completed");
+                }
+                Ok(results)
+            }
             Err(err) => {
                 if err.is::<FailFastHarnessInfo>() {
                     let failed = err.downcast::<FailFastHarnessInfo>().unwrap();
-                    Ok(vec![HarnessResult {
+                    let result = vec![HarnessResult {
                         harness: sorted_harnesses[failed.index_to_failing_harness],
                         result: failed.result,
-                    }])
+                    }];
+
+                    if let Some(handler) = json_handler {
+                        add_runner_results_to_json(
+                            handler,
+                            &result,
+                            harnesses.len(),
+                            "completed_with_fail_fast",
+                        );
+                    }
+
+                    Ok(result)
                 } else {
                     Err(err)
                 }
@@ -255,6 +273,25 @@ impl KaniSession {
                 self.write_to_log_file(log_file_path, &msg, thread_index);
             } else {
                 println!("{msg}");
+            }
+
+            // Print stubs applied to this harness so users know which
+            // assumptions are in effect.
+            let multi = rayon::current_num_threads() > 1;
+            let print_line = |line: String| {
+                if let Some(ref log_file_path) = self.args.log_file {
+                    self.write_to_log_file(log_file_path, &line, thread_index);
+                } else if multi {
+                    println!("Thread {thread_index}: {line}");
+                } else {
+                    println!("{line}");
+                }
+            };
+            for stub in &harness.attributes.stubs {
+                print_line(format!("  - Stub: {} -> {}", stub.original, stub.replacement));
+            }
+            for verified in &harness.attributes.verified_stubs {
+                print_line(format!("  - Verified stub: {verified}"));
             }
         }
 

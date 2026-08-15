@@ -29,8 +29,9 @@ use rustc_public::mir::{
 };
 use rustc_public::target::MachineInfo;
 use rustc_public::ty::{
-    AdtDef, FnDef, GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyKind, UintTy,
+    AdtDef, FnDef, GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyKind, UintTy, VariantIdx,
 };
+use rustc_public_bridge::IndexedVal;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::str::FromStr;
@@ -73,7 +74,7 @@ impl TransformPass for IntrinsicGeneratorPass {
                 KaniIntrinsic::CheckedAlignOf => (true, self.checked_align_of(body, instance)),
                 KaniIntrinsic::CheckedSizeOf => (true, self.checked_size_of(body, instance)),
                 KaniIntrinsic::IsInitialized => (true, self.is_initialized_body(body)),
-                KaniIntrinsic::ValidValue => (true, self.valid_value_body(body)),
+                KaniIntrinsic::ValidValue => (true, self.valid_value_body(tcx, body)),
                 // The former two are handled in contracts pass for now, while the latter is handled in the the automatic harness pass.
                 KaniIntrinsic::WriteAny
                 | KaniIntrinsic::AnyModifies
@@ -105,7 +106,7 @@ impl IntrinsicGeneratorPass {
     ///     ret
     /// }
     /// ```
-    fn valid_value_body(&self, body: Body) -> Body {
+    fn valid_value_body(&self, tcx: TyCtxt, body: Body) -> Body {
         let mut new_body = MutableBody::from(body);
         new_body.clear_body(TerminatorKind::Return);
 
@@ -128,7 +129,7 @@ impl IntrinsicGeneratorPass {
         // The first and only argument type.
         let arg_ty = new_body.locals()[1].ty;
         let TyKind::RigidTy(RigidTy::RawPtr(target_ty, _)) = arg_ty.kind() else { unreachable!() };
-        let validity = ty_validity_per_offset(&machine_info, target_ty, 0);
+        let validity = ty_validity_per_offset(tcx, &machine_info, target_ty, 0);
         match validity {
             Ok(ranges) if ranges.is_empty() => {
                 // Nothing to check
@@ -587,7 +588,8 @@ impl IntrinsicGeneratorPass {
 fn build_some(option: AdtDef, args: GenericArgs, val_op: Operand) -> Rvalue {
     let var_idx = option
         .variants_iter()
-        .find_map(|var| (!var.fields().is_empty()).then_some(var.idx))
+        .enumerate()
+        .find_map(|(idx, var)| (!var.fields().is_empty()).then_some(VariantIdx::to_val(idx)))
         .unwrap();
     Rvalue::Aggregate(AggregateKind::Adt(option, var_idx, args, None, None), vec![val_op])
 }
@@ -595,7 +597,10 @@ fn build_some(option: AdtDef, args: GenericArgs, val_op: Operand) -> Rvalue {
 /// Build an Rvalue `None`.
 /// Since the variants of `Option` are `Some(val)` and `None`, we know we've found the `None` variant when we find the first variant without fields.
 fn build_none(option: AdtDef, args: GenericArgs) -> Rvalue {
-    let var_idx =
-        option.variants_iter().find_map(|var| var.fields().is_empty().then_some(var.idx)).unwrap();
+    let var_idx = option
+        .variants_iter()
+        .enumerate()
+        .find_map(|(idx, var)| var.fields().is_empty().then_some(VariantIdx::to_val(idx)))
+        .unwrap();
     Rvalue::Aggregate(AggregateKind::Adt(option, var_idx, args, None, None), vec![])
 }

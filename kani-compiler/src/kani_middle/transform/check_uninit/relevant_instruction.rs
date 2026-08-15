@@ -121,7 +121,7 @@ impl MemoryInitOp {
             | MemoryInitOp::StoreArgument { operand, .. } => {
                 let place = match operand {
                     Operand::Copy(place) | Operand::Move(place) => place,
-                    Operand::Constant(_) => unreachable!(),
+                    Operand::Constant(_) | Operand::RuntimeChecks(_) => unreachable!(),
                 };
                 let rvalue = Rvalue::AddressOf(RawPtrKind::Const, place.clone());
                 rvalue.ty(body.locals()).unwrap()
@@ -269,7 +269,7 @@ fn mk_ref(
     let ref_local = {
         let place = match operand {
             Operand::Copy(place) | Operand::Move(place) => place,
-            Operand::Constant(_) => unreachable!(),
+            Operand::Constant(_) | Operand::RuntimeChecks(_) => unreachable!(),
         };
         let rvalue = Rvalue::AddressOf(RawPtrKind::Const, place.clone());
         let ret_ty = rvalue.ty(body.locals()).unwrap();
