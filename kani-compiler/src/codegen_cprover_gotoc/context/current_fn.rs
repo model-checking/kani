@@ -39,6 +39,12 @@ pub struct CurrentFnCtx<'tcx> {
     /// The interned version of `readable_name`. This allows us to avoid re-interning
     /// that string every time we want to use it internally.
     interned_readable_name: InternedString,
+    /// The CBMC `#pragma check` directives implied by this function's
+    /// `kanitool::disable_checks` attributes.
+    ///
+    /// Computed once here rather than per span: every `Location` this function produces carries
+    /// them, and the leaked slice backing them would otherwise be reallocated for each span.
+    pragmas: &'static [&'static str],
     /// A counter to enable creating temporary variables
     temp_var_counter: u64,
 }
@@ -60,14 +66,24 @@ impl MirVisitor for AddressTakenLocalsCollector {
 }
 
 thread_local! {
-    /// Stores (`name`, `mangled_name`) pairs for each [Instance].
+    /// Stores (`readable_name`, `mangled_name`) pairs for each [Instance].
     pub static INSTANCE_NAME_CACHE: RefCell<FxHashMap<Instance, (String, String)>> = RefCell::new(FxHashMap::default());
 }
 
-/// Returns the (`name`, `mangled_name`) pair for an [Instance] from the cache, computing it if no entry exists.
+/// Returns the (`readable_name`, `mangled_name`) pair for an [Instance] from the cache,
+/// computing it if no entry exists.
+///
+/// The readable name is the stripped form from [crate::kani_middle::readable_name], not the
+/// raw [Instance::name], so that callers can use the cached value directly. The stripping
+/// depends only on the local crate name, which is fixed for a compilation session.
 fn instance_names(instance: &Instance) -> (String, String) {
     INSTANCE_NAME_CACHE.with_borrow_mut(|cache| {
-        cache.entry(*instance).or_insert_with(|| (instance.name(), instance.mangled_name())).clone()
+        cache
+            .entry(*instance)
+            .or_insert_with(|| {
+                (crate::kani_middle::readable_name(*instance), instance.mangled_name())
+            })
+            .clone()
     })
 }
 
@@ -76,8 +92,7 @@ impl<'tcx> CurrentFnCtx<'tcx> {
     pub fn new(instance: Instance, gcx: &GotocCtx<'tcx, '_>, body: &Body) -> Self {
         let (readable_name, name) = instance_names(&instance);
         let instance_internal = rustc_internal::internal(gcx.tcx, instance);
-        let readable_name = crate::kani_middle::readable_name(instance);
-        let name = instance.mangled_name();
+        let pragmas = crate::codegen_cprover_gotoc::codegen::disabled_check_pragmas(gcx, &instance);
         let locals = body.locals().to_vec();
         let arg_count = body.arg_locals().len();
         let local_names = body
@@ -99,6 +114,7 @@ impl<'tcx> CurrentFnCtx<'tcx> {
             name,
             interned_readable_name: (&readable_name).into(),
             readable_name,
+            pragmas,
             temp_var_counter: 0,
         }
     }
@@ -145,6 +161,11 @@ impl<'tcx> CurrentFnCtx<'tcx> {
 
     pub fn interned_readable_name(&self) -> InternedString {
         self.interned_readable_name
+    }
+
+    /// The CBMC `#pragma check` directives implied by this function's `disable_checks` attributes.
+    pub fn pragmas(&self) -> &'static [&'static str] {
+        self.pragmas
     }
 
     pub fn locals(&self) -> &[LocalDecl] {

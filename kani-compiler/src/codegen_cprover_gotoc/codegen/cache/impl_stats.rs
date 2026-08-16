@@ -194,10 +194,14 @@ pub(crate) mod stats {
         }
     }
 
+    /// The mean of `durations`, or zero when empty.
+    ///
+    /// A cache that saw only hits or only misses leaves one of these vectors empty, while the
+    /// debug formatting above prints all three averages, so this must not divide by zero.
     fn avg_duration(durations: &[Duration]) -> Duration {
         let len = durations.len() as u32;
         let sum: Duration = durations.iter().sum();
-        sum / len
+        sum.checked_div(len).unwrap_or(Duration::ZERO)
     }
 
     pub(crate) fn total_hits_and_queries<'a>(

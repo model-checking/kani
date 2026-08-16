@@ -126,12 +126,27 @@ impl Location {
 
     /// Tries to set the `function` field of a [Location::Loc], but returns `None` if the location
     /// is of a different variant and the field couldn't be set.
+    ///
+    /// `new_function` is assigned as given, so passing `None` clears the field. Overwriting only
+    /// on `Some` would leave a stale function on a `Location` reused across contexts, which is
+    /// how this is used by the codegen span cache.
     pub fn try_set_function(&mut self, new_function: Option<InternedString>) -> Option<()> {
         if let Location::Loc { function, .. } = self {
-            if let Some(new_function) = new_function {
-                *function = Some(new_function);
-            }
+            *function = new_function;
+            Some(())
+        } else {
+            None
+        }
+    }
 
+    /// Tries to set the `pragmas` field of a [Location::Loc], but returns `None` if the location
+    /// is of a different variant and the field couldn't be set.
+    ///
+    /// Like [Self::try_set_function], the pragmas describe the function being codegen'd rather
+    /// than the source location, so a `Location` reused across functions has to have them reset.
+    pub fn try_set_pragmas(&mut self, new_pragmas: &'static [&'static str]) -> Option<()> {
+        if let Location::Loc { pragmas, .. } = self {
+            *pragmas = new_pragmas;
             Some(())
         } else {
             None

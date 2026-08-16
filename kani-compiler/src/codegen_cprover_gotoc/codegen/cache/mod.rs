@@ -39,7 +39,7 @@ pub use impl_no_stats::cache_entry_impl;
 use crate::implement_cache;
 
 thread_local! {
-    /// The thread-local codegen cache. Since currently codegen is constrainted to be done
+    /// The thread-local codegen cache. Since currently codegen is constrained to be done
     /// in a single thread (since the compiler's [TyCtxt](rustc_middle::ty::TyCtxt) isn't `Send`),
     /// we only ever need the cache in that one thread.
     pub static CACHE: RefCell<CodegenCache> = RefCell::new(Default::default());
@@ -68,7 +68,7 @@ pub fn cache_entry<V: CodegenCacheVal>(key: V::Key) -> impl CacheEntry<EntryVal 
 /// The trait for an entry in the cache, that provides the core API without us having to know how
 /// the cache is implemented (namely whether stats are being recorded or not).
 pub trait CacheEntry {
-    /// The the of the value that this cache entry holds.
+    /// The type of the value that this cache entry holds.
     type EntryVal: CodegenCacheVal;
 
     /// Applies `f` to modify the value found in the cache, if there was one.

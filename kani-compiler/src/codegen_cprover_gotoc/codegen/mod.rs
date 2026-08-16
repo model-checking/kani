@@ -25,4 +25,5 @@ pub(super) mod typ;
 
 pub use assert::PropertyClass;
 pub use block::bb_label;
+pub use span::disabled_check_pragmas;
 pub use typ::TypeExt;

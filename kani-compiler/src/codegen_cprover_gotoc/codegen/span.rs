@@ -40,41 +40,29 @@ impl GotocCtx<'_, '_> {
     pub fn codegen_span_stable(&self, sp: SpanStable) -> Location {
         cache_entry::<Location>(sp)
             .tweak(|res| {
-                res.try_set_function(self.current_fn.as_ref().map(|x| x.interned_readable_name()))
-                    .unwrap();
+                // `function` and `pragmas` are properties of the *current function*, not of the
+                // span, so a cached `Location` carries whichever function first produced it. Reset
+                // both, or a span reused from another function would be misattributed and — worse
+                // — would inherit that function's `disable_checks` pragmas.
+                //
+                // A non-`Loc` location has no function field to attribute, so ignore that case.
+                let _ = res
+                    .try_set_function(self.current_fn.as_ref().map(|x| x.interned_readable_name()));
+                res.try_set_pragmas(self.current_fn_pragmas());
             })
             .or_insert_with(|| self.codegen_span_stable_inner(sp))
     }
 
+    /// The `disable_checks` pragmas that apply to the function currently being codegen'd.
+    ///
+    /// Read from [CurrentFnCtx](crate::codegen_cprover_gotoc::context::CurrentFnCtx), which
+    /// computes them once per function. Recomputing here would leak a fresh slice per span.
+    fn current_fn_pragmas(&self) -> &'static [&'static str] {
+        self.current_fn.as_ref().map(|current_fn| current_fn.pragmas()).unwrap_or_default()
+    }
+
     pub fn codegen_span_stable_inner(&self, sp: SpanStable) -> Location {
-        // Attribute to mark functions as where automatic pointer checks should not be generated.
-        let should_skip_ptr_checks_attr = vec![
-            rustc_span::symbol::Symbol::intern("kanitool"),
-            rustc_span::symbol::Symbol::intern("disable_checks"),
-        ];
-        let pragmas: &'static [&str] = {
-            let disabled_checks: Vec<_> = self
-                .current_fn
-                .as_ref()
-                .map(|current_fn| {
-                    let instance = current_fn.instance();
-                    self.tcx
-                        .get_attrs_by_path(instance.def.def_id(), &should_skip_ptr_checks_attr)
-                        .collect()
-                })
-                .unwrap_or_default();
-            disabled_checks
-                .iter()
-                .map(|attr| {
-                    let arg = parse_word(attr).expect(
-                        "incorrect value passed to `disable_checks`, expected a single identifier",
-                    );
-                    *PRAGMAS.get(arg.as_str()).unwrap_or_else(|| panic!("attempting to disable an unexisting check, the possible options are {:?}",
-                        PRAGMAS.keys()))
-                })
-                .collect::<Vec<_>>()
-                .leak() // This is to preserve `Location` being Copy, but could blow up the memory utilization of compiler. 
-        };
+        let pragmas = self.current_fn_pragmas();
         let loc = sp.get_lines();
 
         Location::new(
@@ -115,4 +103,43 @@ fn parse_word(attr: &Attribute) -> Option<String> {
     else {
         None
     }
+}
+
+/// Returns the CBMC `#pragma check` directives implied by `instance`'s
+/// `kanitool::disable_checks` attributes.
+///
+/// Called once per function when building its
+/// [CurrentFnCtx](crate::codegen_cprover_gotoc::context::CurrentFnCtx), since every `Location`
+/// that function produces carries the same pragmas.
+pub fn disabled_check_pragmas(
+    gcx: &GotocCtx<'_, '_>,
+    instance: &rustc_public::mir::mono::Instance,
+) -> &'static [&'static str] {
+    use rustc_public::CrateDef;
+    // Attribute to mark functions as where automatic pointer checks should not be generated.
+    let should_skip_ptr_checks_attr = vec![
+        rustc_span::symbol::Symbol::intern("kanitool"),
+        rustc_span::symbol::Symbol::intern("disable_checks"),
+    ];
+    let disabled_checks: Vec<_> = gcx
+        .tcx
+        .get_attrs_by_path(
+            rustc_internal::internal(gcx.tcx, instance.def.def_id()),
+            &should_skip_ptr_checks_attr,
+        )
+        .collect();
+    disabled_checks
+        .iter()
+        .map(|attr| {
+            let arg = parse_word(attr)
+                .expect("incorrect value passed to `disable_checks`, expected a single identifier");
+            *PRAGMAS.get(arg.as_str()).unwrap_or_else(|| {
+                panic!(
+                    "attempting to disable an unexisting check, the possible options are {:?}",
+                    PRAGMAS.keys()
+                )
+            })
+        })
+        .collect::<Vec<_>>()
+        .leak() // This is to preserve `Location` being Copy, but could blow up the memory utilization of compiler.
 }
