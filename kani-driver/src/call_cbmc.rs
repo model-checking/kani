@@ -268,6 +268,7 @@ impl KaniSession {
                         self.args.extra_pointer_checks,
                         self.args.common_args.quiet,
                         &self.args.output_format,
+                        self.args.log_file.as_ref(),
                     )
                 }),
             )
@@ -279,6 +280,7 @@ impl KaniSession {
                     self.args.extra_pointer_checks,
                     self.args.common_args.quiet,
                     &self.args.output_format,
+                    self.args.log_file.as_ref(),
                 )
             })
             .await)

@@ -39,7 +39,9 @@ mod concrete_playback;
 mod coverage;
 mod harness_runner;
 mod list;
+mod log_file;
 mod metadata;
+mod progress_indicator;
 mod project;
 
 mod frontend;
@@ -83,6 +85,15 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     let args = args::CargoKaniArgs::parse_from(&input_args);
     check_is_valid(&args);
 
+    // Handle version flag
+    if args.version {
+        print_kani_version(
+            InvocationType::CargoKani(input_args),
+            args.verify_opts.common_args.verbose,
+        );
+        return Ok(());
+    }
+
     let mut session = match args.command {
         Some(CargoKaniSubcommand::Autoharness(autoharness_args)) => {
             return autoharness_cargo(*autoharness_args);
@@ -97,7 +108,7 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     };
 
     if !session.args.common_args.quiet {
-        print_kani_version(InvocationType::CargoKani(input_args));
+        print_kani_version(InvocationType::CargoKani(input_args), session.args.common_args.verbose);
     }
 
     let project = project::cargo_project(&mut session, false)?;
@@ -108,6 +119,12 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
 fn standalone_main() -> Result<()> {
     let args = args::StandaloneArgs::parse();
     check_is_valid(&args);
+
+    // Handle version flag
+    if args.version {
+        print_kani_version(InvocationType::Standalone, args.verify_opts.common_args.verbose);
+        return Ok(());
+    }
 
     let (session, project) = match args.command {
         Some(StandaloneSubcommand::Autoharness(args)) => {
@@ -120,7 +137,7 @@ fn standalone_main() -> Result<()> {
         Some(StandaloneSubcommand::VerifyStd(args)) => {
             let session = KaniSession::new(args.verify_opts)?;
             if !session.args.common_args.quiet {
-                print_kani_version(InvocationType::Standalone);
+                print_kani_version(InvocationType::Standalone, session.args.common_args.verbose);
             }
 
             let project = project::std_project(&args.std_path, &session)?;
@@ -129,7 +146,7 @@ fn standalone_main() -> Result<()> {
         None => {
             let session = KaniSession::new(args.verify_opts)?;
             if !session.args.common_args.quiet {
-                print_kani_version(InvocationType::Standalone);
+                print_kani_version(InvocationType::Standalone, session.args.common_args.verbose);
             }
 
             let project =
