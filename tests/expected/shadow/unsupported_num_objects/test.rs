@@ -18,11 +18,21 @@ fn check_max_objects<const N: usize>() {
     // numbering, so the `N` thresholds below may need to be adjusted when
     // upgrading CBMC.
     let mut have_42 = false;
+    // Allocate each object directly (leaked; never deallocated) so that it is
+    // a real heap allocation with the least possible surrounding code for
+    // symbolic execution: no `Box` place projections, no deallocation, and no
+    // container bookkeeping. This keeps the test well under the per-test
+    // timeout on slower CI runners.
+    let layout = std::alloc::Layout::new::<usize>();
     while i < N {
-        let x: Box<usize> = Box::new(kani::any());
-        if *x == 42 {
-            have_42 = true;
+        let x: *mut usize = unsafe { std::alloc::alloc(layout) as *mut usize };
+        unsafe {
+            x.write(kani::any());
+            if *x == 42 {
+                have_42 = true;
+            }
         }
+        std::hint::black_box(x);
         i += 1;
     }
 
@@ -38,10 +48,10 @@ fn check_max_objects<const N: usize>() {
 
 #[kani::proof]
 fn check_max_objects_pass() {
-    check_max_objects::<1020>();
+    check_max_objects::<1021>();
 }
 
 #[kani::proof]
 fn check_max_objects_fail() {
-    check_max_objects::<1021>();
+    check_max_objects::<1022>();
 }

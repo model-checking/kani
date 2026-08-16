@@ -37,6 +37,16 @@ impl GotocCtx<'_, '_> {
     }
 
     pub fn codegen_span_stable(&self, sp: SpanStable) -> Location {
+        self.codegen_span_stable_with_pragmas(sp, &[])
+    }
+
+    /// Like [Self::codegen_span_stable], but additionally attaches the given
+    /// CBMC check pragmas (e.g. `disable:pointer-check`) to the location.
+    pub fn codegen_span_stable_with_pragmas(
+        &self,
+        sp: SpanStable,
+        extra_pragmas: &'static [&'static str],
+    ) -> Location {
         // Attribute to mark functions as where automatic pointer checks should not be generated.
         let should_skip_ptr_checks_attr = vec![
             rustc_span::symbol::Symbol::intern("kanitool"),
@@ -53,17 +63,23 @@ impl GotocCtx<'_, '_> {
                         .collect()
                 })
                 .unwrap_or_default();
-            disabled_checks
-                .iter()
-                .map(|attr| {
-                    let arg = parse_word(attr).expect(
-                        "incorrect value passed to `disable_checks`, expected a single identifier",
-                    );
-                    *PRAGMAS.get(arg.as_str()).unwrap_or_else(|| panic!("attempting to disable an unexisting check, the possible options are {:?}",
-                        PRAGMAS.keys()))
-                })
-                .collect::<Vec<_>>()
-                .leak() // This is to preserve `Location` being Copy, but could blow up the memory utilization of compiler. 
+            if disabled_checks.is_empty() {
+                // Fast path avoiding a per-location allocation.
+                extra_pragmas
+            } else {
+                disabled_checks
+                    .iter()
+                    .map(|attr| {
+                        let arg = parse_word(attr).expect(
+                            "incorrect value passed to `disable_checks`, expected a single identifier",
+                        );
+                        *PRAGMAS.get(arg.as_str()).unwrap_or_else(|| panic!("attempting to disable a nonexistent check, the possible options are {:?}",
+                            PRAGMAS.keys()))
+                    })
+                    .chain(extra_pragmas.iter().copied())
+                    .collect::<Vec<_>>()
+                    .leak() // This is to preserve `Location` being Copy, but could blow up the memory utilization of compiler.
+            }
         };
         let loc = sp.get_lines();
         Location::new(

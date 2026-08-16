@@ -5,11 +5,13 @@ use anyhow::{Error, Result, bail};
 use kani_metadata::{ArtifactType, HarnessKind, HarnessMetadata};
 use rayon::prelude::*;
 use std::fs::File;
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 use std::path::Path;
 
 use crate::args::{NumThreads, OutputFormat};
 use crate::call_cbmc::{VerificationResult, VerificationStatus};
+use crate::frontend::{JsonHandler, schema_utils::add_runner_results_to_json};
+use crate::progress_indicator::ProgressIndicator;
 use crate::project::Project;
 use crate::session::{BUG_REPORT_URL, KaniSession};
 
@@ -54,8 +56,25 @@ impl<'pr> HarnessRunner<'_, 'pr> {
     pub(crate) fn check_all_harnesses(
         &self,
         harnesses: &'pr [&HarnessMetadata],
+        mut json_handler: Option<&mut JsonHandler>,
     ) -> Result<Vec<HarnessResult<'pr>>> {
         let sorted_harnesses = crate::metadata::sort_harnesses_by_loc(harnesses);
+
+        // Determine if we should show progress indicator.
+        //
+        // Test stderr, not stdout: `ProgressBar::new` draws to stderr
+        // (`ProgressDrawTarget::stderr()`), so gating on stdout meant
+        // `kani --log-file log.txt > out.txt` from a terminal lost the progress bar
+        // even though stderr was still interactive — the very case where redirecting
+        // stdout makes the bar most useful. indicatif hides a non-terminal target
+        // itself, so this is about not suppressing a bar that would render fine.
+        let show_progress = self.sess.args.log_file.is_some()
+            && !self.sess.args.common_args.quiet
+            && std::io::stderr().is_terminal();
+
+        // Create progress indicator
+        let progress_indicator = ProgressIndicator::new(sorted_harnesses.len(), show_progress);
+
         let pool = {
             let mut builder = rayon::ThreadPoolBuilder::new();
             match self.sess.args.jobs() {
@@ -86,6 +105,15 @@ impl<'pr> HarnessRunner<'_, 'pr> {
                     }
 
                     let result = self.sess.check_harness(goto_file, harness)?;
+
+                    // Update progress indicator if active
+                    if progress_indicator.is_active() {
+                        let succeeded = result.status == VerificationStatus::Success;
+                        let timed_out =
+                            matches!(&result.results, Err(crate::call_cbmc::ExitStatus::Timeout));
+                        progress_indicator.update_with_result(succeeded, timed_out);
+                    }
+
                     if self.sess.args.fail_fast && result.status == VerificationStatus::Failure {
                         Err(Error::new(FailFastHarnessInfo {
                             index_to_failing_harness: idx,
@@ -97,15 +125,35 @@ impl<'pr> HarnessRunner<'_, 'pr> {
                 })
                 .collect::<Result<Vec<_>>>()
         });
+
+        // Finish progress indicator
+        progress_indicator.finish();
+
         match results {
-            Ok(results) => Ok(results),
+            Ok(results) => {
+                if let Some(handler) = json_handler.as_deref_mut() {
+                    add_runner_results_to_json(handler, &results, harnesses.len(), "completed");
+                }
+                Ok(results)
+            }
             Err(err) => {
                 if err.is::<FailFastHarnessInfo>() {
                     let failed = err.downcast::<FailFastHarnessInfo>().unwrap();
-                    Ok(vec![HarnessResult {
+                    let result = vec![HarnessResult {
                         harness: sorted_harnesses[failed.index_to_failing_harness],
                         result: failed.result,
-                    }])
+                    }];
+
+                    if let Some(handler) = json_handler {
+                        add_runner_results_to_json(
+                            handler,
+                            &result,
+                            harnesses.len(),
+                            "completed_with_fail_fast",
+                        );
+                    }
+
+                    Ok(result)
                 } else {
                     Err(err)
                 }
@@ -127,11 +175,27 @@ impl KaniSession {
             }
 
             let output = result.render(&self.args.output_format, harness.attributes.should_panic);
+
             if rayon::current_num_threads() > 1 {
-                println!("Thread {thread_index}: {output}");
+                self.emit_line(&format!("Thread {thread_index}: {output}"));
             } else {
-                println!("{output}");
+                self.emit_line(&output);
             }
+        }
+    }
+
+    /// Emit one line of harness output: to `--log-file` when one is configured, so the
+    /// terminal is left to the progress indicator, and to stdout otherwise.
+    ///
+    /// `line` is emitted as given. Callers own any `Thread N:` prefix, so that the
+    /// log file and stdout carry identical text.
+    fn emit_line(&self, line: &str) {
+        if let Some(ref log_file_path) = self.args.log_file {
+            if let Err(e) = crate::log_file::append_line(log_file_path, line) {
+                eprintln!("Failed to write to log file {}: {}", log_file_path.display(), e);
+            }
+        } else {
+            println!("{line}");
         }
     }
 
@@ -201,16 +265,16 @@ impl KaniSession {
                 msg = format!("Thread {thread_index}: {msg}");
             }
 
-            println!("{msg}");
+            self.emit_line(&msg);
 
             // Print stubs applied to this harness so users know which
             // assumptions are in effect.
             let multi = rayon::current_num_threads() > 1;
             let print_line = |line: String| {
                 if multi {
-                    println!("Thread {thread_index}: {line}");
+                    self.emit_line(&format!("Thread {thread_index}: {line}"));
                 } else {
-                    println!("{line}");
+                    self.emit_line(&line);
                 }
             };
             for stub in &harness.attributes.stubs {

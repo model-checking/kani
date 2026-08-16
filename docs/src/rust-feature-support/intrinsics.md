@@ -220,8 +220,8 @@ try | No | [#267](https://github.com/model-checking/kani/issues/267) |
 type_id | Yes | |
 type_name | Yes | |
 typed_swap_nonoverlapping | Yes | |
-unaligned_volatile_load | No | See [Notes - Concurrency](#concurrency) |
-unaligned_volatile_store | No | See [Notes - Concurrency](#concurrency) |
+unaligned_volatile_load | Partial | See [Notes - Concurrency](#concurrency) |
+unaligned_volatile_store | Partial | See [Notes - Concurrency](#concurrency) |
 unchecked_add | Yes | |
 unchecked_div | Yes | |
 unchecked_mul | Yes | |
@@ -232,10 +232,10 @@ unchecked_sub | Yes | |
 unlikely | Yes | |
 unreachable | Yes | |
 variant_count | Yes | |
-volatile_copy_memory | No | See [Notes - Concurrency](#concurrency) |
-volatile_copy_nonoverlapping_memory | No | See [Notes - Concurrency](#concurrency) |
+volatile_copy_memory | Partial | See [Notes - Concurrency](#concurrency) |
+volatile_copy_nonoverlapping_memory | Partial | See [Notes - Concurrency](#concurrency) |
 volatile_load | Partial | See [Notes - Concurrency](#concurrency) |
-volatile_set_memory | No | See [Notes - Concurrency](#concurrency) |
+volatile_set_memory | Partial | See [Notes - Concurrency](#concurrency) |
 volatile_store | Partial | See [Notes - Concurrency](#concurrency) |
 wrapping_add | Yes | |
 wrapping_mul | Yes | |

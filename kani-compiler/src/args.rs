@@ -65,6 +65,12 @@ pub struct Arguments {
     /// Option used for suppressing global ASM error.
     #[clap(long)]
     pub ignore_global_asm: bool,
+    /// Do not inject Kani's macro overrides (`assert!`, `panic!`, ...) into the crate.
+    /// Assertion failures are then reported as generic panics rather than with the original
+    /// condition/message. This is an escape hatch for crates whose macro imports conflict
+    /// with the injected overrides (rustc E0659).
+    #[clap(long)]
+    pub no_assert_overrides: bool,
     /// Compute verification results under the assumption that no panic occurs.
     /// This feature is unstable, and it requires `-Z unstable-options` to be used
     #[clap(long)]
