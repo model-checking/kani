@@ -290,7 +290,7 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
                             state.extend(&lvalue_set, &state.successors(&rvalue_set));
                         }
                         // Semantically equivalent *a = b.
-                        Intrinsic::VolatileStore => {
+                        Intrinsic::VolatileStore | Intrinsic::UnalignedVolatileStore => {
                             let lvalue_set = self.successors_for_deref(state, args[0].node.clone());
                             let rvalue_set =
                                 self.successors_for_operand(state, args[1].node.clone());
@@ -527,7 +527,6 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
             // Using the operand unchanged requires determining where it could point, which
             // `successors_for_operand` does.
             Rvalue::Use(operand)
-            | Rvalue::ShallowInitBox(operand, _)
             | Rvalue::Cast(_, operand, _)
             | Rvalue::Repeat(operand, ..)
             | Rvalue::WrapUnsafeBinder(operand, _) => self.successors_for_operand(state, operand),
@@ -698,6 +697,9 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::UncheckedDiv
         | Intrinsic::UncheckedRem
         | Intrinsic::Unlikely
+        // Same argument shape/semantics as `WriteBytes` below (volatility is not
+        // an aliasing concern), so it is likewise identity-aliasing.
+        | Intrinsic::VolatileSetMemory
         | Intrinsic::VtableSize
         | Intrinsic::VtableAlign
         | Intrinsic::WrappingAdd

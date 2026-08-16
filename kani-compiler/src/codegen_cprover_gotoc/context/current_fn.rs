@@ -51,10 +51,8 @@ struct AddressTakenLocalsCollector {
 impl MirVisitor for AddressTakenLocalsCollector {
     fn visit_rvalue(&mut self, rvalue: &Rvalue, _location: Location) {
         match rvalue {
-            Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => {
-                if p.projection.is_empty() {
-                    self.address_taken_locals.insert(p.local);
-                }
+            Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) if p.projection.is_empty() => {
+                self.address_taken_locals.insert(p.local);
             }
             _ => (),
         }

@@ -254,18 +254,6 @@ impl GotocCtx<'_, '_> {
             }};
         }
 
-        macro_rules! unstable_codegen {
-            ($($tt:tt)*) => {{
-                let expr = self.codegen_unimplemented_expr(
-                    &format!("'{}' intrinsic", intrinsic_str),
-                    cbmc_ret_ty,
-                    loc,
-                    "https://github.com/model-checking/kani/issues/new/choose",
-                );
-                self.codegen_expr_to_place_stable(place, expr, loc)
-            }};
-        }
-
         let intrinsic = Intrinsic::from_instance(&instance);
 
         match intrinsic {
@@ -566,21 +554,79 @@ impl GotocCtx<'_, '_> {
             Intrinsic::TruncF32 => codegen_simple_intrinsic!(Truncf),
             Intrinsic::TruncF64 => codegen_simple_intrinsic!(Trunc),
             Intrinsic::TypedSwap => self.codegen_swap(fargs, farg_types, loc),
+            // No alignment assertion for these two, by design: tolerating a
+            // misaligned pointer is the entire purpose of the `unaligned_*`
+            // variants. CBMC models the misaligned typed access byte-precisely,
+            // so the plain dereference is faithful -- see the byte-wise oracle
+            // tests in `tests/kani/Intrinsics/Volatile/unaligned.rs`, which
+            // compare the loaded value against `u32::from_ne_bytes` at every
+            // offset -- native order, so the oracle stays byte-precise without
+            // assuming an endianness. Dereferenceability itself is still checked
+            // by `--pointer-check`, as for the aligned variants.
             Intrinsic::UnalignedVolatileLoad => {
-                unstable_codegen!(self.codegen_expr_to_place_stable(
-                    place,
-                    fargs.remove(0).dereference(),
-                    loc
-                ))
+                self.codegen_expr_to_place_stable(place, fargs.remove(0).dereference(), loc)
+            }
+            Intrinsic::UnalignedVolatileStore => {
+                assert!(self.place_ty_stable(place).kind().is_unit());
+                let dst = fargs.remove(0);
+                let src = fargs.remove(0);
+                let dst_typ = farg_types[0];
+                if self.is_zst_stable(pointee_type_stable(dst_typ).unwrap()) {
+                    // Do not dereference (and assign) a ZST -- same guard as
+                    // `codegen_volatile_store`. A ZST pointer may legally be
+                    // dangling-but-aligned, so this path is reachable.
+                    Stmt::skip(loc)
+                } else {
+                    dst.dereference().assign(src, loc)
+                }
             }
             Intrinsic::UncheckedDiv => codegen_op_with_div_overflow_check!(div),
             Intrinsic::UncheckedRem => codegen_op_with_div_overflow_check!(rem),
             Intrinsic::Unlikely => self.codegen_expr_to_place_stable(place, fargs.remove(0), loc),
-            Intrinsic::VolatileCopyMemory => unstable_codegen!(codegen_intrinsic_copy!(Memmove)),
+            // These two document their safety requirements as "consistent
+            // with `copy`" / "consistent with `copy_nonoverlapping`", so
+            // reusing `codegen_copy` checks the conditions their own docs
+            // state. Volatility itself constrains the optimizer (the access
+            // must not be elided or reordered), which Kani has no need to
+            // model since it performs no such optimization.
+            //
+            // One direction is worth being explicit about: the volatile
+            // family's docs additionally permit pointers *outside* any Rust
+            // allocation (the MMIO carve-out on `ptr::read_volatile`), which
+            // the non-volatile counterparts do not. Reusing `codegen_copy`
+            // therefore checks *at least* the documented UB conditions and is
+            // conservative rather than exact -- a legal MMIO access may be
+            // rejected by `--pointer-check`. That is incompleteness, never a
+            // missed UB, which is the safe direction for a verifier.
+            //
+            // Both intrinsics are declared as `(dst, src, count)`, but
+            // `codegen_copy` expects `fargs`/`farg_types` ordered as
+            // `[src, dst, ..]` (it does `fargs.remove(0)` for `src` followed
+            // by `fargs.remove(0)` for `dst`). So we swap the first two
+            // entries of `fargs`, and build a `farg_types` slice with the
+            // first two entries swapped as well, before delegating.
+            Intrinsic::VolatileCopyMemory => {
+                fargs.swap(0, 1);
+                let swapped_types = [farg_types[1], farg_types[0]];
+                self.codegen_copy(intrinsic_str, false, fargs, &swapped_types, Some(place), loc)
+            }
             Intrinsic::VolatileCopyNonOverlappingMemory => {
-                unstable_codegen!(codegen_intrinsic_copy!(Memcpy))
+                fargs.swap(0, 1);
+                let swapped_types = [farg_types[1], farg_types[0]];
+                self.codegen_copy(intrinsic_str, true, fargs, &swapped_types, Some(place), loc)
             }
             Intrinsic::VolatileLoad => self.codegen_volatile_load(fargs, farg_types, place, loc),
+            // `volatile_set_memory(dst, val, count)` has the same argument
+            // order as `write_bytes(dst, val, count)` (no `dst`/`src` swap is
+            // needed, unlike the two copy intrinsics above), and its docs
+            // state its safety requirements as "consistent with
+            // `write_bytes`", so `codegen_write_bytes` checks the conditions
+            // its own docs state. The same conservative-direction caveat as
+            // the copy intrinsics above applies to the MMIO carve-out.
+            Intrinsic::VolatileSetMemory => {
+                assert!(self.place_ty_stable(place).kind().is_unit());
+                self.codegen_write_bytes(fargs, farg_types, loc)
+            }
             Intrinsic::VolatileStore => {
                 assert!(self.place_ty_stable(place).kind().is_unit());
                 self.codegen_volatile_store(fargs, farg_types, loc)
