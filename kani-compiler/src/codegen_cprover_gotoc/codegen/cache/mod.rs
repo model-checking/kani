@@ -48,7 +48,7 @@ thread_local! {
 /// The hashmap implementation used to store data in the cache.
 type HashImpl<K, V> = FxHashMap<K, V>;
 
-// Define the actual cache implementation. This will expand to the struct defintion and
+// Define the actual cache implementation. This will expand to the struct definition and
 // implementation based on whether or not we want to record cache statistics.
 //
 // Each row of the macro represents the cache for a different type, whose syntax is:
@@ -78,7 +78,7 @@ pub trait CacheEntry {
     fn or_insert_with<F: FnOnce() -> Self::EntryVal>(self, f: F) -> Self::EntryVal;
 }
 
-/// A type whose value can be stored in the codegen cache and retrived with a
+/// A type whose value can be stored in the codegen cache and retrieved with a
 /// specific corresponding [Key](CodegenCacheVal::Key) type.
 pub trait CodegenCacheVal: Clone
 where

@@ -127,7 +127,7 @@ impl<V: CodegenCacheVal> CacheEntry for StatsEntry<V> {
     }
 }
 
-/// Utilites for recording cache statistics.
+/// Utilities for recording cache statistics.
 pub(crate) mod stats {
     use std::time::Duration;
 
