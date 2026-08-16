@@ -38,31 +38,63 @@ impl GotocCtx<'_, '_> {
     }
 
     pub fn codegen_span_stable(&self, sp: SpanStable) -> Location {
+        self.codegen_span_stable_with_pragmas(sp, &[])
+    }
+
+    /// Like [Self::codegen_span_stable], but additionally attaches the given
+    /// CBMC check pragmas (e.g. `disable:pointer-check`) to the location.
+    pub fn codegen_span_stable_with_pragmas(
+        &self,
+        sp: SpanStable,
+        extra_pragmas: &'static [&'static str],
+    ) -> Location {
         cache_entry::<Location>(sp)
             .tweak(|res| {
-                // `function` and `pragmas` are properties of the *current function*, not of the
-                // span, so a cached `Location` carries whichever function first produced it. Reset
-                // both, or a span reused from another function would be misattributed and — worse
-                // — would inherit that function's `disable_checks` pragmas.
+                // `function` and `pragmas` describe the *current function* and call site, not the
+                // span, so a cached `Location` carries whichever context first produced it. Reset
+                // both, or a span reused elsewhere would be misattributed and — worse — would
+                // inherit that context's `disable_checks` pragmas.
                 //
                 // A non-`Loc` location has no function field to attribute, so ignore that case.
                 let _ = res
                     .try_set_function(self.current_fn.as_ref().map(|x| x.interned_readable_name()));
-                res.try_set_pragmas(self.current_fn_pragmas());
+                res.try_set_pragmas(self.pragmas_for(extra_pragmas));
             })
-            .or_insert_with(|| self.codegen_span_stable_inner(sp))
+            .or_insert_with(|| self.codegen_span_stable_inner(sp, extra_pragmas))
+    }
+
+    /// The pragmas that apply at this call site: the current function's `disable_checks`
+    /// pragmas, plus any `extra_pragmas` the caller asked for.
+    ///
+    /// The function's own pragmas come from
+    /// [CurrentFnCtx](crate::codegen_cprover_gotoc::context::CurrentFnCtx), which computes them
+    /// once per function. Only the case where both sets are non-empty needs an allocation, so the
+    /// common paths leak nothing per location.
+    fn pragmas_for(&self, extra_pragmas: &'static [&'static str]) -> &'static [&'static str] {
+        let fn_pragmas = self.current_fn_pragmas();
+        match (fn_pragmas.is_empty(), extra_pragmas.is_empty()) {
+            (true, _) => extra_pragmas,
+            (false, true) => fn_pragmas,
+            (false, false) => fn_pragmas
+                .iter()
+                .copied()
+                .chain(extra_pragmas.iter().copied())
+                .collect::<Vec<_>>()
+                .leak(), // This is to preserve `Location` being Copy, but could blow up the memory utilization of compiler.
+        }
     }
 
     /// The `disable_checks` pragmas that apply to the function currently being codegen'd.
-    ///
-    /// Read from [CurrentFnCtx](crate::codegen_cprover_gotoc::context::CurrentFnCtx), which
-    /// computes them once per function. Recomputing here would leak a fresh slice per span.
     fn current_fn_pragmas(&self) -> &'static [&'static str] {
         self.current_fn.as_ref().map(|current_fn| current_fn.pragmas()).unwrap_or_default()
     }
 
-    pub fn codegen_span_stable_inner(&self, sp: SpanStable) -> Location {
-        let pragmas = self.current_fn_pragmas();
+    pub fn codegen_span_stable_inner(
+        &self,
+        sp: SpanStable,
+        extra_pragmas: &'static [&'static str],
+    ) -> Location {
+        let pragmas = self.pragmas_for(extra_pragmas);
         let loc = sp.get_lines();
 
         Location::new(
@@ -135,7 +167,7 @@ pub fn disabled_check_pragmas(
                 .expect("incorrect value passed to `disable_checks`, expected a single identifier");
             *PRAGMAS.get(arg.as_str()).unwrap_or_else(|| {
                 panic!(
-                    "attempting to disable an unexisting check, the possible options are {:?}",
+                    "attempting to disable a nonexistent check, the possible options are {:?}",
                     PRAGMAS.keys()
                 )
             })

@@ -81,6 +81,7 @@ pub fn strip_local_crate_prefix(name: String) -> String {
 pub mod abi;
 pub mod analysis;
 pub mod attributes;
+pub mod codegen_order;
 pub mod codegen_units;
 pub mod coercion;
 mod intrinsics;
