@@ -406,11 +406,19 @@ impl CodegenBackend for GotocCodegenBackend {
                         // compilation. Reachability run here to rate the harnesses also warms the
                         // shared transformer's body cache reused during codegen. See
                         // `kani_middle::codegen_order`.
-                        let ordered_harnesses = order_harnesses::<MostReachableItems>(
-                            &unit.harnesses,
-                            tcx,
-                            &mut shared_unit_transformer,
-                        );
+                        //
+                        // Only worth the extra reachability pass when there are export workers to
+                        // overlap with; without them exports happen synchronously on this thread,
+                        // so ordering cannot hide any latency and would only add compile time.
+                        let ordered_harnesses = if export_thread_pool.has_workers() {
+                            order_harnesses::<MostReachableItems>(
+                                &unit.harnesses,
+                                tcx,
+                                &mut shared_unit_transformer,
+                            )
+                        } else {
+                            unit.harnesses.iter().collect()
+                        };
 
                         for harness in ordered_harnesses {
                             let model_path = units.harness_model_path(*harness).unwrap();
