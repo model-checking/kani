@@ -45,7 +45,6 @@ Kani uses [CBMC](https://github.com/diffblue/cbmc) as its underlying verificatio
 |-----------|-------------|
 | `docs/` | User and developer documentation (built with mdBook) |
 | `rfc/` | Request for Comments documents for design decisions |
-| `papers/` | Academic papers related to Kani |
 
 ## Build and Development Commands
 
