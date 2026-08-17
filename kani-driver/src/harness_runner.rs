@@ -7,6 +7,7 @@ use rayon::prelude::*;
 use std::fs::File;
 use std::io::{IsTerminal, Write};
 use std::path::Path;
+use std::sync::Mutex;
 
 use crate::args::{NumThreads, OutputFormat};
 use crate::call_cbmc::{VerificationResult, VerificationStatus};
@@ -36,17 +37,16 @@ pub(crate) struct HarnessResult<'pr> {
     pub result: VerificationResult,
 }
 
+/// Signals that a harness failed under `--fail-fast`, so no further harnesses should start.
+/// The failing harness's result is already in the shared accumulator, so this carries no payload.
 #[derive(Debug)]
-struct FailFastHarnessInfo {
-    pub index_to_failing_harness: usize,
-    pub result: VerificationResult,
-}
+struct FailFastAbort;
 
-impl std::error::Error for FailFastHarnessInfo {}
+impl std::error::Error for FailFastAbort {}
 
-impl std::fmt::Display for FailFastHarnessInfo {
+impl std::fmt::Display for FailFastAbort {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "harness failed")
+        write!(f, "aborting: a harness failed and --fail-fast is set")
     }
 }
 
@@ -56,7 +56,7 @@ impl<'pr> HarnessRunner<'_, 'pr> {
     pub(crate) fn check_all_harnesses(
         &self,
         harnesses: &'pr [&HarnessMetadata],
-        mut json_handler: Option<&mut JsonHandler>,
+        json_handler: Option<&mut JsonHandler>,
     ) -> Result<Vec<HarnessResult<'pr>>> {
         let sorted_harnesses = crate::metadata::sort_harnesses_by_loc(harnesses);
 
@@ -90,75 +90,62 @@ impl<'pr> HarnessRunner<'_, 'pr> {
             builder.build()?
         };
 
-        let results = pool.install(|| -> Result<Vec<HarnessResult<'pr>>> {
-            sorted_harnesses
-                .par_iter()
-                .enumerate()
-                .map(|(idx, harness)| -> Result<HarnessResult<'pr>> {
-                    let goto_file =
-                        self.project.get_harness_artifact(harness, ArtifactType::Goto).unwrap();
+        // Completed results accumulate here so a `--fail-fast` abort keeps them.
+        let completed: Mutex<Vec<(usize, HarnessResult<'pr>)>> = Mutex::new(Vec::new());
 
-                    self.sess.instrument_model(goto_file, goto_file, self.project, harness)?;
+        let run_result = pool.install(|| -> Result<()> {
+            sorted_harnesses.par_iter().enumerate().try_for_each(|(idx, harness)| -> Result<()> {
+                let goto_file =
+                    self.project.get_harness_artifact(harness, ArtifactType::Goto).unwrap();
 
-                    if self.sess.args.synthesize_loop_contracts {
-                        self.sess.synthesize_loop_contracts(goto_file, goto_file, harness)?;
-                    }
+                self.sess.instrument_model(goto_file, goto_file, self.project, harness)?;
 
-                    let result = self.sess.check_harness(goto_file, harness)?;
+                if self.sess.args.synthesize_loop_contracts {
+                    self.sess.synthesize_loop_contracts(goto_file, goto_file, harness)?;
+                }
 
-                    // Update progress indicator if active
-                    if progress_indicator.is_active() {
-                        let succeeded = result.status == VerificationStatus::Success;
-                        let timed_out =
-                            matches!(&result.results, Err(crate::call_cbmc::ExitStatus::Timeout));
-                        progress_indicator.update_with_result(succeeded, timed_out);
-                    }
+                let result = self.sess.check_harness(goto_file, harness)?;
 
-                    if self.sess.args.fail_fast && result.status == VerificationStatus::Failure {
-                        Err(Error::new(FailFastHarnessInfo {
-                            index_to_failing_harness: idx,
-                            result,
-                        }))
-                    } else {
-                        Ok(HarnessResult { harness, result })
-                    }
-                })
-                .collect::<Result<Vec<_>>>()
+                // Update progress indicator if active
+                if progress_indicator.is_active() {
+                    let succeeded = result.status == VerificationStatus::Success;
+                    let timed_out =
+                        matches!(&result.results, Err(crate::call_cbmc::ExitStatus::Timeout));
+                    progress_indicator.update_with_result(succeeded, timed_out);
+                }
+
+                let fail_fast_triggered =
+                    self.sess.args.fail_fast && result.status == VerificationStatus::Failure;
+
+                completed.lock().unwrap().push((idx, HarnessResult { harness, result }));
+
+                // Ask rayon to stop scheduling further harnesses (best effort); harnesses
+                // already in flight still complete and record their results.
+                if fail_fast_triggered { Err(Error::new(FailFastAbort)) } else { Ok(()) }
+            })
         });
 
         // Finish progress indicator
         progress_indicator.finish();
 
-        match results {
-            Ok(results) => {
-                if let Some(handler) = json_handler.as_deref_mut() {
-                    add_runner_results_to_json(handler, &results, harnesses.len(), "completed");
-                }
-                Ok(results)
-            }
-            Err(err) => {
-                if err.is::<FailFastHarnessInfo>() {
-                    let failed = err.downcast::<FailFastHarnessInfo>().unwrap();
-                    let result = vec![HarnessResult {
-                        harness: sorted_harnesses[failed.index_to_failing_harness],
-                        result: failed.result,
-                    }];
+        // A genuine error (not the fail-fast signal) must still propagate.
+        let fail_fast = match run_result {
+            Ok(()) => false,
+            Err(err) if err.is::<FailFastAbort>() => true,
+            Err(err) => return Err(err),
+        };
 
-                    if let Some(handler) = json_handler {
-                        add_runner_results_to_json(
-                            handler,
-                            &result,
-                            harnesses.len(),
-                            "completed_with_fail_fast",
-                        );
-                    }
+        // Completion order under parallelism is nondeterministic; restore harness order.
+        let mut collected = completed.into_inner().unwrap();
+        collected.sort_by_key(|(idx, _)| *idx);
+        let results: Vec<HarnessResult<'pr>> = collected.into_iter().map(|(_, r)| r).collect();
 
-                    Ok(result)
-                } else {
-                    Err(err)
-                }
-            }
+        if let Some(handler) = json_handler {
+            let status_label = if fail_fast { "completed_with_fail_fast" } else { "completed" };
+            add_runner_results_to_json(handler, &results, harnesses.len(), status_label);
         }
+
+        Ok(results)
     }
 }
 
