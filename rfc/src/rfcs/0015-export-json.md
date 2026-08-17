@@ -9,9 +9,12 @@
 
 ## Summary
 
-Add an opt-in, `-Z`-gated `--export-json <path>` flag that writes one machine-readable file
-describing a verification run: per-harness outcome, failed properties, check and cover outcomes by
-status, resource cost, and the provenance needed to reproduce the run.
+Specify the machine-readable file that Kani's `--export-json <path>` flag writes. The flag shipped
+in [#4472](https://github.com/model-checking/kani/pull/4472) and is unstable. The file describes one
+verification run: per-harness outcome, failed properties, check and cover outcomes by status,
+resource cost, and the provenance needed to reproduce the run. The schema in this RFC is the
+proposed contract for that file; whether it supersedes the shipped v1 shape, and how, is the first
+open question.
 
 ## User Impact
 
@@ -58,25 +61,32 @@ demotes a `Success` to `Unreachable` when the result cannot be trusted. **That r
 lives in the presentation layer and reaches no machine-readable output.** This RFC's core proposal is
 to carry it in the results file.
 
-**Downside.** A schema is an interface, and interfaces constrain future change. That is why this is
-proposed behind `-Z export-json` with an explicit version field, so the shape can be corrected while
-it is still being learned from real consumers.
+**Downside.** A schema is an interface, and interfaces constrain future change. That is why the
+schema stays behind an unstable gate with an explicit version field, so the shape can be corrected
+while it is still being learned from real consumers.
 
-### Relationship to prior work
+### Relationship to the shipped implementation (#4472)
 
-[PR #4472](https://github.com/model-checking/kani/pull/4472) proposed a similar capability and did
-substantial work; the design discussion there shaped this proposal, and I would welcome
-@yimingyinqwqq's review. Reviewers on that PR asked for an RFC first, for real unstable gating, for
-CBMC data to come from `--json-ui` rather than scraped log text, and for a standard schema approach.
-This RFC exists to settle those questions before code merges, and is intended as the official RFC for
-this capability. It is numbered `0015`; the maintainers will reconcile #4472's earlier claim on that
-number.
+[PR #4472](https://github.com/model-checking/kani/pull/4472) merged on 2026-08-12 and ships
+`--export-json` on `main`, behind `-Z unstable-options`. It is the as-built v1; the design
+discussion there shaped this proposal, and I would welcome @yimingyinqwqq's review. The capability
+therefore exists today. What this RFC settles is the contract for it.
+
+The shipped document differs from the schema specified here in shape and vocabulary: it exports
+count summaries plus per-harness detail arrays correlated by `harness_id == pretty_name`, it
+serializes status values in their Rust `Debug` casing, and it gates on `-Z unstable-options` rather
+than a dedicated feature ident. Whether this schema supersedes the shipped shape while the flag is
+unstable — and what migrates — is the first open question below. This RFC is numbered `0015`, per
+review; #4472 merged without an RFC file, so the number is free.
 
 ## User Experience
 
 ```
 cargo kani -Z export-json --export-json results.json
 ```
+
+(This shows the dedicated gate this RFC proposes. The shipped flag gates on
+`-Z unstable-options` today — see "On the `-Z` gate" below.)
 
 The flag is additive for every output format it supports: existing rendered output is unchanged, and
 the file is written in addition to it. Omitting the flag changes nothing. One combination is rejected
@@ -116,9 +126,11 @@ better beside `--sarif` and age better if Kani ever emits a second JSON artifact
 yet load-bearing. This RFC uses `--export-json` to match the proof-of-concept and the issue #942
 discussion, and treats the final name as an open decision rather than a design commitment.
 
-**On the `-Z` gate.** The feature gates on its own `-Z export-json` identifier rather than the generic
-`-Z unstable-options`, matching the per-feature gating pattern (`--coverage` gates on `SourceCoverage`),
-so this artifact can stabilize — or be dropped — independently of unrelated unstable options.
+**On the `-Z` gate.** As shipped, the flag gates on the generic `-Z unstable-options`. This RFC
+proposes a dedicated `-Z export-json` identifier instead, matching the per-feature gating pattern
+(`--coverage` gates on `SourceCoverage`), so this artifact can stabilize — or be dropped —
+independently of unrelated unstable options. The switch is a one-line gate change on an unstable
+surface; it belongs to the migration discussed in the first open question.
 
 ### Example
 
@@ -498,10 +510,9 @@ serialization of the Rust type it comes from, and this schema does not fork type
   must therefore use an explicit `SCREAMING_SNAKE_CASE` rename, not `UPPERCASE`, to match.) The
   newly-introduced enums (`Outcome`, `verdict`, `run_state`) were given this casing on purpose, so a
   consumer sees one value convention across the whole file rather than a seam between reused and new types.
-  (The open soundness PR #4732, which implements the `run_state` marker, currently serializes its values in
-  lowercase; those will be normalized to SCREAMING_SNAKE before this lands, and any future value set
-  introduced into the file follows this same single rule rather than carrying its Rust type's default
-  casing.)
+  (`run_state` is proposed in this RFC's completeness contract and does not exist in the shipped
+  writer; any implementation of it uses this casing, and any future value set introduced into the
+  file follows this same single rule rather than carrying its Rust type's default casing.)
 - **PascalCase, object-shaped**, for the two embedded `kani_metadata` attribute enums below, which keep
   their own serde derivation untouched for the same no-forking reason.
 
@@ -603,10 +614,17 @@ discovered:
 
 Consumers keep scraping, including Kani's own. The status quo works until an output string changes,
 and then the breakage is silent — a grep that matches nothing looks exactly like a run with nothing
-to report. The vacuity problem in particular stays invisible to automation.
+to report. The vacuity problem in particular stays invisible to automation. Doing nothing now has a
+second cost: the shipped v1 document becomes the de-facto contract, unversioned and unspecified.
 
 ## Open questions
 
+- **Does this schema supersede the shipped v1 shape?** #4472's document — count summaries and
+  per-harness detail arrays joined on `pretty_name`, `Debug`-cased status values, gated
+  `-Z unstable-options` — is on `main` today, and this RFC's schema is not that shape. The flag is
+  unstable, so the shape can change without a deprecation cycle. The question is whether to migrate
+  the shipped writer to this schema now, or to redraw this RFC around the shipped shape. The
+  sections above are written for the former.
 - **Processed or raw view?** The property list Kani renders is already post-processed: reachability
   checks removed, some descriptions rewritten, successful checks demoted on a fundamental failure.
   This proposal exports the **processed** view, so the file agrees with Kani's exit code and text
