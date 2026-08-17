@@ -4,6 +4,7 @@
 //! MIR Span related functions
 
 use crate::codegen_cprover_gotoc::GotocCtx;
+use crate::codegen_cprover_gotoc::codegen::cache::{CacheEntry, cache_entry};
 use cbmc::goto_program::Location;
 use lazy_static::lazy_static;
 use rustc_hir::Attribute;
@@ -47,41 +48,55 @@ impl GotocCtx<'_, '_> {
         sp: SpanStable,
         extra_pragmas: &'static [&'static str],
     ) -> Location {
-        // Attribute to mark functions as where automatic pointer checks should not be generated.
-        let should_skip_ptr_checks_attr = vec![
-            rustc_span::symbol::Symbol::intern("kanitool"),
-            rustc_span::symbol::Symbol::intern("disable_checks"),
-        ];
-        let pragmas: &'static [&str] = {
-            let disabled_checks: Vec<_> = self
-                .current_fn
-                .as_ref()
-                .map(|current_fn| {
-                    let instance = current_fn.instance();
-                    self.tcx
-                        .get_attrs_by_path(instance.def.def_id(), &should_skip_ptr_checks_attr)
-                        .collect()
-                })
-                .unwrap_or_default();
-            if disabled_checks.is_empty() {
-                // Fast path avoiding a per-location allocation.
-                extra_pragmas
-            } else {
-                disabled_checks
-                    .iter()
-                    .map(|attr| {
-                        let arg = parse_word(attr).expect(
-                            "incorrect value passed to `disable_checks`, expected a single identifier",
-                        );
-                        *PRAGMAS.get(arg.as_str()).unwrap_or_else(|| panic!("attempting to disable a nonexistent check, the possible options are {:?}",
-                            PRAGMAS.keys()))
-                    })
-                    .chain(extra_pragmas.iter().copied())
-                    .collect::<Vec<_>>()
-                    .leak() // This is to preserve `Location` being Copy, but could blow up the memory utilization of compiler.
-            }
-        };
+        cache_entry::<Location>(sp)
+            .tweak(|res| {
+                // `function` and `pragmas` describe the *current function* and call site, not the
+                // span, so a cached `Location` carries whichever context first produced it. Reset
+                // both, or a span reused elsewhere would be misattributed and — worse — would
+                // inherit that context's `disable_checks` pragmas.
+                //
+                // A non-`Loc` location has no function field to attribute, so ignore that case.
+                let _ = res
+                    .try_set_function(self.current_fn.as_ref().map(|x| x.interned_readable_name()));
+                res.try_set_pragmas(self.pragmas_for(extra_pragmas));
+            })
+            .or_insert_with(|| self.codegen_span_stable_inner(sp, extra_pragmas))
+    }
+
+    /// The pragmas that apply at this call site: the current function's `disable_checks`
+    /// pragmas, plus any `extra_pragmas` the caller asked for.
+    ///
+    /// The function's own pragmas come from
+    /// [CurrentFnCtx](crate::codegen_cprover_gotoc::context::CurrentFnCtx), which computes them
+    /// once per function. Only the case where both sets are non-empty needs an allocation, so the
+    /// common paths leak nothing per location.
+    fn pragmas_for(&self, extra_pragmas: &'static [&'static str]) -> &'static [&'static str] {
+        let fn_pragmas = self.current_fn_pragmas();
+        match (fn_pragmas.is_empty(), extra_pragmas.is_empty()) {
+            (true, _) => extra_pragmas,
+            (false, true) => fn_pragmas,
+            (false, false) => fn_pragmas
+                .iter()
+                .copied()
+                .chain(extra_pragmas.iter().copied())
+                .collect::<Vec<_>>()
+                .leak(), // This is to preserve `Location` being Copy, but could blow up the memory utilization of compiler.
+        }
+    }
+
+    /// The `disable_checks` pragmas that apply to the function currently being codegen'd.
+    fn current_fn_pragmas(&self) -> &'static [&'static str] {
+        self.current_fn.as_ref().map(|current_fn| current_fn.pragmas()).unwrap_or_default()
+    }
+
+    pub fn codegen_span_stable_inner(
+        &self,
+        sp: SpanStable,
+        extra_pragmas: &'static [&'static str],
+    ) -> Location {
+        let pragmas = self.pragmas_for(extra_pragmas);
         let loc = sp.get_lines();
+
         Location::new(
             sp.get_filename().to_string(),
             self.current_fn.as_ref().map(|x| x.readable_name().to_string()),
@@ -120,4 +135,43 @@ fn parse_word(attr: &Attribute) -> Option<String> {
     else {
         None
     }
+}
+
+/// Returns the CBMC `#pragma check` directives implied by `instance`'s
+/// `kanitool::disable_checks` attributes.
+///
+/// Called once per function when building its
+/// [CurrentFnCtx](crate::codegen_cprover_gotoc::context::CurrentFnCtx), since every `Location`
+/// that function produces carries the same pragmas.
+pub fn disabled_check_pragmas(
+    gcx: &GotocCtx<'_, '_>,
+    instance: &rustc_public::mir::mono::Instance,
+) -> &'static [&'static str] {
+    use rustc_public::CrateDef;
+    // Attribute to mark functions as where automatic pointer checks should not be generated.
+    let should_skip_ptr_checks_attr = vec![
+        rustc_span::symbol::Symbol::intern("kanitool"),
+        rustc_span::symbol::Symbol::intern("disable_checks"),
+    ];
+    let disabled_checks: Vec<_> = gcx
+        .tcx
+        .get_attrs_by_path(
+            rustc_internal::internal(gcx.tcx, instance.def.def_id()),
+            &should_skip_ptr_checks_attr,
+        )
+        .collect();
+    disabled_checks
+        .iter()
+        .map(|attr| {
+            let arg = parse_word(attr)
+                .expect("incorrect value passed to `disable_checks`, expected a single identifier");
+            *PRAGMAS.get(arg.as_str()).unwrap_or_else(|| {
+                panic!(
+                    "attempting to disable a nonexistent check, the possible options are {:?}",
+                    PRAGMAS.keys()
+                )
+            })
+        })
+        .collect::<Vec<_>>()
+        .leak() // This is to preserve `Location` being Copy, but could blow up the memory utilization of compiler.
 }
