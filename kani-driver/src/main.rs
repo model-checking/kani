@@ -81,7 +81,18 @@ fn main() -> ExitCode {
 
 /// The main function for the `cargo kani` command.
 fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
-    let input_args = join_args(input_args)?;
+    let input_args = match join_args(input_args.clone()) {
+        Ok(joined) => joined,
+        // `--version` must answer even when a malformed `Cargo.toml` breaks `join_args`.
+        Err(err) => {
+            return if args::requests_version(&input_args) {
+                print_kani_version(InvocationType::CargoKani(input_args), false);
+                Ok(())
+            } else {
+                Err(err)
+            };
+        }
+    };
     let args = args::CargoKaniArgs::parse_from(&input_args);
     check_is_valid(&args);
 
