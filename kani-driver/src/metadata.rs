@@ -127,6 +127,16 @@ impl KaniSession {
             );
         }
 
+        // A `--harness` filter that matches nothing must fail here
+        if !harness_filters.is_empty() && compiler_filtered_harnesses.is_empty() {
+            match self.args.harnesses.as_slice() {
+                [harness] => bail!("no harnesses matched the harness filter: `{harness}`"),
+                harnesses => {
+                    bail!("no harnesses matched the harness filters: `{}`", harnesses.join("`, `"))
+                }
+            }
+        }
+
         Ok(compiler_filtered_harnesses)
     }
 }
