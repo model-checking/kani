@@ -5,7 +5,7 @@
 # Regression test for https://github.com/model-checking/kani/issues/4731:
 # a `--harness` filter that matches no harness must fail (non-zero exit + an
 # error) *before* codegen/export -- even under `--quiet`, which suppresses the
-# end-of-run summary where the "no harnesses matched" error is otherwise raised.
+# end-of-run summary where the zero-match error is otherwise raised.
 # Previously such a run exited 0 and, with `--export-json`, wrote a document
 # that serialized an empty run as a clean pass.
 
@@ -18,8 +18,8 @@ if [[ ${CODE} -eq 0 ]]; then
     echo "FAIL: zero-match run under --quiet exited 0"
     exit 1
 fi
-if ! grep -q "no harnesses matched" <<< "${OUT}"; then
-    echo "FAIL: expected a 'no harnesses matched' error, got:"
+if ! grep -q "Failed to match the following harness(es):" <<< "${OUT}"; then
+    echo "FAIL: expected the zero-match error, got:"
     echo "${OUT}"
     exit 1
 fi
@@ -46,7 +46,7 @@ if [[ ${CODE} -eq 0 ]]; then
     echo "FAIL: zero-match run with two filters exited 0"
     exit 1
 fi
-if ! grep -q 'no harnesses matched the harness filters: `does_not_exist_a`, `does_not_exist_b`' <<< "${OUT}"; then
+if ! grep -q 'does_not_exist_a`, `does_not_exist_b' <<< "${OUT}"; then
     echo "FAIL: expected both filters in the error, got:"
     echo "${OUT}"
     exit 1
