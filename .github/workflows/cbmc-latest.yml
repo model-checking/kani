@@ -65,6 +65,14 @@ jobs:
 
   perf:
     runs-on: ubuntu-24.04
+    # The perf suite is memory-hungry: the s2n-quic harnesses solve large
+    # formulas, and running them concurrently exhausts a standard runner, which
+    # shows up as an unattributable SIGTERM (exit 143) or "the hosted runner
+    # lost communication with the server" a few minutes into the step rather
+    # than as a test failure. Run serially instead, as kani.yml does. That takes
+    # ~45 min, so the 180-min step timeout leaves ample headroom, and the job
+    # timeout sits above (step timeout) x (max_attempts) so a retry can land.
+    timeout-minutes: 380
     steps:
       - name: Checkout Kani under "kani"
         uses: actions/checkout@v6
@@ -96,10 +104,20 @@ jobs:
           echo "${GITHUB_WORKSPACE}/cbmc/build/bin" >> $GITHUB_PATH
 
       - name: Execute Kani performance tests
-        working-directory: ./kani
-        run: ./scripts/kani-perf.sh
+        # Run the suite serially and allow one retry, matching the perf job in
+        # kani.yml. `working-directory` is not valid on a `uses` step, so the
+        # command changes directory itself.
+        uses: nick-fields/retry@v4
+        with:
+          timeout_minutes: 180
+          max_attempts: 2
+          command: cd kani && ./scripts/kani-perf.sh
+        env:
+          RUST_TEST_THREADS: 1
 
       - name: Execute Kani performance ignored tests
         working-directory: ./kani
         continue-on-error: true
         run: cargo run -p compiletest -- --suite perf --mode cargo-kani-test ignore --ignored --no-fail-fast
+        env:
+          RUST_TEST_THREADS: 1
