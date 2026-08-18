@@ -115,7 +115,15 @@ Kani will detect if a struct or enum could implement `Arbitrary` and derive it a
 Note that this automatic derivation feature is only available for autoharness.
 
 ### Generic Functions
-The current implementation does not generate harnesses for generic functions.
+For a generic function, Kani generates a harness for a single monomorphic instantiation of the function:
+it substitutes the function's type parameters with concrete types such that all of the function's
+trait bounds are satisfied, and erases lifetime parameters. Kani first tries a fixed list of
+primitive types (starting with `i32`, and including the wider integer and float types) uniformly
+for all parameters; if that fails, it searches per-parameter combinations, drawing additional
+candidate types from the concrete implementations of the traits each parameter is bound by
+(so, e.g., a parameter bound by a crate-local trait can be instantiated with a crate-local struct
+implementing it). The search is capped, so functions with many type parameters or very complex
+bounds may still be skipped.
 For example, given:
 ```rust
 fn foo<T: Eq>(x: T, y: T) {
@@ -124,23 +132,21 @@ fn foo<T: Eq>(x: T, y: T) {
     }
 }
 ```
-Kani would report that no functions were eligible for automatic harness generation.
-
-If, however, some caller of `foo` is eligible for an automatic harness, then a monomorphized version of `foo` may still be reachable during verification.
-For instance, if we add `main`:
-```rust
-fn main() {
-    let x: u8 = 2;
-    let y: u8 = 2;
-    foo(x, y);
-}
+Kani generates and runs a harness that verifies `foo::<i32>`, and the summary table shows the
+instantiated name, e.g.:
 ```
-and run the autoharness subcommand, we get:
+| Crate    | Selected Function | Kind of Automatic Harness | Verification Result |
+| my_crate | foo::<i32>        | #[kani::proof]            | Failure             |
 ```
-Autoharness: Checking function main against all possible inputs...
+Note that verifying a single instantiation is an underapproximation of all of the function's possible behaviors:
+a successful result for `foo::<i32>` does not imply that other instantiations of `foo` are also safe.
+Kani makes this explicit by displaying the instantiated name of the verified function.
 
-Failed Checks: x and y are equal
- File: "src/lib.rs", line 3, in foo::<u8>
+`usize` const generic parameters (e.g. array lengths) are instantiated with the value 2.
 
-VERIFICATION:- FAILED
-```
+Kani skips a generic function (with skip reason "Generic Function") if:
+- no candidate type satisfies the function's trait bounds, or
+- the function has non-`usize` const generic parameters, which Kani does not instantiate yet.
+
+If some caller of a generic function is eligible for an automatic harness, then additional monomorphized
+versions of the generic function may still be reachable (and thus verified) through the caller's harness.
