@@ -81,6 +81,7 @@ pub fn strip_local_crate_prefix(name: String) -> String {
 pub mod abi;
 pub mod analysis;
 pub mod attributes;
+pub mod codegen_order;
 pub mod codegen_units;
 pub mod coercion;
 mod intrinsics;
@@ -357,7 +358,7 @@ fn can_derive_arbitrary(
 /// In addition to the types that implement or can derive `Arbitrary`, automatic harnesses support
 /// raw pointer arguments, as long as the pointee type (after peeling all raw pointer layers)
 /// implements or can derive `Arbitrary`: for those, the harness generates a pointer in a
-/// nondeterministic allocation state (null, dangling, dead object, or valid),
+/// nondeterministic allocation state (null, out of bounds, or valid),
 /// c.f. `KaniModel::AnyPtr`.
 /// Note that raw pointers are only supported as immediate harness arguments (or through other raw
 /// pointers): a raw pointer behind a reference or inside an ADT remains unsupported, since the

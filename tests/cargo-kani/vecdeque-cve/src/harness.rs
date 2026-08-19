@@ -9,7 +9,6 @@
 #![feature(rustc_attrs)]
 #![feature(core_intrinsics)]
 #![feature(ptr_internals)]
-#![feature(rustc_allow_const_fn_unstable)]
 #![allow(internal_features)]
 
 #[cfg(disable_debug_asserts)]

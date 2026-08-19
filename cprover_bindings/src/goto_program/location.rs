@@ -124,6 +124,35 @@ impl Location {
         }
     }
 
+    /// Tries to set the `function` field of a [Location::Loc], but returns `None` if the location
+    /// is of a different variant and the field couldn't be set.
+    ///
+    /// `new_function` is assigned as given, so passing `None` clears the field. Overwriting only
+    /// on `Some` would leave a stale function on a `Location` reused across contexts, which is
+    /// how this is used by the codegen span cache.
+    pub fn try_set_function(&mut self, new_function: Option<InternedString>) -> Option<()> {
+        if let Location::Loc { function, .. } = self {
+            *function = new_function;
+            Some(())
+        } else {
+            None
+        }
+    }
+
+    /// Tries to set the `pragmas` field of a [Location::Loc], but returns `None` if the location
+    /// is of a different variant and the field couldn't be set.
+    ///
+    /// Like [Self::try_set_function], the pragmas describe the function being codegen'd rather
+    /// than the source location, so a `Location` reused across functions has to have them reset.
+    pub fn try_set_pragmas(&mut self, new_pragmas: &'static [&'static str]) -> Option<()> {
+        if let Location::Loc { pragmas, .. } = self {
+            *pragmas = new_pragmas;
+            Some(())
+        } else {
+            None
+        }
+    }
+
     /// Create a Property type Location
     pub fn property_location<T, U>(
         file: Option<U>,
@@ -199,5 +228,64 @@ impl Location {
     pub fn builtin_function<T: Into<InternedString>>(name: T, line: Option<u64>) -> Location {
         let function_name = name.into();
         Location::BuiltinFunction { line, function_name }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Location;
+
+    fn loc_with(function: Option<&str>, pragmas: &'static [&'static str]) -> Location {
+        Location::new("file.rs", function, 1, Some(1), 1, Some(2), pragmas)
+    }
+
+    fn function_of(location: &Location) -> Option<String> {
+        match location {
+            Location::Loc { function, .. } => function.map(|f| f.to_string()),
+            _ => panic!("expected a Location::Loc"),
+        }
+    }
+
+    fn pragmas_of(location: &Location) -> &'static [&'static str] {
+        match location {
+            Location::Loc { pragmas, .. } => pragmas,
+            _ => panic!("expected a Location::Loc"),
+        }
+    }
+
+    /// The codegen span cache reuses one `Location` across functions and resets these two fields
+    /// per use, so `None` and the empty slice have to *clear* rather than be ignored. Overwriting
+    /// only on `Some` previously left a stale function behind, and pragmas were not reset at all,
+    /// which leaked one function's `disable_checks` onto another's locations.
+    #[test]
+    fn setters_clear_as_well_as_overwrite() {
+        let mut location = loc_with(Some("first"), &["disable:pointer-check"]);
+
+        // Overwriting with a new value.
+        location.try_set_function(Some("second".into())).unwrap();
+        location.try_set_pragmas(&["disable:bounds-check"]).unwrap();
+        assert_eq!(function_of(&location).as_deref(), Some("second"));
+        assert_eq!(pragmas_of(&location), &["disable:bounds-check"]);
+
+        // Clearing. This is the case the cache hits when a span is reused where there is no
+        // current function, or by a function that disables no checks.
+        location.try_set_function(None).unwrap();
+        location.try_set_pragmas(&[]).unwrap();
+        assert_eq!(function_of(&location), None);
+        assert!(pragmas_of(&location).is_empty());
+    }
+
+    /// Both setters report failure on variants that have no such field, so callers can skip them
+    /// rather than panic.
+    #[test]
+    fn setters_report_failure_on_other_variants() {
+        let mut none = Location::None;
+        assert!(none.try_set_function(Some("f".into())).is_none());
+        assert!(none.try_set_pragmas(&["disable:pointer-check"]).is_none());
+
+        let mut builtin =
+            Location::BuiltinFunction { function_name: "builtin".into(), line: Some(1) };
+        assert!(builtin.try_set_function(Some("f".into())).is_none());
+        assert!(builtin.try_set_pragmas(&["disable:pointer-check"]).is_none());
     }
 }

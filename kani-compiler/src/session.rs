@@ -4,7 +4,6 @@
 //! Module used to configure a compiler session.
 
 use crate::args::Arguments;
-use rustc_driver::default_translator;
 use rustc_errors::{
     ColorConfig, DiagInner, emitter::Emitter, emitter::HumanReadableErrorType, json::JsonEmitter,
 };
@@ -56,7 +55,6 @@ static JSON_PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicHookInfo<'_>) + Sync + 
                 Box::new(io::BufWriter::new(io::stderr())),
                 #[allow(clippy::arc_with_non_send_sync)]
                 Some(Arc::new(SourceMap::new(FilePathMapping::empty()))),
-                default_translator(),
                 false,
                 HumanReadableErrorType { short: false, unicode: false },
                 ColorConfig::Never,

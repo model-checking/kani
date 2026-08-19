@@ -24,7 +24,7 @@ use rustc_public::mir::{
 };
 use rustc_public::ty::{
     AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, Region, RegionKind, RigidTy, Ty, TyKind,
-    UintTy, VariantDef,
+    UintTy, VariantDef, VariantIdx,
 };
 use rustc_public_bridge::IndexedVal;
 use tracing::debug;
@@ -132,9 +132,9 @@ impl TransformPass for AutomaticArbitraryPass {
 
 /// Insert a call to kani::any::<ty>() in `body`; return the local storing the result.
 /// For raw pointer types, insert a call to the `KaniModel::AnyPtr` model instead, which generates
-/// a pointer in a nondeterministic allocation state (null, dangling, dead object, or valid);
-/// in the valid case, the pointer points to a nondeterministic value stored in a dedicated local,
-/// which stays alive for the entire harness.
+/// a pointer in a nondeterministic allocation state (null, out of bounds, or valid);
+/// in the valid case, the pointer points to a nondeterministic value stored in a dedicated local
+/// of `body`, which keeps it alive for as long as the transformed body executes.
 /// Panics if `ty` does not implement Arbitrary (and is not a reference or raw pointer to such a
 /// type).
 fn call_kani_any_for_ty(
@@ -163,13 +163,13 @@ fn call_kani_any_for_ty(
         ref_lcl
     } else if let TyKind::RigidTy(RigidTy::RawPtr(inner_ty, ptr_mutability)) = ty.kind() {
         // Generate the storage for the valid-pointer case: a local with a nondeterministic value
-        // of the pointee type. Since it is a local of the harness body, it stays alive for the
-        // entire harness.
+        // of the pointee type. Since it is a local of the body being transformed, it stays alive
+        // for as long as that body executes.
         let storage_lcl =
             call_kani_any_for_ty(kani_any, kani_any_ptr, body, inner_ty, Mutability::Mut, source);
 
         // Pass a mutable reference to the storage to the AnyPtr model, which returns a `*mut T`
-        // that is either null, dangling, pointing to a dead object, or pointing to the storage.
+        // that is either null, out of bounds (one past the end), or pointing to the storage.
         let region = Region { kind: RegionKind::ReErased };
         let ref_ty = Ty::new_ref(region.clone(), inner_ty, Mutability::Mut);
         let ref_lcl = body.new_local(ref_ty, source.span(body.blocks()), Mutability::Not);
@@ -233,6 +233,7 @@ impl AutomaticArbitraryPass {
         adt_args: &GenericArgs,
         body: &mut MutableBody,
         source: &mut SourceInstruction,
+        variant_idx: VariantIdx,
         variant: VariantDef,
     ) -> BasicBlockIdx {
         let fields = variant.fields();
@@ -259,7 +260,7 @@ impl AutomaticArbitraryPass {
         );
         let mut assign_instr = SourceInstruction::Terminator { bb: source.bb() - 1 };
         let rvalue = Rvalue::Aggregate(
-            AggregateKind::Adt(adt_def, variant.idx, adt_args.clone(), None, None),
+            AggregateKind::Adt(adt_def, variant_idx, adt_args.clone(), None, None),
             field_locals.into_iter().map(|lcl| Operand::Move(lcl.into())).collect(),
         );
         body.assign_to(Place::from(0), rvalue, &mut assign_instr, InsertPosition::Before);
@@ -307,10 +308,20 @@ impl AutomaticArbitraryPass {
         let switch_int_instr = SourceInstruction::Terminator { bb: source.bb() - 1 };
 
         let mut branches: Vec<(u128, BasicBlockIdx)> = vec![];
-        for variant in def.variants_iter() {
-            let target_bb =
-                self.call_kani_any_for_variant(def, &args, &mut new_body, &mut source, variant);
-            branches.push((variant.idx.to_index() as u128, target_bb));
+        // `variants_iter` yields variants in source-declaration order, so the
+        // enumeration index is the variant's `VariantIdx` (see `AdtDef::variant`).
+        // `VariantDef::idx` is no longer publicly accessible, so reconstruct it.
+        for (idx, variant) in def.variants_iter().enumerate() {
+            let variant_idx = VariantIdx::to_val(idx);
+            let target_bb = self.call_kani_any_for_variant(
+                def,
+                &args,
+                &mut new_body,
+                &mut source,
+                variant_idx,
+                variant,
+            );
+            branches.push((idx as u128, target_bb));
         }
 
         let otherwise = branches.pop().unwrap().1;
@@ -343,7 +354,15 @@ impl AutomaticArbitraryPass {
         let mut source = SourceInstruction::Terminator { bb: 0 };
 
         let variant = def.variants()[0];
-        self.call_kani_any_for_variant(def, &args, &mut new_body, &mut source, variant);
+        // A struct has a single variant at index 0.
+        self.call_kani_any_for_variant(
+            def,
+            &args,
+            &mut new_body,
+            &mut source,
+            VariantIdx::to_val(0),
+            variant,
+        );
 
         new_body.into()
     }
@@ -354,6 +373,7 @@ pub struct AutomaticHarnessPass {
     kani_any: FnDef,
     kani_any_ptr: FnDef,
     init_contracts_hook: Instance,
+    reset_clause_depth: Instance,
     kani_autoharness_intrinsic: FnDef,
 }
 
@@ -367,7 +387,17 @@ impl AutomaticHarnessPass {
         let init_contracts_hook = *kani_fns.get(&KaniHook::InitContracts.into()).unwrap();
         let init_contracts_hook =
             Instance::resolve(init_contracts_hook, &GenericArgs(vec![])).unwrap();
-        Self { kani_any, kani_any_ptr, init_contracts_hook, kani_autoharness_intrinsic }
+        let reset_clause_depth =
+            *kani_fns.get(&KaniModel::ResetContractClauseDepth.into()).unwrap();
+        let reset_clause_depth =
+            Instance::resolve(reset_clause_depth, &GenericArgs(vec![])).unwrap();
+        Self {
+            kani_any,
+            kani_any_ptr,
+            init_contracts_hook,
+            reset_clause_depth,
+            kani_autoharness_intrinsic,
+        }
     }
 }
 
@@ -405,8 +435,31 @@ impl TransformPass for AutomaticHarnessPass {
         let mut source = SourceInstruction::Terminator { bb: 0 };
 
         // Contract harnesses need a free(NULL) statement, c.f. kani_core::init_contracts().
+        //
+        // Order matters: `reset_contract_clause_depth` must execute BEFORE
+        // `init_contracts` (which triggers the first contract dispatch that
+        // reads the counter). Because `insert_call(..., Before, ...)`
+        // splits the block so that the newly-inserted call runs FIRST (and
+        // then advances `source` past it), we insert `reset` first (so it
+        // becomes the current first call) and `init_contracts` second (so
+        // it runs after `reset`). The manual `proof_for_contract` path in
+        // `library/kani_macros/src/sysroot/contracts/mod.rs` produces the
+        // same final order (two `stmts.insert(0, ...)` calls with reset
+        // inserted last so it ends up first).
         let attrs = KaniAttributes::for_def_id(tcx, def.def_id());
         if attrs.has_contract() {
+            let reset_ret = harness_body.new_local(
+                Ty::new_tuple(&[]),
+                source.span(harness_body.blocks()),
+                Mutability::Not,
+            );
+            harness_body.insert_call(
+                &self.reset_clause_depth,
+                &mut source,
+                InsertPosition::Before,
+                vec![],
+                Place::from(reset_ret),
+            );
             let ret_local = harness_body.new_local(
                 Ty::from_rigid_kind(RigidTy::Tuple(vec![])),
                 source.span(harness_body.blocks()),
