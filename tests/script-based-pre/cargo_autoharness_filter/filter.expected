@@ -1,4 +1,4 @@
-Kani generated automatic harnesses for 46 function(s):
+Kani generated automatic harnesses for 47 function(s):
 +--------------------------+----------------------------------------------+
 | Crate                    | Selected Function                            |
 +=========================================================================+
@@ -23,6 +23,8 @@ Kani generated automatic harnesses for 46 function(s):
 | cargo_autoharness_filter | yes_harness::f_f32                           |
 |--------------------------+----------------------------------------------|
 | cargo_autoharness_filter | yes_harness::f_f64                           |
+|--------------------------+----------------------------------------------|
+| cargo_autoharness_filter | yes_harness::f_generic::<i32>                |
 |--------------------------+----------------------------------------------|
 | cargo_autoharness_filter | yes_harness::f_i128                          |
 |--------------------------+----------------------------------------------|
@@ -95,14 +97,12 @@ Kani generated automatic harnesses for 46 function(s):
 | cargo_autoharness_filter | yes_harness::f_usize                         |
 +--------------------------+----------------------------------------------+
 
-Kani did not generate automatic harnesses for 5 function(s).
+Kani did not generate automatic harnesses for 4 function(s).
 If you believe that the provided reason is incorrect and Kani should have generated an automatic harness, please comment on this issue: https://github.com/model-checking/kani/issues/3832
 +--------------------------+----------------------------------------+----------------------------------------------------------------------------------+
 | Crate                    | Skipped Function                       | Reason for Skipping                                                              |
 +======================================================================================================================================================+
 | cargo_autoharness_filter | no_harness::doesnt_implement_arbitrary | Missing Arbitrary implementation for argument(s) x: DoesntImplementArbitrary<'_> |
-|--------------------------+----------------------------------------+----------------------------------------------------------------------------------|
-| cargo_autoharness_filter | no_harness::unsupported_generic        | Generic Function                                                                 |
 |--------------------------+----------------------------------------+----------------------------------------------------------------------------------|
 | cargo_autoharness_filter | no_harness::unsupported_no_arg_name    | Missing Arbitrary implementation for argument(s) _: std::vec::Vec<u8>            |
 |--------------------------+----------------------------------------+----------------------------------------------------------------------------------|
@@ -112,6 +112,7 @@ If you believe that the provided reason is incorrect and Kani should have genera
 +--------------------------+----------------------------------------+----------------------------------------------------------------------------------+
 Autoharness: Checking function yes_harness::f_mut_pointer against all possible inputs...
 Autoharness: Checking function yes_harness::f_const_pointer against all possible inputs...
+Autoharness: Checking function yes_harness::f_generic::<i32> against all possible inputs...
 Autoharness: Checking function yes_harness::f_ref against all possible inputs...
 Autoharness: Checking function yes_harness::empty_body against all possible inputs...
 Autoharness: Checking function yes_harness::f_phantom_pinned against all possible inputs...
@@ -186,6 +187,8 @@ Autoharness Summary:
 |--------------------------+----------------------------------------------+---------------------------+---------------------|
 | cargo_autoharness_filter | yes_harness::f_f64                           | #[kani::proof]            | Success             |
 |--------------------------+----------------------------------------------+---------------------------+---------------------|
+| cargo_autoharness_filter | yes_harness::f_generic::<i32>                | #[kani::proof]            | Success             |
+|--------------------------+----------------------------------------------+---------------------------+---------------------|
 | cargo_autoharness_filter | yes_harness::f_i128                          | #[kani::proof]            | Success             |
 |--------------------------+----------------------------------------------+---------------------------+---------------------|
 | cargo_autoharness_filter | yes_harness::f_i16                           | #[kani::proof]            | Success             |
@@ -256,4 +259,4 @@ Autoharness Summary:
 |--------------------------+----------------------------------------------+---------------------------+---------------------|
 | cargo_autoharness_filter | yes_harness::f_usize                         | #[kani::proof]            | Success             |
 +--------------------------+----------------------------------------------+---------------------------+---------------------+
-Complete - 46 successfully verified functions, 0 failures, 46 total.
+Complete - 47 successfully verified functions, 0 failures, 47 total.

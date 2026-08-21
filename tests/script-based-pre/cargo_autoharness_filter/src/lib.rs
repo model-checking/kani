@@ -200,13 +200,14 @@ mod yes_harness {
     fn f_mut_pointer(x: u32, _y: *mut i32) -> u32 {
         x
     }
+
+    fn f_generic<T>(x: u32, _y: T) -> u32 {
+        x
+    }
 }
 
 mod no_harness {
     use crate::{DerivesArbitrary, DoesntImplementArbitrary};
-    fn unsupported_generic<T>(x: u32, _y: T) -> u32 {
-        x
-    }
     fn unsupported_vec(x: u32, _y: Vec<u8>) -> u32 {
         x
     }
