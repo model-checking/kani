@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{Error, Result, bail};
+use anyhow::{Error, Result};
 use kani_metadata::{ArtifactType, HarnessKind, HarnessMetadata};
 use rayon::prelude::*;
 use std::fs::File;
@@ -344,12 +344,9 @@ impl KaniSession {
                         "No proof harnesses (functions with #[kani::proof]) were found to verify."
                     )
                 }
-                [harness] => {
-                    bail!("no harnesses matched the harness filter: `{harness}`")
-                }
-                harnesses => {
-                    bail!("no harnesses matched the harness filters: `{}`", harnesses.join("`, `"))
-                }
+                // `determine_targets` fails a zero-match filter before codegen, so this arm
+                // only guards paths that skip harness filtering.
+                _ => return Err(crate::metadata::no_harness_match_error(&self.args.harnesses)),
             };
         }
 

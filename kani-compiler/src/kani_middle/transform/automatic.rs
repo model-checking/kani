@@ -9,10 +9,10 @@
 use crate::args::ReachabilityType;
 use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::codegen_units::CodegenUnit;
-use crate::kani_middle::implements_arbitrary;
 use crate::kani_middle::kani_functions::{KaniHook, KaniIntrinsic, KaniModel};
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
+use crate::kani_middle::{implements_arbitrary, implements_invariant};
 use crate::kani_queries::QueryDb;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::ty::TyCtxt;
@@ -37,6 +37,8 @@ pub struct AutomaticArbitraryPass {
     kani_any: FnDef,
     /// The FnDef of KaniModel::AnyPtr
     kani_any_ptr: FnDef,
+    /// The FnDef of KaniModel::AssumeSafe
+    kani_assume_safe: FnDef,
 }
 
 impl AutomaticArbitraryPass {
@@ -44,7 +46,8 @@ impl AutomaticArbitraryPass {
         let kani_fns = query_db.kani_functions();
         let kani_any = *kani_fns.get(&KaniModel::Any.into()).unwrap();
         let kani_any_ptr = *kani_fns.get(&KaniModel::AnyPtr.into()).unwrap();
-        Self { kani_any, kani_any_ptr }
+        let kani_assume_safe = *kani_fns.get(&KaniModel::AssumeSafe.into()).unwrap();
+        Self { kani_any, kani_any_ptr, kani_assume_safe }
     }
 }
 
@@ -135,19 +138,33 @@ impl TransformPass for AutomaticArbitraryPass {
 /// a pointer in a nondeterministic allocation state (null, out of bounds, or valid);
 /// in the valid case, the pointer points to a nondeterministic value stored in a dedicated local
 /// of `body`, which keeps it alive for as long as the transformed body executes.
+/// If `ty` is an ADT that implements `Invariant`, additionally insert a call to the
+/// `KaniModel::AssumeSafe` model (`kani_assume_safe`), which assumes that the nondeterministic
+/// value respects the type's safety invariant, c.f.
+/// <https://rust-lang.github.io/unsafe-code-guidelines/glossary.html#validity-and-safety-invariant>.
 /// Panics if `ty` does not implement Arbitrary (and is not a reference or raw pointer to such a
 /// type).
 fn call_kani_any_for_ty(
     kani_any: FnDef,
     kani_any_ptr: FnDef,
+    kani_assume_safe: FnDef,
     body: &mut MutableBody,
     ty: Ty,
     mutability: Mutability,
     source: &mut SourceInstruction,
+    invariant_cache: &mut FxHashMap<Ty, bool>,
 ) -> Local {
     if let TyKind::RigidTy(RigidTy::Ref(region, inner_ty, inner_mutability)) = ty.kind() {
-        let inner_lcl =
-            call_kani_any_for_ty(kani_any, kani_any_ptr, body, inner_ty, inner_mutability, source);
+        let inner_lcl = call_kani_any_for_ty(
+            kani_any,
+            kani_any_ptr,
+            kani_assume_safe,
+            body,
+            inner_ty,
+            inner_mutability,
+            source,
+            invariant_cache,
+        );
         let ref_lcl = body.new_local(ty, source.span(body.blocks()), mutability);
         let borrow_kind = if inner_mutability == Mutability::Not {
             BorrowKind::Shared
@@ -165,8 +182,16 @@ fn call_kani_any_for_ty(
         // Generate the storage for the valid-pointer case: a local with a nondeterministic value
         // of the pointee type. Since it is a local of the body being transformed, it stays alive
         // for as long as that body executes.
-        let storage_lcl =
-            call_kani_any_for_ty(kani_any, kani_any_ptr, body, inner_ty, Mutability::Mut, source);
+        let storage_lcl = call_kani_any_for_ty(
+            kani_any,
+            kani_any_ptr,
+            kani_assume_safe,
+            body,
+            inner_ty,
+            Mutability::Mut,
+            source,
+            invariant_cache,
+        );
 
         // Pass a mutable reference to the storage to the AnyPtr model, which returns a `*mut T`
         // that is either null, out of bounds (one past the end), or pointing to the storage.
@@ -215,7 +240,29 @@ fn call_kani_any_for_ty(
                 .unwrap_or_else(|_| panic!("expected a ty that implements Arbitrary, got {ty}"));
         let lcl = body.new_local(ty, source.span(body.blocks()), mutability);
         body.insert_call(&kani_any_inst, source, InsertPosition::Before, vec![], Place::from(lcl));
-        lcl
+
+        // If the type has a safety invariant, assume that it holds for the nondeterministic value.
+        // We only check ADTs since those are the only types for which users can implement
+        // `Invariant` in a way that constrains the values (the library's implementations for
+        // primitive types are trivially `true`).
+        if matches!(ty.kind(), TyKind::RigidTy(RigidTy::Adt(..)))
+            && implements_invariant(ty, kani_assume_safe, invariant_cache)
+        {
+            let assume_safe_inst =
+                Instance::resolve(kani_assume_safe, &GenericArgs(vec![GenericArgKind::Type(ty)]))
+                    .unwrap();
+            let safe_lcl = body.new_local(ty, source.span(body.blocks()), mutability);
+            body.insert_call(
+                &assume_safe_inst,
+                source,
+                InsertPosition::Before,
+                vec![Operand::Move(Place::from(lcl))],
+                Place::from(safe_lcl),
+            );
+            safe_lcl
+        } else {
+            lcl
+        }
     }
 }
 
@@ -227,6 +274,9 @@ impl AutomaticArbitraryPass {
     ///   2. Constructing the variant from the results of 1) and assigning it to the return local.
     ///
     /// This function will panic if a field type does not implement Arbitrary.
+    // The parameters are all distinct pieces of context that the callers already hold
+    // individually; grouping them would not make the call sites clearer.
+    #[allow(clippy::too_many_arguments)]
     fn call_kani_any_for_variant(
         &self,
         adt_def: AdtDef,
@@ -235,6 +285,7 @@ impl AutomaticArbitraryPass {
         source: &mut SourceInstruction,
         variant_idx: VariantIdx,
         variant: VariantDef,
+        invariant_cache: &mut FxHashMap<Ty, bool>,
     ) -> BasicBlockIdx {
         let fields = variant.fields();
         let mut field_locals = vec![];
@@ -244,10 +295,12 @@ impl AutomaticArbitraryPass {
             let lcl = call_kani_any_for_ty(
                 self.kani_any,
                 self.kani_any_ptr,
+                self.kani_assume_safe,
                 body,
                 ty,
                 Mutability::Not,
                 source,
+                invariant_cache,
             );
             field_locals.push(lcl);
         }
@@ -287,15 +340,18 @@ impl AutomaticArbitraryPass {
         let mut new_body = MutableBody::from(body);
         new_body.clear_body(TerminatorKind::Unreachable);
         let mut source = SourceInstruction::Terminator { bb: 0 };
+        let mut invariant_cache = FxHashMap::default();
 
         // Generate a nondet u128 to switch on
         let discr_lcl = call_kani_any_for_ty(
             self.kani_any,
             self.kani_any_ptr,
+            self.kani_assume_safe,
             &mut new_body,
             Ty::from_rigid_kind(RigidTy::Uint(UintTy::U128)),
             Mutability::Not,
             &mut source,
+            &mut invariant_cache,
         );
 
         // Insert a placeholder for the SwitchInt terminator
@@ -320,6 +376,7 @@ impl AutomaticArbitraryPass {
                 &mut source,
                 variant_idx,
                 variant,
+                &mut invariant_cache,
             );
             branches.push((idx as u128, target_bb));
         }
@@ -352,6 +409,7 @@ impl AutomaticArbitraryPass {
         let mut new_body = MutableBody::from(body);
         new_body.clear_body(TerminatorKind::Unreachable);
         let mut source = SourceInstruction::Terminator { bb: 0 };
+        let mut invariant_cache = FxHashMap::default();
 
         let variant = def.variants()[0];
         // A struct has a single variant at index 0.
@@ -362,6 +420,7 @@ impl AutomaticArbitraryPass {
             &mut source,
             VariantIdx::to_val(0),
             variant,
+            &mut invariant_cache,
         );
 
         new_body.into()
@@ -372,6 +431,7 @@ impl AutomaticArbitraryPass {
 pub struct AutomaticHarnessPass {
     kani_any: FnDef,
     kani_any_ptr: FnDef,
+    kani_assume_safe: FnDef,
     init_contracts_hook: Instance,
     reset_clause_depth: Instance,
     kani_autoharness_intrinsic: FnDef,
@@ -384,6 +444,7 @@ impl AutomaticHarnessPass {
             *kani_fns.get(&KaniIntrinsic::AutomaticHarness.into()).unwrap();
         let kani_any = *kani_fns.get(&KaniModel::Any.into()).unwrap();
         let kani_any_ptr = *kani_fns.get(&KaniModel::AnyPtr.into()).unwrap();
+        let kani_assume_safe = *kani_fns.get(&KaniModel::AssumeSafe.into()).unwrap();
         let init_contracts_hook = *kani_fns.get(&KaniHook::InitContracts.into()).unwrap();
         let init_contracts_hook =
             Instance::resolve(init_contracts_hook, &GenericArgs(vec![])).unwrap();
@@ -394,6 +455,7 @@ impl AutomaticHarnessPass {
         Self {
             kani_any,
             kani_any_ptr,
+            kani_assume_safe,
             init_contracts_hook,
             reset_clause_depth,
             kani_autoharness_intrinsic,
@@ -476,6 +538,10 @@ impl TransformPass for AutomaticHarnessPass {
 
         // For each argument of `fn_to_verify`, create a nondeterministic value of its type
         // by generating a kani::any() call and saving the result in `arg_local`.
+        // If the argument type implements `Invariant`, we additionally assume that the
+        // nondeterministic value respects the type's safety invariant,
+        // c.f. `call_kani_any_for_ty`.
+        let mut invariant_cache = FxHashMap::default();
         let arg_locals = fn_to_verify_body
             .arg_locals()
             .iter()
@@ -483,10 +549,12 @@ impl TransformPass for AutomaticHarnessPass {
                 call_kani_any_for_ty(
                     self.kani_any,
                     self.kani_any_ptr,
+                    self.kani_assume_safe,
                     &mut harness_body,
                     local_decl.ty,
                     local_decl.mutability,
                     &mut source,
+                    &mut invariant_cache,
                 )
             })
             .collect::<Vec<_>>();
