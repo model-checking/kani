@@ -22,6 +22,20 @@ use std::str::FromStr;
 use std::time::Duration;
 use strum::VariantNames;
 
+/// Detect a whole-argument `--version`/`-V` in raw args, stopping at a `--` or
+/// `--cbmc-args` boundary. Used when `join_args` fails and clap never parses.
+pub fn requests_version(args: &[OsString]) -> bool {
+    for arg in args.iter().skip(1) {
+        if arg == "--" || arg == "--cbmc-args" {
+            return false;
+        }
+        if arg == "--version" || arg == "-V" {
+            return true;
+        }
+    }
+    false
+}
+
 /// Trait used to perform extra validation after parsing.
 pub trait ValidateArgs {
     /// Perform post-parsing validation but do not abort.
@@ -1047,6 +1061,18 @@ mod tests {
     use clap::Parser;
 
     use super::*;
+
+    #[test]
+    fn requests_version_matches_whole_flags_only() {
+        let to_args = |args: &[&str]| args.iter().map(OsString::from).collect::<Vec<_>>();
+        assert!(requests_version(&to_args(&["cargo-kani", "--version"])));
+        assert!(requests_version(&to_args(&["cargo-kani", "-V"])));
+        assert!(requests_version(&to_args(&["cargo-kani", "--quiet", "-V"])));
+        assert!(!requests_version(&to_args(&["cargo-kani"])));
+        assert!(!requests_version(&to_args(&["cargo-kani", "--", "--version"])));
+        assert!(!requests_version(&to_args(&["cargo-kani", "--cbmc-args", "--version"])));
+        assert!(!requests_version(&to_args(&["cargo-kani", "-qV"])));
+    }
 
     #[test]
     fn check_arg_parsing() {
