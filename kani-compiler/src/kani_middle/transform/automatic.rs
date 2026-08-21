@@ -29,10 +29,11 @@ use rustc_public::ty::{
 use rustc_public_bridge::IndexedVal;
 use tracing::debug;
 
-/// Generate `T::any()` implementations for `T`s that do not implement Arbitrary in source code.
-/// Currently limited to structs and enums.
-#[derive(Debug, Clone)]
-pub struct AutomaticArbitraryPass {
+/// The Kani model functions used to construct nondeterministic values.
+/// These are always needed together, so they are grouped to be threaded through
+/// `call_kani_any_for_ty` and its callers as a single unit.
+#[derive(Debug, Clone, Copy)]
+struct AnyModels {
     /// The FnDef of KaniModel::Any
     kani_any: FnDef,
     /// The FnDef of KaniModel::AnyPtr
@@ -41,13 +42,28 @@ pub struct AutomaticArbitraryPass {
     kani_assume_safe: FnDef,
 }
 
+impl AnyModels {
+    fn new(query_db: &QueryDb) -> Self {
+        let kani_fns = query_db.kani_functions();
+        Self {
+            kani_any: *kani_fns.get(&KaniModel::Any.into()).unwrap(),
+            kani_any_ptr: *kani_fns.get(&KaniModel::AnyPtr.into()).unwrap(),
+            kani_assume_safe: *kani_fns.get(&KaniModel::AssumeSafe.into()).unwrap(),
+        }
+    }
+}
+
+/// Generate `T::any()` implementations for `T`s that do not implement Arbitrary in source code.
+/// Currently limited to structs and enums.
+#[derive(Debug, Clone)]
+pub struct AutomaticArbitraryPass {
+    /// The Kani model functions used to construct nondeterministic values.
+    models: AnyModels,
+}
+
 impl AutomaticArbitraryPass {
     pub fn new(_unit: &CodegenUnit, query_db: &QueryDb) -> Self {
-        let kani_fns = query_db.kani_functions();
-        let kani_any = *kani_fns.get(&KaniModel::Any.into()).unwrap();
-        let kani_any_ptr = *kani_fns.get(&KaniModel::AnyPtr.into()).unwrap();
-        let kani_assume_safe = *kani_fns.get(&KaniModel::AssumeSafe.into()).unwrap();
-        Self { kani_any, kani_any_ptr, kani_assume_safe }
+        Self { models: AnyModels::new(query_db) }
     }
 }
 
@@ -109,7 +125,7 @@ impl TransformPass for AutomaticArbitraryPass {
             )
         };
 
-        if instance.def.def_id() != self.kani_any.def_id() {
+        if instance.def.def_id() != self.models.kani_any.def_id() {
             return (false, body);
         }
 
@@ -117,7 +133,7 @@ impl TransformPass for AutomaticArbitraryPass {
         let binding = instance.args();
         let ty = binding.0[0].expect_ty();
 
-        if implements_arbitrary(*ty, self.kani_any, &mut FxHashMap::default()) {
+        if implements_arbitrary(*ty, self.models.kani_any, &mut FxHashMap::default()) {
             return (false, body);
         }
 
@@ -145,9 +161,7 @@ impl TransformPass for AutomaticArbitraryPass {
 /// Panics if `ty` does not implement Arbitrary (and is not a reference or raw pointer to such a
 /// type).
 fn call_kani_any_for_ty(
-    kani_any: FnDef,
-    kani_any_ptr: FnDef,
-    kani_assume_safe: FnDef,
+    models: AnyModels,
     body: &mut MutableBody,
     ty: Ty,
     mutability: Mutability,
@@ -155,16 +169,8 @@ fn call_kani_any_for_ty(
     invariant_cache: &mut FxHashMap<Ty, bool>,
 ) -> Local {
     if let TyKind::RigidTy(RigidTy::Ref(region, inner_ty, inner_mutability)) = ty.kind() {
-        let inner_lcl = call_kani_any_for_ty(
-            kani_any,
-            kani_any_ptr,
-            kani_assume_safe,
-            body,
-            inner_ty,
-            inner_mutability,
-            source,
-            invariant_cache,
-        );
+        let inner_lcl =
+            call_kani_any_for_ty(models, body, inner_ty, inner_mutability, source, invariant_cache);
         let ref_lcl = body.new_local(ty, source.span(body.blocks()), mutability);
         let borrow_kind = if inner_mutability == Mutability::Not {
             BorrowKind::Shared
@@ -182,16 +188,8 @@ fn call_kani_any_for_ty(
         // Generate the storage for the valid-pointer case: a local with a nondeterministic value
         // of the pointee type. Since it is a local of the body being transformed, it stays alive
         // for as long as that body executes.
-        let storage_lcl = call_kani_any_for_ty(
-            kani_any,
-            kani_any_ptr,
-            kani_assume_safe,
-            body,
-            inner_ty,
-            Mutability::Mut,
-            source,
-            invariant_cache,
-        );
+        let storage_lcl =
+            call_kani_any_for_ty(models, body, inner_ty, Mutability::Mut, source, invariant_cache);
 
         // Pass a mutable reference to the storage to the AnyPtr model, which returns a `*mut T`
         // that is either null, out of bounds (one past the end), or pointing to the storage.
@@ -208,9 +206,11 @@ fn call_kani_any_for_ty(
             source,
             InsertPosition::Before,
         );
-        let any_ptr_inst =
-            Instance::resolve(kani_any_ptr, &GenericArgs(vec![GenericArgKind::Type(inner_ty)]))
-                .unwrap();
+        let any_ptr_inst = Instance::resolve(
+            models.kani_any_ptr,
+            &GenericArgs(vec![GenericArgKind::Type(inner_ty)]),
+        )
+        .unwrap();
         let mut_ptr_ty = Ty::new_ptr(inner_ty, Mutability::Mut);
         let ptr_lcl = body.new_local(mut_ptr_ty, source.span(body.blocks()), mutability);
         body.insert_call(
@@ -236,7 +236,7 @@ fn call_kani_any_for_ty(
         }
     } else {
         let kani_any_inst =
-            Instance::resolve(kani_any, &GenericArgs(vec![GenericArgKind::Type(ty)]))
+            Instance::resolve(models.kani_any, &GenericArgs(vec![GenericArgKind::Type(ty)]))
                 .unwrap_or_else(|_| panic!("expected a ty that implements Arbitrary, got {ty}"));
         let lcl = body.new_local(ty, source.span(body.blocks()), mutability);
         body.insert_call(&kani_any_inst, source, InsertPosition::Before, vec![], Place::from(lcl));
@@ -246,11 +246,13 @@ fn call_kani_any_for_ty(
         // `Invariant` in a way that constrains the values (the library's implementations for
         // primitive types are trivially `true`).
         if matches!(ty.kind(), TyKind::RigidTy(RigidTy::Adt(..)))
-            && implements_invariant(ty, kani_assume_safe, invariant_cache)
+            && implements_invariant(ty, models.kani_assume_safe, invariant_cache)
         {
-            let assume_safe_inst =
-                Instance::resolve(kani_assume_safe, &GenericArgs(vec![GenericArgKind::Type(ty)]))
-                    .unwrap();
+            let assume_safe_inst = Instance::resolve(
+                models.kani_assume_safe,
+                &GenericArgs(vec![GenericArgKind::Type(ty)]),
+            )
+            .unwrap();
             let safe_lcl = body.new_local(ty, source.span(body.blocks()), mutability);
             body.insert_call(
                 &assume_safe_inst,
@@ -293,9 +295,7 @@ impl AutomaticArbitraryPass {
         // Construct nondeterministic values for each of the variant's fields
         for ty in fields.iter().map(|field| field.ty_with_args(adt_args)) {
             let lcl = call_kani_any_for_ty(
-                self.kani_any,
-                self.kani_any_ptr,
-                self.kani_assume_safe,
+                self.models,
                 body,
                 ty,
                 Mutability::Not,
@@ -344,9 +344,7 @@ impl AutomaticArbitraryPass {
 
         // Generate a nondet u128 to switch on
         let discr_lcl = call_kani_any_for_ty(
-            self.kani_any,
-            self.kani_any_ptr,
-            self.kani_assume_safe,
+            self.models,
             &mut new_body,
             Ty::from_rigid_kind(RigidTy::Uint(UintTy::U128)),
             Mutability::Not,
@@ -429,9 +427,8 @@ impl AutomaticArbitraryPass {
 /// Transform the dummy body of an automatic_harness Kani intrinsic to be a proof harness for a given function.
 #[derive(Debug, Clone)]
 pub struct AutomaticHarnessPass {
-    kani_any: FnDef,
-    kani_any_ptr: FnDef,
-    kani_assume_safe: FnDef,
+    /// The Kani model functions used to construct nondeterministic values.
+    models: AnyModels,
     init_contracts_hook: Instance,
     reset_clause_depth: Instance,
     kani_autoharness_intrinsic: FnDef,
@@ -442,9 +439,6 @@ impl AutomaticHarnessPass {
         let kani_fns = query_db.kani_functions();
         let kani_autoharness_intrinsic =
             *kani_fns.get(&KaniIntrinsic::AutomaticHarness.into()).unwrap();
-        let kani_any = *kani_fns.get(&KaniModel::Any.into()).unwrap();
-        let kani_any_ptr = *kani_fns.get(&KaniModel::AnyPtr.into()).unwrap();
-        let kani_assume_safe = *kani_fns.get(&KaniModel::AssumeSafe.into()).unwrap();
         let init_contracts_hook = *kani_fns.get(&KaniHook::InitContracts.into()).unwrap();
         let init_contracts_hook =
             Instance::resolve(init_contracts_hook, &GenericArgs(vec![])).unwrap();
@@ -453,9 +447,7 @@ impl AutomaticHarnessPass {
         let reset_clause_depth =
             Instance::resolve(reset_clause_depth, &GenericArgs(vec![])).unwrap();
         Self {
-            kani_any,
-            kani_any_ptr,
-            kani_assume_safe,
+            models: AnyModels::new(query_db),
             init_contracts_hook,
             reset_clause_depth,
             kani_autoharness_intrinsic,
@@ -547,9 +539,7 @@ impl TransformPass for AutomaticHarnessPass {
             .iter()
             .map(|local_decl| {
                 call_kani_any_for_ty(
-                    self.kani_any,
-                    self.kani_any_ptr,
-                    self.kani_assume_safe,
+                    self.models,
                     &mut harness_body,
                     local_decl.ty,
                     local_decl.mutability,
