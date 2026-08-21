@@ -18,7 +18,8 @@ use rustc_public::mir::{
 };
 use rustc_public::rustc_internal;
 use rustc_public::ty::{
-    ClosureDef, FnDef, GenericArgs, MirConst, RigidTy, Ty, TyKind, TypeAndMut, UintTy,
+    ClosureDef, FnDef, GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyKind, TypeAndMut,
+    UintTy,
 };
 use rustc_span::Symbol;
 use std::collections::HashSet;
@@ -135,11 +136,15 @@ impl AnyModifiesPass {
                     fn_sig.skip_binder().inputs()[0].kind().builtin_deref(true)
             {
                 // case on the type of the input
-                if let TyKind::RigidTy(RigidTy::Slice(_)) = internal_type.kind() {
-                    //if the input is a slice, use write_any_slice
+                if let TyKind::RigidTy(RigidTy::Slice(elem_ty)) = internal_type.kind() {
+                    //if the input is a slice `[T]`, use write_any_slice. Note that
+                    //`write_any_slice<T>(slice: *mut [T])` is generic over the *element* type
+                    //`T`, whereas `instance_args` holds the pointee type `[T]`. Resolving with
+                    //`instance_args` here would incorrectly produce `write_any_slice<[T]>`
+                    //(i.e. a `*mut [[T]]`), so we resolve with the element type instead.
+                    let elem_args = GenericArgs(vec![GenericArgKind::Type(elem_ty)]);
                     let instance =
-                        Instance::resolve(self.kani_write_any_slice.unwrap(), &instance_args)
-                            .unwrap();
+                        Instance::resolve(self.kani_write_any_slice.unwrap(), &elem_args).unwrap();
                     let literal = MirConst::try_new_zero_sized(instance.ty()).unwrap();
                     let span = bb.terminator.span;
                     let new_func = ConstOperand { span, user_ty: None, const_: literal };
