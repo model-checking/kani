@@ -496,9 +496,11 @@ fn choose_generic_instantiation(tcx: TyCtxt, fn_item: CrateItem) -> Result<Insta
         if !args_satisfy_predicates(tcx, def, &args) {
             continue;
         }
-        if let Ok(instance) = Instance::resolve(def, &args)
-            && instance.has_body()
-        {
+        // Return the resolved instance regardless of whether it has a body: a body-less
+        // instance (e.g. a generic trait method without a default) is then reported accurately
+        // as `NoBody` by `skip_reason`, rather than falling through to a generic-function skip
+        // reason here.
+        if let Ok(instance) = Instance::resolve(def, &args) {
             return Ok(instance);
         }
     }
