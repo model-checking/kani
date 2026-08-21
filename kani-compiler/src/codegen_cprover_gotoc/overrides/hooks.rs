@@ -1261,6 +1261,91 @@ fn find_closure_call_expr(instance: &Instance, gcx: &mut GotocCtx, loc: Location
     None
 }
 
+/// This hook intercepts calls to `std::ptr::align_offset<T>`. The real implementation in
+/// `library/core/src/ptr/mod.rs` computes from the pointer's integer address, which is expensive to
+/// symbolically execute: it is the reason the string test in
+/// <https://github.com/model-checking/kani/issues/2363> was slow.
+///
+/// We answer from the pointer's offset within its object instead: aligned when
+/// `__CPROVER_pointer_offset(ptr)` is a multiple of `align`, and `usize::MAX` otherwise, which
+/// `align_offset`'s documentation explicitly permits ("It is permissible for the implementation to
+/// always return usize::MAX. Only your algorithm's performance can depend on getting a usable
+/// offset here, not its correctness.").
+///
+/// The offset is the only part of an address CBMC's memory model represents; object base addresses
+/// are not modelled as having a particular alignment. Answering from the offset therefore matches
+/// what the real implementation concludes under that model, which is what makes this a shortcut
+/// rather than a change in behaviour.
+///
+/// The caveat is that this reports "aligned" for a pointer whose object base is less aligned than
+/// `align` -- something CBMC cannot represent either way, so the real implementation does not
+/// discover it under this model either. Returning `usize::MAX` unconditionally would avoid that, but
+/// it makes Kani report failures in correct code: `debug_assert_eq!(p.align_offset(a), 0)` is a
+/// pattern real crates use, aws/s2n-quic among them, and Kani honours debug assertions.
+struct AlignOffset;
+
+impl GotocHook for AlignOffset {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
+        // Every alignment helper -- the `align_offset` methods on raw pointers, `is_aligned`,
+        // `is_aligned_to` -- eventually calls this one function. Kani normally renders the path as
+        // `std::ptr`, but a `no_std` crate sees `core::ptr`, so match both.
+        instance_name.starts_with("std::ptr::align_offset::<")
+            || instance_name.starts_with("core::ptr::align_offset::<")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        _instance: Instance,
+        mut fargs: Vec<Expr>,
+        assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 2);
+        let ptr = fargs.remove(0);
+        let align = fargs.remove(0);
+        // test power-of-two: align > 0 && (align & (align - 1)) == 0
+        let zero = Expr::int_constant(0, align.typ().clone());
+        let one = Expr::int_constant(1, align.typ().clone());
+        let cond = align
+            .clone()
+            .gt(zero.clone())
+            .and(align.clone().bitand(align.clone().sub(one)).eq(zero));
+        let loc = gcx.codegen_span_stable(span);
+        let safety_check = gcx.codegen_assert_assume(
+            cond,
+            PropertyClass::SafetyCheck,
+            "align_offset: align is not a power-of-two",
+            loc,
+        );
+        let place_expr = unwrap_or_return_codegen_unimplemented_stmt!(
+            gcx,
+            gcx.codegen_place_stable(assign_to, loc)
+        )
+        .goto_expr;
+        // Aligned when the offset within the object is a multiple of `align`, which is the most
+        // CBMC's memory model can tell us; `usize::MAX` when it is not, which the documentation
+        // permits. The offset is taken as unsigned so that the remainder is the byte distance into
+        // the object rather than a signed remainder.
+        let align_typ = align.typ().clone();
+        let offset = ptr.pointer_offset().cast_to(align_typ.clone());
+        let is_aligned = offset.rem(align).eq(Expr::int_constant(0, align_typ));
+        let rhs = is_aligned.ternary(
+            Expr::int_constant(0, place_expr.typ().clone()),
+            Expr::int_constant(usize::MAX, place_expr.typ().clone()),
+        );
+        let assign = place_expr.assign(rhs, loc).with_location(loc);
+        Stmt::block(vec![safety_check, assign, Stmt::goto(bb_label(target.unwrap()), loc)], loc)
+    }
+}
+
 /// Find the closure Instance from the quantifier function's generic args.
 fn find_closure_instance(instance: &Instance) -> Option<Instance> {
     for arg in instance.args().0.iter() {
@@ -1388,6 +1473,7 @@ pub fn fn_hooks() -> GotocHooks {
             Rc::new(RustAlloc),
             Rc::new(MemCmp),
             Rc::new(LoopInvariantRegister),
+            Rc::new(AlignOffset),
         ],
     }
 }
