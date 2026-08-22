@@ -61,8 +61,11 @@ fn test_create_harness_metadata_json() {
         attributes: HarnessAttributes::new(HarnessKind::Proof),
         contract: None,
         has_loop_contracts: true,
-        is_automatically_generated: false,
-        is_bounded: false,
+        // A bounded harness is always automatically generated; check that both flags are
+        // serialized so that JSON consumers can tell a bounded autoharness run apart from an
+        // unbounded one.
+        is_automatically_generated: true,
+        is_bounded: true,
     };
 
     let json = create_harness_metadata_json(&harness);
@@ -73,7 +76,8 @@ fn test_create_harness_metadata_json() {
     assert_eq!(json["source"]["start_line"], 10);
     assert_eq!(json["source"]["end_line"], 20);
     assert_eq!(json["has_loop_contracts"], true);
-    assert_eq!(json["is_automatically_generated"], false);
+    assert_eq!(json["is_automatically_generated"], true);
+    assert_eq!(json["is_bounded"], true);
 }
 
 #[test]

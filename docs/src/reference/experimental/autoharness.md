@@ -169,7 +169,10 @@ Nested slice references (e.g. `&&[u8]`) and slices inside user-defined types rem
 
 ## Limitations
 ### Arguments Implementing Arbitrary
-Kani will only generate an automatic harness for a function if it can represent each of its arguments nondeterministically, without bounds.
+Kani will only generate an automatic harness for a function if it can represent each of its arguments nondeterministically.
+By default, it must be able to do so *without bounds*; the `--bounded-arguments` option (see above) relaxes this to
+additionally allow argument types that can only be represented up to a bound, such as slice (`&[T]`/`&mut [T]`) and
+string (`&str`) references.
 In technical terms, each of the arguments needs to implement the `Arbitrary`
 trait or be capable of deriving it, or be a reference (mutable or immutable)
 where any of the prior requirements is fulfilled by the referenced type.

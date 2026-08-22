@@ -2,7 +2,14 @@
 | cargo_autoharness_slices | count_a          | Requires --bounded-arguments for argument(s) s: &str              |
 [with --bounded-arguments]
 | cargo_autoharness_slices | nested           | Missing Arbitrary implementation for argument(s) xs: &&[u8] |
-- Status: SATISFIED
+Status: SATISFIED\
+Description: "maximum-length slice with nondet contents"
+Status: SATISFIED\
+Description: "empty slice"
+Status: SATISFIED\
+Description: "3-byte string starting with 'a'"
+Status: SATISFIED\
+Description: "string starting with a non-ASCII char"
 | cargo_autoharness_slices | count_a           | #[kani::proof] (bounded)  | Success             |
 | cargo_autoharness_slices | slice_cover       | #[kani::proof] (bounded)  | Success             |
 | cargo_autoharness_slices | str_cover         | #[kani::proof] (bounded)  | Success             |

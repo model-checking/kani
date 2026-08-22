@@ -166,8 +166,10 @@ const AUTOHARNESS_SLICE_BOUND: u64 = 16;
 /// valid-UTF-8 prefix of nondeterministic bytes, and reasoning about UTF-8 validity is
 /// expensive. On top of that, a harness that decodes every `char` (e.g. `s.chars().count()`)
 /// unwinds the decoding loop up to the default bound (20) over symbolic bytes, so the cost grows
-/// steeply with the number of bytes: 8 bytes already exceed Kani's default 60s harness timeout
-/// for such harnesses, while 4 stay well within it.
+/// steeply with the number of bytes: on a typical machine 8 bytes already exceed Kani's default
+/// 60s harness timeout for such harnesses, while 4 stay comfortably within it (though a
+/// char-decoding harness can still approach the timeout on slow machines, so callers that must
+/// not time out should raise `--harness-timeout`).
 const AUTOHARNESS_STR_BOUND: u64 = 4;
 
 /// For raw pointer types, insert a call to the `KaniModel::AnyPtr` model instead, which generates
