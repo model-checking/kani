@@ -179,6 +179,17 @@ where any of the prior requirements is fulfilled by the referenced type.
 Kani will detect if a struct or enum could implement `Arbitrary` and derive it automatically.
 Note that this automatic derivation feature is only available for autoharness.
 
+### Reference and Pointer Arguments
+Each reference, pointer, slice, or string argument is generated from its own independent
+nondeterministic storage. Autoharness therefore does *not* explore aliasing *between* distinct
+arguments: for example, given `fn f(a: &T, b: &T)`, the generated harness always passes two
+references to separate allocations, so `a` and `b` never share an address (`core::ptr::eq(a, b)`
+is always `false`), even though a caller could pass the same reference twice. A successful
+automatic harness is thus an underapproximation with respect to caller-controlled aliasing, in
+the same way that verifying a single monomorphization is an underapproximation for [generic
+functions](#generic-functions). This applies to all reference/pointer arguments and is
+independent of the length bound that `--bounded-arguments` introduces.
+
 ### Generic Functions
 For a generic function, Kani generates a harness for a single monomorphic instantiation of the function:
 it substitutes every type parameter with the first candidate from a fixed list of primitive types
