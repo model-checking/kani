@@ -42,6 +42,11 @@ pub struct HarnessMetadata {
     pub has_loop_contracts: bool,
     /// If the harness was automatically generated or manually written.
     pub is_automatically_generated: bool,
+    /// Whether the (automatically generated) harness uses *bounded* nondeterministic values
+    /// for some arguments (e.g. slice references), in which case its verification result only
+    /// holds up to the bounds, c.f. the autoharness --bounded-arguments option.
+    #[serde(default)]
+    pub is_bounded: bool,
 }
 
 /// The attributes added by the user to control how a harness is executed.

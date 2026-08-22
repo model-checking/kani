@@ -69,6 +69,10 @@ pub enum KaniModel {
     Any,
     #[strum(serialize = "AnyPtrModel")]
     AnyPtr,
+    #[strum(serialize = "AnySliceRefModel")]
+    AnySliceRef,
+    #[strum(serialize = "AnyStrRefModel")]
+    AnyStrRef,
     #[strum(serialize = "AssumeSafeModel")]
     AssumeSafe,
     #[strum(serialize = "CopyInitStateModel")]

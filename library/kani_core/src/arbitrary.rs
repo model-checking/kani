@@ -199,6 +199,48 @@ macro_rules! generate_arbitrary {
             }
         }
 
+        /// Generate a slice of nondeterministic length (at most `N`) referring to a prefix of
+        /// `storage`, a nondeterministic array that the caller keeps alive for as long as the
+        /// returned slice is in use.
+        ///
+        /// This model is used by the compiler to generate nondeterministic `&[T]` / `&mut [T]`
+        /// arguments for automatic harnesses (`kani autoharness`). Note that any verification
+        /// result obtained with a bounded value like this one is valid only up to the bound.
+        #[kanitool::fn_marker = "AnySliceRefModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_slice_ref<T, const N: usize>(storage: &mut [T; N]) -> &mut [T] {
+            let len: usize = crate::kani::any();
+            crate::kani::assume(len <= N);
+            &mut storage[..len]
+        }
+
+        /// Generate a string slice referring to the longest valid-UTF-8 prefix of `storage`, a
+        /// nondeterministic byte array (at most `N` bytes) that the caller keeps alive for as
+        /// long as the returned slice is in use. This is the same approach as `String`'s
+        /// `BoundedArbitrary` implementation: computing the valid prefix is a deterministic
+        /// function of the nondeterministic bytes, which symbolic execution handles well,
+        /// whereas *assuming* `str::from_utf8(..).is_ok()` over nondeterministic bytes and
+        /// length is intractable even for a handful of bytes. All string contents up to length
+        /// `N` are covered: a string of length `k < N` arises from storage whose byte at index
+        /// `k` starts an invalid sequence.
+        ///
+        /// This model is used by the compiler to generate nondeterministic `&str` arguments for
+        /// automatic harnesses (`kani autoharness`). Note that any verification result obtained
+        /// with a bounded value like this one is valid only up to the bound.
+        #[kanitool::fn_marker = "AnyStrRefModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_str_ref<const N: usize>(storage: &mut [u8; N]) -> &str {
+            let valid_len = match core_path::str::from_utf8(storage) {
+                Ok(_) => N,
+                // `valid_up_to` is always a character boundary.
+                Err(e) => e.valid_up_to(),
+            };
+            // SAFETY: `storage[..valid_len]` is the longest valid UTF-8 prefix of `storage`.
+            unsafe { core_path::str::from_utf8_unchecked(&storage[..valid_len]) }
+        }
+
         arbitrary_tuple!(A);
         arbitrary_tuple!(A, B);
         arbitrary_tuple!(A, B, C);
