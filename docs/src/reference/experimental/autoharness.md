@@ -189,6 +189,8 @@ automatic harness is thus an underapproximation with respect to caller-controlle
 the same way that verifying a single monomorphization is an underapproximation for [generic
 functions](#generic-functions). This applies to all reference/pointer arguments and is
 independent of the length bound that `--bounded-arguments` introduces.
+Modeling caller-controlled aliasing between arguments is tracked in
+[#4750](https://github.com/model-checking/kani/issues/4750).
 
 ### Generic Functions
 For a generic function, Kani generates a harness for a single monomorphic instantiation of the function:
