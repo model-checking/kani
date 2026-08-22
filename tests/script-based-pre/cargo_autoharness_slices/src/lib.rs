@@ -3,7 +3,7 @@
 
 // Test that the autoharness subcommand supports slice reference (`&[T]`, `&mut [T]`) and
 // string slice (`&str`) arguments. The generated harness produces a slice of nondeterministic
-// length, bounded by AUTOHARNESS_SLICE_BOUND (16) for slices and AUTOHARNESS_STR_BOUND (8)
+// length, bounded by AUTOHARNESS_SLICE_BOUND (16) for slices and AUTOHARNESS_STR_BOUND (4)
 // for strings, backed by nondeterministic harness-local storage, c.f. the `AnySliceRef` and
 // `AnyStrRef` models. The "TEST NOTE" comments explain the expected result per function.
 

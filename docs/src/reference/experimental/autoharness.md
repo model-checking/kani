@@ -158,7 +158,7 @@ table repeats the caveat.
 With `--bounded-arguments`, for a function with `&[T]`/`&mut [T]` arguments (where `T`
 implements or can derive `Arbitrary`) or `&str` arguments, the generated harness produces a
 slice of nondeterministic length, backed by nondeterministic storage that lives for the entire
-harness: **up to 16 elements** for slices and **up to 8 bytes** for strings. Strings cover all
+harness: **up to 16 elements** for slices and **up to 4 bytes** for strings. Strings cover all
 valid UTF-8 contents up to the bound (the generated string is the longest valid-UTF-8 prefix of
 nondeterministic bytes, the same approach as `String`'s `BoundedArbitrary` implementation); the
 smaller bound reflects the cost of reasoning about UTF-8 for symbolic execution. The bounds are
