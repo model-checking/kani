@@ -2,6 +2,7 @@
 | cargo_autoharness_slices | count_a          | Requires --bounded-arguments for argument(s) s: &str              |
 [with --bounded-arguments]
 | cargo_autoharness_slices | nested           | Missing Arbitrary implementation for argument(s) xs: &&[u8] |
+against all possible inputs (bounded for some arguments)...
 Status: SATISFIED\
 Description: "maximum-length slice with nondet contents"
 Status: SATISFIED\
