@@ -78,6 +78,32 @@ mod should_derive {
     struct RefRefStruct(&'static &'static i32);
     fn ref_ref_struct(foo: RefRefStruct) {}
 
+    // A struct with a reference field but a *hand-written* Arbitrary implementation that safely
+    // materializes the referent (a shared reference to a `static`). Because the field type itself
+    // implements Arbitrary, a struct nesting it -- and a top-level `&ManualRefStruct` argument --
+    // are supported: the synthesized `any()` calls this hand-written impl via
+    // `kani::any::<ManualRefStruct>()` rather than trying to synthesize the reference itself.
+    // Regression test: the derivability check must consult a field/pointee type's own Arbitrary
+    // impl before recursing into it (and rejecting its reference field).
+    pub struct ManualRefStruct(&'static u8);
+
+    impl kani::Arbitrary for ManualRefStruct {
+        fn any() -> Self {
+            static BYTE: u8 = 0;
+            ManualRefStruct(&BYTE)
+        }
+    }
+
+    struct NestsManualRef {
+        inner: ManualRefStruct,
+    }
+
+    fn nests_manual_ref(foo: NestsManualRef) {
+        let _ = foo.inner;
+    }
+
+    fn ref_to_manual(foo: &ManualRefStruct) {}
+
     #[derive(Eq, PartialEq)]
     pub struct AlignmentStruct(usize);
 
