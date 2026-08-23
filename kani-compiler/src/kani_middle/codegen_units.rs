@@ -565,6 +565,7 @@ fn automatic_harness_partition(
 
         if is_proof_harness(tcx, instance)
             || name.contains("kani::Arbitrary")
+            || name.contains("kani::BoundedArbitrary")
             || name.contains("kani::Invariant")
         {
             return Err(AutoHarnessSkipReason::KaniImpl);

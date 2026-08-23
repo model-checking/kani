@@ -1,8 +1,9 @@
 [without --bounded-arguments]
-| cargo_autoharness_bounded | packet_check                                    | Requires --bounded-arguments for argument(s) p: Packet                                |
+Requires --bounded-arguments for argument(s) p: Packet
 [with --bounded-arguments]
-| cargo_autoharness_bounded | nested_vec                                      | Missing Arbitrary implementation for argument(s) xs: std::vec::Vec<std::vec::Vec<u8>> |
-- Status: SATISFIED
+Missing Arbitrary implementation for argument(s) xs: std::vec::Vec<std::vec::Vec<u8>>
+Status: SATISFIED\
+Description: "max-length vec with specific contents"
 | cargo_autoharness_bounded | packet_check      | #[kani::proof] (bounded)  | Success             |
 | cargo_autoharness_bounded | string_head       | #[kani::proof] (bounded)  | Success             |
 | cargo_autoharness_bounded | vec_cover         | #[kani::proof] (bounded)  | Success             |

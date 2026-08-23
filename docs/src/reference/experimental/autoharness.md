@@ -166,7 +166,7 @@ chosen to stay below the default loop-unwinding bound of 20, so that loops over 
 be fully unwound by default.
 
 Additionally (also requiring `--bounded-arguments`), for arguments whose type implements
-[`BoundedArbitrary`](https://model-checking.github.io/kani/reference/experimental/bounded-arbitrary.html)
+[`BoundedArbitrary`](../bounded_arbitrary.md)
 (e.g. `Vec<T>`, `String`, or user types deriving it), the harness generates a bounded
 nondeterministic value with **bound 4** (via `kani::bounded_any`). The same caveat applies:
 verification results only hold up to the bound. The smaller bound reflects that these values are
@@ -178,12 +178,13 @@ Nested slice references (e.g. `&&[u8]`) and slices inside user-defined types rem
 ## Limitations
 ### Arguments Implementing Arbitrary
 Kani will only generate an automatic harness for a function if it can represent each of its arguments nondeterministically.
-By default, it must be able to do so *without bounds*; the `--bounded-arguments` option (see above) relaxes this to
-additionally allow argument types that can only be represented up to a bound, such as slice (`&[T]`/`&mut [T]`) and
-string (`&str`) references.
-In technical terms, each of the arguments needs to implement the `Arbitrary`
+By default, it must be able to do so *without bounds*: each argument needs to implement the `Arbitrary`
 trait or be capable of deriving it, or be a reference (mutable or immutable)
 where any of the prior requirements is fulfilled by the referenced type.
+The `--bounded-arguments` option (see above) relaxes this to
+additionally allow argument types that can only be represented up to a bound: slice (`&[T]`/`&mut [T]`) and
+string (`&str`) references, and types implementing [`BoundedArbitrary`](../bounded_arbitrary.md)
+(e.g. `Vec<T>`, `String`, or user types deriving it).
 Kani will detect if a struct or enum could implement `Arbitrary` and derive it automatically.
 Note that this automatic derivation feature is only available for autoharness.
 
