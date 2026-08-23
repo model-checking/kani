@@ -108,6 +108,7 @@ impl CodegenUnits {
                     args,
                     &crate_info.name,
                     *kani_fns.get(&KaniModel::Any.into()).unwrap(),
+                    *kani_fns.get(&KaniModel::BoundedAny.into()).unwrap(),
                 );
                 AUTOHARNESS_MD
                     .set(AutoHarnessMetadata {
@@ -524,6 +525,7 @@ fn automatic_harness_partition(
     args: &Arguments,
     crate_name: &str,
     kani_any_def: FnDef,
+    kani_bounded_any_def: FnDef,
 ) -> (Vec<(Instance, bool)>, BTreeMap<String, AutoHarnessSkipReason>) {
     let crate_fn_defs = rustc_public::local_crate().fn_defs().into_iter().collect::<FxHashSet<_>>();
     // Filter out CrateItems that are functions, but not functions defined in the crate itself, i.e., rustc-inserted functions
@@ -563,6 +565,7 @@ fn automatic_harness_partition(
 
         if is_proof_harness(tcx, instance)
             || name.contains("kani::Arbitrary")
+            || name.contains("kani::BoundedArbitrary")
             || name.contains("kani::Invariant")
         {
             return Err(AutoHarnessSkipReason::KaniImpl);
@@ -574,8 +577,8 @@ fn automatic_harness_partition(
 
         // Each argument of `instance` must be supported by automatic harness generation, i.e.,
         // implement Arbitrary (or be capable of deriving it), be a raw pointer, or -- if the user
-        // opted in via --bounded-arguments -- be a supported slice/string reference,
-        // c.f. `autoharness_supported_arg_ty`.
+        // opted in via --bounded-arguments -- be a supported slice/string reference or a
+        // BoundedArbitrary container type, c.f. `autoharness_supported_arg_ty`.
         // Note that generic functions have been instantiated with concrete types at this point,
         // so we know that each of these arguments has a concrete type.
         let mut problematic_args = vec![];
@@ -584,12 +587,17 @@ fn automatic_harness_partition(
             // Note: we deliberately do not insert the verdict into `ty_arbitrary_cache` here.
             // The cache stores whether a type implements (or can derive) Arbitrary, which is the
             // wrong semantics for types that are supported in argument position only (raw
-            // pointers, and slice/string references whose backing storage the harness owns):
-            // caching the argument-position verdict under the same key would poison the cache for
-            // the ADT-field checks. `implements_arbitrary` memoizes its own recursion internally,
-            // so repeated argument types stay cheap.
-            let support =
-                autoharness_supported_arg_ty(arg.ty, kani_any_def, &mut ty_arbitrary_cache);
+            // pointers, slice/string references whose backing storage the harness owns, and
+            // BoundedArbitrary container types): caching the argument-position verdict under the
+            // same key would poison the cache for the ADT-field checks. `implements_arbitrary`
+            // memoizes its own recursion internally, so repeated argument types stay cheap.
+            let support = autoharness_supported_arg_ty(
+                tcx,
+                arg.ty,
+                kani_any_def,
+                kani_bounded_any_def,
+                &mut ty_arbitrary_cache,
+            );
 
             if support == ArgSupport::Arbitrary {
                 continue;

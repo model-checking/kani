@@ -12,7 +12,7 @@ use crate::kani_middle::codegen_units::CodegenUnit;
 use crate::kani_middle::kani_functions::{KaniHook, KaniIntrinsic, KaniModel};
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
-use crate::kani_middle::{implements_arbitrary, implements_invariant};
+use crate::kani_middle::{can_derive_arbitrary, implements_arbitrary, implements_invariant};
 use crate::kani_queries::QueryDb;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::ty::TyCtxt;
@@ -44,6 +44,8 @@ struct AnyModels {
     kani_any_str_ref: FnDef,
     /// The FnDef of KaniModel::AssumeSafe
     kani_assume_safe: FnDef,
+    /// The FnDef of KaniModel::BoundedAny
+    kani_bounded_any: FnDef,
 }
 
 impl AnyModels {
@@ -55,6 +57,7 @@ impl AnyModels {
             kani_any_slice_ref: *kani_fns.get(&KaniModel::AnySliceRef.into()).unwrap(),
             kani_any_str_ref: *kani_fns.get(&KaniModel::AnyStrRef.into()).unwrap(),
             kani_assume_safe: *kani_fns.get(&KaniModel::AssumeSafe.into()).unwrap(),
+            kani_bounded_any: *kani_fns.get(&KaniModel::BoundedAny.into()).unwrap(),
         }
     }
 }
@@ -122,7 +125,7 @@ impl TransformPass for AutomaticArbitraryPass {
     /// ```
     /// We match the implementations that kani_macros::derive creates for structs and enums,
     /// so see that module for full documentation of what the generated bodies look like.
-    fn transform(&mut self, _tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
+    fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         debug!(function=?instance.name(), "AutomaticArbitraryPass::transform");
 
         let unexpected_ty = |ty: &Ty| {
@@ -145,8 +148,8 @@ impl TransformPass for AutomaticArbitraryPass {
 
         if let TyKind::RigidTy(RigidTy::Adt(def, args)) = ty.kind() {
             match def.kind() {
-                AdtKind::Enum => (true, self.generate_enum_body(def, args, body)),
-                AdtKind::Struct => (true, self.generate_struct_body(def, args, body)),
+                AdtKind::Enum => (true, self.generate_enum_body(tcx, def, args, body)),
+                AdtKind::Struct => (true, self.generate_struct_body(tcx, def, args, body)),
                 AdtKind::Union => unexpected_ty(ty),
             }
         } else {
@@ -172,6 +175,14 @@ const AUTOHARNESS_SLICE_BOUND: u64 = 16;
 /// not time out should raise `--harness-timeout`).
 const AUTOHARNESS_STR_BOUND: u64 = 4;
 
+/// The bound for nondeterministic values of types that implement `BoundedArbitrary` (rather
+/// than `Arbitrary`) that automatic harnesses generate, e.g. `Vec<T>` or `String`.
+/// Verification results for functions with such arguments are only valid up to this bound.
+/// This is smaller than the slice/str bounds since `BoundedArbitrary` values are heap
+/// allocated, and for `String` additionally involve UTF-8 reasoning; a bound of 8 already
+/// makes simple `String` harnesses exceed Kani's default 60s harness timeout.
+const AUTOHARNESS_BOUNDED_ANY_BOUND: u64 = 4;
+
 /// For raw pointer types, insert a call to the `KaniModel::AnyPtr` model instead, which generates
 /// a pointer in a nondeterministic allocation state (null, out of bounds, or valid);
 /// in the valid case, the pointer points to a nondeterministic value stored in a dedicated local
@@ -180,13 +191,17 @@ const AUTOHARNESS_STR_BOUND: u64 = 4;
 /// models instead, which return a slice of nondeterministic length (bounded by
 /// [AUTOHARNESS_SLICE_BOUND]) backed by a nondeterministic array stored in a dedicated local,
 /// which stays alive for the entire harness.
+/// If `ty` does not implement `Arbitrary` (and cannot derive it) but implements `BoundedArbitrary`
+/// (e.g. `Vec<T>` or `String`), insert a call to the `KaniModel::BoundedAny` model, which returns
+/// a *bounded* nondeterministic value (bounded by [AUTOHARNESS_BOUNDED_ANY_BOUND]).
 /// If `ty` is an ADT that implements `Invariant`, additionally insert a call to the
 /// `KaniModel::AssumeSafe` model (`kani_assume_safe`), which assumes that the nondeterministic
 /// value respects the type's safety invariant, c.f.
 /// <https://rust-lang.github.io/unsafe-code-guidelines/glossary.html#validity-and-safety-invariant>.
-/// Panics if `ty` does not implement Arbitrary (and is not a reference or raw pointer to such a
-/// type, or a reference to a slice or str of such a type).
+/// Panics if `ty` does not implement Arbitrary or BoundedArbitrary (and is not a reference or raw
+/// pointer to such a type, or a reference to a slice or str of such a type).
 fn call_kani_any_for_ty(
+    tcx: TyCtxt,
     models: AnyModels,
     body: &mut MutableBody,
     ty: Ty,
@@ -234,6 +249,7 @@ fn call_kani_any_for_ty(
         let elem_lcls = (0..bound)
             .map(|_| {
                 call_kani_any_for_ty(
+                    tcx,
                     models,
                     body,
                     elem_ty,
@@ -301,8 +317,15 @@ fn call_kani_any_for_ty(
             slice_lcl
         }
     } else if let TyKind::RigidTy(RigidTy::Ref(region, inner_ty, inner_mutability)) = ty.kind() {
-        let inner_lcl =
-            call_kani_any_for_ty(models, body, inner_ty, inner_mutability, source, invariant_cache);
+        let inner_lcl = call_kani_any_for_ty(
+            tcx,
+            models,
+            body,
+            inner_ty,
+            inner_mutability,
+            source,
+            invariant_cache,
+        );
         let ref_lcl = body.new_local(ty, source.span(body.blocks()), mutability);
         let borrow_kind = if inner_mutability == Mutability::Not {
             BorrowKind::Shared
@@ -320,8 +343,15 @@ fn call_kani_any_for_ty(
         // Generate the storage for the valid-pointer case: a local with a nondeterministic value
         // of the pointee type. Since it is a local of the body being transformed, it stays alive
         // for as long as that body executes.
-        let storage_lcl =
-            call_kani_any_for_ty(models, body, inner_ty, Mutability::Mut, source, invariant_cache);
+        let storage_lcl = call_kani_any_for_ty(
+            tcx,
+            models,
+            body,
+            inner_ty,
+            Mutability::Mut,
+            source,
+            invariant_cache,
+        );
 
         // Pass a mutable reference to the storage to the AnyPtr model, which returns a `*mut T`
         // that is either null, out of bounds (one past the end), or pointing to the storage.
@@ -367,16 +397,44 @@ fn call_kani_any_for_ty(
             ptr_lcl
         }
     } else {
-        let kani_any_inst =
-            Instance::resolve(models.kani_any, &GenericArgs(vec![GenericArgKind::Type(ty)]))
-                .unwrap_or_else(|_| panic!("expected a ty that implements Arbitrary, got {ty}"));
+        // Prefer an unbounded nondeterministic value via (implemented or compiler-derived)
+        // Arbitrary; fall back to BoundedArbitrary for container types like Vec<T> or String.
+        // Note: use a fresh cache for the Arbitrary check -- `invariant_cache` memoizes a
+        // different predicate (Invariant), so the two must not share a map.
+        let mut arbitrary_cache = FxHashMap::default();
+        let use_arbitrary = implements_arbitrary(ty, models.kani_any, &mut arbitrary_cache)
+            || can_derive_arbitrary(ty, models.kani_any, &mut arbitrary_cache);
+        let (model, generic_args) = if use_arbitrary {
+            (models.kani_any, GenericArgs(vec![GenericArgKind::Type(ty)]))
+        } else {
+            // `Instance::resolve` does not check trait bounds, so ensure the type actually
+            // implements BoundedArbitrary before emitting the call: an unresolvable
+            // `T::bounded_any` would otherwise only surface as an ICE during reachability.
+            assert!(
+                crate::kani_middle::implements_bounded_arbitrary(tcx, ty, models.kani_bounded_any),
+                "expected a ty that implements Arbitrary or BoundedArbitrary, got {ty}"
+            );
+            (
+                models.kani_bounded_any,
+                GenericArgs(vec![
+                    GenericArgKind::Type(ty),
+                    GenericArgKind::Const(
+                        TyConst::try_from_target_usize(AUTOHARNESS_BOUNDED_ANY_BOUND).unwrap(),
+                    ),
+                ]),
+            )
+        };
+        let any_inst = Instance::resolve(model, &generic_args).unwrap_or_else(|_| {
+            panic!("expected a ty that implements Arbitrary or BoundedArbitrary, got {ty}")
+        });
         let lcl = body.new_local(ty, source.span(body.blocks()), mutability);
-        body.insert_call(&kani_any_inst, source, InsertPosition::Before, vec![], Place::from(lcl));
+        body.insert_call(&any_inst, source, InsertPosition::Before, vec![], Place::from(lcl));
 
         // If the type has a safety invariant, assume that it holds for the nondeterministic value.
         // We only check ADTs since those are the only types for which users can implement
         // `Invariant` in a way that constrains the values (the library's implementations for
-        // primitive types are trivially `true`).
+        // primitive types are trivially `true`). This applies regardless of whether the value was
+        // generated via Arbitrary or BoundedArbitrary.
         if matches!(ty.kind(), TyKind::RigidTy(RigidTy::Adt(..)))
             && implements_invariant(ty, models.kani_assume_safe, invariant_cache)
         {
@@ -413,6 +471,7 @@ impl AutomaticArbitraryPass {
     #[allow(clippy::too_many_arguments)]
     fn call_kani_any_for_variant(
         &self,
+        tcx: TyCtxt,
         adt_def: AdtDef,
         adt_args: &GenericArgs,
         body: &mut MutableBody,
@@ -427,6 +486,7 @@ impl AutomaticArbitraryPass {
         // Construct nondeterministic values for each of the variant's fields
         for ty in fields.iter().map(|field| field.ty_with_args(adt_args)) {
             let lcl = call_kani_any_for_ty(
+                tcx,
                 self.models,
                 body,
                 ty,
@@ -465,7 +525,7 @@ impl AutomaticArbitraryPass {
     ///   _ => Enum::LastVariant
     /// }
     /// ```
-    fn generate_enum_body(&self, def: AdtDef, args: GenericArgs, body: Body) -> Body {
+    fn generate_enum_body(&self, tcx: TyCtxt, def: AdtDef, args: GenericArgs, body: Body) -> Body {
         // Autoharness only deems a function with an enum eligible if it has at least one variant, c.f. `can_derive_arbitrary`
         assert!(def.num_variants() > 0);
 
@@ -476,6 +536,7 @@ impl AutomaticArbitraryPass {
 
         // Generate a nondet u128 to switch on
         let discr_lcl = call_kani_any_for_ty(
+            tcx,
             self.models,
             &mut new_body,
             Ty::from_rigid_kind(RigidTy::Uint(UintTy::U128)),
@@ -500,6 +561,7 @@ impl AutomaticArbitraryPass {
         for (idx, variant) in def.variants_iter().enumerate() {
             let variant_idx = VariantIdx::to_val(idx);
             let target_bb = self.call_kani_any_for_variant(
+                tcx,
                 def,
                 &args,
                 &mut new_body,
@@ -533,7 +595,13 @@ impl AutomaticArbitraryPass {
     ///   ...
     /// }
     /// ```
-    fn generate_struct_body(&self, def: AdtDef, args: GenericArgs, body: Body) -> Body {
+    fn generate_struct_body(
+        &self,
+        tcx: TyCtxt,
+        def: AdtDef,
+        args: GenericArgs,
+        body: Body,
+    ) -> Body {
         assert_eq!(def.num_variants(), 1);
 
         let mut new_body = MutableBody::from(body);
@@ -544,6 +612,7 @@ impl AutomaticArbitraryPass {
         let variant = def.variants()[0];
         // A struct has a single variant at index 0.
         self.call_kani_any_for_variant(
+            tcx,
             def,
             &args,
             &mut new_body,
@@ -671,6 +740,7 @@ impl TransformPass for AutomaticHarnessPass {
             .iter()
             .map(|local_decl| {
                 call_kani_any_for_ty(
+                    tcx,
                     self.models,
                     &mut harness_body,
                     local_decl.ty,
