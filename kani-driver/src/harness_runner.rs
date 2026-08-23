@@ -246,14 +246,22 @@ impl KaniSession {
         if !self.args.common_args.quiet {
             // If the harness is automatically generated, pretty_name refers to the function under verification.
             let mut msg = if harness.is_automatically_generated {
+                // A bounded harness only explores some arguments up to a bound, so it does not
+                // check *all* possible inputs; qualify the message accordingly so a bounded run
+                // does not masquerade as exhaustive (c.f. the "(bounded)" marker in the summary).
+                let inputs = if harness.is_bounded {
+                    "all possible inputs (bounded for some arguments)"
+                } else {
+                    "all possible inputs"
+                };
                 if matches!(harness.attributes.kind, HarnessKind::Proof) {
                     format!(
-                        "Autoharness: Checking function {} against all possible inputs...",
+                        "Autoharness: Checking function {} against {inputs}...",
                         harness.pretty_name
                     )
                 } else {
                     format!(
-                        "Autoharness: Checking function {}'s contract against all possible inputs...",
+                        "Autoharness: Checking function {}'s contract against {inputs}...",
                         harness.pretty_name
                     )
                 }

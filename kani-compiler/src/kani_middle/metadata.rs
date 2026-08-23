@@ -42,6 +42,7 @@ pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> 
         contract: Default::default(),
         has_loop_contracts: false,
         is_automatically_generated: false,
+        is_bounded: false,
     }
 }
 
@@ -121,6 +122,7 @@ pub fn gen_automatic_proof_metadata(
     base_name: &Path,
     fn_to_verify: &Instance,
     harness_mangled_name: String,
+    is_bounded: bool,
 ) -> HarnessMetadata {
     let def = fn_to_verify.def;
     let pretty_name = readable_name(*fn_to_verify);
@@ -163,5 +165,6 @@ pub fn gen_automatic_proof_metadata(
         contract: Default::default(),
         has_loop_contracts: false,
         is_automatically_generated: true,
+        is_bounded,
     }
 }

@@ -145,14 +145,52 @@ Note that automatic harnesses do not *assert* type invariants, e.g., they do not
 To verify that a function preserves an invariant, add a [function contract](contracts.md) such as `#[kani::ensures(|result| result.is_safe())]`;
 autoharness verifies a function against its contract if it has one.
 
+## Bounded Arguments (opt-in: `--bounded-arguments`)
+By default, autoharness only generates harnesses whose nondeterministic inputs cover *all*
+possible values, so that a successful result carries Kani's usual guarantee. Some argument
+types (e.g. slices) can only be generated in a *bounded* fashion; because a bug that requires
+a larger input would then be missed, these are **disabled by default** and require the
+`--bounded-arguments` option. Functions that would become eligible with the option are
+reported in the skipped-functions table with reason "Requires --bounded-arguments". Harnesses
+that use bounded values are marked **"(bounded)"** in the summary table, and a note after the
+table repeats the caveat.
+
+With `--bounded-arguments`, for a function with `&[T]`/`&mut [T]` arguments (where `T`
+implements or can derive `Arbitrary`) or `&str` arguments, the generated harness produces a
+slice of nondeterministic length, backed by nondeterministic storage that lives for the entire
+harness: **up to 16 elements** for slices and **up to 4 bytes** for strings. Strings cover all
+valid UTF-8 contents up to the bound (the generated string is the longest valid-UTF-8 prefix of
+nondeterministic bytes, the same approach as `String`'s `BoundedArbitrary` implementation); the
+smaller bound reflects the cost of reasoning about UTF-8 for symbolic execution. The bounds are
+chosen to stay below the default loop-unwinding bound of 20, so that loops over the slice can
+be fully unwound by default.
+
+Nested slice references (e.g. `&&[u8]`) and slices inside user-defined types remain unsupported.
+
 ## Limitations
 ### Arguments Implementing Arbitrary
-Kani will only generate an automatic harness for a function if it can represent each of its arguments nondeterministically, without bounds.
+Kani will only generate an automatic harness for a function if it can represent each of its arguments nondeterministically.
+By default, it must be able to do so *without bounds*; the `--bounded-arguments` option (see above) relaxes this to
+additionally allow argument types that can only be represented up to a bound, such as slice (`&[T]`/`&mut [T]`) and
+string (`&str`) references.
 In technical terms, each of the arguments needs to implement the `Arbitrary`
 trait or be capable of deriving it, or be a reference (mutable or immutable)
 where any of the prior requirements is fulfilled by the referenced type.
 Kani will detect if a struct or enum could implement `Arbitrary` and derive it automatically.
 Note that this automatic derivation feature is only available for autoharness.
+
+### Reference and Pointer Arguments
+Each reference, pointer, slice, or string argument is generated from its own independent
+nondeterministic storage. Autoharness therefore does *not* explore aliasing *between* distinct
+arguments: for example, given `fn f(a: &T, b: &T)`, the generated harness always passes two
+references to separate allocations, so `a` and `b` never share an address (`core::ptr::eq(a, b)`
+is always `false`), even though a caller could pass the same reference twice. A successful
+automatic harness is thus an underapproximation with respect to caller-controlled aliasing, in
+the same way that verifying a single monomorphization is an underapproximation for [generic
+functions](#generic-functions). This applies to all reference/pointer arguments and is
+independent of the length bound that `--bounded-arguments` introduces.
+Modeling caller-controlled aliasing between arguments is tracked in
+[#4750](https://github.com/model-checking/kani/issues/4750).
 
 ### Generic Functions
 For a generic function, Kani generates a harness for a single monomorphic instantiation of the function:

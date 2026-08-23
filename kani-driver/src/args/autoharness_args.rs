@@ -23,6 +23,13 @@ pub struct CommonAutoharnessArgs {
     #[arg(long = "exclude-pattern", num_args(1), value_name = "PATTERN")]
     pub exclude_pattern: Vec<String>,
 
+    /// Also create automatic harnesses for functions whose arguments require *bounded*
+    /// nondeterministic values, e.g. slice references (`&[T]`, `&str`). Such harnesses are
+    /// marked "(bounded)" in the output, and their verification results only hold up to the
+    /// bounds; a bug that requires a larger input will not be found.
+    #[arg(long)]
+    pub bounded_arguments: bool,
+
     /// Run the `list` subcommand after generating the automatic harnesses. Note that this option implies --only-codegen.
     #[arg(long)]
     pub list: bool,

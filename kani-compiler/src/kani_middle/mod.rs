@@ -9,8 +9,8 @@ use crate::kani_queries::QueryDb;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_hir::{def::DefKind, def_id::DefId as InternalDefId, def_id::LOCAL_CRATE};
 use rustc_middle::ty::TyCtxt;
-use rustc_public::mir::TerminatorKind;
 use rustc_public::mir::mono::{Instance, MonoItem};
+use rustc_public::mir::{Mutability, TerminatorKind};
 use rustc_public::rustc_internal;
 use rustc_public::ty::{
     AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, RigidTy, Span as SpanStable, Ty, TyKind,
@@ -400,25 +400,74 @@ fn can_derive_arbitrary(
     }
 }
 
-/// Can an automatic harness generate a nondeterministic value of type `ty` for a harness
-/// argument?
-/// In addition to the types that implement or can derive `Arbitrary`, automatic harnesses support
-/// raw pointer arguments, as long as the pointee type (after peeling all raw pointer layers)
-/// implements or can derive `Arbitrary`: for those, the harness generates a pointer in a
-/// nondeterministic allocation state (null, out of bounds, or valid),
-/// c.f. `KaniModel::AnyPtr`.
-/// Note that raw pointers are only supported as immediate harness arguments (or through other raw
-/// pointers): a raw pointer behind a reference or inside an ADT remains unsupported, since the
-/// pointee storage that the generated harness allocates would not outlive the generated value.
+/// How an automatic harness can generate a nondeterministic value of a given argument type,
+/// c.f. `autoharness_supported_arg_ty`.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum ArgSupport {
+    /// An unbounded nondeterministic value, via (implemented or compiler-derived) `Arbitrary`.
+    Arbitrary,
+    /// A *bounded* nondeterministic value; verification results only hold up to the bound.
+    /// Only used if the user passed `--bounded-arguments`.
+    Bounded,
+    /// The type is not supported.
+    Unsupported,
+}
+
+/// Determine how an automatic harness can generate a nondeterministic value of type `ty` for a
+/// harness argument.
+/// In addition to the types that implement or can derive `Arbitrary`, automatic harnesses support:
+/// - raw pointer arguments, as long as the pointee type (after peeling all raw pointer layers)
+///   implements or can derive `Arbitrary`: for those, the harness generates a pointer in a
+///   nondeterministic allocation state (null, out of bounds, or valid), c.f. `KaniModel::AnyPtr`;
+/// - slice references (`&[T]`/`&mut [T]`, provided `T` implements or can derive `Arbitrary`) and
+///   string slices (`&str`): for those, the harness generates a slice of *bounded* nondeterministic
+///   length backed by harness-local storage, c.f. `KaniModel::AnySliceRef` and
+///   `KaniModel::AnyStrRef`.
+///
+/// Note that raw pointers and slice/string references are only supported as immediate harness
+/// arguments (raw pointers also through other raw pointers): such a type behind a reference or
+/// inside an ADT remains unsupported, since the pointee/backing storage that the generated harness
+/// allocates would not outlive the generated value.
 fn autoharness_supported_arg_ty(
     ty: Ty,
     kani_any_def: FnDef,
     ty_arbitrary_cache: &mut FxHashMap<Ty, bool>,
-) -> bool {
+) -> ArgSupport {
+    let arbitrary_or_derive = |ty: Ty, cache: &mut FxHashMap<Ty, bool>| {
+        if implements_arbitrary(ty, kani_any_def, cache)
+            || can_derive_arbitrary(ty, kani_any_def, cache)
+        {
+            ArgSupport::Arbitrary
+        } else {
+            ArgSupport::Unsupported
+        }
+    };
+
     if let TyKind::RigidTy(RigidTy::RawPtr(inner_ty, _)) = ty.kind() {
+        // A raw pointer is supported as long as its pointee is: propagate the pointee's verdict,
+        // so a pointer to a bounded pointee (e.g. `*mut &[T]`) is itself reported as bounded.
         autoharness_supported_arg_ty(inner_ty, kani_any_def, ty_arbitrary_cache)
+    } else if let TyKind::RigidTy(RigidTy::Ref(_, inner_ty, inner_mutability)) = ty.kind() {
+        match inner_ty.kind() {
+            TyKind::RigidTy(RigidTy::Slice(elem_ty)) => {
+                if arbitrary_or_derive(elem_ty, ty_arbitrary_cache) == ArgSupport::Arbitrary {
+                    ArgSupport::Bounded
+                } else {
+                    ArgSupport::Unsupported
+                }
+            }
+            // There is no way to obtain a `&mut str` from our nondeterministic byte storage
+            // without breaking the UTF-8 safety invariant on writes, so only support `&str`.
+            TyKind::RigidTy(RigidTy::Str) => {
+                if inner_mutability == Mutability::Not {
+                    ArgSupport::Bounded
+                } else {
+                    ArgSupport::Unsupported
+                }
+            }
+            _ => arbitrary_or_derive(ty, ty_arbitrary_cache),
+        }
     } else {
-        implements_arbitrary(ty, kani_any_def, ty_arbitrary_cache)
-            || can_derive_arbitrary(ty, kani_any_def, ty_arbitrary_cache)
+        arbitrary_or_derive(ty, ty_arbitrary_cache)
     }
 }
