@@ -65,6 +65,12 @@ pub struct Arguments {
     /// Option used for suppressing global ASM error.
     #[clap(long)]
     pub ignore_global_asm: bool,
+    /// Do not inject Kani's macro overrides (`assert!`, `panic!`, ...) into the crate.
+    /// Assertion failures are then reported as generic panics rather than with the original
+    /// condition/message. This is an escape hatch for crates whose macro imports conflict
+    /// with the injected overrides (rustc E0659).
+    #[clap(long)]
+    pub no_assert_overrides: bool,
     /// Compute verification results under the assumption that no panic occurs.
     /// This feature is unstable, and it requires `-Z unstable-options` to be used
     #[clap(long)]
@@ -111,6 +117,11 @@ pub struct Arguments {
     /// See kani_driver::autoharness_args for documentation.
     #[arg(long = "autoharness-exclude-pattern", num_args(1))]
     pub autoharness_excluded_patterns: Vec<String>,
+    /// If we are running the autoharness subcommand, whether to generate harnesses for
+    /// functions whose arguments require bounded nondeterministic values (e.g. slice
+    /// references). See kani_driver::autoharness_args for documentation.
+    #[arg(long = "autoharness-bounded-arguments")]
+    pub autoharness_bounded_arguments: bool,
 }
 
 #[derive(Debug, Clone, Copy, AsRefStr, EnumString, VariantNames, PartialEq, Eq)]

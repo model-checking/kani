@@ -824,16 +824,6 @@ impl GotocCtx<'_, '_> {
             Rvalue::CheckedBinaryOp(op, e1, e2) => {
                 self.codegen_rvalue_checked_binary_op(op, e1, e2, res_ty)
             }
-            Rvalue::ShallowInitBox(operand, content_ty) => {
-                // The behaviour of ShallowInitBox is simply transmuting *mut u8 to Box<T>.
-                // See https://github.com/rust-lang/compiler-team/issues/460 for more details.
-                let operand = self.codegen_operand_stable(operand);
-                let box_ty = Ty::new_box(*content_ty);
-                let box_ty = self.codegen_ty_stable(box_ty);
-                let cbmc_t = self.codegen_ty_stable(*content_ty);
-                let box_contents = operand.cast_to(cbmc_t.to_pointer());
-                self.box_value(box_contents, box_ty)
-            }
             Rvalue::UnaryOp(op, e) => match op {
                 UnOp::Not => {
                     if self.operand_ty_stable(e).kind().is_bool() {
@@ -955,7 +945,11 @@ impl GotocCtx<'_, '_> {
     pub fn codegen_get_discriminant(&mut self, e: Expr, ty: Ty, res_ty: Ty) -> Expr {
         let layout = self.layout_of_stable(ty);
         match &layout.variants {
-            Variants::Empty => unreachable!("Discriminant for uninhabited enum with no variants"),
+            // An uninhabited enum with no variants has no inhabitant, so reading its
+            // discriminant is unreachable at runtime. The rustc SSA backend returns a
+            // poison value for uninhabited layouts here; we mirror that with a nondet
+            // value of the target type (the surrounding code path is dead anyway).
+            Variants::Empty => Expr::nondet(self.codegen_ty_stable(res_ty)),
             Variants::Single { index } => {
                 let discr_val = layout
                     .ty

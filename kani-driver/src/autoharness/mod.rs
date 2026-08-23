@@ -17,7 +17,7 @@ use crate::session::KaniSession;
 use crate::{InvocationType, print_kani_version, project, verify_project};
 use anyhow::Result;
 use comfy_table::Table as PrettyTable;
-use kani_metadata::{AutoHarnessSkipReason, KaniMetadata};
+use kani_metadata::{AutoHarnessSkipReason, HarnessMetadata, KaniMetadata};
 
 const AUTOHARNESS_TIMEOUT: &str = "60s";
 const LOOP_UNWIND_DEFAULT: u32 = 20;
@@ -27,7 +27,7 @@ pub fn autoharness_cargo(args: CargoAutoharnessArgs) -> Result<()> {
     setup_session(&mut session, &args.common_autoharness_args);
 
     if !session.args.common_args.quiet {
-        print_kani_version(InvocationType::CargoKani(vec![]));
+        print_kani_version(InvocationType::CargoKani(vec![]), session.args.common_args.verbose);
     }
     let project = project::cargo_project(&mut session, false)?;
     postprocess_project(project, session, args.common_autoharness_args)
@@ -38,7 +38,7 @@ pub fn autoharness_standalone(args: StandaloneAutoharnessArgs) -> Result<()> {
     setup_session(&mut session, &args.common_autoharness_args);
 
     if !session.args.common_args.quiet {
-        print_kani_version(InvocationType::Standalone);
+        print_kani_version(InvocationType::Standalone, session.args.common_args.verbose);
     }
 
     let project = if args.std {
@@ -57,6 +57,7 @@ fn setup_session(session: &mut KaniSession, common_autoharness_args: &CommonAuto
     session.add_auto_harness_args(
         &common_autoharness_args.include_pattern,
         &common_autoharness_args.exclude_pattern,
+        common_autoharness_args.bounded_arguments,
     );
 }
 
@@ -95,7 +96,8 @@ fn print_autoharness_metadata(metadata: Vec<KaniMetadata>) {
         );
         skipped_table.add_rows(autoharness_md.skipped.into_iter().filter_map(|(func, reason)| {
             match reason {
-                AutoHarnessSkipReason::MissingArbitraryImpl(ref args) => Some(vec![
+                AutoHarnessSkipReason::MissingArbitraryImpl(ref args)
+                | AutoHarnessSkipReason::RequiresBoundedArguments(ref args) => Some(vec![
                     md.crate_name.clone(),
                     func,
                     format!(
@@ -106,9 +108,10 @@ fn print_autoharness_metadata(metadata: Vec<KaniMetadata>) {
                             .join(", ")
                     ),
                 ]),
-                AutoHarnessSkipReason::GenericFn
-                | AutoHarnessSkipReason::NoBody
-                | AutoHarnessSkipReason::UserFilter => {
+                AutoHarnessSkipReason::GenericFn(ref detail) => {
+                    Some(vec![md.crate_name.clone(), func, format!("{reason}: {detail}")])
+                }
+                AutoHarnessSkipReason::NoBody | AutoHarnessSkipReason::UserFilter => {
                     Some(vec![md.crate_name.clone(), func, reason.to_string()])
                 }
                 // We don't report Kani implementations to the user to avoid exposing Kani functions we insert during instrumentation.
@@ -161,13 +164,21 @@ impl KaniSession {
     }
 
     /// Add the compiler arguments specific to the `autoharness` subcommand.
-    pub fn add_auto_harness_args(&mut self, included: &[String], excluded: &[String]) {
+    pub fn add_auto_harness_args(
+        &mut self,
+        included: &[String],
+        excluded: &[String],
+        bounded_arguments: bool,
+    ) {
         let mut args = vec![];
         for pattern in included {
             args.push(format!("--autoharness-include-pattern {pattern}"));
         }
         for pattern in excluded {
             args.push(format!("--autoharness-exclude-pattern {pattern}"));
+        }
+        if bounded_arguments {
+            args.push("--autoharness-bounded-arguments".to_string());
         }
         self.autoharness_compiler_flags = Some(args);
     }
@@ -207,26 +218,44 @@ impl KaniSession {
             "Verification Result",
         ]);
 
+        let harness_kind = |harness: &HarnessMetadata| {
+            if harness.is_bounded {
+                format!("{} (bounded)", harness.attributes.kind)
+            } else {
+                harness.attributes.kind.to_string()
+            }
+        };
+        let mut any_bounded = false;
+
         for success in successes {
+            any_bounded |= success.harness.is_bounded;
             verified_fns.add_row(vec![
                 success.harness.crate_name.clone(),
                 success.harness.pretty_name.clone(),
-                success.harness.attributes.kind.to_string(),
+                harness_kind(success.harness),
                 success.result.status.to_string(),
             ]);
         }
 
         for failure in failures {
+            any_bounded |= failure.harness.is_bounded;
             verified_fns.add_row(vec![
                 failure.harness.crate_name.clone(),
                 failure.harness.pretty_name.clone(),
-                failure.harness.attributes.kind.to_string(),
+                harness_kind(failure.harness),
                 failure.result.status.to_string(),
             ]);
         }
 
         if total > 0 {
             println!("{verified_fns}");
+        }
+
+        if any_bounded {
+            println!(
+                "Note: harnesses marked \"(bounded)\" use bounded nondeterministic values for some arguments (--bounded-arguments);\n\
+                 their verification results only hold up to the bounds, i.e., bugs that require larger input values may be missed."
+            );
         }
 
         if failing > 0 {

@@ -255,7 +255,7 @@ fn custom_coerce_unsize_info<'tcx>(
         value: trait_ref,
     }) {
         Ok(ImplSource::UserDefined(ImplSourceUserDefinedData { impl_def_id, .. })) => {
-            tcx.coerce_unsized_info(impl_def_id).unwrap().custom_kind.unwrap()
+            tcx.coerce_unsized_info(*impl_def_id).unwrap().custom_kind.unwrap()
         }
         impl_source => {
             unreachable!("invalid `CoerceUnsized` impl_source: {:?}", impl_source);

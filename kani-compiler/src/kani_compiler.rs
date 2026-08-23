@@ -38,9 +38,77 @@ use rustc_session::config::ErrorOutputType;
 use rustc_span::{FileName, sym};
 use tracing::debug;
 
+/// rustc flags kani-compiler requires for correct verification semantics, set
+/// unconditionally on every kani-mode invocation. kani's MIR analysis and
+/// goto-c codegen assume abort-on-panic, checked overflow, v0 mangling,
+/// encoded MIR, storage markers, and `cfg(kani)`. `cargo kani` already passes
+/// these (`kani_rustc_flags()` in kani-driver); for that path appending is
+/// idempotent — see "Override semantics" below. For any other caller — a build
+/// system that drives kani-compiler directly, or a contributor running
+/// `RUSTC=kani-compiler cargo build` to debug — omitting one of these flags
+/// previously produced an incorrect or failed verification: missing
+/// `--cfg=kani` is a vacuous 0-harness pass, missing `-Coverflow-checks=on`
+/// or `-Zmir-enable-passes` proves a different program (silent), and the
+/// rest are hard errors. Now the compiler enforces the correct values.
+///
+/// Override semantics. These are appended, not prepended, and the three
+/// relevant rustc behaviors are not uniform:
+/// - Scalar `-C`/`-Z` options (`panic`, `overflow-checks`,
+///   `symbol-mangling-version`, `always-encode-mir`, `panic_abort_tests`) are
+///   last-flag-wins, so appending makes them non-overridable by the caller.
+///   That is the point: the caller cannot weaken a verification invariant.
+///   The cost is that a future Kani feature wanting one of these *off* has to
+///   change this list, not just kani-driver — compare `--prove-safety-only`,
+///   which sets `-Cdebug-assertions=off` in the driver alone.
+/// - `-Zmir-enable-passes` ACCUMULATES rather than overriding: each occurrence
+///   pushes onto one list. So appending `-RemoveStorageMarkers` does not
+///   discard a caller's earlier entry. This matters for `--coverage`, which
+///   adds `-Zmir-enable-passes=-SingleUseConsts` in `kani_rustc_flags()`: both
+///   disables survive. Were it last-flag-wins, appending here would silently
+///   re-enable `SingleUseConsts` under `--coverage`.
+/// - `--cfg`/`--check-cfg` are additive.
+///
+/// One caveat for direct callers: appending `--check-cfg` *enables* cfg
+/// checking for a caller that passed none, so that crate's own undeclared cfgs
+/// begin emitting `unexpected_cfgs` warnings. Warnings only, never a build
+/// failure, and `cargo kani` is unaffected because kani-driver already passes
+/// `--check-cfg=cfg(kani)`.
+///
+/// Single-token `--flag=value` encoding: rustc's getopts-based CLI parses
+/// `--cfg=kani` and `--cfg kani` identically, and this is the same encoding
+/// kani-driver has always passed (`base_rustc_flags()`). The integration test
+/// at `tests/script-based-pre/compiler_defaults/` pins that both cfg flags
+/// are parsed and applied in this exact form.
+///
+/// Deliberately NOT included:
+/// - `-Clinker=echo` — would clobber a real linker a build system provides
+///   for rlib output (last-flag-wins).
+/// - `-Zcrate-attr=feature(register_tool)` / `-Zcrate-attr=register_tool(kanitool)`
+///   — `-Zcrate-attr` ERRORS on a duplicate registration. `cargo kani` already
+///   passes these via `base_rustc_flags()`; appending again would break every
+///   `cargo kani` invocation (`error: tool 'kanitool' was already registered`).
+///   Omitting them is a loud compile error (`unrecognized tool kanitool`), not
+///   silent unsoundness — caller responsibility is acceptable here.
+/// - Conditional flags (`-Cinstrument-coverage`, `-Zno-codegen`,
+///   `-Cdebug-assertions=off`, `-Zrandomize-layout`) — encode session intent;
+///   the caller chooses them.
+/// - Diagnostic-format flags (`-Ztrim-diagnostic-paths`, `-Zhuman_readable_cgu_names`,
+///   `-Zunstable-options`) — caller preferences, not invariants.
+const KANI_REQUIRED_RUSTC_ARGS: &[&str] = &[
+    "-Cpanic=abort",
+    "-Coverflow-checks=on",
+    "-Csymbol-mangling-version=v0",
+    "-Zalways-encode-mir",
+    "-Zpanic_abort_tests=yes",
+    "-Zmir-enable-passes=-RemoveStorageMarkers",
+    "--cfg=kani",
+    "--check-cfg=cfg(kani)",
+];
+
 /// Run the Kani flavour of the compiler.
 /// This may require multiple runs of the rustc driver ([`rustc_driver::run_compiler`]).
-pub fn run(args: Vec<String>) {
+pub fn run(mut args: Vec<String>) {
+    args.extend(KANI_REQUIRED_RUSTC_ARGS.iter().map(|s| s.to_string()));
     let mut kani_compiler = KaniCompiler::new();
     kani_compiler.run(args);
 }
@@ -95,12 +163,15 @@ struct KaniCompiler {
     /// macro overrides are not injected (the macros are defined in the standard
     /// library being built, and `kani` is not available).
     build_std: bool,
+    /// Whether the user requested to skip injecting Kani's macro overrides
+    /// (`--no-assert-overrides`).
+    no_assert_overrides: bool,
 }
 
 impl KaniCompiler {
     /// Create a new [KaniCompiler] instance.
     pub fn new() -> KaniCompiler {
-        KaniCompiler { build_std: false }
+        KaniCompiler { build_std: false, no_assert_overrides: false }
     }
 
     /// Compile the current crate with the given arguments.
@@ -126,6 +197,7 @@ impl Callbacks for KaniCompiler {
         // Remember whether we are building the standard library so that
         // `after_crate_root_parsing` can decide whether to inject Kani's macro overrides.
         self.build_std = args.build_std;
+        self.no_assert_overrides = args.no_assert_overrides;
 
         // Capture args in the closure so they're available when the backend is created
         // (potentially on a different thread).
@@ -163,6 +235,7 @@ impl Callbacks for KaniCompiler {
         krate: &mut ast::Crate,
     ) -> Compilation {
         if !self.build_std
+            && !self.no_assert_overrides
             && !attr::contains_name(&krate.attrs, sym::no_std)
             && !attr::contains_name(&krate.attrs, sym::no_core)
             // Only inject when an external `std` is available to import. The
@@ -240,5 +313,100 @@ fn inject_kani_macro_overrides(compiler: &Compiler, krate: &mut ast::Crate) {
         Err(error) => {
             error.emit();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::KANI_REQUIRED_RUSTC_ARGS;
+
+    /// Join the two-token `-C opt=val` / `-Z opt=val` / `--cfg val` encodings into single
+    /// logical flags, so the invariants below hold no matter which encoding
+    /// `KANI_REQUIRED_RUSTC_ARGS` uses. rustc's getopts CLI accepts both forms
+    /// interchangeably, so a future edit could switch encodings without changing behavior;
+    /// these assertions must not silently stop applying if it does.
+    fn logical_flags() -> Vec<String> {
+        normalize_encodings(KANI_REQUIRED_RUSTC_ARGS)
+    }
+
+    /// Bare `-C`/`-Z` take their value as the next token and join without a separator
+    /// (`-C` + `linker=echo` == `-Clinker=echo`); bare long options join with `=`
+    /// (`--cfg` + `kani` == `--cfg=kani`).
+    fn normalize_encodings(args: &[&str]) -> Vec<String> {
+        let mut flags = Vec::new();
+        let mut args = args.iter();
+        while let Some(arg) = args.next() {
+            match *arg {
+                "-C" | "-Z" => {
+                    let value = args.next().expect("`-C`/`-Z` must be followed by a value");
+                    flags.push(format!("{arg}{value}"));
+                }
+                "--cfg" | "--check-cfg" => {
+                    let value = args.next().expect("`--cfg` must be followed by a value");
+                    flags.push(format!("{arg}={value}"));
+                }
+                single_token => flags.push(single_token.to_string()),
+            }
+        }
+        flags
+    }
+
+    /// The required-flags list must never include a linker override — a build
+    /// system that needs a real linker for rlib output would have it silently
+    /// clobbered (last-flag-wins).
+    #[test]
+    fn required_args_do_not_clobber_linker() {
+        assert!(
+            !logical_flags().iter().any(|f| f.starts_with("-Clinker")),
+            "KANI_REQUIRED_RUSTC_ARGS must not set -Clinker (build systems own that)"
+        );
+    }
+
+    /// The soundness invariants kani's MIR analysis assumes.
+    #[test]
+    fn required_args_cover_soundness_invariants() {
+        let flags = logical_flags();
+        for must_have in
+            ["-Cpanic=abort", "-Coverflow-checks=on", "-Zalways-encode-mir", "--cfg=kani"]
+        {
+            assert!(
+                flags.iter().any(|f| f == must_have),
+                "missing soundness-critical flag: {must_have}"
+            );
+        }
+    }
+
+    /// `-Zcrate-attr` errors on duplicate registration. `cargo kani` already
+    /// passes `-Z crate-attr=...`; including it here would break every
+    /// `cargo kani` invocation with `error: tool 'kanitool' was already registered`.
+    #[test]
+    fn required_args_do_not_duplicate_crate_attr() {
+        assert!(
+            !logical_flags().iter().any(|f| f.starts_with("-Zcrate-attr")),
+            "KANI_REQUIRED_RUSTC_ARGS must not include -Zcrate-attr (cargo kani passes it; rustc errors on duplicate)"
+        );
+    }
+
+    /// The invariants above are only meaningful if `normalize_encodings` really does join
+    /// the two-token forms; a silent regression there would defeat all three.
+    #[test]
+    fn normalize_encodings_joins_both_forms() {
+        assert_eq!(
+            normalize_encodings(&[
+                "-C",
+                "linker=echo",
+                "-Z",
+                "crate-attr=register_tool(kanitool)",
+                "--cfg",
+                "kani",
+                "-Cpanic=abort",
+            ]),
+            [
+                "-Clinker=echo",
+                "-Zcrate-attr=register_tool(kanitool)",
+                "--cfg=kani",
+                "-Cpanic=abort"
+            ]
+        );
     }
 }

@@ -1,0 +1,5 @@
+Kani Rust Verifier\
+using rustc
+) (standalone)
+(commit
+with LLVM
