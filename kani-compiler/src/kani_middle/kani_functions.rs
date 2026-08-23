@@ -67,6 +67,16 @@ pub enum KaniModel {
     AlignOfVal,
     #[strum(serialize = "AnyModel")]
     Any,
+    #[strum(serialize = "AnyPtrModel")]
+    AnyPtr,
+    #[strum(serialize = "AnySliceRefModel")]
+    AnySliceRef,
+    #[strum(serialize = "AnyStrRefModel")]
+    AnyStrRef,
+    #[strum(serialize = "AssumeSafeModel")]
+    AssumeSafe,
+    #[strum(serialize = "BoundedAnyModel")]
+    BoundedAny,
     #[strum(serialize = "CopyInitStateModel")]
     CopyInitState,
     #[strum(serialize = "CopyInitStateSingleModel")]
@@ -75,6 +85,12 @@ pub enum KaniModel {
     LoadArgument,
     #[strum(serialize = "InitializeMemoryInitializationStateModel")]
     InitializeMemoryInitializationState,
+    #[strum(serialize = "EnterContractClauseModel")]
+    EnterContractClause,
+    #[strum(serialize = "ExitContractClauseModel")]
+    ExitContractClause,
+    #[strum(serialize = "InContractClauseModel")]
+    InContractClause,
     #[strum(serialize = "IsPtrInitializedModel")]
     IsPtrInitialized,
     #[strum(serialize = "IsStrPtrInitializedModel")]
@@ -89,6 +105,8 @@ pub enum KaniModel {
     PtrOffsetFrom,
     #[strum(serialize = "PtrOffsetFromUnsignedModel")]
     PtrOffsetFromUnsigned,
+    #[strum(serialize = "ResetContractClauseDepthModel")]
+    ResetContractClauseDepth,
     #[strum(serialize = "RunContractModel")]
     RunContract,
     #[strum(serialize = "RunLoopContractModel")]

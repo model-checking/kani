@@ -1,0 +1,12 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+# FIXME: this test is disabled (via the `fixme` path convention) on toolchains
+# nightly-2026-02-13 through nightly-2026-04-28: std uses pattern-typed
+# `NonNull` (`ty::PatternKind::NotNull`, added in nightly-2026-02-13), which
+# `rustc_public` cannot convert to its stable representation on these nightlies
+# (`todo!()` in rustc_public's type conversion; implemented upstream on
+# nightly-2026-04-29), so Kani cannot codegen std at all in this window.
+# Re-enable (rename the directory back to `std_codegen`) when the toolchain
+# reaches nightly-2026-04-29.
+script: codegen_std.sh
+expected: codegen_std.expected

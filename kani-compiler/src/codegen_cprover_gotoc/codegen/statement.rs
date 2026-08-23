@@ -17,7 +17,8 @@ use rustc_public::abi::{ArgAbi, FnAbi, PassMode};
 use rustc_public::mir::mono::{Instance, InstanceKind};
 use rustc_public::mir::{
     AssertMessage, BasicBlockIdx, CopyNonOverlapping, NonDivergingIntrinsic, Operand, Place,
-    RETURN_LOCAL, Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
+    ProjectionElem, RETURN_LOCAL, Rvalue, Statement, StatementKind, SwitchTargets, Terminator,
+    TerminatorKind,
 };
 use rustc_public::rustc_internal;
 use rustc_public::ty::{Abi, RigidTy, Span, Ty, TyKind, VariantIdx};
@@ -78,6 +79,41 @@ impl GotocCtx<'_, '_> {
         }
     }
 
+    /// Whether `stmt` contains at least one dereference and every dereference
+    /// in it is a load of a by-reference closure capture in a contract-clause
+    /// closure (see [crate::codegen_cprover_gotoc::context::CurrentFnCtx::is_capture_ref_local]).
+    /// For such statements pointer-validity checks are vacuous by construction.
+    ///
+    /// This is deliberately conservative: any dereference that is not
+    /// *directly* a capture load — including further dereferences of the
+    /// captured value performed by the user-written clause expression — makes
+    /// this function return `false`, keeping full checking in place.
+    fn stmt_derefs_only_capture_refs(&self, stmt: &Statement) -> bool {
+        if !self.current_fn().has_capture_ref_locals() {
+            return false;
+        }
+        let StatementKind::Assign(lhs, rhs) = &stmt.kind else {
+            return false;
+        };
+        let mut places: Vec<&Place> = vec![lhs];
+        collect_rvalue_places(rhs, &mut places);
+        let mut has_deref = false;
+        for place in places {
+            for (idx, elem) in place.projection.iter().enumerate() {
+                if matches!(elem, ProjectionElem::Deref) {
+                    // After the `Derefer` MIR pass, `Deref` only appears as the
+                    // first projection element; treat anything else as unknown.
+                    if idx == 0 && self.current_fn().is_capture_ref_local(place.local) {
+                        has_deref = true;
+                    } else {
+                        return false;
+                    }
+                }
+            }
+        }
+        has_deref
+    }
+
     /// Generate Goto-C for MIR [Statement]s.
     /// This does not cover all possible "statements" because MIR distinguishes between ordinary
     /// statements and [Terminator]s, which can exclusively appear at the end of a basic block.
@@ -86,7 +122,15 @@ impl GotocCtx<'_, '_> {
     pub fn codegen_statement(&mut self, stmt: &Statement) -> Stmt {
         let _trace_span = debug_span!("CodegenStatement", statement = ?stmt).entered();
         debug!(?stmt, kind=?stmt.kind, "handling_statement");
-        let location = self.codegen_span_stable(stmt.span);
+        let location = if self.stmt_derefs_only_capture_refs(stmt) {
+            // Every dereference in this statement only loads a by-reference
+            // closure capture of a contract-clause closure, which is valid by
+            // construction (see `CurrentFnCtx::is_capture_ref_local`), so tell
+            // CBMC not to generate pointer-validity checks for it.
+            self.codegen_span_stable_with_pragmas(stmt.span, &["disable:pointer-check"])
+        } else {
+            self.codegen_span_stable(stmt.span)
+        };
         match &stmt.kind {
             StatementKind::Assign(lhs, rhs) => {
                 let lty = self.place_ty_stable(lhs);
@@ -791,7 +835,7 @@ impl GotocCtx<'_, '_> {
                 Stmt::block(
                     vec![
                         self.codegen_expr_to_place_stable(destination, func_expr.call(fargs), loc),
-                        Stmt::goto(bb_label(target.unwrap()), loc),
+                        self.codegen_end_call(*target, loc),
                     ],
                     loc,
                 )
@@ -918,5 +962,35 @@ impl GotocCtx<'_, '_> {
             .goto_expr
             .assign(expr, loc)
         }
+    }
+}
+
+/// Collect all places appearing in `rvalue` (directly or inside operands).
+fn collect_rvalue_places<'a>(rvalue: &'a Rvalue, places: &mut Vec<&'a Place>) {
+    let push_operand = |op: &'a Operand, places: &mut Vec<&'a Place>| {
+        if let Operand::Copy(place) | Operand::Move(place) = op {
+            places.push(place);
+        }
+    };
+    match rvalue {
+        Rvalue::Use(op)
+        | Rvalue::Repeat(op, _)
+        | Rvalue::Cast(_, op, _)
+        | Rvalue::UnaryOp(_, op) => push_operand(op, places),
+        Rvalue::BinaryOp(_, op1, op2) | Rvalue::CheckedBinaryOp(_, op1, op2) => {
+            push_operand(op1, places);
+            push_operand(op2, places);
+        }
+        Rvalue::Ref(_, _, place)
+        | Rvalue::AddressOf(_, place)
+        | Rvalue::Len(place)
+        | Rvalue::CopyForDeref(place)
+        | Rvalue::Discriminant(place) => places.push(place),
+        Rvalue::Aggregate(_, operands) => {
+            for op in operands {
+                push_operand(op, places);
+            }
+        }
+        Rvalue::ThreadLocalRef(..) => {}
     }
 }

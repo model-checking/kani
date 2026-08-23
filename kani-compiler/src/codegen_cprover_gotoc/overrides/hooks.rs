@@ -62,6 +62,32 @@ struct Cover;
 
 const UNEXPECTED_CALL: &str = "Hooks from kani library handled as a map";
 
+/// Extracts a string message from a constant `Expr` produced by one of Kani's
+/// hooks (e.g. `kani::cover`, `kani::assert`, `kani::check`, ...).
+///
+/// The message argument to these functions is typed as `&'static str`, but
+/// nothing prevents a user from passing an expression that is not a string
+/// literal (e.g. a `const` computed via some indirection). In that case,
+/// `extract_const_message` cannot recover the string contents. Rather than
+/// panicking (which used to cause an internal compiler error), emit a clean,
+/// spanned, user-facing error and abort compilation.
+///
+/// `construct` should be the user-facing name of the Kani construct being
+/// codegen'd (e.g. `"cover"`, `"assert"`), and is only used for the error
+/// message.
+fn extract_msg_or_err(gcx: &GotocCtx, msg_expr: &Expr, span: Span, construct: &str) -> String {
+    gcx.extract_const_message(msg_expr).unwrap_or_else(|| {
+        utils::span_err(gcx.tcx, span, format!("`{construct}` message must be a string literal"));
+        gcx.tcx.dcx().abort_if_errors();
+        // `span_err` above emits a hard error, which `abort_if_errors` is guaranteed to
+        // observe and turn into a fatal error, unwinding before we get here.
+        unreachable!(
+            "rustc should have aborted after the `{construct}` message error emitted above; \
+             reaching this point means that error was never counted by the diagnostic context"
+        )
+    })
+}
+
 impl GotocHook for Cover {
     fn hook_applies(
         &self,
@@ -85,7 +111,7 @@ impl GotocHook for Cover {
         assert_eq!(fargs.len(), 2);
         let cond = fargs.remove(0).cast_to(Type::bool());
         let msg = fargs.remove(0);
-        let msg = gcx.extract_const_message(&msg).unwrap();
+        let msg = extract_msg_or_err(gcx, &msg, span, "cover");
         let target = target.unwrap();
         let caller_loc = gcx.codegen_caller_span_stable(span);
 
@@ -156,7 +182,7 @@ impl GotocHook for Assert {
         assert_eq!(fargs.len(), 2);
         let cond = fargs.remove(0).cast_to(Type::bool());
         let msg = fargs.remove(0);
-        let msg = gcx.extract_const_message(&msg).unwrap();
+        let msg = extract_msg_or_err(gcx, &msg, span, "assert");
         let target = target.unwrap();
         let caller_loc = gcx.codegen_caller_span_stable(span);
 
@@ -196,7 +222,7 @@ impl GotocHook for UnsupportedCheck {
     ) -> Stmt {
         assert_eq!(fargs.len(), 1);
         let msg = fargs.pop().unwrap();
-        let msg = gcx.extract_const_message(&msg).unwrap();
+        let msg = extract_msg_or_err(gcx, &msg, span, "unsupported");
         let caller_loc = gcx.codegen_caller_span_stable(span);
         if let Some(target) = target {
             Stmt::block(
@@ -240,7 +266,7 @@ impl GotocHook for SafetyCheck {
         assert_eq!(fargs.len(), 2);
         let msg = fargs.pop().unwrap();
         let cond = fargs.pop().unwrap().cast_to(Type::bool());
-        let msg = gcx.extract_const_message(&msg).unwrap();
+        let msg = extract_msg_or_err(gcx, &msg, span, "safety_check");
         let target = target.unwrap();
         let caller_loc = gcx.codegen_caller_span_stable(span);
         Stmt::block(
@@ -277,7 +303,7 @@ impl GotocHook for SafetyCheckNoAssume {
         assert_eq!(fargs.len(), 2);
         let msg = fargs.pop().unwrap();
         let cond = fargs.pop().unwrap().cast_to(Type::bool());
-        let msg = gcx.extract_const_message(&msg).unwrap();
+        let msg = extract_msg_or_err(gcx, &msg, span, "safety_check_no_assume");
         let target = target.unwrap();
         let caller_loc = gcx.codegen_caller_span_stable(span);
         Stmt::block(
@@ -315,7 +341,7 @@ impl GotocHook for Check {
         assert_eq!(fargs.len(), 2);
         let cond = fargs.remove(0).cast_to(Type::bool());
         let msg = fargs.remove(0);
-        let msg = gcx.extract_const_message(&msg).unwrap();
+        let msg = extract_msg_or_err(gcx, &msg, span, "check");
         let target = target.unwrap();
         let caller_loc = gcx.codegen_caller_span_stable(span);
 
@@ -384,7 +410,7 @@ impl GotocHook for Panic {
         &self,
         tcx: TyCtxt,
         instance: Instance,
-        _instance_name: &str,
+        instance_name: &str,
         kani_tool_attr: Option<&String>,
     ) -> bool {
         let def_id = rustc_internal::internal(tcx, instance.def.def_id());
@@ -396,6 +422,13 @@ impl GotocHook for Panic {
             || tcx.is_lang_item(def_id, LangItem::PanicDisplay)
             || Some(def_id) == tcx.lang_items().panic_fmt()
             || Some(def_id) == tcx.lang_items().begin_panic_fn()
+            // The diverging error path of string slicing. It is not a lang
+            // item, and (since nightly-2026-02-16) its message formatting
+            // uses `floor_char_boundary`/`ceil_char_boundary`, whose loops
+            // get codegen'd into every slicing call site and blow up
+            // symbolic execution. Treating it as a panic (which Kani models
+            // as `assert false` anyway) skips that dead formatting code.
+            || instance_name == "core::str::slice_error_fail"
     }
 
     fn handle(

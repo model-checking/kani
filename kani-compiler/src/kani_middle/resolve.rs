@@ -14,12 +14,12 @@ use rustc_hir::def_id::{CRATE_DEF_INDEX, DefId, LOCAL_CRATE, LocalDefId, LocalMo
 use rustc_hir::{ItemKind, UseKind};
 use rustc_middle::ty::TyCtxt;
 use rustc_middle::ty::fast_reject::{self, TreatParams};
+use rustc_public::CrateDef;
 use rustc_public::mir::mono::Instance;
 use rustc_public::rustc_internal;
 use rustc_public::ty::{
     AssocItem, FnDef, GenericArgKind, GenericArgs, RigidTy, TraitDef, Ty, TyKind,
 };
-use rustc_public::{CrateDef, CrateDefItems};
 use std::collections::HashSet;
 use std::fmt;
 use std::iter::Peekable;
@@ -239,7 +239,7 @@ impl fmt::Display for ResolveError<'_> {
             ResolveError::UnexpectedType { tcx, item: def_id, expected } => write!(
                 f,
                 "expected {expected}, found {} `{}`",
-                tcx.def_kind(def_id).descr(*def_id),
+                tcx.def_kind(*def_id).descr(*def_id),
                 tcx.def_path_str(*def_id)
             ),
             ResolveError::MissingItem { tcx, base, unresolved } => {
@@ -704,7 +704,7 @@ fn resolve_in_type_def<'tcx>(
     let candidates: Vec<DefId> = tcx
         .inherent_impls(type_id)
         .iter()
-        .flat_map(|impl_id| tcx.associated_item_def_ids(impl_id))
+        .flat_map(|impl_id| tcx.associated_item_def_ids(*impl_id))
         .cloned()
         .filter(|item| is_item_name(tcx, *item, name))
         .collect();
@@ -730,7 +730,7 @@ fn resolve_in_type_def<'tcx>(
                         &generic_args,
                         &candidates
                             .iter()
-                            .map(|def_id| tcx.def_path_str(def_id))
+                            .map(|def_id| tcx.def_path_str(*def_id))
                             .intersperse("\n".to_string())
                             .collect::<String>()
                     ),
@@ -763,7 +763,7 @@ fn resolve_in_type_def<'tcx>(
                             "Got multiple refined candidates {:?}",
                             refined_candidates
                                 .iter()
-                                .map(|def_id| tcx.def_path_str(def_id))
+                                .map(|def_id| tcx.def_path_str(*def_id))
                                 .collect::<Vec<String>>()
                         ),
                     }
@@ -839,7 +839,7 @@ where
         let item = impls
             .iter()
             .find_map(|item_impl| {
-                tcx.associated_item_def_ids(item_impl)
+                tcx.associated_item_def_ids(*item_impl)
                     .iter()
                     .copied()
                     .find(|item| is_item_name(tcx, *item, &name))

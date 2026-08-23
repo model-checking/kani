@@ -624,7 +624,6 @@ pub trait MutMirVisitor {
             Rvalue::Repeat(op, _) => {
                 self.visit_operand(op);
             }
-            Rvalue::ShallowInitBox(op, _) => self.visit_operand(op),
             Rvalue::UnaryOp(_, op) | Rvalue::Use(op) => {
                 self.visit_operand(op);
             }

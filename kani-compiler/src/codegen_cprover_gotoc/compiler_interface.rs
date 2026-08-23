@@ -6,10 +6,11 @@
 use crate::args::ReachabilityType;
 use crate::codegen_cprover_gotoc::context::MinimalGotocCtx;
 use crate::codegen_cprover_gotoc::utils::file_writing_pool::{FileDataToWrite, ThreadPool};
-use crate::codegen_cprover_gotoc::{GotocCtx, context};
+use crate::codegen_cprover_gotoc::{GotocCtx, clear_codegen_cache, context};
 use crate::kani_middle::analysis;
 use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::check_reachable_items;
+use crate::kani_middle::codegen_order::{MostReachableItems, order_harnesses};
 use crate::kani_middle::codegen_units::{CodegenUnit, CodegenUnits};
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
@@ -399,7 +400,29 @@ impl CodegenBackend for GotocCodegenBackend {
                         let mut shared_unit_transformer =
                             BodyTransformation::new(&queries, tcx, unit);
 
-                        for harness in &unit.harnesses {
+                        // Codegen the harnesses expected to generate the most code first, so their
+                        // (slow) goto-file export runs on a worker thread while the main thread
+                        // keeps codegening the rest, rather than stalling on them at the end of
+                        // compilation. Reachability run here to rate the harnesses also warms the
+                        // shared transformer's body cache reused during codegen. See
+                        // `kani_middle::codegen_order`.
+                        //
+                        // Only worth the extra reachability pass when there are export workers to
+                        // overlap with; without them exports happen synchronously on this thread,
+                        // so ordering cannot hide any latency and would only add compile time.
+                        let ordered_harnesses = if export_thread_pool.has_workers() {
+                            order_harnesses::<MostReachableItems>(
+                                &unit.harnesses,
+                                tcx,
+                                &mut shared_unit_transformer,
+                            )
+                        } else {
+                            unit.harnesses.iter().collect()
+                        };
+
+                        for harness in ordered_harnesses {
+                            clear_codegen_cache();
+
                             let model_path = units.harness_model_path(*harness).unwrap();
                             let is_automatic_harness = units.is_automatic_harness(harness);
                             let contract_metadata =
