@@ -1,13 +1,14 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{Error, Result};
+use anyhow::Result;
 use kani_metadata::{ArtifactType, HarnessKind, HarnessMetadata};
 use rayon::prelude::*;
 use std::fs::File;
 use std::io::{IsTerminal, Write};
 use std::path::Path;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::args::{NumThreads, OutputFormat};
 use crate::call_cbmc::{VerificationResult, VerificationStatus};
@@ -35,19 +36,6 @@ pub(crate) struct HarnessRunner<'sess, 'pr> {
 pub(crate) struct HarnessResult<'pr> {
     pub harness: &'pr HarnessMetadata,
     pub result: VerificationResult,
-}
-
-/// Signals that a harness failed under `--fail-fast`, so no further harnesses should start.
-/// The failing harness's result is already in the shared accumulator, so this carries no payload.
-#[derive(Debug)]
-struct FailFastAbort;
-
-impl std::error::Error for FailFastAbort {}
-
-impl std::fmt::Display for FailFastAbort {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "aborting: a harness failed and --fail-fast is set")
-    }
 }
 
 impl<'pr> HarnessRunner<'_, 'pr> {
@@ -93,8 +81,20 @@ impl<'pr> HarnessRunner<'_, 'pr> {
         // Completed results accumulate here so a `--fail-fast` abort keeps them.
         let completed: Mutex<Vec<(usize, HarnessResult<'pr>)>> = Mutex::new(Vec::new());
 
+        // `--fail-fast` is signalled by this latch rather than through the `Err` channel, which
+        // stays reserved for genuine errors. `try_for_each` surfaces only one `Err`, so sharing
+        // the channel would let an abort mask a real failure raised by a sibling harness.
+        let fail_fast = AtomicBool::new(false);
+
         let run_result = pool.install(|| -> Result<()> {
             sorted_harnesses.par_iter().enumerate().try_for_each(|(idx, harness)| -> Result<()> {
+                // Once a harness has failed under `--fail-fast`, the remaining harnesses return
+                // without starting. Harnesses already in flight still finish and record their
+                // results.
+                if fail_fast.load(Ordering::Relaxed) {
+                    return Ok(());
+                }
+
                 let goto_file =
                     self.project.get_harness_artifact(harness, ArtifactType::Goto).unwrap();
 
@@ -114,26 +114,26 @@ impl<'pr> HarnessRunner<'_, 'pr> {
                     progress_indicator.update_with_result(succeeded, timed_out);
                 }
 
-                let fail_fast_triggered =
+                let triggered =
                     self.sess.args.fail_fast && result.status == VerificationStatus::Failure;
 
                 completed.lock().unwrap().push((idx, HarnessResult { harness, result }));
 
-                // Ask rayon to stop scheduling further harnesses (best effort); harnesses
-                // already in flight still complete and record their results.
-                if fail_fast_triggered { Err(Error::new(FailFastAbort)) } else { Ok(()) }
+                if triggered {
+                    fail_fast.store(true, Ordering::Relaxed);
+                }
+                Ok(())
             })
         });
 
         // Finish progress indicator
         progress_indicator.finish();
 
-        // A genuine error (not the fail-fast signal) must still propagate.
-        let fail_fast = match run_result {
-            Ok(()) => false,
-            Err(err) if err.is::<FailFastAbort>() => true,
-            Err(err) => return Err(err),
-        };
+        // The `Err` channel now carries genuine errors only, so any error propagates.
+        run_result?;
+
+        // Read after the parallel region has joined, which orders every store before this load.
+        let fail_fast = fail_fast.load(Ordering::Relaxed);
 
         // Completion order under parallelism is nondeterministic; restore harness order.
         let mut collected = completed.into_inner().unwrap();
