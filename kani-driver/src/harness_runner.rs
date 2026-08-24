@@ -38,6 +38,52 @@ pub(crate) struct HarnessResult<'pr> {
     pub result: VerificationResult,
 }
 
+/// The outcome of one unit of work run by [`run_until_abort`].
+struct Completed<T> {
+    payload: T,
+    /// Whether this outcome should stop units that have not started yet.
+    aborts: bool,
+}
+
+/// Run `run_one` over `items` in parallel, keeping the payloads of units that completed even when
+/// one of them aborts the run, and returning them in `items` order together with whether an abort
+/// happened.
+///
+/// The abort is latched rather than raised through the `Err` channel, which stays reserved for
+/// genuine errors. `try_for_each` surfaces only one `Err`, so signalling an abort that way would
+/// let it displace a real failure raised by a sibling unit still in flight.
+fn run_until_abort<I: Sync, T: Send>(
+    items: &[I],
+    run_one: impl Fn(&I) -> Result<Completed<T>> + Sync,
+) -> Result<(Vec<T>, bool)> {
+    let completed: Mutex<Vec<(usize, T)>> = Mutex::new(Vec::new());
+    let aborted = AtomicBool::new(false);
+
+    items.par_iter().enumerate().try_for_each(|(idx, item)| -> Result<()> {
+        // A unit that has not started returns without running once an abort is latched. Units
+        // already in flight finish and record their payloads.
+        if aborted.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+
+        let Completed { payload, aborts } = run_one(item)?;
+        completed.lock().unwrap().push((idx, payload));
+
+        if aborts {
+            aborted.store(true, Ordering::Relaxed);
+        }
+        Ok(())
+    })?;
+
+    // Completion order under parallelism is nondeterministic; restore `items` order.
+    let mut collected = completed.into_inner().unwrap();
+    collected.sort_by_key(|(idx, _)| *idx);
+    let payloads = collected.into_iter().map(|(_, payload)| payload).collect();
+
+    // Read after the parallel region has joined, which orders every store before this load.
+    Ok((payloads, aborted.load(Ordering::Relaxed)))
+}
+
 impl<'pr> HarnessRunner<'_, 'pr> {
     /// Given a [`HarnessRunner`] (to abstract over how these harnesses were generated), this runs
     /// the proof-checking process for each harness in `harnesses`.
@@ -78,23 +124,8 @@ impl<'pr> HarnessRunner<'_, 'pr> {
             builder.build()?
         };
 
-        // Completed results accumulate here so a `--fail-fast` abort keeps them.
-        let completed: Mutex<Vec<(usize, HarnessResult<'pr>)>> = Mutex::new(Vec::new());
-
-        // `--fail-fast` is signalled by this latch rather than through the `Err` channel, which
-        // stays reserved for genuine errors. `try_for_each` surfaces only one `Err`, so sharing
-        // the channel would let an abort mask a real failure raised by a sibling harness.
-        let fail_fast = AtomicBool::new(false);
-
-        let run_result = pool.install(|| -> Result<()> {
-            sorted_harnesses.par_iter().enumerate().try_for_each(|(idx, harness)| -> Result<()> {
-                // Once a harness has failed under `--fail-fast`, the remaining harnesses return
-                // without starting. Harnesses already in flight still finish and record their
-                // results.
-                if fail_fast.load(Ordering::Relaxed) {
-                    return Ok(());
-                }
-
+        let run_result = pool.install(|| {
+            run_until_abort(&sorted_harnesses, |harness| {
                 let goto_file =
                     self.project.get_harness_artifact(harness, ArtifactType::Goto).unwrap();
 
@@ -114,31 +145,18 @@ impl<'pr> HarnessRunner<'_, 'pr> {
                     progress_indicator.update_with_result(succeeded, timed_out);
                 }
 
-                let triggered =
+                let aborts =
                     self.sess.args.fail_fast && result.status == VerificationStatus::Failure;
 
-                completed.lock().unwrap().push((idx, HarnessResult { harness, result }));
-
-                if triggered {
-                    fail_fast.store(true, Ordering::Relaxed);
-                }
-                Ok(())
+                Ok(Completed { payload: HarnessResult { harness, result }, aborts })
             })
         });
 
         // Finish progress indicator
         progress_indicator.finish();
 
-        // The `Err` channel now carries genuine errors only, so any error propagates.
-        run_result?;
-
-        // Read after the parallel region has joined, which orders every store before this load.
-        let fail_fast = fail_fast.load(Ordering::Relaxed);
-
-        // Completion order under parallelism is nondeterministic; restore harness order.
-        let mut collected = completed.into_inner().unwrap();
-        collected.sort_by_key(|(idx, _)| *idx);
-        let results: Vec<HarnessResult<'pr>> = collected.into_iter().map(|(_, r)| r).collect();
+        // The `Err` channel carries genuine errors only, so any error propagates.
+        let (results, fail_fast) = run_result?;
 
         if let Some(handler) = json_handler {
             let status_label = if fail_fast { "completed_with_fail_fast" } else { "completed" };
@@ -369,5 +387,136 @@ impl KaniSession {
     /// This is just a placeholder for now.
     fn show_coverage_summary(&self) -> Result<()> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Completed, run_until_abort};
+    use anyhow::{Result, anyhow};
+    use std::sync::Mutex;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::Duration;
+
+    /// What one unit of work should do when it runs.
+    #[derive(Clone, Copy)]
+    enum Unit {
+        Pass,
+        /// Completes, and latches the abort.
+        Abort,
+        /// Fails for a reason of its own, unrelated to `--fail-fast`.
+        Error,
+    }
+
+    /// Run `units` on a single thread, so the order they are visited in is the order given.
+    fn run_sequential(units: &[Unit]) -> (Result<(Vec<usize>, bool)>, Vec<usize>) {
+        run_on(units, 1)
+    }
+
+    fn run_on(units: &[Unit], threads: usize) -> (Result<(Vec<usize>, bool)>, Vec<usize>) {
+        let ran: Mutex<Vec<usize>> = Mutex::new(Vec::new());
+        let indexed: Vec<(usize, Unit)> = units.iter().copied().enumerate().collect();
+        let pool = rayon::ThreadPoolBuilder::new().num_threads(threads).build().unwrap();
+
+        let outcome = pool.install(|| {
+            run_until_abort(&indexed, |(idx, unit)| {
+                ran.lock().unwrap().push(*idx);
+                match unit {
+                    Unit::Pass => Ok(Completed { payload: *idx, aborts: false }),
+                    Unit::Abort => Ok(Completed { payload: *idx, aborts: true }),
+                    Unit::Error => Err(anyhow!("unit {idx} failed for its own reasons")),
+                }
+            })
+        });
+
+        let mut ran = ran.into_inner().unwrap();
+        ran.sort_unstable();
+        (outcome, ran)
+    }
+
+    /// The property the whole design rests on: an abort is reported through the returned flag and
+    /// never through the `Err` channel.
+    ///
+    /// This is what makes it impossible for an abort to displace a genuine error. `try_for_each`
+    /// surfaces only one `Err`, so as long as an abort never produces one, whatever `Err` comes
+    /// back is a real failure. Revert the latch to an `Err(FailFastAbort)` and this test fails.
+    #[test]
+    fn an_abort_is_not_reported_as_an_error() {
+        let (outcome, _) = run_sequential(&[Unit::Abort]);
+        let (payloads, aborted) = outcome.expect("an abort must not surface as an error");
+        assert!(aborted, "the abort must be reported through the flag");
+        assert_eq!(payloads, vec![0], "the aborting unit's own payload is kept");
+    }
+
+    /// The reviewer's scenario: one unit trips the abort while another returns a genuine error, both
+    /// in flight at once. The genuine error must be what propagates.
+    ///
+    /// Both units wait for the other to start before returning, so the abort and the error really do
+    /// overlap. The wait is bounded, so this cannot hang if rayon runs them on one thread; in that
+    /// case the assertion still holds, it is just no longer testing an overlap.
+    #[test]
+    fn a_genuine_error_is_not_displaced_by_a_concurrent_abort() {
+        let started = AtomicUsize::new(0);
+        let units = [Unit::Abort, Unit::Error];
+        let indexed: Vec<(usize, Unit)> = units.iter().copied().enumerate().collect();
+        let pool = rayon::ThreadPoolBuilder::new().num_threads(2).build().unwrap();
+
+        let outcome = pool.install(|| {
+            run_until_abort(&indexed, |(idx, unit)| {
+                started.fetch_add(1, Ordering::SeqCst);
+                for _ in 0..1_000 {
+                    if started.load(Ordering::SeqCst) >= 2 {
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+                match unit {
+                    Unit::Abort => Ok(Completed { payload: *idx, aborts: true }),
+                    _ => Err(anyhow!("unit {idx} failed for its own reasons")),
+                }
+            })
+        });
+
+        let err = outcome.expect_err("the genuine error must propagate");
+        assert_eq!(err.to_string(), "unit 1 failed for its own reasons");
+    }
+
+    /// A genuine error propagates when nothing aborts, which is the behaviour that existed before
+    /// `--fail-fast` and must not regress.
+    #[test]
+    fn a_genuine_error_propagates_on_its_own() {
+        let (outcome, _) = run_sequential(&[Unit::Pass, Unit::Error]);
+        let err = outcome.expect_err("a genuine error must propagate");
+        assert_eq!(err.to_string(), "unit 1 failed for its own reasons");
+    }
+
+    /// An abort stops units that have not started. The unit after it never runs, which is why the
+    /// error it would have raised is absent rather than swallowed.
+    #[test]
+    fn an_abort_stops_units_that_have_not_started() {
+        let (outcome, ran) = run_sequential(&[Unit::Abort, Unit::Error]);
+        let (payloads, aborted) = outcome.expect("the skipped unit never ran, so no error exists");
+        assert!(aborted);
+        assert_eq!(payloads, vec![0]);
+        assert_eq!(ran, vec![0], "the unit after the abort must not have run");
+    }
+
+    /// Units that completed before the abort keep their payloads, in input order rather than
+    /// completion order. This is the original defect the branch fixes.
+    #[test]
+    fn units_completed_before_an_abort_are_kept_in_order() {
+        let (outcome, _) = run_sequential(&[Unit::Pass, Unit::Pass, Unit::Abort, Unit::Pass]);
+        let (payloads, aborted) = outcome.expect("an abort is not an error");
+        assert!(aborted);
+        assert_eq!(payloads, vec![0, 1, 2], "completed payloads kept, in input order");
+    }
+
+    /// A run where nothing aborts and nothing fails reports no abort and keeps everything.
+    #[test]
+    fn a_clean_run_reports_no_abort() {
+        let (outcome, _) = run_sequential(&[Unit::Pass, Unit::Pass, Unit::Pass]);
+        let (payloads, aborted) = outcome.expect("a clean run must succeed");
+        assert!(!aborted);
+        assert_eq!(payloads, vec![0, 1, 2]);
     }
 }
