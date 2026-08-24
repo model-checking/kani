@@ -361,6 +361,102 @@ fn ty_is_sized(tcx: TyCtxt, ty: Ty) -> bool {
         .is_sized(*tcx.at(rustc_span::DUMMY_SP), rustc_middle::ty::TypingEnv::fully_monomorphized())
 }
 
+/// The smart-pointer types for which automatic harnesses can generate nondeterministic values
+/// via dedicated (optional) models, c.f. `KaniModel::is_optional`.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum SmartPointerKind {
+    Arc,
+    Box,
+    Rc,
+}
+
+/// If `ty` is `Box<T>`, `Rc<T>`, or `Arc<T>`, return the pointer kind and the pointee type `T`.
+/// Note that `Box<T, A>`/`Rc<T, A>`/`Arc<T, A>` with a non-default allocator are not
+/// recognized, and unsized pointees (e.g. `Box<[T]>`) are rejected by the caller's
+/// Arbitrary check on the pointee.
+fn smart_pointer_pointee(tcx: TyCtxt, ty: Ty) -> Option<(SmartPointerKind, Ty)> {
+    let TyKind::RigidTy(RigidTy::Adt(def, args)) = ty.kind() else {
+        return None;
+    };
+
+    let kind = if def.is_box() {
+        SmartPointerKind::Box
+    } else {
+        let def_id = rustc_internal::internal(tcx, def.def_id());
+        if tcx.get_diagnostic_item(rustc_span::sym::Rc) == Some(def_id) {
+            SmartPointerKind::Rc
+        } else if tcx.get_diagnostic_item(rustc_span::sym::Arc) == Some(def_id) {
+            SmartPointerKind::Arc
+        } else {
+            return None;
+        }
+    };
+
+    // The first generic argument is the pointee. (The remaining argument is the allocator,
+    // which is validated by the model return-type check in `smart_pointer_model_instance`.)
+    let pointee = args.0.iter().find_map(|arg| match arg {
+        GenericArgKind::Type(ty) => Some(*ty),
+        _ => None,
+    })?;
+    if !ty_is_sized(tcx, pointee) {
+        return None;
+    }
+    Some((kind, pointee))
+}
+
+/// If `ty` is a supported smart-pointer type whose generation model is available, resolve the
+/// model for the pointee and return it together with the pointee type. Returns `None` if the
+/// model's return type does not match `ty` exactly (e.g. for a non-default allocator).
+fn smart_pointer_model_instance(
+    tcx: TyCtxt,
+    ty: Ty,
+    smart_pointer_models: &SmartPointerModels,
+) -> Option<(Instance, Ty)> {
+    let (kind, pointee) = smart_pointer_pointee(tcx, ty)?;
+    let model = smart_pointer_models.for_kind(kind)?;
+    let instance =
+        Instance::resolve(model, &GenericArgs(vec![GenericArgKind::Type(pointee)])).ok()?;
+    let TyKind::RigidTy(RigidTy::FnDef(..)) = instance.ty().kind() else {
+        return None;
+    };
+    let ret_ty = instance.ty().kind().fn_sig()?.skip_binder().output();
+    (ret_ty == ty).then_some((instance, pointee))
+}
+
+/// The (optional) smart-pointer generation models, c.f. `smart_pointer_pointee`.
+/// `None` entries mean the model is unavailable (e.g. in the `no_core` flow, which has no
+/// `alloc`), in which case the corresponding smart-pointer types are not supported.
+#[derive(Copy, Clone, Debug)]
+pub struct SmartPointerModels {
+    pub any_arc: Option<FnDef>,
+    pub any_box: Option<FnDef>,
+    pub any_rc: Option<FnDef>,
+}
+
+impl SmartPointerModels {
+    pub fn from_kani_functions(
+        kani_fns: &std::collections::HashMap<
+            crate::kani_middle::kani_functions::KaniFunction,
+            FnDef,
+        >,
+    ) -> Self {
+        use crate::kani_middle::kani_functions::KaniModel;
+        SmartPointerModels {
+            any_arc: kani_fns.get(&KaniModel::AnyArc.into()).copied(),
+            any_box: kani_fns.get(&KaniModel::AnyBox.into()).copied(),
+            any_rc: kani_fns.get(&KaniModel::AnyRc.into()).copied(),
+        }
+    }
+
+    pub fn for_kind(&self, kind: SmartPointerKind) -> Option<FnDef> {
+        match kind {
+            SmartPointerKind::Arc => self.any_arc,
+            SmartPointerKind::Box => self.any_box,
+            SmartPointerKind::Rc => self.any_rc,
+        }
+    }
+}
+
 /// Inspect a `kani::bounded_any::<T, N>()` (c.f. `KaniModel::BoundedAny`) instantiation to
 /// determine if `T: BoundedArbitrary`. The model looks like:
 /// ```rust
@@ -493,6 +589,10 @@ pub enum ArgSupport {
 /// - types that implement `BoundedArbitrary` (e.g. `Vec<T>`, `String`, or user types deriving
 ///   it): the harness generates a bounded nondeterministic value via `KaniModel::BoundedAny`
 ///   (reported as [ArgSupport::Bounded]).
+/// - `Box<T>`/`Rc<T>`/`Arc<T>` arguments whose pointee `T` implements or can derive `Arbitrary`,
+///   provided the corresponding (optional) generation model is available, c.f.
+///   `smart_pointer_model_instance`: a smart pointer to `T` covers exactly the values of `T`, so
+///   these are *unbounded* (reported as [ArgSupport::Arbitrary]).
 ///
 /// Note that raw pointers and slice/string references are only supported as immediate harness
 /// arguments (raw pointers also through other raw pointers): such a type behind a reference or
@@ -503,6 +603,7 @@ fn autoharness_supported_arg_ty(
     ty: Ty,
     kani_any_def: FnDef,
     kani_bounded_any_def: FnDef,
+    smart_pointer_models: &SmartPointerModels,
     ty_arbitrary_cache: &mut FxHashMap<Ty, bool>,
 ) -> ArgSupport {
     let arbitrary_or_derive = |ty: Ty, cache: &mut FxHashMap<Ty, bool>| {
@@ -523,6 +624,7 @@ fn autoharness_supported_arg_ty(
             inner_ty,
             kani_any_def,
             kani_bounded_any_def,
+            smart_pointer_models,
             ty_arbitrary_cache,
         )
     } else if let TyKind::RigidTy(RigidTy::Ref(_, inner_ty, inner_mutability)) = ty.kind() {
@@ -547,6 +649,13 @@ fn autoharness_supported_arg_ty(
         }
     } else {
         if arbitrary_or_derive(ty, ty_arbitrary_cache) == ArgSupport::Arbitrary {
+            ArgSupport::Arbitrary
+        } else if smart_pointer_model_instance(tcx, ty, smart_pointer_models).is_some_and(
+            |(_, pointee)| {
+                arbitrary_or_derive(pointee, ty_arbitrary_cache) == ArgSupport::Arbitrary
+            },
+        ) {
+            // A smart pointer to `T` covers exactly the values of `T`, so it is unbounded.
             ArgSupport::Arbitrary
         } else if implements_bounded_arbitrary(tcx, ty, kani_bounded_any_def) {
             ArgSupport::Bounded

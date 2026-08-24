@@ -12,7 +12,10 @@ use crate::kani_middle::codegen_units::CodegenUnit;
 use crate::kani_middle::kani_functions::{KaniHook, KaniIntrinsic, KaniModel};
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
-use crate::kani_middle::{can_derive_arbitrary, implements_arbitrary, implements_invariant};
+use crate::kani_middle::{
+    SmartPointerModels, can_derive_arbitrary, implements_arbitrary, implements_invariant,
+    smart_pointer_model_instance,
+};
 use crate::kani_queries::QueryDb;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::ty::TyCtxt;
@@ -46,6 +49,8 @@ struct AnyModels {
     kani_assume_safe: FnDef,
     /// The FnDef of KaniModel::BoundedAny
     kani_bounded_any: FnDef,
+    /// The (optional) smart-pointer generation models (`Box`/`Rc`/`Arc`).
+    smart_pointer_models: SmartPointerModels,
 }
 
 impl AnyModels {
@@ -58,6 +63,7 @@ impl AnyModels {
             kani_any_str_ref: *kani_fns.get(&KaniModel::AnyStrRef.into()).unwrap(),
             kani_assume_safe: *kani_fns.get(&KaniModel::AssumeSafe.into()).unwrap(),
             kani_bounded_any: *kani_fns.get(&KaniModel::BoundedAny.into()).unwrap(),
+            smart_pointer_models: SmartPointerModels::from_kani_functions(kani_fns),
         }
     }
 }
@@ -198,8 +204,13 @@ const AUTOHARNESS_BOUNDED_ANY_BOUND: u64 = 4;
 /// `KaniModel::AssumeSafe` model (`kani_assume_safe`), which assumes that the nondeterministic
 /// value respects the type's safety invariant, c.f.
 /// <https://rust-lang.github.io/unsafe-code-guidelines/glossary.html#validity-and-safety-invariant>.
-/// Panics if `ty` does not implement Arbitrary or BoundedArbitrary (and is not a reference or raw
-/// pointer to such a type, or a reference to a slice or str of such a type).
+/// For `Box<T>`/`Rc<T>`/`Arc<T>` whose pointee only *can derive* Arbitrary (so the smart
+/// pointer's blanket `Arbitrary` implementation is unresolvable), insert a call to the
+/// corresponding smart-pointer model (`any_box`/`any_rc`/`any_arc`) instead; the model's internal
+/// `kani::any::<T>()` call is replaced with the compiler-synthesized implementation by this pass.
+/// Panics if `ty` does not implement Arbitrary or BoundedArbitrary and is not a supported smart
+/// pointer (and is not a reference or raw pointer to such a type, or a reference to a slice or str
+/// of such a type).
 fn call_kani_any_for_ty(
     tcx: TyCtxt,
     models: AnyModels,
@@ -398,14 +409,23 @@ fn call_kani_any_for_ty(
         }
     } else {
         // Prefer an unbounded nondeterministic value via (implemented or compiler-derived)
-        // Arbitrary; fall back to BoundedArbitrary for container types like Vec<T> or String.
+        // Arbitrary; fall back to a smart-pointer model (`Box`/`Rc`/`Arc` of a derivable pointee)
+        // and then to BoundedArbitrary for container types like Vec<T> or String.
         // Note: use a fresh cache for the Arbitrary check -- `invariant_cache` memoizes a
         // different predicate (Invariant), so the two must not share a map.
         let mut arbitrary_cache = FxHashMap::default();
         let use_arbitrary = implements_arbitrary(ty, models.kani_any, &mut arbitrary_cache)
             || can_derive_arbitrary(ty, models.kani_any, &mut arbitrary_cache);
-        let (model, generic_args) = if use_arbitrary {
-            (models.kani_any, GenericArgs(vec![GenericArgKind::Type(ty)]))
+        let any_inst = if use_arbitrary {
+            Instance::resolve(models.kani_any, &GenericArgs(vec![GenericArgKind::Type(ty)]))
+                .unwrap_or_else(|_| panic!("expected a ty that implements Arbitrary, got {ty}"))
+        } else if let Some((inst, _)) =
+            smart_pointer_model_instance(tcx, ty, &models.smart_pointer_models)
+        {
+            // `Box<T>`/`Rc<T>`/`Arc<T>` whose pointee only *can derive* Arbitrary: the smart
+            // pointer's own blanket `Arbitrary` is unresolvable, so use the dedicated model,
+            // whose internal `kani::any::<T>()` call this pass rewrites to the synthesized impl.
+            inst
         } else {
             // `Instance::resolve` does not check trait bounds, so ensure the type actually
             // implements BoundedArbitrary before emitting the call: an unresolvable
@@ -414,19 +434,19 @@ fn call_kani_any_for_ty(
                 crate::kani_middle::implements_bounded_arbitrary(tcx, ty, models.kani_bounded_any),
                 "expected a ty that implements Arbitrary or BoundedArbitrary, got {ty}"
             );
-            (
+            Instance::resolve(
                 models.kani_bounded_any,
-                GenericArgs(vec![
+                &GenericArgs(vec![
                     GenericArgKind::Type(ty),
                     GenericArgKind::Const(
                         TyConst::try_from_target_usize(AUTOHARNESS_BOUNDED_ANY_BOUND).unwrap(),
                     ),
                 ]),
             )
+            .unwrap_or_else(|_| {
+                panic!("expected a ty that implements Arbitrary or BoundedArbitrary, got {ty}")
+            })
         };
-        let any_inst = Instance::resolve(model, &generic_args).unwrap_or_else(|_| {
-            panic!("expected a ty that implements Arbitrary or BoundedArbitrary, got {ty}")
-        });
         let lcl = body.new_local(ty, source.span(body.blocks()), mutability);
         body.insert_call(&any_inst, source, InsertPosition::Before, vec![], Place::from(lcl));
 
