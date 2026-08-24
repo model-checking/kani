@@ -513,6 +513,55 @@ fn implements_bounded_arbitrary(tcx: TyCtxt, ty: Ty, kani_bounded_any_def: FnDef
     false
 }
 
+/// The formatting traits whose implementations automatic harnesses can verify via dedicated
+/// models (c.f. `KaniModel::CheckDebugFmt`/`CheckDisplayFmt`).
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum FmtTrait {
+    Debug,
+    Display,
+}
+
+/// If `instance` is the `fmt` method of a `Debug` or `Display` implementation, return the
+/// trait and the implementing (self) type. Such methods take a `&mut Formatter` argument that
+/// cannot be generated nondeterministically; instead, the generated harness formats a
+/// nondeterministic value of the self type into a discarding sink, which exercises `fmt`
+/// through the core formatting machinery with a real `Formatter`.
+///
+/// Both the eligibility check (`automatic_harness_partition`) and the harness generation
+/// (`AutomaticHarnessPass`) go through this function, so that they cannot disagree on whether a
+/// given function is handled by the formatting models.
+fn fmt_impl_self_ty(tcx: TyCtxt, instance: Instance) -> Option<(FmtTrait, Ty)> {
+    let def_id = rustc_internal::internal(tcx, instance.def.def_id());
+
+    // A `fmt` method carrying a function contract is out of scope: the automatic *contract*
+    // harness calls the function directly (and would therefore need a `Formatter`), and the
+    // formatting models reach `fmt` through a function pointer, where contract dispatch does
+    // not apply. Bail out so that such a function is reported as skipped for its
+    // `&mut Formatter` argument, just like any other function we cannot call.
+    if KaniAttributes::for_item(tcx, def_id).has_contract() {
+        return None;
+    }
+
+    let impl_def_id = tcx.trait_impl_of_assoc(def_id)?;
+    let trait_def_id = tcx.impl_trait_ref(impl_def_id).skip_binder().def_id;
+
+    let fmt_trait = if Some(trait_def_id) == tcx.get_diagnostic_item(rustc_span::sym::Debug) {
+        FmtTrait::Debug
+    } else if Some(trait_def_id) == tcx.get_diagnostic_item(rustc_span::sym::Display) {
+        FmtTrait::Display
+    } else {
+        return None;
+    };
+
+    // The `fmt` method's first input is `&Self`; peel the reference to obtain the
+    // (monomorphic) self type.
+    let sig = instance.ty().kind().fn_sig()?.skip_binder();
+    let TyKind::RigidTy(RigidTy::Ref(_, self_ty, _)) = sig.inputs().first()?.kind() else {
+        return None;
+    };
+    Some((fmt_trait, self_ty))
+}
+
 /// Is `ty` a struct or enum whose fields/variants implement Arbitrary, or a reference to such a
 /// type?
 fn can_derive_arbitrary(

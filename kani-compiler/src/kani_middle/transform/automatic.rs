@@ -13,8 +13,8 @@ use crate::kani_middle::kani_functions::{KaniHook, KaniIntrinsic, KaniModel};
 use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_middle::{
-    SmartPointerModels, can_derive_arbitrary, implements_arbitrary, implements_invariant,
-    smart_pointer_model_instance,
+    FmtTrait, SmartPointerModels, can_derive_arbitrary, fmt_impl_self_ty, implements_arbitrary,
+    implements_invariant, smart_pointer_model_instance,
 };
 use crate::kani_queries::QueryDb;
 use rustc_data_structures::fx::FxHashMap;
@@ -650,6 +650,10 @@ impl AutomaticArbitraryPass {
 pub struct AutomaticHarnessPass {
     /// The Kani model functions used to construct nondeterministic values.
     models: AnyModels,
+    /// The FnDef of KaniModel::CheckDebugFmt
+    kani_check_debug_fmt: FnDef,
+    /// The FnDef of KaniModel::CheckDisplayFmt
+    kani_check_display_fmt: FnDef,
     init_contracts_hook: Instance,
     reset_clause_depth: Instance,
     kani_autoharness_intrinsic: FnDef,
@@ -660,6 +664,8 @@ impl AutomaticHarnessPass {
         let kani_fns = query_db.kani_functions();
         let kani_autoharness_intrinsic =
             *kani_fns.get(&KaniIntrinsic::AutomaticHarness.into()).unwrap();
+        let kani_check_debug_fmt = *kani_fns.get(&KaniModel::CheckDebugFmt.into()).unwrap();
+        let kani_check_display_fmt = *kani_fns.get(&KaniModel::CheckDisplayFmt.into()).unwrap();
         let init_contracts_hook = *kani_fns.get(&KaniHook::InitContracts.into()).unwrap();
         let init_contracts_hook =
             Instance::resolve(init_contracts_hook, &GenericArgs(vec![])).unwrap();
@@ -669,6 +675,8 @@ impl AutomaticHarnessPass {
             Instance::resolve(reset_clause_depth, &GenericArgs(vec![])).unwrap();
         Self {
             models: AnyModels::new(query_db),
+            kani_check_debug_fmt,
+            kani_check_display_fmt,
             init_contracts_hook,
             reset_clause_depth,
             kani_autoharness_intrinsic,
@@ -708,6 +716,49 @@ impl TransformPass for AutomaticHarnessPass {
         let mut harness_body = MutableBody::from(body);
         harness_body.clear_body(TerminatorKind::Return);
         let mut source = SourceInstruction::Terminator { bb: 0 };
+
+        // Debug/Display fmt implementations are exercised through the corresponding check
+        // model, which formats a nondeterministic value of the self type into a discarding
+        // sink: their `&mut Formatter` argument cannot be generated nondeterministically,
+        // and the model reaches `fn_to_verify` through the core formatting machinery with a
+        // real `Formatter`.
+        if let Some((fmt_trait, self_ty)) = fmt_impl_self_ty(tcx, fn_to_verify) {
+            // Generate `&self_ty` directly: `call_kani_any_for_ty` creates the nondeterministic
+            // value (assuming its safety invariant, if any) in a local of the harness body --
+            // which therefore outlives the model call -- and borrows it.
+            let ref_ty =
+                Ty::new_ref(Region { kind: RegionKind::ReErased }, self_ty, Mutability::Not);
+            let mut invariant_cache = FxHashMap::default();
+            let ref_lcl = call_kani_any_for_ty(
+                tcx,
+                self.models,
+                &mut harness_body,
+                ref_ty,
+                Mutability::Not,
+                &mut source,
+                &mut invariant_cache,
+            );
+            let model = match fmt_trait {
+                FmtTrait::Debug => self.kani_check_debug_fmt,
+                FmtTrait::Display => self.kani_check_display_fmt,
+            };
+            let model_inst =
+                Instance::resolve(model, &GenericArgs(vec![GenericArgKind::Type(self_ty)]))
+                    .unwrap();
+            let ret_lcl = harness_body.new_local(
+                Ty::from_rigid_kind(RigidTy::Tuple(vec![])),
+                source.span(harness_body.blocks()),
+                Mutability::Not,
+            );
+            harness_body.insert_call(
+                &model_inst,
+                &mut source,
+                InsertPosition::Before,
+                vec![Operand::Move(Place::from(ref_lcl))],
+                Place::from(ret_lcl),
+            );
+            return (true, harness_body.into());
+        }
 
         // Contract harnesses need a free(NULL) statement, c.f. kani_core::init_contracts().
         //
