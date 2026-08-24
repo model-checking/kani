@@ -1,5 +1,5 @@
 | cargo_autoharness_smart_pointers | box_not_derivable | Missing Arbitrary implementation for argument(s) b: std::boxed::Box<NotDerivable> |
-| cargo_autoharness_smart_pointers | box_unsized       | Missing Arbitrary implementation for argument(s) b: std::boxed::Box<[u8]>         |
+| cargo_autoharness_smart_pointers | box_unsized       | Missing Arbitrary implementation for argument(s) b: std::boxed::Box<str>          |
 - Status: SATISFIED
 | cargo_autoharness_smart_pointers | arc_derivable     | #[kani::proof]            | Success             |
 | cargo_autoharness_smart_pointers | box_derivable     | #[kani::proof]            | Success             |

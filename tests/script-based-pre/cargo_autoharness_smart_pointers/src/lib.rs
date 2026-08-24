@@ -41,15 +41,18 @@ pub fn arc_derivable(a: Arc<OnlyDerivable>) -> u8 {
 }
 
 // TEST NOTE: should FAIL, and the cover check must be SATISFIED: all pointee values are
-// generated (full coverage; smart pointers are not bounded).
-pub fn arc_assert(a: Arc<Derived>) {
+// generated (full coverage; smart pointers are not bounded). `OnlyDerivable` is used so that the
+// pointee's Arbitrary implementation is compiler-derived, exercising the AnyArc model path
+// (an `Arc<Derived>` would instead resolve the blanket `Arbitrary` implementation).
+pub fn arc_assert(a: Arc<OnlyDerivable>) {
     kani::cover!(a.x == 255, "extreme pointee values are generated");
     assert!(a.x < 255);
 }
 
 // TEST NOTE: skipped (gracefully, without crashing the compiler): unsized pointees are not
-// supported.
-pub fn box_unsized(b: Box<[u8]>) -> usize {
+// supported. `Box<str>` is used (rather than e.g. `Box<[u8]>`, which implements
+// `BoundedArbitrary`) so that the argument is genuinely unsupported without `--bounded-arguments`.
+pub fn box_unsized(b: Box<str>) -> usize {
     b.len()
 }
 
