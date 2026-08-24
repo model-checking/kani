@@ -5,6 +5,7 @@
 
 use crate::{
     intrinsics::Intrinsic,
+    kani_middle::nonnull_pointee,
     kani_middle::transform::{
         body::{InsertPosition, MutableBody, SourceInstruction},
         check_uninit::{
@@ -16,14 +17,14 @@ use crate::{
 };
 use rustc_public::{
     mir::{
-        AggregateKind, CastKind, LocalDecl, MirVisitor, NonDivergingIntrinsic, Operand, Place,
-        PointerCoercion, ProjectionElem, Rvalue, Statement, StatementKind, Terminator,
+        AggregateKind, CastKind, LocalDecl, MirVisitor, Mutability, NonDivergingIntrinsic, Operand,
+        Place, PointerCoercion, ProjectionElem, Rvalue, Statement, StatementKind, Terminator,
         TerminatorKind,
         alloc::GlobalAlloc,
         mono::{Instance, InstanceKind},
         visit::{Location, PlaceContext},
     },
-    ty::{AdtKind, ConstantKind, RigidTy, TyKind},
+    ty::{AdtKind, ConstantKind, RigidTy, Ty, TyKind},
 };
 
 pub struct CheckUninitVisitor {
@@ -371,7 +372,7 @@ impl MirVisitor for CheckUninitVisitor {
                                 "alloc::alloc::__rust_dealloc" => {
                                     /* Memory is uninitialized here, need to update shadow memory. */
                                     self.push_target(MemoryInitOp::SetSliceChunk {
-                                        operand: args[0].clone(),
+                                        operand: raw_ptr_arg(&args[0], self.locals.as_slice()),
                                         count: args[1].clone(),
                                         value: false,
                                         position: InsertPosition::After,
@@ -708,4 +709,22 @@ fn try_resolve_instance(locals: &[LocalDecl], func: &Operand) -> Result<Instance
             "Kani was not able to resolve the instance of the function operand `{ty:?}`. Currently, memory initialization checks in presence of function pointers and vtable calls are not supported. For more information about planned support, see https://github.com/model-checking/kani/issues/3300."
         )),
     }
+}
+
+/// The pointer argument of an allocation shim, as a raw pointer.
+///
+/// These shims take `NonNull<u8>` as of nightly-2026-03-21, where they previously took `*mut u8`.
+/// `NonNull<T>` is `repr(transparent)` over a single `*const T` field, so projecting that field
+/// yields the same address with the pointer type the shadow-memory models expect. Operands that are
+/// already raw pointers, and any shape we cannot project, are passed through unchanged.
+fn raw_ptr_arg(arg: &Operand, locals: &[LocalDecl]) -> Operand {
+    let Ok(arg_ty) = arg.ty(locals) else { return arg.clone() };
+    let Some(pointee) = nonnull_pointee(arg_ty) else { return arg.clone() };
+    let place = match arg {
+        Operand::Copy(place) | Operand::Move(place) => place,
+        Operand::Constant(_) | Operand::RuntimeChecks(_) => return arg.clone(),
+    };
+    let mut projection = place.projection.clone();
+    projection.push(ProjectionElem::Field(0, Ty::new_ptr(pointee, Mutability::Not)));
+    Operand::Copy(Place { local: place.local, projection })
 }

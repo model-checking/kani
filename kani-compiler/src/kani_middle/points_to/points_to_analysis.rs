@@ -43,7 +43,7 @@ use rustc_middle::{
 use rustc_mir_dataflow::{Analysis, Forward, JoinSemiLattice};
 use rustc_public::mir::{Body as StableBody, mono::Instance as StableInstance};
 use rustc_public::rustc_internal;
-use rustc_span::{DUMMY_SP, source_map::Spanned};
+use rustc_span::{DUMMY_SP, Spanned};
 use std::collections::HashSet;
 
 /// Main points-to analysis object.
