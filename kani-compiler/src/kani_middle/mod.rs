@@ -275,7 +275,11 @@ fn implements_arbitrary(
 
     if let TyKind::RigidTy(RigidTy::Ref(_, inner_ty, _)) = ty.kind() {
         if let TyKind::RigidTy(RigidTy::Adt(..)) = inner_ty.kind() {
-            return can_derive_arbitrary(inner_ty, kani_any_def, ty_arbitrary_cache);
+            // The harness owns the referent's storage, so a top-level reference argument is
+            // supported whenever its pointee is: prefer the pointee's own `Arbitrary` impl (which
+            // may exist even for a type containing references), falling back to synthesizing one.
+            return implements_arbitrary(inner_ty, kani_any_def, ty_arbitrary_cache)
+                || can_derive_arbitrary(inner_ty, kani_any_def, ty_arbitrary_cache);
         } else {
             return implements_arbitrary(inner_ty, kani_any_def, ty_arbitrary_cache);
         }
@@ -505,8 +509,23 @@ fn can_derive_arbitrary(
             let mut fields_impl_arbitrary = true;
             for ty in fields.iter().map(|field| field.ty_with_args(&args)) {
                 if let TyKind::RigidTy(RigidTy::Adt(..)) = ty.kind() {
+                    // Prefer the field type's own `Arbitrary` implementation: a hand-written
+                    // impl can exist even for a type that itself contains references (and so is
+                    // not compiler-derivable), and the synthesized `any()` would call it via
+                    // `kani::any::<Field>()`. Only fall back to synthesizing one if it has none.
                     fields_impl_arbitrary &=
-                        can_derive_arbitrary(ty, kani_any_def, ty_arbitrary_cache);
+                        implements_arbitrary(ty, kani_any_def, ty_arbitrary_cache)
+                            || can_derive_arbitrary(ty, kani_any_def, ty_arbitrary_cache);
+                } else if let TyKind::RigidTy(RigidTy::Ref(..)) = ty.kind() {
+                    // A bare reference *field* cannot be synthesized: the storage for the referent
+                    // would live inside the synthesized `any()` body and dangle once it returns,
+                    // and (unlike an ADT field) a reference type cannot carry a hand-written
+                    // `Arbitrary` impl (orphan rule). (Only `&'static` fields reach this point:
+                    // reference fields with a lifetime parameter make the ADT's generic arguments
+                    // contain a lifetime, which is rejected below.)
+                    // Note that this differs from *top-level argument* references, for which
+                    // the harness itself owns the storage.
+                    fields_impl_arbitrary = false;
                 } else {
                     fields_impl_arbitrary &=
                         implements_arbitrary(ty, kani_any_def, ty_arbitrary_cache);
