@@ -52,6 +52,19 @@ const KANI_COPY_INIT_STATE_SINGLE: KaniFunction =
     KaniFunction::Model(KaniModel::CopyInitStateSingle);
 const KANI_LOAD_ARGUMENT: KaniFunction = KaniFunction::Model(KaniModel::LoadArgument);
 const KANI_STORE_ARGUMENT: KaniFunction = KaniFunction::Model(KaniModel::StoreArgument);
+// The contract-clause-depth functions access the `CONTRACT_CLAUSE_DEPTH`
+// static. Instrumenting that access would inject memory-initialization shadow
+// writes that CBMC's contract write-set check then flags as illegal side
+// effects when a clause is evaluated during contract verification (e.g. a
+// `requires(can_dereference(..))` under `-Z uninit-checks`). The counter is
+// verifier-internal and always reset at harness entry, so skipping these is
+// sound, mirroring the mem-init functions above.
+const KANI_ENTER_CONTRACT_CLAUSE: KaniFunction =
+    KaniFunction::Model(KaniModel::EnterContractClause);
+const KANI_EXIT_CONTRACT_CLAUSE: KaniFunction = KaniFunction::Model(KaniModel::ExitContractClause);
+const KANI_IN_CONTRACT_CLAUSE: KaniFunction = KaniFunction::Model(KaniModel::InContractClause);
+const KANI_RESET_CONTRACT_CLAUSE_DEPTH: KaniFunction =
+    KaniFunction::Model(KaniModel::ResetContractClauseDepth);
 
 // Function bodies of those functions will not be instrumented as not to cause infinite recursion.
 const SKIPPED_ITEMS: &[KaniFunction] = &[
@@ -67,6 +80,10 @@ const SKIPPED_ITEMS: &[KaniFunction] = &[
     KANI_COPY_INIT_STATE_SINGLE,
     KANI_LOAD_ARGUMENT,
     KANI_STORE_ARGUMENT,
+    KANI_ENTER_CONTRACT_CLAUSE,
+    KANI_EXIT_CONTRACT_CLAUSE,
+    KANI_IN_CONTRACT_CLAUSE,
+    KANI_RESET_CONTRACT_CLAUSE_DEPTH,
 ];
 
 /// Instruments the code with checks for uninitialized memory, agnostic to the source of targets.

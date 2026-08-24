@@ -28,8 +28,13 @@ impl LibConfig {
             sysroot.to_str().unwrap(),
             "-L",
             path.to_str().unwrap(),
+            // Use the `force` modifier so that the `kani` crate is resolved even if the code
+            // under verification never references it. `#[no_std]` crates do not link Kani's
+            // `std` (which would otherwise pull in `kani`), so without `force` the Kani
+            // library and its functions would be missing entirely, c.f.
+            // https://github.com/model-checking/kani/issues/3906.
             "--extern",
-            "kani",
+            "force:kani",
             "--extern",
             kani_std_wrapper.as_str(),
         ]
@@ -120,6 +125,10 @@ impl KaniSession {
     /// being compiled.
     pub fn kani_compiler_local_flags(&self) -> Vec<KaniArg> {
         let mut flags: Vec<KaniArg> = vec![];
+
+        if self.args.no_assert_overrides {
+            flags.push("--no-assert-overrides".into());
+        }
 
         if self.args.common_args.debug {
             flags.push("--log-level=debug".into());
@@ -264,6 +273,12 @@ pub fn base_rustc_flags(lib_config: LibConfig) -> Vec<RustcArg> {
         "crate-attr=feature(register_tool)",
         "-Z",
         "crate-attr=register_tool(kanitool)",
+        // Kani injects unstable features (`register_tool` above) into every crate it compiles,
+        // so crates that `forbid(unstable_features)` (e.g. rustls) would fail to build through
+        // no fault of their own. Downgrade that lint to a warning; `--force-warn` overrides
+        // even a `forbid` in the crate source.
+        "--force-warn",
+        "unstable_features",
     ]
     .map(RustcArg::from)
     .to_vec();

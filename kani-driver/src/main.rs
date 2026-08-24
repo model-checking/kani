@@ -39,7 +39,9 @@ mod concrete_playback;
 mod coverage;
 mod harness_runner;
 mod list;
+mod log_file;
 mod metadata;
+mod progress_indicator;
 mod project;
 
 mod frontend;
@@ -83,6 +85,15 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     let args = args::CargoKaniArgs::parse_from(&input_args);
     check_is_valid(&args);
 
+    // Handle version flag
+    if args.version {
+        print_kani_version(
+            InvocationType::CargoKani(input_args),
+            args.verify_opts.common_args.verbose,
+        );
+        return Ok(());
+    }
+
     let mut session = match args.command {
         Some(CargoKaniSubcommand::Autoharness(autoharness_args)) => {
             return autoharness_cargo(*autoharness_args);
@@ -97,7 +108,7 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     };
 
     if !session.args.common_args.quiet {
-        print_kani_version(InvocationType::CargoKani(input_args));
+        print_kani_version(InvocationType::CargoKani(input_args), session.args.common_args.verbose);
     }
 
     let project = project::cargo_project(&mut session, false)?;
@@ -108,6 +119,12 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
 fn standalone_main() -> Result<()> {
     let args = args::StandaloneArgs::parse();
     check_is_valid(&args);
+
+    // Handle version flag
+    if args.version {
+        print_kani_version(InvocationType::Standalone, args.verify_opts.common_args.verbose);
+        return Ok(());
+    }
 
     let (session, project) = match args.command {
         Some(StandaloneSubcommand::Autoharness(args)) => {
@@ -120,7 +137,7 @@ fn standalone_main() -> Result<()> {
         Some(StandaloneSubcommand::VerifyStd(args)) => {
             let session = KaniSession::new(args.verify_opts)?;
             if !session.args.common_args.quiet {
-                print_kani_version(InvocationType::Standalone);
+                print_kani_version(InvocationType::Standalone, session.args.common_args.verbose);
             }
 
             let project = project::std_project(&args.std_path, &session)?;
@@ -129,7 +146,7 @@ fn standalone_main() -> Result<()> {
         None => {
             let session = KaniSession::new(args.verify_opts)?;
             if !session.args.common_args.quiet {
-                print_kani_version(InvocationType::Standalone);
+                print_kani_version(InvocationType::Standalone, session.args.common_args.verbose);
             }
 
             let project =
@@ -157,9 +174,8 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
         handler.add_item("tools", create_tool_versions_json(&session, &harnesses));
 
         // The per-harness arrays are filled in lazily below and by the harness runner, so declare
-        // them up front. A run with no matching harnesses would otherwise omit them entirely and
-        // write a document missing four of its documented keys -- and the "no harnesses matched"
-        // error is only reported after the export, so a consumer sees the malformed file first.
+        // them up front: a run that selects no harnesses (a crate with none) would otherwise
+        // write a document missing four of its documented keys.
         for key in ["harness_metadata", "error_details", "property_details", "cbmc"] {
             handler.add_item(key, json!([]));
         }

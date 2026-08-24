@@ -235,7 +235,7 @@ pub fn create_harness_metadata_json(h: &HarnessMetadata) -> Value {
         },
         "has_loop_contracts": h.has_loop_contracts,
         "is_automatically_generated": h.is_automatically_generated,
-
+        "is_bounded": h.is_bounded,
     })
 }
 
