@@ -225,7 +225,7 @@ impl KaniSession {
         let mut cmd = TokioCommand::new("cbmc");
         cmd.args(args);
 
-        let verification_results = if self.args.output_format == crate::args::OutputFormat::Old {
+        let verification_results = if self.args.output_format() == crate::args::OutputFormat::Old {
             if self.run_terminal_timeout(cmd).is_err() {
                 VerificationResult::mock_failure()
             } else {
@@ -267,7 +267,7 @@ impl KaniSession {
                         i,
                         self.args.extra_pointer_checks,
                         self.args.common_args.quiet,
-                        &self.args.output_format,
+                        &self.args.output_format(),
                         self.args.log_file.as_ref(),
                     )
                 }),
@@ -279,7 +279,7 @@ impl KaniSession {
                     i,
                     self.args.extra_pointer_checks,
                     self.args.common_args.quiet,
-                    &self.args.output_format,
+                    &self.args.output_format(),
                     self.args.log_file.as_ref(),
                 )
             })

@@ -79,16 +79,36 @@ Autoharness also accepts a `--list` argument, which runs the [list subcommand](.
 
 For a full list of options, run `kani autoharness --help`.
 
+### Parallel verification
+
+Since autoharness typically generates many harnesses, it verifies them in parallel by default,
+i.e. as if `--jobs` (the thread pool's default number of threads, normally one per logical CPU)
+and `--output-format=terse` had been passed. Note that plain `kani`/`cargo kani` verification is
+unaffected and remains sequential by default.
+
+To override the default:
+- `-j <N>` / `--jobs=<N>` caps the number of harnesses verified concurrently. Each thread runs
+  its own CBMC process, so peak memory grows with the number of threads; lower `<N>` if a run
+  exhausts the available memory. `--jobs=1` keeps the terse output but verifies sequentially.
+- `--output-format=regular` verifies harnesses sequentially, with Kani's default, more detailed
+  per-check output. (Parallel verification requires terse output, because interleaved detailed
+  output is hard to read; passing `--jobs` together with `--output-format=regular` is therefore
+  an error.)
+
+In parallel runs each harness result line is prefixed with the thread that produced it, and
+results arrive in nondeterministic order; the summary table printed at the end is always sorted.
+
 ## Example
 Using the `estimate_size` example from [First Steps](../../tutorial-first-steps.md) again:
 ```rust
 {{#include ../../tutorial/first-steps-v1/src/lib.rs:code}}
 ```
 
-We get:
+We get (passing `--output-format=regular` so that the per-check detail is shown, c.f.
+[Parallel verification](#parallel-verification)):
 
 ```
-# cargo kani autoharness -Z autoharness
+# cargo kani autoharness -Z autoharness --output-format=regular
 Autoharness: Checking function estimate_size against all possible inputs...
 RESULTS:
 Check 3: estimate_size.assertion.1
