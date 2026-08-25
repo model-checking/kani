@@ -11,6 +11,7 @@ use rustc_abi::{
 };
 use rustc_ast::ast::Mutability;
 use rustc_index::IndexVec;
+use rustc_middle::ty::Unnormalized;
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::print::FmtPrinter;
 use rustc_middle::ty::print::with_no_trimmed_paths;
@@ -583,8 +584,9 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     ///      c.f. <https://rust-lang.github.io/unsafe-code-guidelines/introduction.html>
     pub fn codegen_ty(&mut self, ty: Ty<'tcx>) -> Type {
         // TODO: Remove all monomorphize calls
-        let normalized =
-            self.tcx.normalize_erasing_regions(ty::TypingEnv::fully_monomorphized(), ty);
+        let normalized = self
+            .tcx
+            .normalize_erasing_regions(ty::TypingEnv::fully_monomorphized(), Unnormalized::new(ty));
         let goto_typ = self.codegen_ty_inner(normalized);
         if let Some(tag) = goto_typ.tag() {
             self.type_map.entry(tag).or_insert_with(|| {
@@ -1046,8 +1048,10 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     pub fn codegen_ty_ref(&mut self, pointee_type: Ty<'tcx>) -> Type {
         // Normalize pointee_type to remove projection and opaque types
         trace!(?pointee_type, "codegen_ty_ref");
-        let pointee_type =
-            self.tcx.normalize_erasing_regions(ty::TypingEnv::fully_monomorphized(), pointee_type);
+        let pointee_type = self.tcx.normalize_erasing_regions(
+            ty::TypingEnv::fully_monomorphized(),
+            Unnormalized::new(pointee_type),
+        );
 
         if !self.use_thin_pointer(pointee_type) {
             return self.codegen_fat_ptr(pointee_type);
@@ -1656,6 +1660,15 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                     trace!(?data_path, ?curr, ?s_name, ?components, "codegen_trait_receiver");
                     components
                 })
+            } else if matches!(curr.kind(), ty::Pat(..)) {
+                // A pattern type is codegen'd as a struct with a single tuple-like field holding
+                // the type it constrains, so rebuild it with the thin data pointer in that field.
+                self.ensure_struct(new_name, new_pretty_name, |_, _| {
+                    vec![DatatypeComponent::Field {
+                        name: GotocCtx::tuple_fld_name(0).intern(),
+                        typ: last_type.clone(),
+                    }]
+                })
             } else {
                 unreachable!("Expected structs only {:?}", curr);
             }
@@ -1736,6 +1749,12 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                     self.curr = next;
                     assert!(non_zsts.next().is_none(), "Expected only one non-zst field.");
                     Some((name, self.curr))
+                } else if let ty::Pat(base_ty, _) = self.curr.kind() {
+                    // A pattern type is codegen'd as a struct with a single tuple-like field
+                    // holding the type it constrains. `NonNull` holds a
+                    // `pattern_type!(*const T is !null)`, so keep walking to reach the pointer.
+                    self.curr = *base_ty;
+                    Some((GotocCtx::tuple_fld_name(0), self.curr))
                 } else {
                     None
                 }

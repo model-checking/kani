@@ -206,7 +206,7 @@ impl CodegenUnits {
 }
 
 fn stub_def(tcx: TyCtxt, def_id: DefId) -> FnDef {
-    let ty_internal = tcx.type_of(def_id).instantiate_identity();
+    let ty_internal = tcx.type_of(def_id).instantiate_identity().skip_normalization();
     let ty = rustc_internal::stable(ty_internal);
     if let TyKind::RigidTy(RigidTy::FnDef(def, _)) = ty.kind() {
         def
@@ -482,7 +482,8 @@ fn impl_derived_candidates(tcx: TyCtxt, def: FnDef) -> FxHashMap<usize, Vec<Ty>>
             let slot = candidates.entry(param_ty.index as usize).or_default();
             for impls in tcx.trait_impls_of(trait_pred.def_id()).non_blanket_impls().values() {
                 for &impl_def_id in impls {
-                    let self_ty = tcx.type_of(impl_def_id).instantiate_identity();
+                    let self_ty =
+                        tcx.type_of(impl_def_id).instantiate_identity().skip_normalization();
                     // Only fully concrete self types can be substituted directly.
                     if rustc_middle::ty::TypeVisitableExt::has_param(&self_ty) {
                         continue;
@@ -515,7 +516,12 @@ fn args_satisfy_predicates(tcx: TyCtxt, def: FnDef, args: &GenericArgs) -> bool 
     let args_internal = rustc_internal::internal(tcx, args);
     let predicates = tcx.predicates_of(def_id).instantiate(tcx, args_internal);
     for (predicate, _span) in predicates {
-        ocx.register_obligation(Obligation::new(tcx, cause.clone(), param_env, predicate));
+        ocx.register_obligation(Obligation::new(
+            tcx,
+            cause.clone(),
+            param_env,
+            predicate.skip_normalization(),
+        ));
     }
     ocx.evaluate_obligations_error_on_ambiguity().is_empty()
 }

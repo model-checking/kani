@@ -140,7 +140,7 @@ impl OverallStats {
     }
 
     /// Iterate over all functions defined in this crate and log any unsafe operation.
-    pub fn unsafe_operations(&mut self, filename: PathBuf) {
+    pub fn unsafe_operations(&mut self, filename: PathBuf, tcx: &TyCtxt) {
         let all_items = rustc_public::all_local_items();
         let (has_unsafe, no_unsafe) = all_items
             .into_iter()
@@ -149,7 +149,8 @@ impl OverallStats {
                 if !kind.is_fn() {
                     return None;
                 };
-                let unsafe_ops = FnUnsafeOperations::new(item.name()).collect(&item.expect_body());
+                let unsafe_ops =
+                    FnUnsafeOperations::new(item.name()).collect(&item.expect_body(), tcx);
                 let fn_sig = kind.fn_sig().unwrap();
                 let is_unsafe = fn_sig.skip_binder().safety == Safety::Unsafe;
                 self.fn_stats.get_mut(&item).unwrap().has_unsafe_ops =
@@ -434,8 +435,8 @@ fn_props! {
 }
 
 impl FnUnsafeOperations {
-    pub fn collect(self, body: &Body) -> FnUnsafeOperations {
-        let mut visitor = BodyVisitor { props: self, body };
+    pub fn collect(self, body: &Body, tcx: &TyCtxt) -> FnUnsafeOperations {
+        let mut visitor = BodyVisitor { props: self, body, tcx };
         visitor.visit_body(body);
         visitor.props
     }
@@ -450,12 +451,13 @@ impl FnUnsafeOperations {
     }
 }
 
-struct BodyVisitor<'a> {
+struct BodyVisitor<'a, 'tcx> {
     props: FnUnsafeOperations,
     body: &'a Body,
+    tcx: &'a TyCtxt<'tcx>,
 }
 
-impl MirVisitor for BodyVisitor<'_> {
+impl MirVisitor for BodyVisitor<'_, '_> {
     fn visit_terminator(&mut self, term: &Terminator, location: Location) {
         match &term.kind {
             TerminatorKind::Call { func, .. } => {
@@ -522,7 +524,12 @@ impl MirVisitor for BodyVisitor<'_> {
                 }
             }
             ProjectionElem::Field(_, ty) => {
-                if ty.kind().is_union() {
+                // Check union-ness on the internal representation. The field type may be an
+                // un-normalized alias, and `rustc_public` cannot yet convert those to their stable
+                // representation, so calling the stable `Ty::kind()` on one panics. The internal
+                // representation is always safe to inspect, and reports an alias as not a union,
+                // which is what the stable `TyKind::Alias` did before it became unconvertible.
+                if rustc_internal::internal(*self.tcx, ty).is_union() {
                     self.props.unsafe_union_access += 1;
                 }
             }
