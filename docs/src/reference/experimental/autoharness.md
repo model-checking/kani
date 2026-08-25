@@ -104,17 +104,38 @@ By default, when a type does not implement `Arbitrary`, Kani synthesizes values 
 For types whose private fields carry a representation invariant (e.g. a date type storing a
 packed, validated ordinal), raw field synthesis can produce values that violate the invariant,
 causing false alarms in every harness that generates the type. With `--constructor-args`, Kani
-instead generates values of private-field struct types by calling one of the type's public
-constructors with nondeterministic arguments, assuming success for constructors returning
-`Option<Self>` or `Result<Self, E>`. Constructors that are doc-hidden, unsafe, zero-argument,
-or generic are not considered.
+instead generates values of private-field struct types through one of the type's own
+constructors, preferring (in order):
+
+1. An *assert-guarded representation constructor*: an `unsafe`, `#[doc(hidden)]`, or
+   `*_unchecked`-named associated function returning `Self` directly, whose preconditions are
+   stated as assertions (e.g. `debug_assert!`) rather than validated returns. Kani inlines its
+   body with nondeterministic arguments and converts every validity statement — `kani::assert`
+   and `assert_unchecked` calls, panic entry points, and overflow (`Assert`) checks — into an
+   assumption, so the constructor's own assertions filter the arguments down to the values the
+   crate considers valid. Calls the constructor makes to further assert-guarded helpers are
+   inlined recursively (bounded in depth and size). Visibility is irrelevant here, since the
+   body is inlined rather than called.
+2. Otherwise, a *checked public constructor*: a public associated function returning `Self`,
+   `Option<Self>`, or `Result<Self, E>`, called with nondeterministic arguments (assuming
+   success for the `Option<Self>`/`Result<Self, E>` shapes).
+
+Zero-argument constructors, and constructors generic over their own parameters, are not
+considered.
 
 This option is opt-in because it under-approximates: harnesses whose values are generated this
 way are marked "(ctor)" in the output, and their verification results only cover values
 reachable through the chosen constructor; a bug that requires a different value will not be
-found. Note also that a constructor which itself panics for some of its inputs (rather than
-rejecting them via `Option`/`Result`) turns those inputs into harness failures, so this option
-can trade one class of false alarm for another.
+found. Note also that a checked constructor which itself panics for some of its inputs (rather
+than rejecting them via `Option`/`Result`) turns those inputs into harness failures, so this
+option can trade one class of false alarm for another.
+
+> **Caveat:** if the chosen constructor is *unsatisfiable* for the generated type — an
+> assert-guarded constructor every argument of which trips an assertion, or a checked
+> constructor that always returns `None`/`Err` — the generated body assumes `false` on all
+> paths and the harness becomes **vacuous**, reporting `Success` without checking anything.
+> Kani does not yet detect this case; see
+> [#4757](https://github.com/model-checking/kani/issues/4757).
 
 ## Example
 Using the `estimate_size` example from [First Steps](../../tutorial-first-steps.md) again:
