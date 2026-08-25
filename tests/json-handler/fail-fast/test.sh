@@ -7,10 +7,10 @@
 # The rendered-summary half of this regression lives in
 # tests/script-based-pre/fail_fast_keeps_completed/.
 
-# Not `set -e`: the run under test exits non-zero by design (a harness fails).
-set -u
-# The validator's exit status is piped into `tail` below; without pipefail a failed
-# validation is masked by tail's success and this test passes regardless.
+set -eu
+# The validator's exit status is piped into `tail` below; `pipefail` makes the
+# pipeline report it and `set -e` makes that status fatal — both are needed, or a
+# failed validation is masked and this test passes regardless.
 set -o pipefail
 
 OUTPUT_FILE="fail_fast_output.json"
@@ -22,9 +22,12 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 VALIDATOR="$PROJECT_ROOT/scripts/validate_json_export.py"
 
 # `sort_harnesses_by_loc` runs later-appearing harnesses first, so sequentially
-# `z_passes` completes before `a_fails` aborts the run.
+# `z_passes` completes before `a_fails` aborts the run. The run exits non-zero by
+# design (a harness fails), so only this invocation is exempted from `set -e`.
+set +e
 kani -Z unstable-options test.rs --fail-fast --export-json "$OUTPUT_FILE"
 CODE=$?
+set -e
 
 # The run must fail overall; a --fail-fast run that exits 0 is a different bug.
 if [ "$CODE" -eq 0 ]; then
