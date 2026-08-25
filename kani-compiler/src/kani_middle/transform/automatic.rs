@@ -14,7 +14,7 @@ use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceIns
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_middle::{
     FmtTrait, SmartPointerModels, can_derive_arbitrary, fmt_impl_self_ty, implements_arbitrary,
-    implements_invariant, smart_pointer_model_instance,
+    implements_invariant, scalar_niche, smart_pointer_model_instance,
 };
 use crate::kani_queries::QueryDb;
 use rustc_data_structures::fx::FxHashMap;
@@ -22,12 +22,13 @@ use rustc_middle::ty::TyCtxt;
 use rustc_public::CrateDef;
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::{
-    AggregateKind, BasicBlockIdx, Body, BorrowKind, CastKind, Local, MutBorrowKind, Mutability,
-    Operand, Place, ProjectionElem, Rvalue, SwitchTargets, Terminator, TerminatorKind,
+    AggregateKind, BasicBlockIdx, BinOp, Body, BorrowKind, CastKind, ConstOperand, Local,
+    MutBorrowKind, Mutability, Operand, Place, ProjectionElem, Rvalue, SwitchTargets, Terminator,
+    TerminatorKind,
 };
 use rustc_public::ty::{
-    AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, Region, RegionKind, RigidTy, Ty, TyConst,
-    TyKind, UintTy, VariantDef, VariantIdx,
+    AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, MirConst, Region, RegionKind, RigidTy, Ty,
+    TyConst, TyKind, UintTy, VariantDef, VariantIdx,
 };
 use rustc_public_bridge::IndexedVal;
 use tracing::debug;
@@ -45,6 +46,8 @@ struct AnyModels {
     kani_any_slice_ref: FnDef,
     /// The FnDef of KaniModel::AnyStrRef
     kani_any_str_ref: FnDef,
+    /// The FnDef of KaniHook::Assume (used for layout-niche assumptions).
+    kani_assume: FnDef,
     /// The FnDef of KaniModel::AssumeSafe
     kani_assume_safe: FnDef,
     /// The FnDef of KaniModel::BoundedAny
@@ -61,6 +64,7 @@ impl AnyModels {
             kani_any_ptr: *kani_fns.get(&KaniModel::AnyPtr.into()).unwrap(),
             kani_any_slice_ref: *kani_fns.get(&KaniModel::AnySliceRef.into()).unwrap(),
             kani_any_str_ref: *kani_fns.get(&KaniModel::AnyStrRef.into()).unwrap(),
+            kani_assume: *kani_fns.get(&KaniHook::Assume.into()).unwrap(),
             kani_assume_safe: *kani_fns.get(&KaniModel::AssumeSafe.into()).unwrap(),
             kani_bounded_any: *kani_fns.get(&KaniModel::BoundedAny.into()).unwrap(),
             smart_pointer_models: SmartPointerModels::from_kani_functions(kani_fns),
@@ -211,6 +215,93 @@ const AUTOHARNESS_BOUNDED_ANY_BOUND: u64 = 4;
 /// Panics if `ty` does not implement Arbitrary or BoundedArbitrary and is not a supported smart
 /// pointer (and is not a reference or raw pointer to such a type, or a reference to a slice or str
 /// of such a type).
+/// If `ty` has a scalar layout with a restricted valid range (a layout niche), emit
+/// `kani::assume(<raw bits of the value in place_local> in valid_range)`.
+///
+/// Values outside the niche are language-level invalid -- rustc packs enum variants into the
+/// invalid bit patterns, so such a value is as invalid as a `bool` holding 3. Nondeterministic
+/// value generation must therefore never produce them: e.g. std's `NonZero` niches, or
+/// `core::time::Duration`'s `Nanoseconds` field (`rustc_layout_scalar_valid_range` types),
+/// whose compiler-derived generation would otherwise produce invalid values and raise false
+/// alarms in every harness generating the type.
+///
+/// The assumption is sound by construction -- it assumes a *necessary* condition of
+/// language-level validity, so every valid value stays in the explored set -- and therefore
+/// needs no flag or reporting caveat.
+fn assume_scalar_niche(
+    tcx: TyCtxt,
+    kani_assume: FnDef,
+    body: &mut MutableBody,
+    source: &mut SourceInstruction,
+    place_local: Local,
+    ty: Ty,
+) {
+    let Some(niche) = scalar_niche(tcx, ty) else { return };
+    let span = source.span(body.blocks());
+    let uint_ty = match niche.bits {
+        8 => UintTy::U8,
+        16 => UintTy::U16,
+        32 => UintTy::U32,
+        64 => UintTy::U64,
+        128 => UintTy::U128,
+        _ => return,
+    };
+    let raw_ty = Ty::from_rigid_kind(RigidTy::Uint(uint_ty));
+    // let raw: uN = transmute(value);
+    let raw_lcl = body.new_local(raw_ty, span, Mutability::Not);
+    body.assign_to(
+        Place::from(raw_lcl),
+        Rvalue::Cast(CastKind::Transmute, Operand::Copy(Place::from(place_local)), raw_ty),
+        source,
+        InsertPosition::Before,
+    );
+    let uint_const = |v: u128| {
+        Operand::Constant(ConstOperand {
+            span,
+            user_ty: None,
+            const_: MirConst::try_from_uint(v, uint_ty).unwrap(),
+        })
+    };
+    let bool_ty = Ty::bool_ty();
+    let ge_lcl = body.new_local(bool_ty, span, Mutability::Not);
+    body.assign_to(
+        Place::from(ge_lcl),
+        Rvalue::BinaryOp(BinOp::Ge, Operand::Copy(Place::from(raw_lcl)), uint_const(niche.start)),
+        source,
+        InsertPosition::Before,
+    );
+    let le_lcl = body.new_local(bool_ty, span, Mutability::Not);
+    body.assign_to(
+        Place::from(le_lcl),
+        Rvalue::BinaryOp(BinOp::Le, Operand::Copy(Place::from(raw_lcl)), uint_const(niche.end)),
+        source,
+        InsertPosition::Before,
+    );
+    // Contiguous range (start <= end): raw >= start && raw <= end.
+    // Wrapping range (end < start, e.g. NonZero's 1..=0): raw >= start || raw <= end.
+    let combine = if niche.start <= niche.end { BinOp::BitAnd } else { BinOp::BitOr };
+    let cond_lcl = body.new_local(bool_ty, span, Mutability::Not);
+    body.assign_to(
+        Place::from(cond_lcl),
+        Rvalue::BinaryOp(
+            combine,
+            Operand::Move(Place::from(ge_lcl)),
+            Operand::Move(Place::from(le_lcl)),
+        ),
+        source,
+        InsertPosition::Before,
+    );
+    let assume_inst = Instance::resolve(kani_assume, &GenericArgs(vec![])).unwrap();
+    let unit_lcl = body.new_local(Ty::new_tuple(&[]), span, Mutability::Not);
+    body.insert_call(
+        &assume_inst,
+        source,
+        InsertPosition::Before,
+        vec![Operand::Move(Place::from(cond_lcl))],
+        Place::from(unit_lcl),
+    );
+}
+
 fn call_kani_any_for_ty(
     tcx: TyCtxt,
     models: AnyModels,
@@ -449,6 +540,10 @@ fn call_kani_any_for_ty(
         };
         let lcl = body.new_local(ty, source.span(body.blocks()), mutability);
         body.insert_call(&any_inst, source, InsertPosition::Before, vec![], Place::from(lcl));
+
+        // Constrain the value to the type's layout niche, if any. This only reads `lcl`, so the
+        // invariant assumption below can still move out of it.
+        assume_scalar_niche(tcx, models.kani_assume, body, source, lcl, ty);
 
         // If the type has a safety invariant, assume that it holds for the nondeterministic value.
         // We only check ADTs since those are the only types for which users can implement
