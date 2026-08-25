@@ -379,15 +379,17 @@ list as an exact argv to replay.
   contract below). This replaces an earlier design that *deleted* the path up front; the trade-off, and
   the residual window before the marker is written, are discussed there.
 - The parent directory of the path does not exist → it is created (`create_dir_all`), matching
-  `--sarif`. A path that is itself an existing directory currently fails when the export write targets it
-  (the same-directory temp write cannot be created inside a file-shaped target); adding an
-  argument-parse-time rejection to match `--sarif`'s is a small follow-up, noted so the difference is not
-  read as intentional.
+  `--sarif`. A path that is itself an existing directory fails today only when the write is attempted,
+  because the same-directory temp write cannot be created inside a file-shaped target. Adopting this
+  RFC includes moving that to the argument-parse-time rejection proposed under *Interaction with other
+  flags*, so the failure arrives before any verification work is done, as it does for `--sarif`. The
+  difference in the shipped code is an accident of implementation order, not an intentional design.
 
 **The completeness contract.** This proposal replaces the boolean `run_complete` shown in the example
 above with a richer **`run_state`** field, and anchors trust on it rather than on file existence. (The
 example still shows `run_complete` because it is genuine output of the pre-marker proof-of-concept; the
-`run_state` marker described here is the proposed change, open as Q2.) The write is atomic: Kani writes
+`run_state` marker described here is the proposed change, and choosing between it and
+delete-up-front is one of the open questions below.) The write is atomic: Kani writes
 the full JSON to a temporary file in the same directory as the target, then `rename`s it onto the target
 path (a same-filesystem POSIX rename is atomic), so the target never holds a partial write and a mid-write
 kill leaves the previous file in place (at worst an orphaned temp file beside it, never mistaken for the
@@ -633,6 +635,12 @@ second cost: the shipped v1 document becomes the de-facto contract, unversioned 
   output. Should the raw CBMC view also be available, or is that CBMC's `--json-ui` to provide?
 - Should a JSON Schema document ship alongside? That likely means a `schemars` dependency, which is
   not currently in the workspace, a real dependency decision rather than something to add quietly.
+- **Completeness: `run_state` marker, or delete the target up front?** This proposal writes a marker.
+  Deleting up front destroys a user-named path before verification starts, and fails *closed* on
+  `ENOENT` for a consumer that only checks whether the file exists; the marker fails *open* for that
+  same consumer, which reads a stale `COMPLETE` from a previous run until the new one finishes. Both
+  become one-way doors as soon as anything consumes the file, which is why this is asked rather than
+  decided.
 - Should this cover the `autoharness` subcommand's results, whose `chosen`/`skipped` classification
   currently has no machine-readable form?
 - Coverage results: include here, or leave with `kani-cov`?
