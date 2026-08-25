@@ -545,7 +545,7 @@ pub fn find_arbitrary_constructor(
 
 /// Convert an internal DefId of a function-like item to a stable FnDef.
 fn to_fn_def(tcx: TyCtxt, def_id: rustc_span::def_id::DefId) -> Option<FnDef> {
-    let ty = rustc_internal::stable(tcx.type_of(def_id).instantiate_identity());
+    let ty = rustc_internal::stable(tcx.type_of(def_id)).value;
     match ty.kind() {
         TyKind::RigidTy(RigidTy::FnDef(def, _)) => Some(def),
         _ => None,
