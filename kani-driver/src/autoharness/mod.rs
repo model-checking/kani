@@ -62,6 +62,7 @@ fn setup_session(session: &mut KaniSession, common_autoharness_args: &CommonAuto
         &common_autoharness_args.include_pattern,
         &common_autoharness_args.exclude_pattern,
         common_autoharness_args.bounded_arguments,
+        common_autoharness_args.constructor_args,
     );
 }
 
@@ -173,6 +174,7 @@ impl KaniSession {
         included: &[String],
         excluded: &[String],
         bounded_arguments: bool,
+        constructor_args: bool,
     ) {
         let mut args = vec![];
         for pattern in included {
@@ -183,6 +185,9 @@ impl KaniSession {
         }
         if bounded_arguments {
             args.push("--autoharness-bounded-arguments".to_string());
+        }
+        if constructor_args {
+            args.push("--autoharness-constructor-args".to_string());
         }
         self.autoharness_compiler_flags = Some(args);
     }
@@ -223,16 +228,21 @@ impl KaniSession {
         ]);
 
         let harness_kind = |harness: &HarnessMetadata| {
+            let mut kind = harness.attributes.kind.to_string();
             if harness.is_bounded {
-                format!("{} (bounded)", harness.attributes.kind)
-            } else {
-                harness.attributes.kind.to_string()
+                kind.push_str(" (bounded)");
             }
+            if harness.is_ctor_based {
+                kind.push_str(" (ctor)");
+            }
+            kind
         };
         let mut any_bounded = false;
+        let mut any_ctor = false;
 
         for success in successes {
             any_bounded |= success.harness.is_bounded;
+            any_ctor |= success.harness.is_ctor_based;
             verified_fns.add_row(vec![
                 success.harness.crate_name.clone(),
                 success.harness.pretty_name.clone(),
@@ -243,6 +253,7 @@ impl KaniSession {
 
         for failure in failures {
             any_bounded |= failure.harness.is_bounded;
+            any_ctor |= failure.harness.is_ctor_based;
             verified_fns.add_row(vec![
                 failure.harness.crate_name.clone(),
                 failure.harness.pretty_name.clone(),
@@ -259,6 +270,12 @@ impl KaniSession {
             println!(
                 "Note: harnesses marked \"(bounded)\" use bounded nondeterministic values for some arguments (--bounded-arguments);\n\
                  their verification results only hold up to the bounds, i.e., bugs that require larger input values may be missed."
+            );
+        }
+        if any_ctor {
+            println!(
+                "Note: harnesses marked \"(ctor)\" generate some values through a type's public constructor (--constructor-args);\n\
+                 their verification results only cover values reachable through that constructor."
             );
         }
 
