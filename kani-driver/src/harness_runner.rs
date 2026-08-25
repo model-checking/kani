@@ -45,6 +45,15 @@ struct Completed<T> {
     aborts: bool,
 }
 
+/// Restore input order over payloads tagged with the index they came from.
+///
+/// Units finish in whatever order the thread pool gets to them, so without this the results
+/// would be reported in completion order and would differ run to run.
+fn in_input_order<T>(mut tagged: Vec<(usize, T)>) -> Vec<T> {
+    tagged.sort_by_key(|(idx, _)| *idx);
+    tagged.into_iter().map(|(_, payload)| payload).collect()
+}
+
 /// Run `run_one` over `items` in parallel, keeping the payloads of units that completed even when
 /// one of them aborts the run, and returning them in `items` order together with whether an abort
 /// happened.
@@ -77,10 +86,7 @@ fn run_until_abort<I: Sync, T: Send>(
         Ok(())
     })?;
 
-    // Completion order under parallelism is nondeterministic; restore `items` order.
-    let mut collected = completed.into_inner().unwrap();
-    collected.sort_by_key(|(idx, _)| *idx);
-    let payloads = collected.into_iter().map(|(_, payload)| payload).collect();
+    let payloads = in_input_order(completed.into_inner().unwrap());
 
     // Read after the parallel region has joined, which orders every store before this load.
     Ok((payloads, aborted.load(Ordering::Relaxed)))
@@ -394,7 +400,7 @@ impl KaniSession {
 
 #[cfg(test)]
 mod tests {
-    use super::{Completed, run_until_abort};
+    use super::{Completed, in_input_order, run_until_abort};
     use anyhow::{Result, anyhow};
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -518,6 +524,24 @@ mod tests {
         let (payloads, aborted) = outcome.expect("an abort is not an error");
         assert!(aborted);
         assert_eq!(payloads, vec![0, 1, 2], "completed payloads kept, in input order");
+    }
+
+    /// The ordering step, on an input it can actually fail on.
+    ///
+    /// The runs above are all on a one-thread pool, where units complete in index order and the
+    /// sort is a no-op: delete it and every one of them still passes. Under `--jobs N` completion
+    /// order really is shuffled, so drive the sort directly with a shuffled input.
+    #[test]
+    fn payloads_are_restored_to_input_order() {
+        let shuffled = vec![(3, "d"), (0, "a"), (2, "c"), (1, "b")];
+        assert_eq!(in_input_order(shuffled), vec!["a", "b", "c", "d"]);
+    }
+
+    /// Already-ordered and empty inputs are the boundary cases.
+    #[test]
+    fn in_input_order_handles_sorted_and_empty_inputs() {
+        assert_eq!(in_input_order(vec![(0, "a"), (1, "b")]), vec!["a", "b"]);
+        assert!(in_input_order(Vec::<(usize, &str)>::new()).is_empty());
     }
 
     /// A run where nothing aborts and nothing fails reports no abort and keeps everything.

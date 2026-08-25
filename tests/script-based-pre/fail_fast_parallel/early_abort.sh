@@ -5,10 +5,13 @@
 # Parallel `--fail-fast` test, converted from a fixed `.expected` UI test when
 # https://github.com/model-checking/kani/issues/4729 was fixed: completed
 # results are now retained, so the summary counts depend on thread scheduling
-# and cannot be pinned to a constant. This script asserts the properties that
-# are stable: the run aborts early (fewer than all ten harnesses run), every
-# harness that ran is counted, and the summary total equals the number of
-# verdicts printed above it.
+# and cannot be pinned to a constant.
+#
+# The regression assertion is `VERDICTS == TOTAL` below: it reproduces #4729's
+# symptom (several verdicts printed above a "1 total" summary) and holds under
+# any schedule. The `< 10` bound above it is a smoke check that the abort
+# happened at all, not the regression check -- it is a statement about
+# scheduling, so it is deliberately loose and nothing rests on it.
 
 set +e
 
@@ -42,14 +45,17 @@ if [[ "${TOTAL}" -lt 1 ]]; then
     exit 1
 fi
 
-# The run must abort early: strictly fewer than all ten harnesses.
+# Smoke check, not the regression assertion: some harness was skipped, so the
+# abort did something. Loose on purpose -- with `--jobs 4` a correct run lands
+# near 4, but the exact number is scheduling, not behaviour.
 if [[ "${TOTAL}" -ge 10 ]]; then
     echo "FAIL: expected an early abort (< 10 harnesses), got ${TOTAL}"
     exit 1
 fi
 
-# The summary must count exactly the harnesses that printed a verdict above it
-# (#4729's symptom was several verdicts above a "1 total" summary).
+# THE regression assertion: the summary must count exactly the harnesses that
+# printed a verdict above it (#4729's symptom was several verdicts above a
+# "1 total" summary). Holds under any schedule.
 VERDICTS=$(grep -c "VERIFICATION:-" <<< "${OUT}")
 if [[ "${VERDICTS}" -ne "${TOTAL}" ]]; then
     echo "FAIL: ${VERDICTS} verdicts printed but the summary counts ${TOTAL}"

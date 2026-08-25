@@ -267,6 +267,8 @@ pub struct VerificationArgs {
     pub extra_pointer_checks: bool,
 
     /// Stop the verification process as soon as one of the harnesses fails.
+    /// Harnesses already running when that happens still finish and are counted, so under
+    /// `--jobs N` the set of reported harnesses depends on how many were in flight.
     #[arg(long)]
     pub fail_fast: bool,
 
