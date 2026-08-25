@@ -8,7 +8,7 @@ use std::fs::File;
 use std::io::{IsTerminal, Write};
 use std::path::Path;
 
-use crate::args::{NumThreads, OutputFormat};
+use crate::args::OutputFormat;
 use crate::call_cbmc::{VerificationResult, VerificationStatus};
 use crate::frontend::{JsonHandler, schema_utils::add_runner_results_to_json};
 use crate::progress_indicator::ProgressIndicator;
@@ -75,20 +75,7 @@ impl<'pr> HarnessRunner<'_, 'pr> {
         // Create progress indicator
         let progress_indicator = ProgressIndicator::new(sorted_harnesses.len(), show_progress);
 
-        let pool = {
-            let mut builder = rayon::ThreadPoolBuilder::new();
-            match self.sess.args.jobs() {
-                NumThreads::UserSpecified(num_threads) => {
-                    builder = builder.num_threads(num_threads);
-                }
-                NumThreads::NoMultithreading => {
-                    builder = builder.num_threads(1);
-                }
-                NumThreads::ThreadPoolDefault => { /* rayon will automatically set num_threads to the default if not specified here */
-                }
-            }
-            builder.build()?
-        };
+        let pool = self.sess.args.jobs().build_thread_pool()?;
 
         let results = pool.install(|| -> Result<Vec<HarnessResult<'pr>>> {
             sorted_harnesses

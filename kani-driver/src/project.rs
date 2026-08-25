@@ -4,6 +4,7 @@
 //! The goal is to provide one project view independent on the build system (cargo / standalone
 //! rustc) and its configuration (e.g.: linker type).
 
+use crate::args::NumThreads;
 use crate::metadata::from_json;
 use crate::session::KaniSession;
 use crate::util::{crate_name, info_operation};
@@ -11,6 +12,8 @@ use anyhow::{Context, Result};
 use kani_metadata::{
     ArtifactType, ArtifactType::*, HarnessMetadata, KaniMetadata, artifact::convert_type,
 };
+use rayon::prelude::*;
+use std::collections::HashSet;
 use std::env::current_dir;
 use std::fs;
 use std::ops::Deref;
@@ -42,6 +45,33 @@ pub struct Project {
     artifacts: Vec<Artifact>,
     /// Records the cargo metadata from the build, if there was any
     pub cargo_metadata: Option<cargo_metadata::Metadata>,
+}
+
+/// One model link whose input has been canonicalized before any work starts.
+#[derive(Debug)]
+struct LinkJob {
+    input: PathBuf,
+    output: PathBuf,
+}
+
+/// Execute independent model links with the configured verification job count.
+///
+/// The indexed parallel iterator preserves input order. If output paths are shared, or the user
+/// selected serial verification, use a regular iterator so two linkers can never write the same
+/// model concurrently.
+fn execute_link_jobs<T, F>(link_jobs: &[LinkJob], jobs: NumThreads, execute: F) -> Result<Vec<T>>
+where
+    T: Send,
+    F: Fn(&LinkJob) -> Result<T> + Send + Sync,
+{
+    let mut destinations = HashSet::with_capacity(link_jobs.len());
+    let unique_destinations = link_jobs.iter().all(|job| destinations.insert(&job.output));
+
+    if link_jobs.len() > 1 && jobs.will_multithread() && unique_destinations {
+        jobs.build_thread_pool()?.install(|| link_jobs.par_iter().map(execute).collect())
+    } else {
+        link_jobs.iter().map(execute).collect()
+    }
 }
 
 impl Project {
@@ -91,32 +121,43 @@ impl Project {
     ) -> Result<Self> {
         // For each harness (test or proof) from each metadata, read the path for the goto
         // SymTabGoto file. Use that path to find all the other artifacts.
-        let mut artifacts = vec![];
-        for crate_metadata in &metadata {
-            for harness_metadata in
+        let link_jobs = metadata
+            .iter()
+            .flat_map(|crate_metadata| {
                 crate_metadata.test_harnesses.iter().chain(crate_metadata.proof_harnesses.iter())
-            {
-                let symtab_out = Artifact::try_new(
-                    harness_metadata.goto_file.as_ref().expect("Expected a model file"),
-                    SymTabGoto,
-                )?;
-                let goto_path = convert_type(&symtab_out.path, symtab_out.typ, Goto);
+            })
+            .map(|harness| {
+                let input = harness
+                    .goto_file
+                    .as_ref()
+                    .expect("Expected a model file")
+                    .canonicalize()
+                    .context("Failed to canonicalize a harness model")?;
+                let output = convert_type(&input, SymTabGoto, Goto);
+                Ok(LinkJob { input, output })
+            })
+            .collect::<Result<Vec<_>>>()?;
 
-                // Link
-                session.link_goto_binary(&[symtab_out.to_path_buf()], &goto_path)?;
-                let goto = Artifact::try_new(&goto_path, Goto)?;
+        let build_artifacts = |link_job: &LinkJob| -> Result<Vec<Artifact>> {
+            let symtab_out = Artifact { path: link_job.input.clone(), typ: SymTabGoto };
 
-                // All other harness artifacts that may have been generated as part of the build.
-                artifacts.extend(
-                    [SymTab, TypeMap, VTableRestriction, PrettyNameMap].iter().filter_map(|typ| {
-                        let artifact = Artifact::try_from(&symtab_out, *typ).ok()?;
-                        Some(artifact)
-                    }),
-                );
-                artifacts.push(symtab_out);
-                artifacts.push(goto);
-            }
-        }
+            session.link_goto_binary(&[symtab_out.to_path_buf()], &link_job.output)?;
+            let goto = Artifact::try_new(&link_job.output, Goto)?;
+
+            // All other harness artifacts that may have been generated as part of the build.
+            let mut artifacts = [SymTab, TypeMap, VTableRestriction, PrettyNameMap]
+                .iter()
+                .filter_map(|typ| Artifact::try_from(&symtab_out, *typ).ok())
+                .collect::<Vec<_>>();
+            artifacts.push(symtab_out);
+            artifacts.push(goto);
+            Ok(artifacts)
+        };
+
+        let artifacts = execute_link_jobs(&link_jobs, session.args.jobs(), build_artifacts)?
+            .into_iter()
+            .flatten()
+            .collect();
 
         Ok(Project { outdir, input, metadata, artifacts, cargo_metadata })
     }
@@ -303,4 +344,103 @@ pub(crate) fn std_project(std_path: &Path, session: &KaniSession) -> Result<Proj
     // Get the metadata and return a Kani project.
     let metadata = outputs.iter().map(|md_file| from_json(md_file)).collect::<Result<Vec<_>>>()?;
     Project::try_new(session, outdir, None, metadata, None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{LinkJob, execute_link_jobs};
+    use crate::args::NumThreads;
+    use anyhow::Result;
+    use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::thread;
+    use std::time::Duration;
+
+    fn link_jobs(destinations: &[&str]) -> Vec<LinkJob> {
+        destinations
+            .iter()
+            .enumerate()
+            .map(|(index, destination)| LinkJob {
+                input: PathBuf::from(format!("{index}.symtab.out")),
+                output: PathBuf::from(destination),
+            })
+            .collect()
+    }
+
+    fn observe_concurrency(active: &AtomicUsize, peak: &AtomicUsize) {
+        let current = active.fetch_add(1, Ordering::SeqCst) + 1;
+        peak.fetch_max(current, Ordering::SeqCst);
+        thread::sleep(Duration::from_millis(25));
+        active.fetch_sub(1, Ordering::SeqCst);
+    }
+
+    #[test]
+    fn parallel_link_jobs_respect_job_limit_and_order() {
+        let link_jobs = link_jobs(&["0.out", "1.out", "2.out", "3.out"]);
+        let expected = execute_link_jobs(&link_jobs, NumThreads::UserSpecified(1), |job| {
+            Ok(job.input.clone())
+        })
+        .unwrap();
+        let active = AtomicUsize::new(0);
+        let peak = AtomicUsize::new(0);
+
+        let actual = execute_link_jobs(&link_jobs, NumThreads::UserSpecified(2), |job| {
+            observe_concurrency(&active, &peak);
+            Ok(job.input.clone())
+        })
+        .unwrap();
+
+        assert_eq!(actual, expected);
+        assert!(peak.load(Ordering::SeqCst) > 1);
+        assert!(peak.load(Ordering::SeqCst) <= 2);
+    }
+
+    #[test]
+    fn serial_job_settings_do_not_use_rayon_workers() {
+        let link_jobs = link_jobs(&["0.out", "1.out"]);
+        for jobs in [NumThreads::NoMultithreading, NumThreads::UserSpecified(1)] {
+            let used_rayon_worker = AtomicBool::new(false);
+            execute_link_jobs(&link_jobs, jobs, |_| {
+                used_rayon_worker
+                    .fetch_or(rayon::current_thread_index().is_some(), Ordering::SeqCst);
+                Ok(())
+            })
+            .unwrap();
+            assert!(!used_rayon_worker.load(Ordering::SeqCst));
+        }
+    }
+
+    #[test]
+    fn shared_destinations_are_linked_serially() {
+        let link_jobs = link_jobs(&["shared.out", "shared.out", "other.out"]);
+        let active = AtomicUsize::new(0);
+        let peak = AtomicUsize::new(0);
+        let used_rayon_worker = AtomicBool::new(false);
+
+        execute_link_jobs(&link_jobs, NumThreads::UserSpecified(2), |_| {
+            used_rayon_worker.fetch_or(rayon::current_thread_index().is_some(), Ordering::SeqCst);
+            observe_concurrency(&active, &peak);
+            Ok(())
+        })
+        .unwrap();
+
+        assert_eq!(peak.load(Ordering::SeqCst), 1);
+        assert!(!used_rayon_worker.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn parallel_link_failures_are_propagated() {
+        let link_jobs = link_jobs(&["0.out", "1.out", "2.out"]);
+
+        let error =
+            execute_link_jobs(&link_jobs, NumThreads::UserSpecified(2), |job| -> Result<()> {
+                if job.input == Path::new("1.symtab.out") {
+                    anyhow::bail!("synthetic link failure");
+                }
+                Ok(())
+            })
+            .unwrap_err();
+
+        assert_eq!(error.to_string(), "synthetic link failure");
+    }
 }
