@@ -18,6 +18,7 @@ use rustc_middle::traits::{ImplSource, ImplSourceUserDefinedData};
 use rustc_middle::ty::TraitRef;
 use rustc_middle::ty::adjustment::CustomCoerceUnsized;
 use rustc_middle::ty::{PseudoCanonicalInput, Ty, TyCtxt, TypingEnv};
+use rustc_public::CrateDefType;
 use rustc_public::Symbol;
 use rustc_public::rustc_internal;
 use rustc_public::ty::{RigidTy, Ty as TyStable, TyKind};

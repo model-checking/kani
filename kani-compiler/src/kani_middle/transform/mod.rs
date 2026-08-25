@@ -60,7 +60,7 @@ fn build_missing_body(tcx: TyCtxt, instance: Instance) -> Body {
     let mono_body = internal_instance.instantiate_mir_and_normalize_erasing_regions(
         tcx,
         TypingEnv::fully_monomorphized(),
-        EarlyBinder::bind(internal_body),
+        EarlyBinder::bind(tcx, internal_body),
     );
     rustc_internal::stable(&mono_body)
 }
