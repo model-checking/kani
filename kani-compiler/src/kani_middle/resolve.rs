@@ -727,8 +727,8 @@ fn resolve_in_type_def<'tcx>(
                 ResolveError::InvalidPath {
                     msg: format!(
                         "the generic arguments {} are invalid. The available implementations are: \n{}",
-                        &generic_args,
-                        &candidates
+                        generic_args,
+                        candidates
                             .iter()
                             .map(|def_id| tcx.def_path_str(*def_id))
                             .intersperse("\n".to_string())

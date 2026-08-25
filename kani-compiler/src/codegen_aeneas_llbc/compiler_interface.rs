@@ -206,7 +206,7 @@ impl CodegenBackend for LlbcCodegenBackend {
         .to_owned()
     }
 
-    fn codegen_crate<'tcx>(&self, tcx: TyCtxt<'tcx>, _crate_info: &CrateInfo) -> Box<dyn Any> {
+    fn codegen_crate<'tcx>(&self, tcx: TyCtxt<'tcx>) -> Box<dyn Any> {
         let ret_val = rustc_internal::run(tcx, || {
             // Queries shouldn't change today once codegen starts.
             let queries = QUERY_DB.with(|db| db.borrow().clone());
@@ -296,6 +296,7 @@ impl CodegenBackend for LlbcCodegenBackend {
         ongoing_codegen: Box<dyn Any>,
         _sess: &Session,
         _filenames: &OutputFilenames,
+        _crate_info: &CrateInfo,
     ) -> (CompiledModules, FxIndexMap<WorkProductId, WorkProduct>) {
         match ongoing_codegen
             .downcast::<(CompiledModules, FxIndexMap<WorkProductId, WorkProduct>)>()

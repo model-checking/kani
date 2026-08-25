@@ -352,7 +352,7 @@ fn compute_capture_ref_locals(
                     return HashSet::new();
                 }
                 if place.projection.is_empty()
-                    && let Rvalue::Use(Operand::Copy(src) | Operand::Move(src)) = rvalue
+                    && let Rvalue::Use(Operand::Copy(src) | Operand::Move(src), _) = rvalue
                     && src.local == 1
                     && src.projection.len() == 1
                     && let ProjectionElem::Field(field_idx, _) = src.projection[0]

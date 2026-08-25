@@ -334,7 +334,7 @@ impl CodegenBackend for GotocCodegenBackend {
         .to_owned()
     }
 
-    fn codegen_crate<'tcx>(&self, tcx: TyCtxt<'tcx>, _crate_info: &CrateInfo) -> Box<dyn Any> {
+    fn codegen_crate<'tcx>(&self, tcx: TyCtxt<'tcx>) -> Box<dyn Any> {
         let ret_val = rustc_internal::run(tcx, || {
             super::utils::init();
 
@@ -525,6 +525,7 @@ impl CodegenBackend for GotocCodegenBackend {
         ongoing_codegen: Box<dyn Any>,
         _sess: &Session,
         _filenames: &OutputFilenames,
+        _crate_info: &CrateInfo,
     ) -> (CompiledModules, FxIndexMap<WorkProductId, WorkProduct>) {
         match ongoing_codegen
             .downcast::<(CompiledModules, FxIndexMap<WorkProductId, WorkProduct>)>()
@@ -615,7 +616,7 @@ fn check_target(session: &Session) {
             "Kani requires the target platform to be `x86_64-unknown-linux-gnu`, \
             `aarch64-unknown-linux-gnu`, `x86_64-apple-*` or `arm64-apple-*`, but \
             it is {}",
-            &session.target.llvm_target
+            session.target.llvm_target
         );
         session.dcx().err(err_msg);
     }

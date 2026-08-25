@@ -93,7 +93,9 @@ fn simd_len_and_type<'tcx>(tcx: TyCtxt<'tcx>, simd_ty: Ty<'tcx>) -> (Const<'tcx>
         ty::Adt(def, args) => {
             assert!(def.repr().simd(), "`simd_size_and_type` called on non-SIMD type");
             let variant = def.non_enum_variant();
-            let f0_ty = variant.fields[rustc_abi::FieldIdx::from_usize(0)].ty(tcx, args);
+            let f0_ty = variant.fields[rustc_abi::FieldIdx::from_usize(0)]
+                .ty(tcx, args)
+                .skip_normalization();
 
             match f0_ty.kind() {
                 ty::Array(elem_ty, len) => (*len, *elem_ty),

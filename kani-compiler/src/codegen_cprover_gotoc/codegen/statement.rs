@@ -305,7 +305,6 @@ impl GotocCtx<'_, '_> {
             }
             StatementKind::PlaceMention(_) => todo!(),
             StatementKind::FakeRead(..)
-            | StatementKind::Retag(_, _)
             | StatementKind::AscribeUserType { .. }
             | StatementKind::Nop
             | StatementKind::ConstEvalCounter => Stmt::skip(location),
@@ -485,7 +484,7 @@ impl GotocCtx<'_, '_> {
                         let discr_ty = self.codegen_enum_discr_typ(dest_ty_internal);
                         let discr_ty = self.codegen_ty(discr_ty);
                         let niche_value =
-                            variant_index_internal.as_u32() - niche_variants.start().as_u32();
+                            variant_index_internal.as_u32() - niche_variants.start.as_u32();
                         let niche_value = (niche_value as u128).wrapping_add(*niche_start);
                         trace!(val=?niche_value, typ=?discr_ty, "codegen_set_discriminant niche");
                         let value = if niche_value == 0
@@ -973,7 +972,7 @@ fn collect_rvalue_places<'a>(rvalue: &'a Rvalue, places: &mut Vec<&'a Place>) {
         }
     };
     match rvalue {
-        Rvalue::Use(op)
+        Rvalue::Use(op, _)
         | Rvalue::Repeat(op, _)
         | Rvalue::Cast(_, op, _)
         | Rvalue::UnaryOp(_, op) => push_operand(op, places),
@@ -985,7 +984,8 @@ fn collect_rvalue_places<'a>(rvalue: &'a Rvalue, places: &mut Vec<&'a Place>) {
         | Rvalue::AddressOf(_, place)
         | Rvalue::Len(place)
         | Rvalue::CopyForDeref(place)
-        | Rvalue::Discriminant(place) => places.push(place),
+        | Rvalue::Discriminant(place)
+        | Rvalue::Reborrow(_, _, place) => places.push(place),
         Rvalue::Aggregate(_, operands) => {
             for op in operands {
                 push_operand(op, places);
