@@ -60,8 +60,10 @@ fn run_until_abort<I: Sync, T: Send>(
     let aborted = AtomicBool::new(false);
 
     items.par_iter().enumerate().try_for_each(|(idx, item)| -> Result<()> {
-        // A unit that has not started returns without running once an abort is latched. Units
-        // already in flight finish and record their payloads.
+        // Best effort: a unit that has not started returns without running once it observes a
+        // latched abort. The load is `Relaxed`, so a unit racing the store may still run; that
+        // costs one extra unit of work and is not incorrect. Units already in flight finish and
+        // record their payloads.
         if aborted.load(Ordering::Relaxed) {
             return Ok(());
         }
@@ -451,9 +453,14 @@ mod tests {
     /// The reviewer's scenario: one unit trips the abort while another returns a genuine error, both
     /// in flight at once. The genuine error must be what propagates.
     ///
-    /// Both units wait for the other to start before returning, so the abort and the error really do
-    /// overlap. The wait is bounded, so this cannot hang if rayon runs them on one thread; in that
-    /// case the assertion still holds, it is just no longer testing an overlap.
+    /// Both units wait for the other to start, so on a pool that runs them in parallel the abort
+    /// and the error really do overlap. The wait is bounded, so nothing hangs.
+    ///
+    /// Rayon is free not to split a two-element iterator, and if it serializes them the aborting
+    /// unit would latch the abort before the erroring unit ran, leaving no genuine error to
+    /// displace and no way to assert one. So the aborting unit latches the abort only once it has
+    /// seen the other unit start. Serialized, it declines to abort and the erroring unit runs
+    /// afterwards, so the assertion holds either way rather than failing on a scheduling accident.
     #[test]
     fn a_genuine_error_is_not_displaced_by_a_concurrent_abort() {
         let started = AtomicUsize::new(0);
@@ -464,14 +471,16 @@ mod tests {
         let outcome = pool.install(|| {
             run_until_abort(&indexed, |(idx, unit)| {
                 started.fetch_add(1, Ordering::SeqCst);
+                let mut both_in_flight = false;
                 for _ in 0..1_000 {
                     if started.load(Ordering::SeqCst) >= 2 {
+                        both_in_flight = true;
                         break;
                     }
                     std::thread::sleep(Duration::from_millis(1));
                 }
                 match unit {
-                    Unit::Abort => Ok(Completed { payload: *idx, aborts: true }),
+                    Unit::Abort => Ok(Completed { payload: *idx, aborts: both_in_flight }),
                     _ => Err(anyhow!("unit {idx} failed for its own reasons")),
                 }
             })

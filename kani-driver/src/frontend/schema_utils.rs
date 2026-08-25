@@ -361,8 +361,8 @@ pub fn process_harness_results(
 
             // Add property details for this harness. `harness_id` is what makes an entry
             // attributable: this array is built in harness-metadata order while
-            // `verification_results.results` follows the order harnesses were scheduled in, so
-            // the two need not agree and cannot be correlated by position.
+            // `verification_results.results` is sorted into `sort_harnesses_by_loc` order, so the
+            // two need not agree and cannot be correlated by position.
             handler.add_harness_detail(
                 "property_details",
                 json!({
