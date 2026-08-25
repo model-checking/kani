@@ -487,9 +487,9 @@ fn impl_derived_candidates(tcx: TyCtxt, def: FnDef) -> FxHashMap<usize, Vec<Ty>>
     // here would leave such a parameter with primitive candidates only.
     let mut next = Some(rustc_internal::internal(tcx, def.def_id()));
     while let Some(def_id) = next {
-        let generic_predicates = tcx.predicates_of(def_id);
-        next = generic_predicates.parent;
-        for (predicate, _span) in generic_predicates.predicates {
+        let generic_clauses = tcx.clauses_of(def_id);
+        next = generic_clauses.parent;
+        for (predicate, _span) in generic_clauses.clauses {
             let Some(trait_pred) = predicate.as_trait_clause() else { continue };
             let trait_pred = trait_pred.skip_binder();
             let ty::Param(param_ty) = trait_pred.self_ty().kind() else { continue };
@@ -528,7 +528,7 @@ fn args_satisfy_predicates(tcx: TyCtxt, def: FnDef, args: &GenericArgs) -> bool 
 
     let def_id = rustc_internal::internal(tcx, def.def_id());
     let args_internal = rustc_internal::internal(tcx, args);
-    let predicates = tcx.predicates_of(def_id).instantiate(tcx, args_internal);
+    let predicates = tcx.clauses_of(def_id).instantiate(tcx, args_internal);
     for (predicate, _span) in predicates {
         ocx.register_obligation(Obligation::new(
             tcx,

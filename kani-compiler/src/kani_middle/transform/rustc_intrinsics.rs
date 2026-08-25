@@ -117,8 +117,8 @@ impl RustcIntrinsicsPass {
         // Double check input parameters of `offset` operation.
         let offset_ty = op2.ty(body.locals()).unwrap();
         let pointer_ty = op1.ty(body.locals()).unwrap();
-        validate_offset(tcx, offset_ty, statement.span);
-        validate_raw_ptr(tcx, pointer_ty, statement.span);
+        validate_offset(tcx, offset_ty, statement.source_info.span);
+        validate_raw_ptr(tcx, pointer_ty, statement.source_info.span);
         tcx.dcx().abort_if_errors();
 
         let pointee_ty = pointer_ty.kind().builtin_deref(true).unwrap().ty;
@@ -204,7 +204,7 @@ impl MutMirVisitor for ReplaceIntrinsicCallVisitor<'_, '_> {
             // Construct the wrapper types needed to insert our resolved model [Instance]
             // back into the MIR as an operand.
             let literal = MirConst::try_new_zero_sized(new_instance.ty()).unwrap();
-            let span = term.span;
+            let span = term.source_info.span;
             let new_func = ConstOperand { span, user_ty: None, const_: literal };
             *func = Operand::Constant(new_func);
             self.changed = true;

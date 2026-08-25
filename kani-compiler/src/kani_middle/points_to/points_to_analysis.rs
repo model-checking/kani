@@ -359,7 +359,7 @@ fn try_resolve_instance<'tcx>(
                 tcx,
                 TypingEnv::fully_monomorphized(),
                 *def,
-                args,
+                args.skip_binder(),
                 DUMMY_SP,
             ))
         }

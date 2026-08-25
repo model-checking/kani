@@ -12,6 +12,7 @@ use tracing::{debug, trace};
 use kani_metadata::HarnessMetadata;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir::Const;
+use rustc_middle::ty::RegionExt;
 use rustc_middle::ty::{self, EarlyBinder, TyCtxt, TypeFoldable, TypingEnv};
 use rustc_public::mir::ConstOperand;
 use rustc_public::mir::mono::Instance;

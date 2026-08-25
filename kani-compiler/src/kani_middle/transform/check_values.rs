@@ -208,7 +208,7 @@ impl ValidValueReq {
             let shape = ty.layout().unwrap().shape();
             match shape.abi {
                 ValueAbi::Scalar(Scalar::Initialized { value, valid_range })
-                | ValueAbi::ScalarPair(Scalar::Initialized { value, valid_range }, _) => {
+                | ValueAbi::ScalarPair { a: Scalar::Initialized { value, valid_range }, .. } => {
                     Some(ValidValueReq {
                         offset: 0,
                         size: value.size(machine_info),
@@ -216,7 +216,7 @@ impl ValidValueReq {
                     })
                 }
                 ValueAbi::Scalar(_)
-                | ValueAbi::ScalarPair(_, _)
+                | ValueAbi::ScalarPair { .. }
                 | ValueAbi::Vector { .. }
                 | ValueAbi::ScalableVector { .. }
                 | ValueAbi::Aggregate { .. } => None,
