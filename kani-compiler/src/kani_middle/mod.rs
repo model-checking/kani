@@ -17,7 +17,7 @@ use rustc_public::ty::{
     TyKind,
 };
 use rustc_public::visitor::{Visitable, Visitor as TyVisitor};
-use rustc_public::{CrateDef, DefId, local_crate};
+use rustc_public::{CrateDef, CrateDefType, DefId, local_crate};
 use std::ops::ControlFlow;
 
 use self::attributes::KaniAttributes;

@@ -29,7 +29,8 @@ use rustc_codegen_ssa::back::archive::{
 use rustc_codegen_ssa::back::link::link_binary;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CompiledModules, CrateInfo, TargetConfig};
-use rustc_data_structures::fx::{FxHashMap, FxIndexMap};
+use rustc_data_structures::fx::FxHashMap;
+use rustc_data_structures::unord::UnordMap;
 use rustc_hir::def_id::{DefId as InternalDefId, LOCAL_CRATE};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
@@ -526,9 +527,8 @@ impl CodegenBackend for GotocCodegenBackend {
         _sess: &Session,
         _filenames: &OutputFilenames,
         _crate_info: &CrateInfo,
-    ) -> (CompiledModules, FxIndexMap<WorkProductId, WorkProduct>) {
-        match ongoing_codegen
-            .downcast::<(CompiledModules, FxIndexMap<WorkProductId, WorkProduct>)>()
+    ) -> (CompiledModules, UnordMap<WorkProductId, WorkProduct>) {
+        match ongoing_codegen.downcast::<(CompiledModules, UnordMap<WorkProductId, WorkProduct>)>()
         {
             Ok(val) => *val,
             Err(val) => panic!("unexpected error: {:?}", (*val).type_id()),
@@ -664,7 +664,7 @@ fn check_options(session: &Session) {
 /// itself and passes it to `codegen_crate` and `link`, so there is nothing crate-specific to report
 /// here.
 fn codegen_results() -> Box<dyn Any> {
-    let work_products = FxIndexMap::<WorkProductId, WorkProduct>::default();
+    let work_products = UnordMap::<WorkProductId, WorkProduct>::default();
     Box::new((CompiledModules { modules: vec![], allocator_module: None }, work_products))
 }
 

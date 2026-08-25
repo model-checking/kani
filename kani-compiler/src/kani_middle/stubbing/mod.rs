@@ -184,7 +184,7 @@ pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Resul
     let old_ret_internal = rustc_internal::internal(tcx, old_ret_ty);
     let new_ret_internal = rustc_internal::internal(tcx, new_ret_ty);
     let new_ret_renamed =
-        EarlyBinder::bind(new_ret_internal).instantiate(tcx, rename_args).skip_normalization();
+        EarlyBinder::bind(tcx, new_ret_internal).instantiate(tcx, rename_args).skip_normalization();
 
     let mut diff = vec![];
     // Error messages show the user's original types (before renaming) for clarity.
@@ -196,8 +196,9 @@ pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Resul
     {
         let old_ty_internal = rustc_internal::internal(tcx, old_arg.ty);
         let new_ty_internal = rustc_internal::internal(tcx, new_arg.ty);
-        let new_renamed =
-            EarlyBinder::bind(new_ty_internal).instantiate(tcx, rename_args).skip_normalization();
+        let new_renamed = EarlyBinder::bind(tcx, new_ty_internal)
+            .instantiate(tcx, rename_args)
+            .skip_normalization();
         if old_ty_internal != new_renamed {
             diff.push(format!(
                 "Expected type `{}` for parameter {}, but found `{}`",
@@ -257,7 +258,7 @@ impl<'tcx> StubConstChecker<'tcx> {
         self.instance.instantiate_mir_and_normalize_erasing_regions(
             self.tcx,
             TypingEnv::fully_monomorphized(),
-            EarlyBinder::bind(value),
+            EarlyBinder::bind(self.tcx, value),
         )
     }
 

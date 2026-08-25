@@ -246,7 +246,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             current_fn.instance().instantiate_mir_and_normalize_erasing_regions(
                 self.tcx,
                 ty::TypingEnv::fully_monomorphized(),
-                ty::EarlyBinder::bind(value),
+                ty::EarlyBinder::bind(self.tcx, value),
             )
         } else {
             // TODO: confirm with rust team there is no way to monomorphize
