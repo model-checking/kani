@@ -37,10 +37,12 @@ pub fn readable_name(instance: Instance) -> String {
 
 /// If `ty` is `NonNull<T>`, return `T`.
 ///
-/// `NonNull<T>` is `repr(transparent)` over `*const T`, so it holds exactly the same address. The
-/// Rust allocation shims (`__rust_dealloc`, `__rust_realloc`) took their pointer arguments as
-/// `*mut u8` until nightly-2026-03-21 and as `NonNull<u8>` afterwards, so code that reasons about
-/// those arguments as pointers has to see through the wrapper.
+/// `NonNull<T>` is `repr(transparent)` over a single field holding a `*const T`, so it holds
+/// exactly the same address. That field is a bare `*const T` up to nightly-2026-04-01 and a
+/// `pattern_type!(*const T is !null)` afterwards, so reaching the pointer can take more than one
+/// projection. The Rust allocation shims (`__rust_dealloc`, `__rust_realloc`) took their pointer
+/// arguments as `*mut u8` until nightly-2026-03-21 and as `NonNull<u8>` afterwards, so code that
+/// reasons about those arguments as pointers has to see through the wrapper.
 pub fn nonnull_pointee(ty: Ty) -> Option<Ty> {
     let TyKind::RigidTy(RigidTy::Adt(def, args)) = ty.kind() else { return None };
     if !matches!(def.name().as_str(), "core::ptr::NonNull" | "std::ptr::NonNull") {
