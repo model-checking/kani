@@ -68,6 +68,7 @@ where
     let unique_destinations = link_jobs.iter().all(|job| destinations.insert(&job.output));
 
     if link_jobs.len() > 1 && jobs.will_multithread() && unique_destinations {
+        // Safe because each link only writes its own output; shared libraries are read-only.
         jobs.build_thread_pool()?.install(|| link_jobs.par_iter().map(execute).collect())
     } else {
         link_jobs.iter().map(execute).collect()
@@ -127,12 +128,10 @@ impl Project {
                 crate_metadata.test_harnesses.iter().chain(crate_metadata.proof_harnesses.iter())
             })
             .map(|harness| {
-                let input = harness
-                    .goto_file
-                    .as_ref()
-                    .expect("Expected a model file")
-                    .canonicalize()
-                    .context("Failed to canonicalize a harness model")?;
+                let model_path = harness.goto_file.as_ref().expect("Expected a model file");
+                let input = model_path.canonicalize().with_context(|| {
+                    format!("Failed to canonicalize harness model {}", model_path.display())
+                })?;
                 let output = convert_type(&input, SymTabGoto, Goto);
                 Ok(LinkJob { input, output })
             })
