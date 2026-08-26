@@ -556,6 +556,11 @@ impl GotocCtx<'_, '_> {
             let variant_proj = self.codegen_variant_lvalue(initial_projection, variant_index, loc);
             let variant_expr = variant_proj.goto_expr.clone();
             let layout = self.layout_of_stable(res_ty);
+            // `Variants::Multiple` stores a `VariantLayout`, which has no `FieldsShape` and so no
+            // field order, so ask rustc for the variant's own layout. `variant_layout` is what the
+            // type side (`codegen_enum_cases`) uses too, so the operands below are ordered exactly
+            // like the goto struct's components.
+            let variant_layout;
             let fields = match &layout.variants {
                 Variants::Empty => {
                     unreachable!("Aggregate expression for uninhabited enum with no variants")
@@ -570,8 +575,12 @@ impl GotocCtx<'_, '_> {
                     }
                     &layout.fields
                 }
-                Variants::Multiple { variants, .. } => {
-                    &variants[rustc_internal::internal(self.tcx, variant_index)].fields
+                Variants::Multiple { .. } => {
+                    variant_layout = self.variant_layout(
+                        rustc_internal::internal(self.tcx, res_ty),
+                        rustc_internal::internal(self.tcx, variant_index),
+                    );
+                    &variant_layout.fields
                 }
             };
 
@@ -749,7 +758,19 @@ impl GotocCtx<'_, '_> {
         let res_ty = self.rvalue_ty_stable(rv);
         debug!(?rv, ?res_ty, "codegen_rvalue");
         match rv {
-            Rvalue::Use(p) => self.codegen_operand_stable(p),
+            Rvalue::Use(p, _) => self.codegen_operand_stable(p),
+            // `Reborrow` is the new user-definable reborrowing of ADTs (`CoerceShared`). It is
+            // documented as a bitwise copy today, but the same docs anticipate it changing memory
+            // layout, so report it as unsupported rather than silently modelling it as a copy.
+            Rvalue::Reborrow(..) => {
+                let typ = self.codegen_ty_stable(res_ty);
+                self.codegen_unimplemented_expr(
+                    "Rvalue::Reborrow",
+                    typ,
+                    loc,
+                    "https://github.com/model-checking/kani/issues/4189",
+                )
+            }
             Rvalue::Repeat(op, sz) => self.codegen_rvalue_repeat(op, sz, loc),
             Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => {
                 let place_ref = self.codegen_place_ref_stable(p, loc);
@@ -978,8 +999,7 @@ impl GotocCtx<'_, '_> {
                     let niche_val = self.codegen_get_niche(e, offset.bytes() as usize, discr_type);
                     let relative_discr =
                         wrapping_sub(&niche_val, u64::try_from(*niche_start).unwrap());
-                    let relative_max =
-                        niche_variants.end().as_u32() - niche_variants.start().as_u32();
+                    let relative_max = niche_variants.last.as_u32() - niche_variants.start.as_u32();
                     let is_niche = if relative_max == 0 {
                         relative_discr.clone().is_zero()
                     } else {
@@ -994,7 +1014,7 @@ impl GotocCtx<'_, '_> {
                             relative_discr.cast_to(result_type.clone())
                         };
                         relative_discr.plus(Expr::int_constant(
-                            niche_variants.start().as_u32(),
+                            niche_variants.start.as_u32(),
                             result_type.clone(),
                         ))
                     };

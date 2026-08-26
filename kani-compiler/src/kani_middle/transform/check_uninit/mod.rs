@@ -21,6 +21,7 @@ use std::collections::HashMap;
 use crate::kani_middle::kani_functions::{KaniFunction, KaniModel};
 pub use delayed_ub::DelayedUbPass;
 pub use ptr_uninit::UninitPass;
+use rustc_public::mir::WithRetag;
 pub use ty_layout::{PointeeInfo, PointeeLayout};
 
 mod delayed_ub;
@@ -649,11 +650,14 @@ impl<'a> UninitInstrumenter<'a> {
         reason: &str,
     ) {
         let span = source.span(body.blocks());
-        let rvalue = Rvalue::Use(Operand::Constant(ConstOperand {
-            const_: MirConst::from_bool(false),
-            span,
-            user_ty: None,
-        }));
+        let rvalue = Rvalue::Use(
+            Operand::Constant(ConstOperand {
+                const_: MirConst::from_bool(false),
+                span,
+                user_ty: None,
+            }),
+            WithRetag::No,
+        );
         let result = body.insert_assignment(rvalue, source, position);
         body.insert_check(&self.safety_check_type, source, position, Some(result), reason);
     }

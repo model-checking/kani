@@ -187,8 +187,8 @@ impl ProjectedPlace {
         assert!(
             Self::check_fat_ptr_typ(&fat_ptr_goto_expr, &fat_ptr_mir_typ, ctx),
             "\n{:?}\n{:?}",
-            &fat_ptr_goto_expr,
-            &fat_ptr_mir_typ
+            fat_ptr_goto_expr,
+            fat_ptr_mir_typ
         );
         Ok(ProjectedPlace { goto_expr, mir_typ_or_variant, fat_ptr_goto_expr, fat_ptr_mir_typ })
     }

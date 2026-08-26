@@ -188,7 +188,7 @@ impl MirVisitor for CheckUninitVisitor {
                 // either a union or a field inside a union.
                 if is_inside_union {
                     match rvalue {
-                        Rvalue::Use(operand) => {
+                        Rvalue::Use(operand, _) => {
                             // This is a union-to-union assignment, so we need to copy the
                             // initialization state.
                             if place.ty(&self.locals).unwrap().kind().is_union() {
@@ -225,7 +225,6 @@ impl MirVisitor for CheckUninitVisitor {
             | StatementKind::SetDiscriminant { .. }
             | StatementKind::StorageLive(_)
             | StatementKind::StorageDead(_)
-            | StatementKind::Retag(_, _)
             | StatementKind::PlaceMention(_)
             | StatementKind::AscribeUserType { .. }
             | StatementKind::Coverage(_)

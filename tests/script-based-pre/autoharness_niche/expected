@@ -1,9 +1,5 @@
-Status: SATISFIED
-Status: SATISFIED
-| niche_probe | check_monthly::<Month>                  | #[kani::proof]            | Success             |
-| niche_probe | cover_extremes                          | #[kani::proof]            | Success             |
-| niche_probe | days_left_in_year                       | #[kani::proof]            | Success             |
-| niche_probe | duration_nanos                          | #[kani::proof]            | Success             |
-| niche_probe | nonzero                                 | #[kani::proof]            | Success             |
-| niche_probe | signed_niche                            | #[kani::proof]            | Success             |
-Complete - 10 successfully verified functions, 0 failures, 10 total.
+| niche_probe | days_left_in_year                   | Missing Arbitrary implementation for argument(s) s: Schedule  |
+| niche_probe | signed_niche                        | Missing Arbitrary implementation for argument(s) p: PosI8     |
+| niche_probe | duration_nanos    | #[kani::proof]            | Success             |
+| niche_probe | nonzero           | #[kani::proof]            | Success             |
+Complete - 2 successfully verified functions, 0 failures, 2 total.

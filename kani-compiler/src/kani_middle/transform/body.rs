@@ -593,7 +593,6 @@ pub trait MutMirVisitor {
             | StatementKind::SetDiscriminant { .. }
             | StatementKind::StorageLive(_)
             | StatementKind::StorageDead(_)
-            | StatementKind::Retag(_, _)
             | StatementKind::PlaceMention(_)
             | StatementKind::AscribeUserType { .. }
             | StatementKind::Coverage(_)
@@ -646,12 +645,12 @@ pub trait MutMirVisitor {
             Rvalue::Repeat(op, _) => {
                 self.visit_operand(op);
             }
-            Rvalue::UnaryOp(_, op) | Rvalue::Use(op) => {
+            Rvalue::UnaryOp(_, op) | Rvalue::Use(op, _) => {
                 self.visit_operand(op);
             }
             Rvalue::AddressOf(..) => {}
             Rvalue::CopyForDeref(_) | Rvalue::Discriminant(_) | Rvalue::Len(_) => {}
-            Rvalue::Ref(..) => {}
+            Rvalue::Ref(..) | Rvalue::Reborrow(..) => {}
             Rvalue::ThreadLocalRef(_) => {}
         }
     }
