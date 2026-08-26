@@ -1,18 +1,27 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-#![feature(rustc_attrs)]
-#![allow(internal_features)]
+// Ranged scalar newtypes are expressed with pattern types since nightly-2026-06-01 removed
+// `rustc_layout_scalar_valid_range_start`/`_end`; `core::num::niche_types` made the same move.
+//
+// Note the consequence for autoharness: a pattern type is not an ADT and has no `Arbitrary`
+// implementation, so `can_derive_arbitrary` cannot synthesize a struct that has one as a field.
+// The locally-defined ranged types below are therefore *skipped* rather than harnessed, which the
+// expected output pins. The niche assumption itself is still exercised end to end through
+// `std::time::Duration`, whose `Nanoseconds` field carries the same kind of range. Teaching
+// autoharness to generate pattern-type fields (generate the base integer, assume the layout
+// niche that `scalar_niche` already computes) would restore the wider reach.
+#![feature(pattern_types)]
+#![feature(pattern_type_macro)]
 
 // A ranged scalar newtype, as the deranged crate (and std's NonZero) define them: the layout
 // niche IS the validity invariant.
-#[rustc_layout_scalar_valid_range_start(1)]
-#[rustc_layout_scalar_valid_range_end(12)]
 #[derive(Clone, Copy)]
-pub struct Month(u8);
+#[repr(transparent)]
+pub struct Month(std::pat::pattern_type!(u8 is 1..=12));
 
 impl Month {
     pub fn get(self) -> u8 {
-        self.0
+        unsafe { std::mem::transmute(self.0) }
     }
 }
 
@@ -57,7 +66,7 @@ pub trait Monthly {
 }
 impl Monthly for Month {
     fn month(&self) -> u8 {
-        self.0
+        self.get()
     }
 }
 pub fn check_monthly<M: Monthly>(m: M) -> u8 {
@@ -65,12 +74,14 @@ pub fn check_monthly<M: Monthly>(m: M) -> u8 {
     m.month()
 }
 
-// A niche on a *signed* scalar: the valid range is expressed as raw bit patterns, so the
-// comparison must be unsigned (here start=1 with no end, i.e. every pattern but 0).
-#[rustc_layout_scalar_valid_range_start(1)]
+// A niche on a *signed* scalar. The valid range is expressed as raw bit patterns, so the
+// comparison must be unsigned: 1..=100 excludes 0 as well as every negative value, whose raw
+// patterns (128..=255) are numerically *above* the range's end.
 #[derive(Clone, Copy)]
-pub struct NonZeroI8(i8);
-pub fn signed_niche(p: NonZeroI8) -> i8 {
-    assert!(p.0 != 0, "NonZeroI8 was zero");
-    p.0
+#[repr(transparent)]
+pub struct PosI8(std::pat::pattern_type!(i8 is 1..=100));
+pub fn signed_niche(p: PosI8) -> i8 {
+    let v: i8 = unsafe { std::mem::transmute(p.0) };
+    assert!(v >= 1 && v <= 100, "PosI8 out of range");
+    v
 }

@@ -18,6 +18,7 @@ use rustc_public::mir::mono::Instance;
 use rustc_public::mir::{
     AggregateKind, BasicBlock, BasicBlockIdx, Body, ConstOperand, Operand, Place, Rvalue,
     Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, VarDebugInfoContents,
+    WithRetag,
 };
 use rustc_public::ty::{FnDef, GenericArgKind, MirConst, RigidTy, TyKind, UintTy};
 use rustc_span::Symbol;
@@ -312,14 +313,14 @@ impl LoopContractPass {
             let user_vars = self.get_user_defined_variables(body);
             for fstmt in firstprj_stmts_copy.iter() {
                 if let StatementKind::Assign(fprjplace, frval) = &fstmt.kind
-                    && let Rvalue::Use(Operand::Copy(firstpatplace)) = frval
+                    && let Rvalue::Use(Operand::Copy(firstpatplace), _) = frval
                     && firstpatplace.local == firstvar
                     && user_vars.contains(&fprjplace.local)
                 {
                     let firstprj = fprjplace.local;
                     for istmt in nthprj_stmts_copy.iter() {
                         if let StatementKind::Assign(iprjplace, irval) = &istmt.kind
-                            && let Rvalue::Use(Operand::Copy(nthpatplace)) = irval
+                            && let Rvalue::Use(Operand::Copy(nthpatplace), _) = irval
                             && nthpatplace.local == nthvar
                             && nthpatplace.projection == firstpatplace.projection
                         {
@@ -350,11 +351,12 @@ impl LoopContractPass {
                     // The assign statements of the projections
                     StatementKind::Assign(fprjplace, frval) => {
                         match frval {
-                            Rvalue::Use(Operand::Copy(firstpatplace)) => {
+                            Rvalue::Use(Operand::Copy(firstpatplace), _) => {
                                 if firstpatplace.local == firstvar {
                                     let mut nthpatplace = firstpatplace.clone();
                                     nthpatplace.local = nthvar;
-                                    let newrval = Rvalue::Use(Operand::Copy(nthpatplace));
+                                    let newrval =
+                                        Rvalue::Use(Operand::Copy(nthpatplace), WithRetag::No);
                                     if let Some(nthprj) = firstprj_nthprj.get(&fprjplace.local) {
                                         // A user pattern binding: redirect the assignment to
                                         // the corresponding nthpat projection variable.
@@ -1138,7 +1140,7 @@ impl LoopContractPass {
                 for stmt in &new_body.blocks()[bb_idx].statements {
                     if let StatementKind::Assign(place, rvalue) = &stmt.kind {
                         match rvalue {
-                            Rvalue::Ref(_,_,rplace) | Rvalue::CopyForDeref(rplace) | Rvalue::Use(Operand::Copy(rplace)) => {
+                            Rvalue::Ref(_,_,rplace) | Rvalue::CopyForDeref(rplace) | Rvalue::Use(Operand::Copy(rplace), _) => {
                                 if supported_vars.contains(&rplace.local) {
                                     supported_vars.push(place.local);
                                 } }
@@ -1176,11 +1178,14 @@ impl LoopContractPass {
                 // ```
                 new_body.assign_to(
                     terminator_destination.clone(),
-                    Rvalue::Use(Operand::Constant(ConstOperand {
-                        span: terminator.span,
-                        user_ty: None,
-                        const_: MirConst::from_bool(true),
-                    })),
+                    Rvalue::Use(
+                        Operand::Constant(ConstOperand {
+                            span: terminator.span,
+                            user_ty: None,
+                            const_: MirConst::from_bool(true),
+                        }),
+                        WithRetag::No,
+                    ),
                     &mut SourceInstruction::Terminator { bb: bb_idx },
                     InsertPosition::Before,
                 );

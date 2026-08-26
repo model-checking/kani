@@ -27,7 +27,7 @@ use rustc_public::mir::{
     AggregateKind, BasicBlock, BasicBlockIdx, BinOp, Body, BorrowKind, CastKind, ConstOperand,
     Local, MutBorrowKind, Mutability, NonDivergingIntrinsic, Operand, Place, ProjectionElem,
     Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, UnOp,
-    UnwindAction,
+    UnwindAction, WithRetag,
 };
 use rustc_public::ty::{
     AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, MirConst, Region, RegionKind, RigidTy, Ty,
@@ -269,7 +269,7 @@ fn remap_block(bb: &mut BasicBlock, local_map: &[Local], block_offset: usize) ->
             StatementKind::Assign(place, rvalue) => {
                 remap_place(place);
                 match rvalue {
-                    Rvalue::Use(op) | Rvalue::Repeat(op, _) | Rvalue::Cast(_, op, _) => {
+                    Rvalue::Use(op, _) | Rvalue::Repeat(op, _) | Rvalue::Cast(_, op, _) => {
                         remap_operand(op)
                     }
                     Rvalue::BinaryOp(_, a, b) | Rvalue::CheckedBinaryOp(_, a, b) => {
@@ -278,6 +278,7 @@ fn remap_block(bb: &mut BasicBlock, local_map: &[Local], block_offset: usize) ->
                     }
                     Rvalue::UnaryOp(_, op) => remap_operand(op),
                     Rvalue::Ref(_, _, p)
+                    | Rvalue::Reborrow(_, _, p)
                     | Rvalue::AddressOf(_, p)
                     | Rvalue::CopyForDeref(p)
                     | Rvalue::Discriminant(p)
@@ -301,7 +302,6 @@ fn remap_block(bb: &mut BasicBlock, local_map: &[Local], block_offset: usize) ->
             StatementKind::AscribeUserType { .. }
             | StatementKind::Coverage(_)
             | StatementKind::ConstEvalCounter
-            | StatementKind::Retag(..)
             | StatementKind::Nop => {}
         }
     }
@@ -474,7 +474,7 @@ fn inline_with_assumed_panics(
                         let cond_lcl =
                             self.body.new_local(Ty::bool_ty(), self.span, Mutability::Mut);
                         let rv = if expected {
-                            Rvalue::Use(cond)
+                            Rvalue::Use(cond, WithRetag::No)
                         } else {
                             Rvalue::UnaryOp(UnOp::Not, cond)
                         };
@@ -540,7 +540,7 @@ fn inline_with_assumed_panics(
                                 bb.statements.push(Statement {
                                     kind: StatementKind::Assign(
                                         Place::from(a),
-                                        Rvalue::Use(arg_op.clone()),
+                                        Rvalue::Use(arg_op.clone(), WithRetag::No),
                                     ),
                                     span: self.span,
                                 });
@@ -561,7 +561,10 @@ fn inline_with_assumed_panics(
                                     statements: vec![Statement {
                                         kind: StatementKind::Assign(
                                             destination.clone(),
-                                            Rvalue::Use(Operand::Move(Place::from(inner_ret_lcl))),
+                                            Rvalue::Use(
+                                                Operand::Move(Place::from(inner_ret_lcl)),
+                                                WithRetag::No,
+                                            ),
                                         ),
                                         span: self.span,
                                     }],
@@ -672,7 +675,7 @@ fn build_mined_expr(
             let lcl = body.new_local(leaf_ty, span, Mutability::Not);
             body.assign_to(
                 Place::from(lcl),
-                Rvalue::Use(Operand::Copy(place)),
+                Rvalue::Use(Operand::Copy(place), WithRetag::No),
                 source,
                 InsertPosition::Before,
             );
@@ -691,7 +694,7 @@ fn build_mined_expr(
             let lcl = body.new_local(leaf_ty, span, Mutability::Not);
             body.assign_to(
                 Place::from(lcl),
-                Rvalue::Use(Operand::Copy(place)),
+                Rvalue::Use(Operand::Copy(place), WithRetag::No),
                 source,
                 InsertPosition::Before,
             );
@@ -702,7 +705,7 @@ fn build_mined_expr(
             let lcl = body.new_local(ty, span, Mutability::Not);
             body.assign_to(
                 Place::from(lcl),
-                Rvalue::Use(Operand::Constant(c.clone())),
+                Rvalue::Use(Operand::Constant(c.clone()), WithRetag::No),
                 source,
                 InsertPosition::Before,
             );
@@ -1565,7 +1568,7 @@ impl AutomaticArbitraryPass {
         // RETURN_LOCAL = move ret; return
         new_body.assign_to(
             Place::from(0),
-            Rvalue::Use(Operand::Move(Place::from(ret_lcl))),
+            Rvalue::Use(Operand::Move(Place::from(ret_lcl)), WithRetag::No),
             &mut source,
             InsertPosition::Before,
         );
@@ -1728,7 +1731,7 @@ impl AutomaticArbitraryPass {
         let mut assign_instr = SourceInstruction::Terminator { bb: ok_bb };
         new_body.assign_to(
             Place::from(0),
-            Rvalue::Use(Operand::Move(payload_place)),
+            Rvalue::Use(Operand::Move(payload_place), WithRetag::No),
             &mut assign_instr,
             InsertPosition::Before,
         );
@@ -2083,10 +2086,13 @@ impl TransformPass for AutomaticHarnessPass {
                     let tmp = harness_body.new_local(inner, span, Mutability::Not);
                     harness_body.assign_to(
                         Place::from(tmp),
-                        Rvalue::Use(Operand::Copy(Place {
-                            local: ret_lcl,
-                            projection: vec![ProjectionElem::Deref],
-                        })),
+                        Rvalue::Use(
+                            Operand::Copy(Place {
+                                local: ret_lcl,
+                                projection: vec![ProjectionElem::Deref],
+                            }),
+                            WithRetag::No,
+                        ),
                         &mut source,
                         InsertPosition::Before,
                     );
@@ -2112,15 +2118,18 @@ impl TransformPass for AutomaticHarnessPass {
                             let tmp = harness_body.new_local(pt, span, Mutability::Not);
                             harness_body.assign_to(
                                 Place::from(tmp),
-                                Rvalue::Use(Operand::Copy(Place {
-                                    local: ret_lcl,
-                                    projection: vec![
-                                        ProjectionElem::Downcast(
-                                            rustc_public::ty::VariantIdx::to_val(ok_idx),
-                                        ),
-                                        ProjectionElem::Field(0, pt),
-                                    ],
-                                })),
+                                Rvalue::Use(
+                                    Operand::Copy(Place {
+                                        local: ret_lcl,
+                                        projection: vec![
+                                            ProjectionElem::Downcast(
+                                                rustc_public::ty::VariantIdx::to_val(ok_idx),
+                                            ),
+                                            ProjectionElem::Field(0, pt),
+                                        ],
+                                    }),
+                                    WithRetag::No,
+                                ),
                                 &mut source,
                                 InsertPosition::Before,
                             );

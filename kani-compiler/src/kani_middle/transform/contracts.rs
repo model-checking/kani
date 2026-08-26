@@ -14,7 +14,7 @@ use rustc_public::CrateDef;
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::{
     BinOp, Body, CastKind, ConstOperand, Mutability, Operand, Place, Rvalue, Terminator,
-    TerminatorKind, VarDebugInfoContents,
+    TerminatorKind, VarDebugInfoContents, WithRetag,
 };
 use rustc_public::rustc_internal;
 use rustc_public::ty::{
@@ -519,7 +519,7 @@ impl FunctionWithContractPass {
         } else {
             new_body.assign_to(
                 ret.clone(),
-                Rvalue::Use(mode_const),
+                Rvalue::Use(mode_const, WithRetag::No),
                 &mut mode_call,
                 InsertPosition::Before,
             );

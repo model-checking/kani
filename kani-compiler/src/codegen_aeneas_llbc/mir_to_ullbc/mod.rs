@@ -1644,7 +1644,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     fn translate_rvalue(&mut self, rvalue: &Rvalue) -> CharonRvalue {
         trace!("translate_rvalue: {rvalue:?}");
         match rvalue {
-            Rvalue::Use(operand) => CharonRvalue::Use(self.translate_operand(operand)),
+            Rvalue::Use(operand, _) => CharonRvalue::Use(self.translate_operand(operand)),
             Rvalue::Repeat(_operand, _) => todo!(),
             Rvalue::Ref(_region, kind, place) => {
                 CharonRvalue::Ref(self.translate_place(&place), translate_borrow_kind(kind))

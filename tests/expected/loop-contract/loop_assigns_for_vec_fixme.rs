@@ -4,6 +4,16 @@
 // kani-flags: -Z loop-contracts
 
 //! Check the use of loop_modifies for Rust's vec
+//!
+//! FIXME: known failing as of nightly-2026-06-01. `core::ptr::drop_in_place` is no longer the drop
+//! lang item; it is now a wrapper that calls the new `drop_glue` lang item through `&mut *to_drop`.
+//! Creating that reference asserts the pointee is aligned and valid, so dropping `v` after the loop
+//! now requires the loop contract to establish those facts. `loop_modifies` havocs the word holding
+//! `v.len()` and the invariant only constrains `i`, so the drop sees an unconstrained length and the
+//! reference creation fails. Strengthening the invariant with `v.len() == i * 3 + 3` is rejected
+//! ("Rust intrinsic assumption failed"), so expressing what the drop needs is a loop-contracts
+//! limitation rather than something the toolchain upgrade can fix. Tracked in
+//! <https://github.com/model-checking/kani/issues/4761>.
 
 #![feature(proc_macro_hygiene)]
 #![feature(stmt_expr_attributes)]

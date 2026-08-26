@@ -173,7 +173,6 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
             | StatementKind::SetDiscriminant { .. }
             | StatementKind::StorageLive(..)
             | StatementKind::StorageDead(..)
-            | StatementKind::Retag(..)
             | StatementKind::PlaceMention(..)
             | StatementKind::AscribeUserType(..)
             | StatementKind::Coverage(..)
@@ -526,11 +525,14 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
         match rvalue {
             // Using the operand unchanged requires determining where it could point, which
             // `successors_for_operand` does.
-            Rvalue::Use(operand)
+            Rvalue::Use(operand, _)
             | Rvalue::Cast(_, operand, _)
             | Rvalue::Repeat(operand, ..)
             | Rvalue::WrapUnsafeBinder(operand, _) => self.successors_for_operand(state, operand),
-            Rvalue::Ref(_, _, ref_place) | Rvalue::RawPtr(_, ref_place) => {
+            // A `Reborrow` bitwise-copies the place, so it can point wherever that place does.
+            Rvalue::Reborrow(_, _, ref_place)
+            | Rvalue::Ref(_, _, ref_place)
+            | Rvalue::RawPtr(_, ref_place) => {
                 // Here, a reference to a place is created, which leaves the place
                 // unchanged.
                 state.resolve_place(ref_place, self.instance)

@@ -26,6 +26,7 @@ use rustc_public::mir::mono::Instance;
 use rustc_public::mir::{
     AggregateKind, BasicBlock, BinOp, Body, ConstOperand, Local, Mutability, Operand, Place,
     RETURN_LOCAL, Rvalue, Statement, StatementKind, Terminator, TerminatorKind, UnOp, UnwindAction,
+    WithRetag,
 };
 use rustc_public::rustc_internal;
 use rustc_public::target::MachineInfo;
@@ -140,11 +141,14 @@ impl IntrinsicGeneratorPass {
         let span = new_body.locals()[ret_var].span;
         let assign = StatementKind::Assign(
             Place::from(ret_var),
-            Rvalue::Use(Operand::Constant(ConstOperand {
-                span,
-                user_ty: None,
-                const_: MirConst::from_bool(true),
-            })),
+            Rvalue::Use(
+                Operand::Constant(ConstOperand {
+                    span,
+                    user_ty: None,
+                    const_: MirConst::from_bool(true),
+                }),
+                WithRetag::No,
+            ),
         );
         let stmt = Statement { kind: assign, span };
         new_body.insert_stmt(stmt, &mut terminator, InsertPosition::Before);
@@ -160,7 +164,7 @@ impl IntrinsicGeneratorPass {
             }
             Ok(ranges) => {
                 // Given the pointer argument, check for possible invalid ranges.
-                let rvalue = Rvalue::Use(Operand::Move(Place::from(1)));
+                let rvalue = Rvalue::Use(Operand::Move(Place::from(1)), WithRetag::No);
                 for range in ranges {
                     let result =
                         build_limits(&mut new_body, &range, rvalue.clone(), &mut terminator);
@@ -211,11 +215,14 @@ impl IntrinsicGeneratorPass {
             let span = new_body.locals()[ret_var].span;
             let assign = StatementKind::Assign(
                 Place::from(ret_var),
-                Rvalue::Use(Operand::Constant(ConstOperand {
-                    span,
-                    user_ty: None,
-                    const_: MirConst::from_bool(true),
-                })),
+                Rvalue::Use(
+                    Operand::Constant(ConstOperand {
+                        span,
+                        user_ty: None,
+                        const_: MirConst::from_bool(true),
+                    }),
+                    WithRetag::No,
+                ),
             );
             new_body.insert_stmt(
                 Statement { kind: assign, span },
@@ -246,11 +253,14 @@ impl IntrinsicGeneratorPass {
                             let span = new_body.locals()[ret_var].span;
                             let assign = StatementKind::Assign(
                                 Place::from(ret_var),
-                                Rvalue::Use(Operand::Constant(ConstOperand {
-                                    span,
-                                    user_ty: None,
-                                    const_: MirConst::from_bool(true),
-                                })),
+                                Rvalue::Use(
+                                    Operand::Constant(ConstOperand {
+                                        span,
+                                        user_ty: None,
+                                        const_: MirConst::from_bool(true),
+                                    }),
+                                    WithRetag::No,
+                                ),
                             );
                             new_body.insert_stmt(
                                 Statement { kind: assign, span },
