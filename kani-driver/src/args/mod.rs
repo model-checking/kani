@@ -267,6 +267,8 @@ pub struct VerificationArgs {
     pub extra_pointer_checks: bool,
 
     /// Stop the verification process as soon as one of the harnesses fails.
+    /// Harnesses already running when that happens still finish and are counted, so under
+    /// `--jobs N` the set of reported harnesses depends on how many were in flight.
     #[arg(long)]
     pub fail_fast: bool,
 
@@ -338,9 +340,11 @@ pub struct VerificationArgs {
     #[arg(long, hide_short_help = true)]
     pub only_codegen: bool,
 
-    /// Toggle between different styles of output
-    #[arg(long, default_value = "regular", ignore_case = true, value_enum)]
-    pub output_format: OutputFormat,
+    /// Toggle between different styles of output. Defaults to "regular", except for
+    /// `autoharness`, which defaults to "terse" (to support parallel harness verification,
+    /// c.f. `--jobs`) unless this option is passed explicitly.
+    #[arg(long, ignore_case = true, value_enum)]
+    pub output_format: Option<OutputFormat>,
 
     /// Write verification results into per-harness files, rather than to stdout
     #[arg(long, hide_short_help = true)]
@@ -437,6 +441,25 @@ pub enum NumThreads {
 }
 
 impl NumThreads {
+    /// Build a Rayon thread pool with this job count.
+    pub(crate) fn build_thread_pool(
+        self,
+    ) -> Result<rayon::ThreadPool, rayon::ThreadPoolBuildError> {
+        let mut builder = rayon::ThreadPoolBuilder::new();
+        match self {
+            Self::UserSpecified(num_threads) => {
+                builder = builder.num_threads(num_threads);
+            }
+            Self::NoMultithreading => {
+                builder = builder.num_threads(1);
+            }
+            Self::ThreadPoolDefault => {
+                // Rayon uses its default number of threads.
+            }
+        }
+        builder.build()
+    }
+
     /// Checks if this will spawn multiple threads in the pool.
     pub fn will_multithread(&self) -> bool {
         match self {
@@ -499,6 +522,31 @@ impl VerificationArgs {
         }
     }
 
+    /// The output format, defaulting to `regular` when the user did not specify one.
+    pub fn output_format(&self) -> OutputFormat {
+        self.output_format.unwrap_or(OutputFormat::Regular)
+    }
+
+    /// Default to parallel harness verification with terse output for `autoharness`, which
+    /// typically generates hundreds of harnesses; sequential verification is a poor fit.
+    ///
+    /// Explicit user choices are preserved: `--output-format` is only defaulted when the user
+    /// did not pass it, and `--jobs` is only defaulted when the user did not pass it *and* the
+    /// resulting format is `terse` (parallel verification requires terse output, c.f.
+    /// `validate`). Consequently `--output-format=regular` (or `old`) opts back into sequential
+    /// verification, while a bare `--jobs=N` still gets the terse output it needs.
+    ///
+    /// This must run *before* argument validation, so that validation sees the options the run
+    /// will actually use; it is idempotent, so calling it again later is harmless.
+    pub fn apply_autoharness_parallel_defaults(&mut self) {
+        if self.output_format.is_none() {
+            self.output_format = Some(OutputFormat::Terse);
+        }
+        if self.jobs.is_none() && self.output_format() == OutputFormat::Terse {
+            self.jobs = Some(None); // `-j`: the thread pool's default thread count
+        }
+    }
+
     /// Computes how many threads should be used to verify harnesses.
     pub fn jobs(&self) -> NumThreads {
         match self.jobs {
@@ -528,7 +576,7 @@ pub enum ConcretePlaybackMode {
     InPlace,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, ValueEnum)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 pub enum OutputFormat {
     Regular,
     Terse,
@@ -796,14 +844,14 @@ impl ValidateArgs for VerificationArgs {
                     "Conflicting options: --concrete-playback=print and --quiet.",
                 ));
             }
-            if self.concrete_playback.is_some() && self.output_format == OutputFormat::Old {
+            if self.concrete_playback.is_some() && self.output_format() == OutputFormat::Old {
                 return Err(Error::raw(
                     ErrorKind::ArgumentConflict,
                     "Conflicting options: --concrete-playback isn't compatible with \
                 --output-format=old.",
                 ));
             }
-            if self.sarif.is_some() && self.output_format == OutputFormat::Old {
+            if self.sarif.is_some() && self.output_format() == OutputFormat::Old {
                 return Err(Error::raw(
                     ErrorKind::ArgumentConflict,
                     "Conflicting options: --sarif isn't compatible with --output-format=old.",
@@ -812,7 +860,7 @@ impl ValidateArgs for VerificationArgs {
             // `--output-format=old` bypasses CBMC's structured output entirely: `run_cbmc` mocks a
             // result with no properties, and treats a timeout as success. An export produced from
             // that would be indistinguishable from a real clean run.
-            if self.export_json.is_some() && self.output_format == OutputFormat::Old {
+            if self.export_json.is_some() && self.output_format() == OutputFormat::Old {
                 return Err(Error::raw(
                     ErrorKind::ArgumentConflict,
                     "Conflicting options: --export-json isn't compatible with --output-format=old.",
@@ -844,7 +892,7 @@ impl ValidateArgs for VerificationArgs {
                     ),
                 ));
             }
-            if self.jobs().will_multithread() && self.output_format != OutputFormat::Terse {
+            if self.jobs().will_multithread() && self.output_format() != OutputFormat::Terse {
                 // More verbose output formats make it hard to interpret output right now when run in parallel.
                 // This can be removed when we change up how results are printed.
                 return Err(Error::raw(
@@ -852,7 +900,7 @@ impl ValidateArgs for VerificationArgs {
                     "Conflicting options: --jobs requires `--output-format=terse`",
                 ));
             }
-            if self.log_file.is_some() && self.output_format == OutputFormat::Old {
+            if self.log_file.is_some() && self.output_format() == OutputFormat::Old {
                 // `old` runs CBMC with inherited stdio instead of piping it, so neither
                 // `kani_cbmc_output_filter` nor `process_output` runs and nothing but the
                 // per-harness "Checking harness ..." lines reaches the log. Accepting the
@@ -1386,5 +1434,62 @@ mod tests {
         let args = "kani input.rs --no-assert-contracts".split_whitespace();
         let err = StandaloneArgs::try_parse_from(args).unwrap().validate().unwrap_err();
         assert_eq!(err.kind(), ErrorKind::MissingRequiredArgument);
+    }
+
+    /// `autoharness` verifies harnesses in parallel by default, which requires terse output.
+    /// Check each combination of explicitly passed / defaulted `--jobs` and `--output-format`.
+    #[test]
+    fn check_autoharness_parallel_defaults() {
+        let effective = |extra: &str| {
+            let args = format!("kani autoharness -Z autoharness {extra} input.rs");
+            let parsed = StandaloneArgs::try_parse_from(args.split_whitespace()).unwrap();
+            let Some(StandaloneSubcommand::Autoharness(mut autoharness)) = parsed.command else {
+                panic!("expected the autoharness subcommand");
+            };
+            autoharness.verify_opts.apply_autoharness_parallel_defaults();
+            (autoharness.verify_opts.jobs(), autoharness.verify_opts.output_format())
+        };
+
+        // Neither option passed: parallel with terse output.
+        assert_eq!(effective(""), (NumThreads::ThreadPoolDefault, OutputFormat::Terse));
+        // Only `--jobs`: the user's thread count, plus the terse output it requires.
+        assert_eq!(effective("--jobs=4"), (NumThreads::UserSpecified(4), OutputFormat::Terse));
+        // Only `--output-format=terse`: parallel, since terse is what parallel needs.
+        assert_eq!(
+            effective("--output-format=terse"),
+            (NumThreads::ThreadPoolDefault, OutputFormat::Terse)
+        );
+        // A more verbose format opts back into sequential verification.
+        assert_eq!(
+            effective("--output-format=regular"),
+            (NumThreads::NoMultithreading, OutputFormat::Regular)
+        );
+        assert_eq!(
+            effective("--output-format=old"),
+            (NumThreads::NoMultithreading, OutputFormat::Old)
+        );
+
+        // Applying the defaults is idempotent, and plain verification is unaffected.
+        let args = "kani input.rs".split_whitespace();
+        let parsed = StandaloneArgs::try_parse_from(args).unwrap();
+        assert_eq!(parsed.verify_opts.jobs(), NumThreads::NoMultithreading);
+        assert_eq!(parsed.verify_opts.output_format(), OutputFormat::Regular);
+    }
+
+    /// `--jobs` with an explicitly requested non-terse format stays an error, for `autoharness`
+    /// (where the defaults cannot silently override the user) as well as plain verification.
+    #[test]
+    fn check_jobs_still_requires_terse() {
+        for args in [
+            "kani autoharness -Z autoharness --jobs=4 --output-format=regular input.rs",
+            "kani --jobs=4 input.rs",
+        ] {
+            let mut parsed = StandaloneArgs::try_parse_from(args.split_whitespace()).unwrap();
+            if let Some(StandaloneSubcommand::Autoharness(autoharness)) = &mut parsed.command {
+                autoharness.verify_opts.apply_autoharness_parallel_defaults();
+            }
+            let err = parsed.validate().unwrap_err();
+            assert_eq!(err.kind(), ErrorKind::ArgumentConflict, "for `{args}`");
+        }
     }
 }

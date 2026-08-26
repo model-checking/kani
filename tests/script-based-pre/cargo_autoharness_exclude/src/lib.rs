@@ -9,7 +9,7 @@ mod include {
         x
     }
 
-    // Doesn't implement Arbitrary, so still should not be included.
+    // Generic functions get instantiated with a concrete type (e.g. `i32`).
     fn generic<T>(x: u32, _y: T) -> u32 {
         x
     }

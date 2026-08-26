@@ -10,7 +10,7 @@ use rustc_middle::mir::{Body, Const as mirConst, ConstValue, Operand, Terminator
 use rustc_middle::mir::{Local, LocalDecl};
 use rustc_middle::ty::{self, Ty, TyCtxt};
 use rustc_middle::ty::{Const, GenericArgsRef, IntrinsicDef};
-use rustc_span::source_map::Spanned;
+use rustc_span::Spanned;
 use rustc_span::symbol::{Symbol, sym};
 use tracing::{debug, trace};
 
@@ -80,7 +80,7 @@ impl<'tcx> ModelIntrinsics<'tcx> {
             let Operand::Constant(fn_def) = func else { unreachable!() };
             fn_def.const_ = mirConst::from_value(
                 ConstValue::ZeroSized,
-                tcx.type_of(stub_id).instantiate(tcx, &*new_gen_args),
+                tcx.type_of(stub_id).instantiate(tcx, &*new_gen_args).skip_normalization(),
             );
         } else {
             debug!(?arg_ty, "replace_simd_bitmask failed");

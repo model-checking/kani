@@ -42,6 +42,8 @@ pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> 
         contract: Default::default(),
         has_loop_contracts: false,
         is_automatically_generated: false,
+        is_bounded: false,
+        is_ctor_based: false,
     }
 }
 
@@ -121,6 +123,8 @@ pub fn gen_automatic_proof_metadata(
     base_name: &Path,
     fn_to_verify: &Instance,
     harness_mangled_name: String,
+    is_bounded: bool,
+    is_ctor_based: bool,
 ) -> HarnessMetadata {
     let def = fn_to_verify.def;
     let pretty_name = readable_name(*fn_to_verify);
@@ -139,7 +143,11 @@ pub fn gen_automatic_proof_metadata(
 
     let kani_attributes = KaniAttributes::for_instance(tcx, *fn_to_verify);
     let harness_kind = if kani_attributes.has_contract() {
-        HarnessKind::ProofForContract { target_fn: pretty_name.clone() }
+        // Use the definition's name rather than the instance's (`pretty_name`), since the two
+        // differ for generic functions under contract (e.g. `foo::<i32>` vs. `foo`), and
+        // `gen_contracts_metadata` matches `target_fn` against the definition-level names stored
+        // in `ContractedFunction`.
+        HarnessKind::ProofForContract { target_fn: strip_local_crate_prefix(def.name()) }
     } else {
         HarnessKind::Proof
     };
@@ -159,5 +167,7 @@ pub fn gen_automatic_proof_metadata(
         contract: Default::default(),
         has_loop_contracts: false,
         is_automatically_generated: true,
+        is_bounded,
+        is_ctor_based,
     }
 }

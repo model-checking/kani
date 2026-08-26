@@ -10,7 +10,6 @@
 #![recursion_limit = "256"]
 #![feature(box_patterns)]
 #![feature(rustc_private)]
-#![feature(more_qualified_paths)]
 #![feature(iter_intersperse)]
 #![feature(f128)]
 #![feature(f16)]
@@ -30,6 +29,7 @@ extern crate rustc_errors;
 extern crate rustc_hir;
 extern crate rustc_hir_pretty;
 extern crate rustc_index;
+extern crate rustc_infer;
 extern crate rustc_interface;
 extern crate rustc_metadata;
 extern crate rustc_middle;
@@ -40,6 +40,7 @@ extern crate rustc_public_bridge;
 extern crate rustc_session;
 extern crate rustc_span;
 extern crate rustc_target;
+extern crate rustc_trait_selection;
 // We can't add this directly as a dependency because we need the version to match rustc
 extern crate tempfile;
 

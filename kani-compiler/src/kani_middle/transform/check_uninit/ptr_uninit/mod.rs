@@ -90,7 +90,9 @@ fn is_harness(instance: Instance, tcx: TyCtxt) -> bool {
         ],
     ];
     harness_identifiers.iter().any(|attr_path| {
-        tcx.has_attrs_with_path(rustc_internal::internal(tcx, instance.def.def_id()), attr_path)
+        tcx.get_attrs_by_path(rustc_internal::internal(tcx, instance.def.def_id()), attr_path)
+            .next()
+            .is_some()
     })
 }
 

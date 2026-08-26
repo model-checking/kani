@@ -82,7 +82,13 @@ fn main() -> ExitCode {
 /// The main function for the `cargo kani` command.
 fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     let input_args = join_args(input_args)?;
-    let args = args::CargoKaniArgs::parse_from(&input_args);
+    let mut args = args::CargoKaniArgs::parse_from(&input_args);
+    // Apply the autoharness defaults before validating, so that validation sees the options the
+    // run will actually use (e.g. `--jobs=N` must not be rejected for lacking
+    // `--output-format=terse` when autoharness supplies exactly that default).
+    if let Some(CargoKaniSubcommand::Autoharness(autoharness_args)) = &mut args.command {
+        autoharness_args.verify_opts.apply_autoharness_parallel_defaults();
+    }
     check_is_valid(&args);
 
     // Handle version flag
@@ -117,7 +123,11 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
 
 /// The main function for the `kani` command.
 fn standalone_main() -> Result<()> {
-    let args = args::StandaloneArgs::parse();
+    let mut args = args::StandaloneArgs::parse();
+    // See the comment in `cargokani_main`.
+    if let Some(StandaloneSubcommand::Autoharness(autoharness_args)) = &mut args.command {
+        autoharness_args.verify_opts.apply_autoharness_parallel_defaults();
+    }
     check_is_valid(&args);
 
     // Handle version flag
@@ -174,9 +184,8 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
         handler.add_item("tools", create_tool_versions_json(&session, &harnesses));
 
         // The per-harness arrays are filled in lazily below and by the harness runner, so declare
-        // them up front. A run with no matching harnesses would otherwise omit them entirely and
-        // write a document missing four of its documented keys -- and the "no harnesses matched"
-        // error is only reported after the export, so a consumer sees the malformed file first.
+        // them up front: a run that selects no harnesses (a crate with none) would otherwise
+        // write a document missing four of its documented keys.
         for key in ["harness_metadata", "error_details", "property_details", "cbmc"] {
             handler.add_item(key, json!([]));
         }
