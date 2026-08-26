@@ -203,8 +203,9 @@ pub fn create_project_metadata_json(project: &Project) -> Value {
     .map(|m| m.crate_name.clone())
     .collect::<Vec<String>>(),
     // The real workspace root, which only exists for Cargo projects; null for a standalone run.
-    // `Project::outdir` is the compiler output directory -- for Cargo it sits under
-    // `target/<triple>/debug/deps` -- so reporting it as the workspace root was simply wrong.
+    // `Project::outdir` is the compiler output directory -- for Cargo it sits somewhere under
+    // `target/`, at a path of cargo's choosing -- so reporting it as the workspace root was
+    // simply wrong.
     "workspace_root": project.cargo_metadata.as_ref()
     .map(|metadata| metadata.workspace_root.clone()),
     "output_dir": project.outdir.clone(),
