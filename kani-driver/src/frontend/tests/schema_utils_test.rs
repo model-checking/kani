@@ -61,7 +61,12 @@ fn test_create_harness_metadata_json() {
         attributes: HarnessAttributes::new(HarnessKind::Proof),
         contract: None,
         has_loop_contracts: true,
-        is_automatically_generated: false,
+        // Bounded and constructor-based harnesses are always automatically generated; check
+        // that all three flags are serialized so that JSON consumers can tell an autoharness
+        // run that under-approximates apart from one that does not.
+        is_automatically_generated: true,
+        is_bounded: true,
+        is_ctor_based: true,
     };
 
     let json = create_harness_metadata_json(&harness);
@@ -72,7 +77,9 @@ fn test_create_harness_metadata_json() {
     assert_eq!(json["source"]["start_line"], 10);
     assert_eq!(json["source"]["end_line"], 20);
     assert_eq!(json["has_loop_contracts"], true);
-    assert_eq!(json["is_automatically_generated"], false);
+    assert_eq!(json["is_automatically_generated"], true);
+    assert_eq!(json["is_bounded"], true);
+    assert_eq!(json["is_ctor_based"], true);
 }
 
 #[test]
@@ -89,6 +96,8 @@ fn test_create_verification_result_json() {
         contract: None,
         has_loop_contracts: false,
         is_automatically_generated: false,
+        is_bounded: false,
+        is_ctor_based: false,
     };
 
     let properties = vec![
@@ -168,6 +177,8 @@ fn test_create_verification_summary_json_real() {
         contract: None,
         has_loop_contracts: false,
         is_automatically_generated: false,
+        is_bounded: false,
+        is_ctor_based: false,
     };
 
     // Create a VerificationResult
@@ -199,6 +210,8 @@ fn test_add_runner_results_to_json_real() {
         contract: None,
         has_loop_contracts: false,
         is_automatically_generated: false,
+        is_bounded: false,
+        is_ctor_based: false,
     };
 
     let verification_result = VerificationResult {

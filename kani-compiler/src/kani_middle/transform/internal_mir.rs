@@ -12,9 +12,9 @@ use rustc_middle::ty::{self as rustc_ty, TyCtxt};
 use rustc_public::mir::{
     AggregateKind, AssertMessage, Body, BorrowKind, CastKind, ConstOperand, CopyNonOverlapping,
     CoroutineDesugaring, CoroutineKind, CoroutineSource, FakeBorrowKind, FakeReadCause, LocalDecl,
-    MutBorrowKind, NonDivergingIntrinsic, Operand, PointerCoercion, RetagKind, RuntimeChecks,
-    Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, UnwindAction,
-    UserTypeProjection, Variance,
+    MutBorrowKind, NonDivergingIntrinsic, Operand, PointerCoercion, RuntimeChecks, Rvalue,
+    Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, UnwindAction,
+    UserTypeProjection, Variance, WithRetag,
 };
 use rustc_public::rustc_internal::internal;
 
@@ -256,7 +256,14 @@ impl RustcInternalMir for Rvalue {
             Rvalue::UnaryOp(un_op, operand) => {
                 rustc_middle::mir::Rvalue::UnaryOp(internal(tcx, un_op), operand.internal_mir(tcx))
             }
-            Rvalue::Use(operand) => rustc_middle::mir::Rvalue::Use(operand.internal_mir(tcx)),
+            Rvalue::Use(operand, retag) => {
+                rustc_middle::mir::Rvalue::Use(operand.internal_mir(tcx), retag.internal_mir(tcx))
+            }
+            Rvalue::Reborrow(ty, mutability, place) => rustc_middle::mir::Rvalue::Reborrow(
+                internal(tcx, ty),
+                internal(tcx, mutability),
+                internal(tcx, place),
+            ),
         }
     }
 }
@@ -279,15 +286,13 @@ impl RustcInternalMir for FakeReadCause {
     }
 }
 
-impl RustcInternalMir for RetagKind {
-    type T<'tcx> = rustc_middle::mir::RetagKind;
+impl RustcInternalMir for WithRetag {
+    type T<'tcx> = rustc_middle::mir::WithRetag;
 
     fn internal_mir<'tcx>(&self, _tcx: TyCtxt<'tcx>) -> Self::T<'tcx> {
         match self {
-            RetagKind::FnEntry => rustc_middle::mir::RetagKind::FnEntry,
-            RetagKind::TwoPhase => rustc_middle::mir::RetagKind::TwoPhase,
-            RetagKind::Raw => rustc_middle::mir::RetagKind::Raw,
-            RetagKind::Default => rustc_middle::mir::RetagKind::Default,
+            WithRetag::Yes => rustc_middle::mir::WithRetag::Yes,
+            WithRetag::No => rustc_middle::mir::WithRetag::No,
         }
     }
 }
@@ -367,10 +372,6 @@ impl RustcInternalMir for StatementKind {
             ),
             StatementKind::StorageDead(local) => rustc_middle::mir::StatementKind::StorageDead(
                 rustc_middle::mir::Local::from_usize(*local),
-            ),
-            StatementKind::Retag(retag_kind, place) => rustc_middle::mir::StatementKind::Retag(
-                retag_kind.internal_mir(tcx),
-                internal(tcx, place).into(),
             ),
             StatementKind::PlaceMention(place) => {
                 rustc_middle::mir::StatementKind::PlaceMention(Box::new(internal(tcx, place)))
@@ -567,9 +568,7 @@ impl RustcInternalMir for TerminatorKind {
                 rustc_middle::mir::TerminatorKind::Call {
                     func: func.internal_mir(tcx),
                     args: Box::from_iter(
-                        args.iter().map(|arg| {
-                            rustc_span::source_map::dummy_spanned(arg.internal_mir(tcx))
-                        }),
+                        args.iter().map(|arg| rustc_span::dummy_spanned(arg.internal_mir(tcx))),
                     ),
                     destination: internal(tcx, destination),
                     target: target.map(|basic_block_idx| {

@@ -8,6 +8,7 @@
 //! the call-graph could be reused by different analysis.
 
 use crate::analysis::{FnCallVisitor, FnUnsafeOperations, OverallStats};
+use rustc_middle::ty::TyCtxt;
 use rustc_public::mir::{MirVisitor, Safety};
 use rustc_public::ty::{FnDef, RigidTy, Ty, TyKind};
 use rustc_public::{CrateDef, CrateDefType};
@@ -23,10 +24,12 @@ impl OverallStats {
     /// - 0 if this function contains unsafe code (including invoking unsafe fns).
     /// - 1 if this function calls a safe abstraction.
     /// - 2+ if this function calls other functions that call safe abstractions.
-    pub fn unsafe_distance(&mut self, filename: PathBuf) {
+    pub fn unsafe_distance(&mut self, filename: PathBuf, tcx: &TyCtxt) {
         let all_items = rustc_public::all_local_items();
-        let mut queue =
-            all_items.into_iter().filter_map(|item| Node::try_new(item.ty())).collect::<Vec<_>>();
+        let mut queue = all_items
+            .into_iter()
+            .filter_map(|item| Node::try_new(item.ty(), tcx))
+            .collect::<Vec<_>>();
         // Build call graph
         let mut call_graph = CallGraph::default();
         while let Some(node) = queue.pop() {
@@ -37,7 +40,7 @@ impl OverallStats {
                 };
                 let mut visitor = FnCallVisitor { body: &body, fns: vec![] };
                 visitor.visit_body(&body);
-                queue.extend(visitor.fns.iter().map(|def| Node::try_new(def.ty()).unwrap()));
+                queue.extend(visitor.fns.iter().map(|def| Node::try_new(def.ty(), tcx).unwrap()));
                 for callee in &visitor.fns {
                     call_graph.rev_edges.entry(*callee).or_default().push(node.def)
                 }
@@ -79,13 +82,13 @@ struct Node {
 }
 
 impl Node {
-    fn try_new(ty: Ty) -> Option<Node> {
+    fn try_new(ty: Ty, tcx: &TyCtxt) -> Option<Node> {
         let kind = ty.kind();
         let TyKind::RigidTy(RigidTy::FnDef(def, _)) = kind else {
             return None;
         };
         let has_unsafe = if let Some(body) = def.body() {
-            let unsafe_ops = FnUnsafeOperations::new(def.name()).collect(&body);
+            let unsafe_ops = FnUnsafeOperations::new(def.name()).collect(&body, tcx);
             unsafe_ops.has_unsafe()
         } else {
             true

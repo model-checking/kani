@@ -5,6 +5,7 @@
 
 use crate::{
     intrinsics::Intrinsic,
+    kani_middle::nonnull_pointee,
     kani_middle::transform::{
         body::{InsertPosition, MutableBody, SourceInstruction},
         check_uninit::{
@@ -23,7 +24,7 @@ use rustc_public::{
         mono::{Instance, InstanceKind},
         visit::{Location, PlaceContext},
     },
-    ty::{AdtKind, ConstantKind, RigidTy, TyKind},
+    ty::{AdtKind, ConstantKind, RigidTy, Ty, TyKind},
 };
 
 pub struct CheckUninitVisitor {
@@ -187,7 +188,7 @@ impl MirVisitor for CheckUninitVisitor {
                 // either a union or a field inside a union.
                 if is_inside_union {
                     match rvalue {
-                        Rvalue::Use(operand) => {
+                        Rvalue::Use(operand, _) => {
                             // This is a union-to-union assignment, so we need to copy the
                             // initialization state.
                             if place.ty(&self.locals).unwrap().kind().is_union() {
@@ -224,7 +225,6 @@ impl MirVisitor for CheckUninitVisitor {
             | StatementKind::SetDiscriminant { .. }
             | StatementKind::StorageLive(_)
             | StatementKind::StorageDead(_)
-            | StatementKind::Retag(_, _)
             | StatementKind::PlaceMention(_)
             | StatementKind::AscribeUserType { .. }
             | StatementKind::Coverage(_)
@@ -371,7 +371,7 @@ impl MirVisitor for CheckUninitVisitor {
                                 "alloc::alloc::__rust_dealloc" => {
                                     /* Memory is uninitialized here, need to update shadow memory. */
                                     self.push_target(MemoryInitOp::SetSliceChunk {
-                                        operand: args[0].clone(),
+                                        operand: raw_ptr_arg(&args[0], self.locals.as_slice()),
                                         count: args[1].clone(),
                                         value: false,
                                         position: InsertPosition::After,
@@ -707,5 +707,51 @@ fn try_resolve_instance(locals: &[LocalDecl], func: &Operand) -> Result<Instance
         _ => Err(format!(
             "Kani was not able to resolve the instance of the function operand `{ty:?}`. Currently, memory initialization checks in presence of function pointers and vtable calls are not supported. For more information about planned support, see https://github.com/model-checking/kani/issues/3300."
         )),
+    }
+}
+
+/// The pointer argument of an allocation shim, as a raw pointer.
+///
+/// These shims take `NonNull<u8>` as of nightly-2026-03-21, where they previously took `*mut u8`.
+/// `NonNull<T>` holds the address in a single field, which as of nightly-2026-05-01 is a
+/// `pattern_type!(*const T is !null)` rather than a bare `*const T`. Project through those
+/// single-field wrappers until the raw pointer is reached, so that the shadow-memory models see the
+/// same address with the pointer type they expect. Operands that are already raw pointers, and any
+/// shape we cannot project all the way down to a pointer, are passed through unchanged.
+fn raw_ptr_arg(arg: &Operand, locals: &[LocalDecl]) -> Operand {
+    let Ok(arg_ty) = arg.ty(locals) else { return arg.clone() };
+    if nonnull_pointee(arg_ty).is_none() {
+        return arg.clone();
+    }
+    let place = match arg {
+        Operand::Copy(place) | Operand::Move(place) => place,
+        Operand::Constant(_) | Operand::RuntimeChecks(_) => return arg.clone(),
+    };
+    let mut projection = place.projection.clone();
+    let mut curr_ty = arg_ty;
+    while !curr_ty.kind().is_raw_ptr() {
+        let Some(field_ty) = single_field_ty(curr_ty) else { return arg.clone() };
+        projection.push(ProjectionElem::Field(0, field_ty));
+        curr_ty = field_ty;
+    }
+    Operand::Copy(Place { local: place.local, projection })
+}
+
+/// The type held by `ty`'s only field, if `ty` is a single-field wrapper.
+///
+/// This sees through both structs with exactly one field (such as `NonNull`) and pattern types,
+/// which hold the type they constrain in a single tuple-like field.
+fn single_field_ty(ty: Ty) -> Option<Ty> {
+    match ty.kind() {
+        TyKind::RigidTy(RigidTy::Adt(def, args)) => {
+            let variant = def.variants_iter().next()?;
+            let fields = variant.fields();
+            if fields.len() != 1 {
+                return None;
+            }
+            Some(fields[0].ty_with_args(&args))
+        }
+        TyKind::RigidTy(RigidTy::Pat(base_ty, _)) => Some(base_ty),
+        _ => None,
     }
 }

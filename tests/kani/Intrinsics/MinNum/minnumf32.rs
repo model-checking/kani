@@ -12,7 +12,7 @@ fn test_general() {
     let x: f32 = kani::any();
     let y: f32 = kani::any();
     kani::assume(!x.is_nan() && !y.is_nan());
-    let res = std::intrinsics::minnumf32(x, y);
+    let res = std::intrinsics::minimum_number_nsz_f32(x, y);
     if x < y {
         assert!(res == x);
     } else {
@@ -25,7 +25,7 @@ fn test_one_nan() {
     let x: f32 = kani::any();
     let y: f32 = kani::any();
     kani::assume((x.is_nan() && !y.is_nan()) || (!x.is_nan() && y.is_nan()));
-    let res = std::intrinsics::minnumf32(x, y);
+    let res = std::intrinsics::minimum_number_nsz_f32(x, y);
     if x.is_nan() {
         assert!(res == y);
     } else {
@@ -38,6 +38,6 @@ fn test_both_nan() {
     let x: f32 = kani::any();
     let y: f32 = kani::any();
     kani::assume(x.is_nan() && y.is_nan());
-    let res = std::intrinsics::minnumf32(x, y);
+    let res = std::intrinsics::minimum_number_nsz_f32(x, y);
     assert!(res.is_nan());
 }

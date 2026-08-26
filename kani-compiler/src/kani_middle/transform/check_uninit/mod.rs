@@ -4,6 +4,7 @@
 //! Module containing multiple transformation passes that instrument the code to detect possible UB
 //! due to the accesses to uninitialized memory.
 
+use crate::kani_middle::nonnull_pointee;
 use crate::kani_middle::transform::body::{
     CheckType, InsertPosition, MutableBody, SourceInstruction,
 };
@@ -20,6 +21,7 @@ use std::collections::HashMap;
 use crate::kani_middle::kani_functions::{KaniFunction, KaniModel};
 pub use delayed_ub::DelayedUbPass;
 pub use ptr_uninit::UninitPass;
+use rustc_public::mir::WithRetag;
 pub use ty_layout::{PointeeInfo, PointeeLayout};
 
 mod delayed_ub;
@@ -166,14 +168,18 @@ impl<'a> UninitInstrumenter<'a> {
             // Sanity check: since CBMC memory object primitives only accept pointers, need to
             // ensure the correct type.
             let ptr_operand_ty = operation.operand_ty(body);
-            let pointee_ty = match ptr_operand_ty.kind() {
-                TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) => pointee_ty,
-                _ => {
+            let pointee_ty =
+                if let TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) = ptr_operand_ty.kind() {
+                    pointee_ty
+                } else if let Some(pointee_ty) = nonnull_pointee(ptr_operand_ty) {
+                    // The allocation shims hand us a `NonNull<u8>`, which holds the same address as the
+                    // `*mut u8` they used to take.
+                    pointee_ty
+                } else {
                     unreachable!(
                         "Should only build checks for raw pointers, `{ptr_operand_ty}` encountered."
                     )
-                }
-            };
+                };
             // Calculate pointee layout for byte-by-byte memory initialization checks.
             match PointeeInfo::from_ty(pointee_ty) {
                 Ok(type_info) => type_info,
@@ -644,11 +650,14 @@ impl<'a> UninitInstrumenter<'a> {
         reason: &str,
     ) {
         let span = source.span(body.blocks());
-        let rvalue = Rvalue::Use(Operand::Constant(ConstOperand {
-            const_: MirConst::from_bool(false),
-            span,
-            user_ty: None,
-        }));
+        let rvalue = Rvalue::Use(
+            Operand::Constant(ConstOperand {
+                const_: MirConst::from_bool(false),
+                span,
+                user_ty: None,
+            }),
+            WithRetag::No,
+        );
         let result = body.insert_assignment(rvalue, source, position);
         body.insert_check(&self.safety_check_type, source, position, Some(result), reason);
     }

@@ -117,6 +117,19 @@ pub struct Arguments {
     /// See kani_driver::autoharness_args for documentation.
     #[arg(long = "autoharness-exclude-pattern", num_args(1))]
     pub autoharness_excluded_patterns: Vec<String>,
+    /// If we are running the autoharness subcommand, whether to generate harnesses for
+    /// functions whose arguments require bounded nondeterministic values (e.g. slice
+    /// references). See kani_driver::autoharness_args for documentation.
+    #[arg(long = "autoharness-bounded-arguments")]
+    pub autoharness_bounded_arguments: bool,
+
+    /// Enable constructor-based nondeterministic value generation for autoharness.
+    #[arg(long = "autoharness-constructor-args")]
+    pub autoharness_constructor_args: bool,
+
+    /// Check mined type invariants on values returned by autoharness-verified functions.
+    #[arg(long = "autoharness-check-invariants")]
+    pub autoharness_check_invariants: bool,
 }
 
 #[derive(Debug, Clone, Copy, AsRefStr, EnumString, VariantNames, PartialEq, Eq)]

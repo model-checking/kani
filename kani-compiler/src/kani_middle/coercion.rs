@@ -225,6 +225,19 @@ impl Iterator for CoerceUnsizedIterator<'_> {
                 self.dst_ty = Some(dst_fields[coerce_index].ty_with_args(dst_args));
                 Some(src_fields[coerce_index].name.clone())
             }
+            (
+                TyKind::RigidTy(RigidTy::Pat(src_base_ty, _)),
+                TyKind::RigidTy(RigidTy::Pat(dst_base_ty, _)),
+            ) => {
+                // A pattern type has the same layout as the type it constrains, and it is
+                // codegen'd as a struct with a single tuple-like field holding that base type.
+                // `NonNull<T>` wraps a `pattern_type!(*const T is !null)`, so the pointer that
+                // carries the metadata sits one field deeper. Traverse into it so that the base
+                // case below sees the underlying pointer.
+                self.src_ty = Some(src_base_ty);
+                self.dst_ty = Some(dst_base_ty);
+                Some("0".to_string())
+            }
             _ => {
                 // Base case is always a pointer (Box, raw_pointer or reference).
                 assert!(

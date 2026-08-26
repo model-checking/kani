@@ -20,7 +20,7 @@ use tracing::{debug, debug_span, trace};
 
 use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_data_structures::fx::FxHashSet;
-use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
+use rustc_data_structures::stable_hash::{StableHash, StableHasher};
 use rustc_middle::ty::{TyCtxt, VtblEntry};
 use rustc_public::CrateItem;
 use rustc_public::mir::alloc::{AllocId, GlobalAlloc};
@@ -479,7 +479,7 @@ fn extract_unsize_coercion(tcx: TyCtxt, orig_ty: Ty, dst_trait: Ty) -> (Ty, Ty) 
 fn to_fingerprint(tcx: TyCtxt, item: &MonoItem) -> Fingerprint {
     tcx.with_stable_hashing_context(|mut hcx| {
         let mut hasher = StableHasher::new();
-        rustc_internal::internal(tcx, item).hash_stable(&mut hcx, &mut hasher);
+        rustc_internal::internal(tcx, item).stable_hash(&mut hcx, &mut hasher);
         hasher.finish()
     })
 }

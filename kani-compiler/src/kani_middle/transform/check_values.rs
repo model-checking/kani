@@ -27,7 +27,7 @@ use rustc_public::mir::visit::{Location, PlaceContext, PlaceRef};
 use rustc_public::mir::{
     AggregateKind, BasicBlockIdx, BinOp, Body, CastKind, FieldIdx, Local, LocalDecl, MirVisitor,
     Mutability, NonDivergingIntrinsic, Operand, Place, ProjectionElem, RawPtrKind, Rvalue,
-    Statement, StatementKind, Terminator, TerminatorKind,
+    Statement, StatementKind, Terminator, TerminatorKind, WithRetag,
 };
 use rustc_public::rustc_internal;
 use rustc_public::target::{MachineInfo, MachineSize};
@@ -418,7 +418,6 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                 | StatementKind::SetDiscriminant { .. }
                 | StatementKind::StorageLive(_)
                 | StatementKind::StorageDead(_)
-                | StatementKind::Retag(_, _)
                 | StatementKind::PlaceMention(_)
                 | StatementKind::AscribeUserType { .. }
                 | StatementKind::Coverage(_)
@@ -517,6 +516,7 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                                             projection: place_ref.projection.to_vec(),
                                         })
                                         .clone(),
+                                        WithRetag::No,
                                     ),
                                     ranges,
                                 })
@@ -539,10 +539,13 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                             Ok(ranges) if !ranges.is_empty() => {
                                 self.push_target(SourceOp::BytesValidity {
                                     target_ty: *target_ty,
-                                    rvalue: Rvalue::Use(Operand::Copy(Place {
-                                        local: place_ref.local,
-                                        projection: place_ref.projection.to_vec(),
-                                    })),
+                                    rvalue: Rvalue::Use(
+                                        Operand::Copy(Place {
+                                            local: place_ref.local,
+                                            projection: place_ref.projection.to_vec(),
+                                        }),
+                                        WithRetag::No,
+                                    ),
                                     ranges,
                                 })
                             }
@@ -683,7 +686,7 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                             ) {
                                 self.push_target(SourceOp::BytesValidity {
                                     target_ty: dest_ty,
-                                    rvalue: Rvalue::Use(first_op),
+                                    rvalue: Rvalue::Use(first_op, WithRetag::No),
                                     ranges: vec![req],
                                 })
                             }
@@ -704,11 +707,12 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
             | Rvalue::CopyForDeref(_)
             | Rvalue::Discriminant(_)
             | Rvalue::Len(_)
+            | Rvalue::Reborrow(..)
             | Rvalue::Ref(_, _, _)
             | Rvalue::Repeat(_, _)
             | Rvalue::ThreadLocalRef(_)
             | Rvalue::UnaryOp(_, _)
-            | Rvalue::Use(_) => {}
+            | Rvalue::Use(..) => {}
         }
         self.super_rvalue(rvalue, location);
     }
@@ -828,7 +832,7 @@ pub fn build_limits(
         ));
         let offset_const = body.new_uint_operand(req.offset as _, UintTy::Usize, span);
         let offset = move_local(body.insert_assignment(
-            Rvalue::Use(offset_const),
+            Rvalue::Use(offset_const, WithRetag::No),
             source,
             InsertPosition::Before,
         ));

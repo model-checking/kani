@@ -179,6 +179,8 @@ pub mod tests {
             contract: Default::default(),
             has_loop_contracts: false,
             is_automatically_generated: false,
+            is_bounded: false,
+            is_ctor_based: false,
         }
     }
 

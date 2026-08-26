@@ -152,8 +152,7 @@ exp2f32 | Partial | Results are overapproximated |
 exp2f64 | Partial | Results are overapproximated |
 expf32 | Partial | Results are overapproximated |
 expf64 | Partial | Results are overapproximated |
-fabsf32 | Yes | |
-fabsf64 | Yes | |
+fabs | Yes | |
 fadd_fast | Yes | |
 fdiv_fast | Partial | [#809](https://github.com/model-checking/kani/issues/809) |
 float_to_int_unchecked | Yes | |
@@ -172,12 +171,12 @@ log2f32 | Partial | Results are overapproximated |
 log2f64 | Partial | Results are overapproximated |
 logf32 | Partial | Results are overapproximated |
 logf64 | Partial | Results are overapproximated |
-maxnumf32 | Yes | |
-maxnumf64 | Yes | |
+maximum_number_nsz_f32 | Yes | |
+maximum_number_nsz_f64 | Yes | |
 align_of | Yes | |
 align_of_val | Yes | |
-minnumf32 | Yes | |
-minnumf64 | Yes | |
+minimum_number_nsz_f32 | Yes | |
+minimum_number_nsz_f64 | Yes | |
 move_val_init | No | |
 mul_with_overflow | Yes | |
 needs_drop | Yes | |

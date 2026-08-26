@@ -7,8 +7,9 @@
 // downstream crates to enable these features as well.
 // So we have to enable this on the commandline (see kani-rustc) with:
 //   RUSTFLAGS="-Zcrate-attr=feature(register_tool) -Zcrate-attr=register_tool(kanitool)"
-#![feature(proc_macro_diagnostic)]
-#![feature(proc_macro_span)]
+// Only the `sysroot` module uses these, and it is `#[cfg(kani_sysroot)]`, so declaring them
+// unconditionally makes the ordinary build trip `unused_features`.
+#![cfg_attr(kani_sysroot, feature(proc_macro_diagnostic))]
 mod derive;
 mod derive_bounded;
 

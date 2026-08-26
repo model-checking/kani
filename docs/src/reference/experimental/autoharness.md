@@ -79,16 +79,110 @@ Autoharness also accepts a `--list` argument, which runs the [list subcommand](.
 
 For a full list of options, run `kani autoharness --help`.
 
+### Parallel verification
+
+Since autoharness typically generates many harnesses, it verifies them in parallel by default,
+i.e. as if `--jobs` (the thread pool's default number of threads, normally one per logical CPU)
+and `--output-format=terse` had been passed. Note that plain `kani`/`cargo kani` verification is
+unaffected and remains sequential by default.
+
+To override the default:
+- `-j <N>` / `--jobs=<N>` caps the number of harnesses verified concurrently. Each thread runs
+  its own CBMC process, so peak memory grows with the number of threads; lower `<N>` if a run
+  exhausts the available memory. `--jobs=1` keeps the terse output but verifies sequentially.
+- `--output-format=regular` verifies harnesses sequentially, with Kani's default, more detailed
+  per-check output. (Parallel verification requires terse output, because interleaved detailed
+  output is hard to read; passing `--jobs` together with `--output-format=regular` is therefore
+  an error.)
+
+In parallel runs each harness result line is prefixed with the thread that produced it, and
+results arrive in nondeterministic order; the summary table printed at the end is always sorted.
+
+### Constructor-based generation (--constructor-args)
+
+By default, when a type does not implement `Arbitrary`, Kani synthesizes values field by field.
+For types whose private fields carry a representation invariant (e.g. a date type storing a
+packed, validated ordinal), raw field synthesis can produce values that violate the invariant,
+causing false alarms in every harness that generates the type. With `--constructor-args`, Kani
+instead generates values of private-field struct types through one of the type's own
+constructors, preferring (in order):
+
+1. An *assert-guarded representation constructor*: an `unsafe`, `#[doc(hidden)]`, or
+   `*_unchecked`-named associated function returning `Self` directly, whose preconditions are
+   stated as assertions (e.g. `debug_assert!`) rather than validated returns. Kani inlines its
+   body with nondeterministic arguments and converts every validity statement — `kani::assert`
+   and `assert_unchecked` calls, panic entry points, and overflow (`Assert`) checks — into an
+   assumption, so the constructor's own assertions filter the arguments down to the values the
+   crate considers valid. Calls the constructor makes to further assert-guarded helpers are
+   inlined recursively (bounded in depth and size). Visibility is irrelevant here, since the
+   body is inlined rather than called.
+2. Otherwise, a *checked public constructor*: a public associated function returning `Self`,
+   `Option<Self>`, or `Result<Self, E>`, called with nondeterministic arguments (assuming
+   success for the `Option<Self>`/`Result<Self, E>` shapes).
+
+Zero-argument constructors, and constructors generic over their own parameters, are not
+considered.
+
+`--constructor-args` additionally enables *mined-invariant filtering*: if a type has no viable
+constructor but its own `&self` methods assert conditions over its fields (see
+[Mined invariants](#mined-invariants---check-invariants) below), the generated value is
+constrained to satisfy those mined conditions via `kani::assume`. This covers types with no
+usable constructor, at lower formula cost than constructor inlining.
+
+This option is opt-in because it under-approximates: harnesses whose values are generated or
+constrained this way are marked "(ctor)" in the output. That marker therefore covers all of the
+mechanisms above — assert-guarded/checked constructors *and* mined-invariant filtering — and
+signals that verification results only cover values the chosen mechanism admits; a bug that
+requires a different value will not be found. Note also that a checked constructor which itself
+panics for some of its inputs (rather than rejecting them via `Option`/`Result`) turns those
+inputs into harness failures, so this option can trade one class of false alarm for another.
+
+> **Caveat:** if the chosen constructor is *unsatisfiable* for the generated type — an
+> assert-guarded constructor every argument of which trips an assertion, or a checked
+> constructor that always returns `None`/`Err` — the generated body assumes `false` on all
+> paths and the harness becomes **vacuous**, reporting `Success` without checking anything.
+> Kani does not yet detect this case; see
+> [#4757](https://github.com/model-checking/kani/issues/4757).
+
+### Mined invariants (--check-invariants)
+
+Many types state their representation invariant implicitly, as assertions over `self`'s fields
+in their own `&self` methods (e.g. `assert!(self.value >= 1)`). Kani can *mine* these: it
+extracts a condition as a type invariant when the assertion executes on every normal return of
+the method (post-dominance), its condition reads only `self`'s fields and constants (a pure,
+call-free slice), and the same conjunct is asserted in at least two distinct methods (so that
+method-local preconditions are not mistaken for type invariants). For enums, a conjunct read
+from a matched variant is guarded by that variant's discriminant.
+
+Mined invariants are used in two ways:
+
+- Under `--constructor-args`, they are *assumed* for generated values (as described above), and
+  such harnesses are marked "(ctor)".
+
+  > **Caveat:** the "asserted in ≥2 methods" filter is a heuristic, not a proof of
+  > type-invariance. If two methods share a *precondition* that is not a universal invariant,
+  > it is assumed for all generated values and may exclude otherwise-valid inputs — a potential
+  > missed bug. This is acceptable only under the opt-in, under-approximating `(ctor)` contract;
+  > see [#4763](https://github.com/model-checking/kani/issues/4763).
+- With `--check-invariants`, they are *checked* on the values returned by verified functions:
+  Kani asserts that each returned value (direct `T`, `&T`, or the payload of an
+  `Option<T>`/`Result<T, E>` — `None`/`Err` pass vacuously) satisfies the type's mined
+  invariants. A failure is reported as a distinct property class naming the asserting methods;
+  because the mined predicate is heuristic, a failure means the returned value *would* trip the
+  type's own assertions when used, which may or may not indicate a bug in the returning
+  function.
+
 ## Example
 Using the `estimate_size` example from [First Steps](../../tutorial-first-steps.md) again:
 ```rust
 {{#include ../../tutorial/first-steps-v1/src/lib.rs:code}}
 ```
 
-We get:
+We get (passing `--output-format=regular` so that the per-check detail is shown, c.f.
+[Parallel verification](#parallel-verification)):
 
 ```
-# cargo kani autoharness -Z autoharness
+# cargo kani autoharness -Z autoharness --output-format=regular
 Autoharness: Checking function estimate_size against all possible inputs...
 RESULTS:
 Check 3: estimate_size.assertion.1
@@ -104,6 +198,30 @@ Complete - 0 successfully verified functions, 1 failures, 1 total.
 This feature is experimental and is therefore subject to change.
 If you have ideas for improving the user experience of this feature,
 please add them to [this GitHub issue](https://github.com/model-checking/kani/issues/3832).
+
+## Raw Pointers
+For a function with raw pointer arguments (`*const T`/`*mut T`, including nested raw pointers),
+the generated harness produces pointers in a nondeterministic allocation state, provided that the
+pointee type implements `Arbitrary` (or can derive it). Each generated pointer is aligned and is either:
+- null,
+- out of bounds of its allocation (and thus invalid for reads or writes), or
+- valid: pointing to a nondeterministic value of the pointee type, which stays allocated for the entire harness.
+
+As a consequence, a function that dereferences a raw pointer argument without being able to rule out
+the null and out-of-bounds states will fail verification. For safe functions, such a failure points at a
+real robustness issue, since safe code can pass any pointer value. For functions whose safety relies on
+caller obligations (e.g., `unsafe fn`s with documented preconditions), add
+[function contracts](contracts.md) with Kani's
+[memory predicates](https://model-checking.github.io/kani/crates/doc/kani/mem/index.html) such as
+`#[kani::requires(kani::mem::can_dereference(ptr))]`: the automatic contract harness assumes the
+precondition, which excludes the invalid pointer states.
+
+Current limitations of the generated pointers:
+- Pointers are always aligned; misaligned-pointer bugs are not covered.
+- No pointers to deallocated objects are generated (Kani's memory predicates cannot reason about those).
+- Distinct pointer arguments never alias each other, and the pointee is always initialized in the valid state.
+- Raw pointers are only supported as direct arguments (possibly nested in other raw pointers), not behind
+  references or inside user-defined types.
 
 ## Type Safety Invariants
 If a type implements the [`Invariant`](https://model-checking.github.io/kani/crates/doc/kani/trait.Invariant.html) trait,
@@ -121,17 +239,96 @@ Note that automatic harnesses do not *assert* type invariants, e.g., they do not
 To verify that a function preserves an invariant, add a [function contract](contracts.md) such as `#[kani::ensures(|result| result.is_safe())]`;
 autoharness verifies a function against its contract if it has one.
 
+## Bounded Arguments (opt-in: `--bounded-arguments`)
+By default, autoharness only generates harnesses whose nondeterministic inputs cover *all*
+possible values, so that a successful result carries Kani's usual guarantee. Some argument
+types (e.g. slices) can only be generated in a *bounded* fashion; because a bug that requires
+a larger input would then be missed, these are **disabled by default** and require the
+`--bounded-arguments` option. Functions that would become eligible with the option are
+reported in the skipped-functions table with reason "Requires --bounded-arguments". Harnesses
+that use bounded values are marked **"(bounded)"** in the summary table, and a note after the
+table repeats the caveat.
+
+With `--bounded-arguments`, for a function with `&[T]`/`&mut [T]` arguments (where `T`
+implements or can derive `Arbitrary`) or `&str` arguments, the generated harness produces a
+slice of nondeterministic length, backed by nondeterministic storage that lives for the entire
+harness: **up to 16 elements** for slices and **up to 4 bytes** for strings. Strings cover all
+valid UTF-8 contents up to the bound (the generated string is the longest valid-UTF-8 prefix of
+nondeterministic bytes, the same approach as `String`'s `BoundedArbitrary` implementation); the
+smaller bound reflects the cost of reasoning about UTF-8 for symbolic execution. The bounds are
+chosen to stay below the default loop-unwinding bound of 20, so that loops over the slice can
+be fully unwound by default.
+
+Additionally (also requiring `--bounded-arguments`), for arguments whose type implements
+[`BoundedArbitrary`](../bounded_arbitrary.md)
+(e.g. `Vec<T>`, `String`, or user types deriving it), the harness generates a bounded
+nondeterministic value with **bound 4** (via `kani::bounded_any`). The same caveat applies:
+verification results only hold up to the bound. The smaller bound reflects that these values are
+heap allocated and, for `String`, involve UTF-8 reasoning, both of which are costly for symbolic
+execution.
+
+Nested slice references (e.g. `&&[u8]`) and slices inside user-defined types remain unsupported.
+
+## Debug and Display Implementations
+For the `fmt` methods of `Debug` and `Display` implementations, the `&mut Formatter` argument
+cannot be generated nondeterministically. Instead, Kani generates a harness that formats a
+nondeterministic value of the implementing type into a sink that discards the output: the
+`Formatter` is constructed by the core formatting machinery (so it is always valid), and panics
+or undefined behavior inside the `fmt` implementation are detected as usual.
+These harnesses are unbounded with respect to the implementing type (its value is generated with
+`kani::any`), so they are generated by default and are unaffected by `--bounded-arguments`. If the
+implementing type implements [`Invariant`](#type-safety-invariants), the generated value is assumed
+to satisfy it, as for any other automatic harness.
+
+Current limitations:
+- The `Formatter` carries the default formatting parameters, i.e. it is the one that
+  `format!("{:?}", value)`/`format!("{}", value)` would produce. Code paths that a `fmt`
+  implementation takes only for a non-default width, precision, fill, alignment, sign, or the
+  alternate (`{:#?}`) flag are therefore not covered.
+- The sink never fails, so `fmt` implementations that propagate write errors with `?` are not
+  verified against the error path.
+- Because the harness goes through `core::fmt`, the core formatting machinery is verified along
+  with the `fmt` implementation, so a reported failure may point at a location inside `core`.
+- A `fmt` method that carries a [function contract](contracts.md) is not handled this way: the
+  automatic contract harness calls the function directly, so it is skipped for its
+  `&mut Formatter` argument like any other function Kani cannot call.
+
 ## Limitations
 ### Arguments Implementing Arbitrary
-Kani will only generate an automatic harness for a function if it can represent each of its arguments nondeterministically, without bounds.
-In technical terms, each of the arguments needs to implement the `Arbitrary`
+Kani will only generate an automatic harness for a function if it can represent each of its arguments nondeterministically.
+By default, it must be able to do so *without bounds*: each argument needs to implement the `Arbitrary`
 trait or be capable of deriving it, or be a reference (mutable or immutable)
 where any of the prior requirements is fulfilled by the referenced type.
+The `--bounded-arguments` option (see above) relaxes this to
+additionally allow argument types that can only be represented up to a bound: slice (`&[T]`/`&mut [T]`) and
+string (`&str`) references, and types implementing [`BoundedArbitrary`](../bounded_arbitrary.md)
+(e.g. `Vec<T>`, `String`, or user types deriving it).
 Kani will detect if a struct or enum could implement `Arbitrary` and derive it automatically.
 Note that this automatic derivation feature is only available for autoharness.
 
+### Reference and Pointer Arguments
+Each reference, pointer, slice, or string argument is generated from its own independent
+nondeterministic storage. Autoharness therefore does *not* explore aliasing *between* distinct
+arguments: for example, given `fn f(a: &T, b: &T)`, the generated harness always passes two
+references to separate allocations, so `a` and `b` never share an address (`core::ptr::eq(a, b)`
+is always `false`), even though a caller could pass the same reference twice. A successful
+automatic harness is thus an underapproximation with respect to caller-controlled aliasing, in
+the same way that verifying a single monomorphization is an underapproximation for [generic
+functions](#generic-functions). This applies to all reference/pointer arguments and is
+independent of the length bound that `--bounded-arguments` introduces.
+Modeling caller-controlled aliasing between arguments is tracked in
+[#4750](https://github.com/model-checking/kani/issues/4750).
+
 ### Generic Functions
-The current implementation does not generate harnesses for generic functions.
+For a generic function, Kani generates a harness for a single monomorphic instantiation of the function:
+it substitutes the function's type parameters with concrete types such that all of the function's
+trait bounds are satisfied, and erases lifetime parameters. Kani first tries a fixed list of
+primitive types (starting with `i32`, and including the wider integer and float types) uniformly
+for all parameters; if that fails, it searches per-parameter combinations, drawing additional
+candidate types from the concrete implementations of the traits each parameter is bound by
+(so, e.g., a parameter bound by a crate-local trait can be instantiated with a crate-local struct
+implementing it). The search is capped, so functions with many type parameters or very complex
+bounds may still be skipped.
 For example, given:
 ```rust
 fn foo<T: Eq>(x: T, y: T) {
@@ -140,23 +337,21 @@ fn foo<T: Eq>(x: T, y: T) {
     }
 }
 ```
-Kani would report that no functions were eligible for automatic harness generation.
-
-If, however, some caller of `foo` is eligible for an automatic harness, then a monomorphized version of `foo` may still be reachable during verification.
-For instance, if we add `main`:
-```rust
-fn main() {
-    let x: u8 = 2;
-    let y: u8 = 2;
-    foo(x, y);
-}
+Kani generates and runs a harness that verifies `foo::<i32>`, and the summary table shows the
+instantiated name, e.g.:
 ```
-and run the autoharness subcommand, we get:
+| Crate    | Selected Function | Kind of Automatic Harness | Verification Result |
+| my_crate | foo::<i32>        | #[kani::proof]            | Failure             |
 ```
-Autoharness: Checking function main against all possible inputs...
+Note that verifying a single instantiation is an underapproximation of all of the function's possible behaviors:
+a successful result for `foo::<i32>` does not imply that other instantiations of `foo` are also safe.
+Kani makes this explicit by displaying the instantiated name of the verified function.
 
-Failed Checks: x and y are equal
- File: "src/lib.rs", line 3, in foo::<u8>
+`usize` const generic parameters (e.g. array lengths) are instantiated with the value 2.
 
-VERIFICATION:- FAILED
-```
+Kani skips a generic function (with skip reason "Generic Function") if:
+- no candidate type satisfies the function's trait bounds, or
+- the function has non-`usize` const generic parameters, which Kani does not instantiate yet.
+
+If some caller of a generic function is eligible for an automatic harness, then additional monomorphized
+versions of the generic function may still be reachable (and thus verified) through the caller's harness.
