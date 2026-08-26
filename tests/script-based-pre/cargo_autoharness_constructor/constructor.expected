@@ -5,8 +5,14 @@
 | cargo_autoharness_constructor | Day::ordinal0 | #[kani::proof] | Failure |
 | cargo_autoharness_constructor | Even::half | #[kani::proof] | Failure |
 | cargo_autoharness_constructor | Even::try_new | #[kani::proof] | Success |
+| cargo_autoharness_constructor | Meter2::level | #[kani::proof] | Success |
+| cargo_autoharness_constructor | Meter2::zero | #[kani::proof] | Success |
+| cargo_autoharness_constructor | Meter::from_ref | #[kani::proof] | Success |
+| cargo_autoharness_constructor | Meter::level | #[kani::proof] | Success |
+| cargo_autoharness_constructor | Meter::new | #[kani::proof] | Success |
 | cargo_autoharness_constructor | Ranged::new_unchecked | #[kani::proof] | Failure |
 | cargo_autoharness_constructor | Wrapper::from_raw_unchecked | #[kani::proof] | Failure |
+| cargo_autoharness_constructor | use_tagged | #[kani::proof] | Success |
 | cargo_autoharness_constructor | wrapped_ordinal0 | #[kani::proof] | Failure |
 === with flag ===
 Note: harnesses marked "(ctor)" generate some values through one of a type's own constructors (--constructor-args);
@@ -16,6 +22,12 @@ Note: harnesses marked "(ctor)" generate some values through one of a type's own
 | cargo_autoharness_constructor | Day::ordinal0 | #[kani::proof] (ctor) | Success |
 | cargo_autoharness_constructor | Even::half | #[kani::proof] (ctor) | Success |
 | cargo_autoharness_constructor | Even::try_new | #[kani::proof] | Success |
+| cargo_autoharness_constructor | Meter2::level | #[kani::proof] | Success |
+| cargo_autoharness_constructor | Meter2::zero | #[kani::proof] | Success |
+| cargo_autoharness_constructor | Meter::from_ref | #[kani::proof] | Success |
+| cargo_autoharness_constructor | Meter::level | #[kani::proof] (ctor) | Success |
+| cargo_autoharness_constructor | Meter::new | #[kani::proof] | Success |
 | cargo_autoharness_constructor | Ranged::new_unchecked | #[kani::proof] | Failure |
 | cargo_autoharness_constructor | Wrapper::from_raw_unchecked | #[kani::proof] | Failure |
+| cargo_autoharness_constructor | use_tagged | #[kani::proof] | Success |
 | cargo_autoharness_constructor | wrapped_ordinal0 | #[kani::proof] (ctor) | Success |
