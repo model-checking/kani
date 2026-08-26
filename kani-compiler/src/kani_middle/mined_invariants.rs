@@ -256,7 +256,7 @@ fn extract_place(body: &Body, place: &Place, depth: usize) -> Option<MinedExpr> 
         return extract_getter_call(body, term, depth);
     }
     match def? {
-        Rvalue::Use(inner) => extract_expr(body, inner, depth + 1),
+        Rvalue::Use(inner, _) => extract_expr(body, inner, depth + 1),
         Rvalue::BinaryOp(bop, a, b) => Some(MinedExpr::BinOp(
             *bop,
             Box::new(extract_expr(body, a, depth + 1)?),
@@ -308,7 +308,7 @@ fn extract_getter_call(
                     return None;
                 }
                 ret_def = Some(match rv {
-                    Rvalue::Use(inner) => extract_expr(&callee, inner, depth + 1)?,
+                    Rvalue::Use(inner, _) => extract_expr(&callee, inner, depth + 1)?,
                     Rvalue::BinaryOp(bop, a, b) => MinedExpr::BinOp(
                         *bop,
                         Box::new(extract_expr(&callee, a, depth + 1)?),

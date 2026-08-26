@@ -675,7 +675,7 @@ fn build_mined_expr(
             let lcl = body.new_local(leaf_ty, span, Mutability::Not);
             body.assign_to(
                 Place::from(lcl),
-                Rvalue::Use(Operand::Copy(place)),
+                Rvalue::Use(Operand::Copy(place), WithRetag::No),
                 source,
                 InsertPosition::Before,
             );
@@ -694,7 +694,7 @@ fn build_mined_expr(
             let lcl = body.new_local(leaf_ty, span, Mutability::Not);
             body.assign_to(
                 Place::from(lcl),
-                Rvalue::Use(Operand::Copy(place)),
+                Rvalue::Use(Operand::Copy(place), WithRetag::No),
                 source,
                 InsertPosition::Before,
             );
@@ -705,7 +705,7 @@ fn build_mined_expr(
             let lcl = body.new_local(ty, span, Mutability::Not);
             body.assign_to(
                 Place::from(lcl),
-                Rvalue::Use(Operand::Constant(c.clone())),
+                Rvalue::Use(Operand::Constant(c.clone()), WithRetag::No),
                 source,
                 InsertPosition::Before,
             );
@@ -2068,10 +2068,13 @@ impl TransformPass for AutomaticHarnessPass {
                     let tmp = harness_body.new_local(inner, span, Mutability::Not);
                     harness_body.assign_to(
                         Place::from(tmp),
-                        Rvalue::Use(Operand::Copy(Place {
-                            local: ret_lcl,
-                            projection: vec![ProjectionElem::Deref],
-                        })),
+                        Rvalue::Use(
+                            Operand::Copy(Place {
+                                local: ret_lcl,
+                                projection: vec![ProjectionElem::Deref],
+                            }),
+                            WithRetag::No,
+                        ),
                         &mut source,
                         InsertPosition::Before,
                     );
@@ -2097,15 +2100,18 @@ impl TransformPass for AutomaticHarnessPass {
                             let tmp = harness_body.new_local(pt, span, Mutability::Not);
                             harness_body.assign_to(
                                 Place::from(tmp),
-                                Rvalue::Use(Operand::Copy(Place {
-                                    local: ret_lcl,
-                                    projection: vec![
-                                        ProjectionElem::Downcast(
-                                            rustc_public::ty::VariantIdx::to_val(ok_idx),
-                                        ),
-                                        ProjectionElem::Field(0, pt),
-                                    ],
-                                })),
+                                Rvalue::Use(
+                                    Operand::Copy(Place {
+                                        local: ret_lcl,
+                                        projection: vec![
+                                            ProjectionElem::Downcast(
+                                                rustc_public::ty::VariantIdx::to_val(ok_idx),
+                                            ),
+                                            ProjectionElem::Field(0, pt),
+                                        ],
+                                    }),
+                                    WithRetag::No,
+                                ),
                                 &mut source,
                                 InsertPosition::Before,
                             );
