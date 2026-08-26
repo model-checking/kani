@@ -1,0 +1,9 @@
+- Status: SATISFIED
+- Status: SATISFIED
+- Status: SATISFIED
+Failed Checks: unwinding assertion loop 0
+| cargo_autoharness_vec_unbounded | coverage          | #[kani::proof]            | Success             |
+| cargo_autoharness_vec_unbounded | head              | #[kani::proof]            | Success             |
+| cargo_autoharness_vec_unbounded | set_first         | #[kani::proof]            | Success             |
+| cargo_autoharness_vec_unbounded | total             | #[kani::proof]            | Failure             |
+Complete - 3 successfully verified functions, 1 failures, 4 total.

@@ -1,5 +1,7 @@
 TERSE: yes
 PARALLEL: yes
+SERIAL: yes
+EQUIVALENT: yes
 | f1 | #[kani::proof] | Success
 | f2 | #[kani::proof] | Success
 | f3 | #[kani::proof] | Success

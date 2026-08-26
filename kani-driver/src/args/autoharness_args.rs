@@ -40,6 +40,14 @@ pub struct CommonAutoharnessArgs {
     #[arg(long)]
     pub constructor_args: bool,
 
+    /// Check that values returned by verified functions satisfy their type's *mined*
+    /// invariants: assertions over the type's own fields that at least two of its methods
+    /// state. Failures are reported as a distinct property class; since the mined predicate
+    /// is heuristic, a failure means the returned value would trip the type's own
+    /// assertions when used, which may or may not be a bug in the returning function.
+    #[arg(long)]
+    pub check_invariants: bool,
+
     /// Run the `list` subcommand after generating the automatic harnesses. Note that this option implies --only-codegen.
     #[arg(long)]
     pub list: bool,

@@ -9,7 +9,7 @@
 
 use crate::args::{Arguments, ReachabilityType};
 use crate::kani_middle::attributes::{KaniAttributes, is_proof_harness};
-use crate::kani_middle::kani_functions::{KaniIntrinsic, KaniModel};
+use crate::kani_middle::kani_functions::{KaniHook, KaniIntrinsic, KaniModel};
 use crate::kani_middle::metadata::{
     gen_automatic_proof_metadata, gen_contracts_metadata, gen_proof_metadata,
 };
@@ -113,6 +113,20 @@ impl CodegenUnits {
                     *kani_fns.get(&KaniModel::Any.into()).unwrap(),
                     *kani_fns.get(&KaniModel::BoundedAny.into()).unwrap(),
                     SmartPointerModels::from_kani_functions(kani_fns),
+                    *kani_fns.get(&KaniHook::Assert.into()).unwrap(),
+                    // Require *all three* unbounded models: eligibility admits `&[T]`, `&mut [T]`
+                    // and `Vec<T>`, but generation resolves each model independently, so gating on
+                    // only one could report a `&mut [T]`/`Vec<T>` arg as unbounded-verified while
+                    // generation silently fell back to a bounded (or unsupported) path. They are
+                    // defined together (all present with `alloc`, all absent in `no_core`), so this
+                    // is all-or-nothing in practice; the conjunction just makes that explicit.
+                    [
+                        KaniModel::AnySliceRefUnbounded,
+                        KaniModel::AnySliceMutUnbounded,
+                        KaniModel::AnyVecUnbounded,
+                    ]
+                    .iter()
+                    .all(|m| kani_fns.contains_key(&(*m).into())),
                 );
                 AUTOHARNESS_MD
                     .set(AutoHarnessMetadata {
@@ -678,6 +692,7 @@ struct AutoHarnessCaveats {
 
 /// Partition every function in the crate into (chosen, skipped), where `chosen` is a vector of the Instances for which we'll generate automatic harnesses,
 /// and `skipped` is a map of function names to the reason why we skipped them.
+#[allow(clippy::too_many_arguments)]
 fn automatic_harness_partition(
     tcx: TyCtxt,
     args: &Arguments,
@@ -685,6 +700,8 @@ fn automatic_harness_partition(
     kani_any_def: FnDef,
     kani_bounded_any_def: FnDef,
     smart_pointer_models: SmartPointerModels,
+    kani_assert_def: FnDef,
+    unbounded_slice_available: bool,
 ) -> (Vec<(Instance, AutoHarnessCaveats)>, BTreeMap<String, AutoHarnessSkipReason>) {
     let crate_fn_defs = rustc_public::local_crate().fn_defs().into_iter().collect::<FxHashSet<_>>();
     // Filter out CrateItems that are functions, but not functions defined in the crate itself, i.e., rustc-inserted functions
@@ -766,6 +783,26 @@ fn automatic_harness_partition(
         let mut problematic_args = vec![];
         let mut bounded_args = vec![];
         for (idx, arg) in body.arg_locals().iter().enumerate() {
+            // Unbounded generation: slices (&[T], &mut [T]) and Vec<T> of primitive
+            // integer/float elements are generated as fresh allocations of nondeterministic
+            // size (results hold for *all* lengths -- unbounded, so no bound caveat), when the
+            // optional alloc-requiring models are present. This takes precedence over the
+            // bounded slice/string support classified by `autoharness_supported_arg_ty`.
+            if unbounded_slice_available {
+                let slice_ok = match arg.ty.kind() {
+                    TyKind::RigidTy(RigidTy::Ref(_, inner, _)) => match inner.kind() {
+                        TyKind::RigidTy(RigidTy::Slice(elem)) => {
+                            crate::kani_middle::slice_elem_unbounded_ok(tcx, elem)
+                        }
+                        _ => false,
+                    },
+                    _ => crate::kani_middle::vec_elem_ty(arg.ty)
+                        .is_some_and(|elem| crate::kani_middle::slice_elem_unbounded_ok(tcx, elem)),
+                };
+                if slice_ok {
+                    continue;
+                }
+            }
             // Note: we deliberately do not insert the verdict into `ty_arbitrary_cache` here.
             // The cache stores whether a type implements (or can derive) Arbitrary, which is the
             // wrong semantics for types that are supported in argument position only (raw
@@ -855,6 +892,7 @@ fn automatic_harness_partition(
                                 tcx,
                                 arg.ty,
                                 kani_any_def,
+                                kani_assert_def,
                                 &mut ty_arbitrary_cache_ctor,
                                 &mut vec![],
                             )

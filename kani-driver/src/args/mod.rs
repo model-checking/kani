@@ -267,6 +267,8 @@ pub struct VerificationArgs {
     pub extra_pointer_checks: bool,
 
     /// Stop the verification process as soon as one of the harnesses fails.
+    /// Harnesses already running when that happens still finish and are counted, so under
+    /// `--jobs N` the set of reported harnesses depends on how many were in flight.
     #[arg(long)]
     pub fail_fast: bool,
 
@@ -439,6 +441,25 @@ pub enum NumThreads {
 }
 
 impl NumThreads {
+    /// Build a Rayon thread pool with this job count.
+    pub(crate) fn build_thread_pool(
+        self,
+    ) -> Result<rayon::ThreadPool, rayon::ThreadPoolBuildError> {
+        let mut builder = rayon::ThreadPoolBuilder::new();
+        match self {
+            Self::UserSpecified(num_threads) => {
+                builder = builder.num_threads(num_threads);
+            }
+            Self::NoMultithreading => {
+                builder = builder.num_threads(1);
+            }
+            Self::ThreadPoolDefault => {
+                // Rayon uses its default number of threads.
+            }
+        }
+        builder.build()
+    }
+
     /// Checks if this will spawn multiple threads in the pool.
     pub fn will_multithread(&self) -> bool {
         match self {
