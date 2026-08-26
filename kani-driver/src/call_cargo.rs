@@ -28,8 +28,15 @@ use tracing::{debug, trace};
 
 /// The outputs of kani-compiler being invoked via cargo on a project.
 pub struct CargoOutputs {
-    /// The directory where compiler outputs should be directed.
-    /// Usually 'target/BUILD_TRIPLE/debug/deps/'
+    /// A directory holding compiler outputs for this build.
+    ///
+    /// Derived from the paths cargo reports for the artifacts it produced rather than assumed: the
+    /// layout under `target/` is cargo's to choose and has changed before. Up to cargo 1.98 every
+    /// artifact sat together in `target/kani/BUILD_TRIPLE/debug/deps/`; cargo 1.99 gives each
+    /// package its own `target/kani/BUILD_TRIPLE/debug/build/PKG/HASH/out/`.
+    ///
+    /// A multi-package build therefore no longer has a single output directory, so this names one
+    /// of them. To reach the artifacts themselves, use [`CargoOutputs::metadata`].
     pub outdir: PathBuf,
     /// The kani-metadata.json files written by kani-compiler.
     pub metadata: Vec<Artifact>,
@@ -142,7 +149,9 @@ crate-type = ["lib"]
             .unwrap_or(&metadata.target_directory.clone().into())
             .clone()
             .join("kani");
-        let outdir = target_dir.join(build_target).join("debug/deps");
+        // The directory to fall back on if the build turns out to produce no artifacts (see
+        // `CargoOutputs::outdir`). Computed here because `target_dir` is consumed below.
+        let profile_dir = target_dir.join(build_target).join("debug");
 
         if self.args.force_build && target_dir.exists() {
             fs::remove_dir_all(&target_dir)?;
@@ -254,6 +263,14 @@ crate-type = ["lib"]
         if !found_target {
             bail!("No supported targets were found.");
         }
+
+        // Report where cargo actually placed the artifacts rather than assuming a layout under
+        // `target/` (see `CargoOutputs::outdir`). With no artifacts there is no such directory to
+        // name, and the profile directory is the closest honest answer.
+        let outdir = artifacts
+            .first()
+            .and_then(|artifact| artifact.parent().map(Path::to_path_buf))
+            .unwrap_or(profile_dir);
 
         Ok(CargoOutputs { outdir, metadata: artifacts, cargo_metadata: metadata })
     }

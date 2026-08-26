@@ -17,6 +17,8 @@ output=$(cargo kani playback -Z concrete-playback --only-codegen --message-forma
 executable=$(echo ${output} |
     jq 'select(.reason == "compiler-artifact") | select(.executable != null) | .executable')
 
+# Only the file name is asserted on: the directory cargo puts the executable in is cargo's to
+# choose, and it changed in cargo 1.99 (artifacts moved out of `debug/deps`).
 echo "[TEST] Executable"
 echo ${executable}
 
