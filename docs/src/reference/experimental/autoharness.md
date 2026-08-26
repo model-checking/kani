@@ -123,12 +123,19 @@ constructors, preferring (in order):
 Zero-argument constructors, and constructors generic over their own parameters, are not
 considered.
 
-This option is opt-in because it under-approximates: harnesses whose values are generated this
-way are marked "(ctor)" in the output, and their verification results only cover values
-reachable through the chosen constructor; a bug that requires a different value will not be
-found. Note also that a checked constructor which itself panics for some of its inputs (rather
-than rejecting them via `Option`/`Result`) turns those inputs into harness failures, so this
-option can trade one class of false alarm for another.
+`--constructor-args` additionally enables *mined-invariant filtering*: if a type has no viable
+constructor but its own `&self` methods assert conditions over its fields (see
+[Mined invariants](#mined-invariants---check-invariants) below), the generated value is
+constrained to satisfy those mined conditions via `kani::assume`. This covers types with no
+usable constructor, at lower formula cost than constructor inlining.
+
+This option is opt-in because it under-approximates: harnesses whose values are generated or
+constrained this way are marked "(ctor)" in the output. That marker therefore covers all of the
+mechanisms above — assert-guarded/checked constructors *and* mined-invariant filtering — and
+signals that verification results only cover values the chosen mechanism admits; a bug that
+requires a different value will not be found. Note also that a checked constructor which itself
+panics for some of its inputs (rather than rejecting them via `Option`/`Result`) turns those
+inputs into harness failures, so this option can trade one class of false alarm for another.
 
 > **Caveat:** if the chosen constructor is *unsatisfiable* for the generated type — an
 > assert-guarded constructor every argument of which trips an assertion, or a checked
@@ -136,6 +143,34 @@ option can trade one class of false alarm for another.
 > paths and the harness becomes **vacuous**, reporting `Success` without checking anything.
 > Kani does not yet detect this case; see
 > [#4757](https://github.com/model-checking/kani/issues/4757).
+
+### Mined invariants (--check-invariants)
+
+Many types state their representation invariant implicitly, as assertions over `self`'s fields
+in their own `&self` methods (e.g. `assert!(self.value >= 1)`). Kani can *mine* these: it
+extracts a condition as a type invariant when the assertion executes on every normal return of
+the method (post-dominance), its condition reads only `self`'s fields and constants (a pure,
+call-free slice), and the same conjunct is asserted in at least two distinct methods (so that
+method-local preconditions are not mistaken for type invariants). For enums, a conjunct read
+from a matched variant is guarded by that variant's discriminant.
+
+Mined invariants are used in two ways:
+
+- Under `--constructor-args`, they are *assumed* for generated values (as described above), and
+  such harnesses are marked "(ctor)".
+
+  > **Caveat:** the "asserted in ≥2 methods" filter is a heuristic, not a proof of
+  > type-invariance. If two methods share a *precondition* that is not a universal invariant,
+  > it is assumed for all generated values and may exclude otherwise-valid inputs — a potential
+  > missed bug. This is acceptable only under the opt-in, under-approximating `(ctor)` contract;
+  > see [#4763](https://github.com/model-checking/kani/issues/4763).
+- With `--check-invariants`, they are *checked* on the values returned by verified functions:
+  Kani asserts that each returned value (direct `T`, `&T`, or the payload of an
+  `Option<T>`/`Result<T, E>` — `None`/`Err` pass vacuously) satisfies the type's mined
+  invariants. A failure is reported as a distinct property class naming the asserting methods;
+  because the mined predicate is heuristic, a failure means the returned value *would* trip the
+  type's own assertions when used, which may or may not indicate a bug in the returning
+  function.
 
 ## Example
 Using the `estimate_size` example from [First Steps](../../tutorial-first-steps.md) again:
