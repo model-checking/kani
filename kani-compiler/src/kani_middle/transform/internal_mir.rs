@@ -561,7 +561,6 @@ impl RustcInternalMir for TerminatorKind {
                     unwind: unwind.internal_mir(tcx),
                     replace: false,
                     drop: None,
-                    async_fut: None,
                 }
             }
             TerminatorKind::Call { func, args, destination, target, unwind } => {
@@ -600,6 +599,9 @@ impl RustcInternalMir for Terminator {
         rustc_middle::mir::Terminator {
             source_info: rustc_middle::mir::SourceInfo::outermost(internal(tcx, self.span)),
             kind: self.kind.internal_mir(tcx),
+            // Terminators gained MIR-level attributes; the stable representation has no
+            // equivalent, and Kani-synthesized terminators carry none.
+            attributes: Default::default(),
         }
     }
 }

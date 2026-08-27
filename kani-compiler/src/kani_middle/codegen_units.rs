@@ -737,9 +737,9 @@ fn resolve_deferred_fn_slots<'tcx>(
         // <i32 as Tap>::Val for a choice that does not satisfy the bound); normalize here and
         // skip the choice on failure, rather than letting Instance::resolve ICE on it.
         let inputs =
-            rustc_middle::ty::EarlyBinder::bind(spec.inputs).instantiate(tcx, args_internal);
+            rustc_middle::ty::EarlyBinder::bind(tcx, spec.inputs).instantiate(tcx, args_internal);
         let output =
-            rustc_middle::ty::EarlyBinder::bind(spec.output).instantiate(tcx, args_internal);
+            rustc_middle::ty::EarlyBinder::bind(tcx, spec.output).instantiate(tcx, args_internal);
         let typing_env = rustc_middle::ty::TypingEnv::fully_monomorphized();
         let Ok(inputs) = tcx.try_normalize_erasing_regions(typing_env, inputs) else {
             return false;

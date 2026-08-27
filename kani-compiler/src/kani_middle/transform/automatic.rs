@@ -21,7 +21,6 @@ use crate::kani_middle::{
 use crate::kani_queries::QueryDb;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::ty::TyCtxt;
-use rustc_public::CrateDef;
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::{
     AggregateKind, BasicBlock, BasicBlockIdx, BinOp, Body, BorrowKind, CastKind, ConstOperand,
@@ -33,6 +32,7 @@ use rustc_public::ty::{
     AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, MirConst, Region, RegionKind, RigidTy, Ty,
     TyConst, TyKind, UintTy, VariantDef, VariantIdx,
 };
+use rustc_public::{CrateDef, CrateDefType};
 use rustc_public_bridge::IndexedVal;
 use tracing::debug;
 
