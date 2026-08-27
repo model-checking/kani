@@ -158,10 +158,16 @@ kani-driver src/main.rs -Z export-json --export-json out.json
 ```json
 {
   "schema_version": "0.1.0",
-  "kani_version": "0.67.0",
   "kani_commit": "7b125f1b47e36ca4cc50c4041abeca01912f80f9",
   "kani_commit_dirty": false,
-  "cbmc_version": "6.10.0 (cbmc-6.10.0)",
+  "tools": {
+    "kani": "0.67.0",
+    "rustc": "1.98.0-nightly (14210df0e 2026-05-31)",
+    "cbmc": "6.10.0 (cbmc-6.10.0)",
+    "goto_cc": "6.10.0 (cbmc-6.10.0)",
+    "goto_instrument": "6.10.0 (cbmc-6.10.0)",
+    "solvers": [{ "name": "cadical", "version": null }]
+  },
   "machine": {
     "cpu_count": 16,
     "total_memory_bytes": 32159113216,
@@ -197,6 +203,7 @@ kani-driver src/main.rs -Z export-json --export-json out.json
   "harnesses": [
     {
       "name": "check_contradictory_assume",
+      "selector": "check_contradictory_assume",
       "crate_name": "main",
       "file": "src/main.rs",
       "line": 2,
@@ -265,6 +272,22 @@ kani-driver src/main.rs -Z export-json --export-json out.json
 This is the vacuity case made machine-readable: the harness's `outcome.verdict` is `SUCCESS` and Kani's
 exit code is `0`, exactly like a harness that proved something. But `checks.unreachable` names both
 properties that could not actually be exercised, so a consumer no longer has to trust the exit code alone.
+
+**Tool provenance (`tools`).** A single object carries the version of every tool whose behaviour can
+change a result: `kani`, `rustc`, `cbmc`, `goto_cc`, `goto_instrument`, and a `solvers` array of
+`{name, version}` (a solver CBMC selects itself contributes `version: null`). This is the machine-readable
+form of the versions Kani already prints, closing the gap in
+[#2572](https://github.com/model-checking/kani/issues/2572): a consumer comparing two runs, or bisecting a
+regression to a toolchain bump, no longer scrapes stdout for them.
+
+**Stable harness selector (`selector`).** Besides its bare `name` and `crate_name`, each harness carries
+the exact string `--harness` accepts to run it again — the module-qualified path
+(`sequence::proofs::no_over_read`; for a crate-root harness it equals `name`). `name` alone is not
+re-runnable (two crates may share one), and `(crate_name, file, line, name)` identifies a harness without
+being a *selector*. An out-of-tree consumer that records which harness backs a downstream result — a CI
+gate re-running one proof, an external tool tracking a proof across commits — needs one stable,
+re-runnable key, and reconstructing it from the file path is fragile. `selector` is that key; Kani owns
+the string rather than making a consumer rebuild it.
 
 The consumer applies two named predicates (all fields are per-harness: `harnesses[].outcome.verdict`,
 `harnesses[].checks.*`, abbreviated below), both guarded on `verdict == "SUCCESS"` and both
@@ -644,6 +667,12 @@ second cost: the shipped v1 document becomes the de-facto contract, unversioned 
 - Should this cover the `autoharness` subcommand's results, whose `chosen`/`skipped` classification
   currently has no machine-readable form?
 - Coverage results: include here, or leave with `kani-cov`?
+- **Shipped fields dropped in this shape — keep or drop?** #4472's document carried three fields this
+  schema does not: the Cargo provenance `project.workspace_root` / `output_dir`; the autoharness
+  `is_bounded` / `is_ctor_based` per-harness flags (orthogonal to the `autoharness` question above, which
+  is about `chosen`/`skipped`); and the `coverage.enabled` marker. Each is cheap to restore if a consumer
+  wants it, and the default here is to leave them out until one does — but the removal is called out as a
+  decision rather than a silent regression, since a consumer of the shipped v1 shape may rely on them.
 - **Final flag name.** `--export-json` versus `--results-json` (see the flag-name note under User
   Experience). The CLI spelling is provisional and this is a stabilization-blocking decision: the name
   must be settled before the flag leaves `-Z`.
