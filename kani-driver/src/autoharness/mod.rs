@@ -213,6 +213,7 @@ impl KaniSession {
     pub fn print_autoharness_summary(
         &self,
         mut automatic: Vec<&HarnessResult<'_>>,
+        quiet: bool,
     ) -> Result<usize> {
         automatic.sort_by(|a, b| a.harness.pretty_name.cmp(&b.harness.pretty_name));
         let (successes, failures): (Vec<_>, Vec<_>) =
@@ -221,6 +222,12 @@ impl KaniSession {
         let succeeding = successes.len();
         let failing = failures.len();
         let total = succeeding + failing;
+
+        // Under --quiet we still need the failure count for the exit code, but the summary itself
+        // is suppressed.
+        if quiet {
+            return Ok(failing);
+        }
 
         println!("\nAutoharness Summary:");
 
