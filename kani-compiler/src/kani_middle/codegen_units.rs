@@ -623,7 +623,7 @@ fn fn_bound_candidates<'tcx>(
     let fn_tr = tcx.lang_items().fn_trait();
     // Collect Fn-ish trait predicates keyed by the self param index, with tupled inputs.
     let mut sig_inputs: FxHashMap<usize, rustc_middle::ty::Ty> = FxHashMap::default();
-    for (predicate, _span) in tcx.predicates_of(def_id).predicates {
+    for (predicate, _span) in tcx.clauses_of(def_id).clauses {
         let Some(tp) = predicate.as_trait_clause() else { continue };
         // HRTB bounds (e.g. for<'a> FnOnce(&'a Self)) carry late-bound regions; erase them
         // rather than skipping the binder, which would leak escaping bound vars into the
@@ -645,7 +645,7 @@ fn fn_bound_candidates<'tcx>(
     }
     // The return type comes from the FnOnce::Output projection bound.
     let mut sig_output: FxHashMap<usize, rustc_middle::ty::Ty> = FxHashMap::default();
-    for (predicate, _span) in tcx.predicates_of(def_id).predicates {
+    for (predicate, _span) in tcx.clauses_of(def_id).clauses {
         let Some(proj) = predicate.as_projection_clause() else { continue };
         let proj = tcx.instantiate_bound_regions_with_erased(proj);
         let rustc_middle::ty::TyKind::Param(param_ty) = proj.projection_term.self_ty().kind()
@@ -663,7 +663,7 @@ fn fn_bound_candidates<'tcx>(
         if inputs.has_param() || output.has_param() {
             // Signature references other generic parameters: defer construction until a
             // candidate choice for those parameters is made.
-            // SAFETY of the transmute-free 'static: predicates_of types live for the whole
+            // SAFETY of the transmute-free 'static: clauses_of types live for the whole
             // compilation session ('tcx); we only use them within this query's lifetime.
             deferred.insert(idx, DeferredFnSpec { inputs, output });
             continue;
