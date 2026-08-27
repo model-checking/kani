@@ -38,9 +38,9 @@ use rustc_public::mir::mono::{Instance, MonoItem};
 use rustc_public::rustc_internal;
 use rustc_public::ty::FnDef;
 use rustc_public::{CrateDef, DefId};
-use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
+use rustc_session::{IncrCompSession, Session};
 use std::any::Any;
 use std::fs::File;
 use std::path::Path;
@@ -296,6 +296,7 @@ impl CodegenBackend for LlbcCodegenBackend {
         &self,
         ongoing_codegen: Box<dyn Any>,
         _sess: &Session,
+        _incr_comp_session: Option<&IncrCompSession>,
         _filenames: &OutputFilenames,
         _crate_info: &CrateInfo,
     ) -> (CompiledModules, UnordMap<WorkProductId, WorkProduct>) {

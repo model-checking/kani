@@ -745,6 +745,22 @@ impl GotocCtx<'_, '_> {
         debug!(?func, ?args, ?destination, ?span, "codegen_funcall");
         let instance_opt = self.get_instance(func);
         if let Some(instance) = instance_opt
+            && matches!(instance.kind, InstanceKind::LlvmIntrinsic)
+        {
+            // An LLVM intrinsic -- an `extern "unadjusted"` declaration whose symbol starts with
+            // `llvm.` -- has no Rust body, and rustc refuses to compute a `FnAbi` for one, so we
+            // cannot codegen the call or even its arguments. Kani has no model for these either,
+            // so report the call as unsupported. As of nightly-2026-08-21 these resolve to their
+            // own `InstanceKind`; before that they were foreign items, and this reports the same
+            // unsupported-construct check that the FFI shim did, so reaching one still fails
+            // verification rather than silently succeeding.
+            return self.codegen_unimplemented_stmt(
+                &format!("call to LLVM intrinsic `{}`", instance.mangled_name()),
+                self.codegen_span_stable(span),
+                "https://github.com/model-checking/kani/issues/4770",
+            );
+        }
+        if let Some(instance) = instance_opt
             && matches!(instance.kind, InstanceKind::Intrinsic)
         {
             let TyKind::RigidTy(RigidTy::FnDef(def, _)) = instance.ty().kind() else {
@@ -805,10 +821,12 @@ impl GotocCtx<'_, '_> {
                         self.codegen_virtual_funcall(self_ty, idx, destination, &mut fargs, loc)
                     }
                     // Normal, non-virtual function calls
-                    InstanceKind::Item
-                    | InstanceKind::Intrinsic
-                    | InstanceKind::LlvmIntrinsic
-                    | InstanceKind::Shim => {
+                    InstanceKind::LlvmIntrinsic => {
+                        unreachable!(
+                            "Kani reports LLVM intrinsic calls as unsupported before codegen"
+                        )
+                    }
+                    InstanceKind::Item | InstanceKind::Intrinsic | InstanceKind::Shim => {
                         // We need to handle FnDef items in a special way because `codegen_operand` compiles them to dummy structs.
                         // (cf. the function documentation)
                         let func_exp = self.codegen_func_expr(instance, loc);

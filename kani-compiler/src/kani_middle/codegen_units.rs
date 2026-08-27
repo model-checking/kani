@@ -547,7 +547,8 @@ fn args_satisfy_predicates(tcx: TyCtxt, def: FnDef, args: &GenericArgs) -> bool 
             predicate.skip_normalization(),
         ));
     }
-    ocx.evaluate_obligations_error_on_ambiguity().is_empty()
+    // As of nightly-2026-08-21 this returns a `TraitErrors` enum rather than a vector of errors.
+    ocx.evaluate_obligations_error_on_ambiguity().no_errors()
 }
 
 /// The nondet closure-model FnDefs, keyed by input shape. By-value models fix their

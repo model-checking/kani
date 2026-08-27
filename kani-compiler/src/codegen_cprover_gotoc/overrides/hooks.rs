@@ -17,7 +17,7 @@ use cbmc::goto_program::CIntType;
 use cbmc::goto_program::Symbol as GotoSymbol;
 use cbmc::goto_program::{BuiltinFn, Expr, Location, Stmt, StmtBody, SymbolValues, Type};
 use cbmc::{InternedString, goto_program::ExprValue};
-use rustc_hir::LangItem;
+use rustc_hir::attrs::lang_items::LangItem;
 use rustc_middle::ty::TyCtxt;
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::{BasicBlockIdx, Place};

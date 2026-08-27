@@ -149,6 +149,7 @@ impl RustcInternalMir for CastKind {
             CastKind::PtrToPtr => rustc_middle::mir::CastKind::PtrToPtr,
             CastKind::FnPtrToPtr => rustc_middle::mir::CastKind::FnPtrToPtr,
             CastKind::Transmute => rustc_middle::mir::CastKind::Transmute,
+            CastKind::BoxDerefTransmute => rustc_middle::mir::CastKind::BoxDerefTransmute,
             CastKind::Subtype => rustc_middle::mir::CastKind::Subtype,
         }
     }
