@@ -148,9 +148,11 @@ output is verbatim from a real run of the proof-of-concept at commit
 that run's. **The JSON is not**, however, a verbatim dump of that commit's own `--export-json`
 output: the PoC at `7b125f1b` emits flat `kani_version`/`cbmc_version` fields, not the grouped
 `tools` object shown below, and reports completeness as a boolean `run_complete`, not the
-`run_state` this RFC proposes (see "The completeness contract" below). Both are proposed additions
-this document specifies; treat the JSON as an instance of the *proposed* schema against the PoC's
-real vacuity run, not as a capture of what the PoC prints today.
+`run_state` this RFC proposes (see "The completeness contract" below). These two are only the most
+visible of this document's proposed additions over the PoC's own shape — `is_bounded`,
+`configuration.coverage_enabled`, `tools.solvers[].source`, and the `summary` section are further
+examples, all covered in their own sections below; treat the JSON as an instance of the *proposed*
+schema against the PoC's real vacuity run, not as a capture of what the PoC prints today.
 
 ```rust
 #[kani::proof]
@@ -177,7 +179,7 @@ kani-driver src/main.rs -Z export-json --export-json out.json
     "cbmc": "6.10.0 (cbmc-6.10.0)",
     "goto_cc": "6.10.0 (cbmc-6.10.0)",
     "goto_instrument": "6.10.0 (cbmc-6.10.0)",
-    "solvers": [{ "name": "cadical", "version": null }]
+    "solvers": [{ "name": "cadical", "version": null, "source": "builtin" }]
   },
   "machine": {
     "cpu_count": 16,
@@ -204,6 +206,7 @@ kani-driver src/main.rs -Z export-json --export-json out.json
       "ignore_global_asm": false,
       "extra_pointer_checks": false
     },
+    "coverage_enabled": false,
     "cbmc_args": []
   },
   "outcome": { "kind": "COMPLETED" },
@@ -220,6 +223,7 @@ kani-driver src/main.rs -Z export-json --export-json out.json
       "contract": null,
       "is_automatically_generated": false,
       "has_loop_contracts": false,
+      "is_bounded": false,
       "attributes": {
         "kind": "Proof",
         "should_panic": false,
@@ -291,14 +295,13 @@ Every field the example shows, normatively. `null` always means *not measured or
 | Field | Type | Null? | Meaning |
 |---|---|---|---|
 | `schema_version` | string (semver) | — | This document's own version; see Compatibility policy. |
-| `kani_version` | string | — | The Kani release that produced this document. |
 | `kani_commit` | string | nullable | Git commit Kani was built from; `null` outside a git checkout. |
 | `kani_commit_dirty` | bool | nullable | Whether the build tree had uncommitted changes; `null` exactly when `kani_commit` is `null`. |
-| `tools.kani` | string | — | Same value as `kani_version`, restated for a consumer reading only `tools`. |
+| `tools.kani` | string | — | The Kani release that produced this document (`env!("CARGO_PKG_VERSION")` at build time). Unlike every other `tools.*` entry, this one is never `null`: Kani always knows its own version. |
 | `tools.rustc` | string | nullable | rustc toolchain `kani-compiler` was built against; `null` if the probe failed. |
 | `tools.cbmc` / `.goto_cc` / `.goto_instrument` | string | nullable | Each tool's own `--version` output; `null` if it could not be probed. |
-| `tools.goto_synthesizer` | string | nullable, key conditional | Present only when loop-contract synthesis ran this run; see "Tool provenance" below. |
-| `tools.solvers[]` | array of `{name, version}` | array never null, may be empty | Deduplicated, name-sorted; see "Tool provenance" below. |
+| `tools.goto_synthesizer` | string | nullable, key conditional | Present only when the run *requested* loop-contract synthesis (`--synthesize-loop-contracts`), regardless of whether synthesis subsequently succeeded; see "Tool provenance" below. |
+| `tools.solvers[]` | array of `{name, version, source}` | array never null, may be empty | Deduplicated, name-sorted; see "Tool provenance" below. |
 | `machine.cpu_count` | integer | nullable | Logical CPUs available; `null` if undetermined. |
 | `machine.total_memory_bytes` | integer | nullable | Total system RAM; Linux only today. |
 | `machine.memory_limit_bytes` | integer | nullable | The enforced ceiling (cgroup/ulimit), not installed RAM; `null` when unlimited or unreadable. |
@@ -310,10 +313,11 @@ Every field the example shows, normatively. `null` always means *not measured or
 | `harness_selection.matched_count` | integer | — | Pre-verification match count; compare against `summary.total`/`run_state`. |
 | `harness_timeout_s` | number | nullable | `--harness-timeout` value in seconds; `null` when unset. |
 | `configuration.checks.*` (7 bools) | bool | — each | See the `configuration.checks.*` entries below and the "Policy for `configuration`" section. |
+| `configuration.coverage_enabled` | bool | — | Whether `--coverage` was passed; see the `configuration.coverage_enabled` entry below. |
 | `configuration.cbmc_args` | array of strings | never null, may be empty | Verbatim (UTF-8-lossy) `--cbmc-args`; a comparability signal, not a replayable argv. |
 | `outcome.kind` (run level) | `"COMPLETED"` \| `"CRASHED"` | — | Whether Kani itself finished the run, independent of harness verdicts. |
 | `outcome.code` | integer | nullable, present only on `CRASHED` | Process exit code, when known. |
-| `outcome.message` | string | nullable, present only on `CRASHED` | Free-text crash reason (e.g. `"goto-instrument crashed on harness 2"`); non-contractual wording. |
+| `outcome.message` | string | nullable, present only on `CRASHED` | Free-text crash reason, run-scoped (e.g. `"kani-compiler exited unexpectedly (signal 11) while building the crate"`); non-contractual wording. Contrast `harnesses[].outcome.message`, whose text is scoped to one harness (e.g. naming the harness CBMC crashed on). |
 | `run_state` | `"INCOMPLETE"` \| `"COMPLETE"` \| `"PARTIAL"` \| `"NO_HARNESSES_SELECTED"` | — | See "The completeness contract" below; this is the trust anchor, not `outcome.kind`. |
 | `target` | string | — | The Rust target triple Kani itself was built for. |
 | `started_at` | string | — | UTC, `YYYY-MM-DDTHH:MM:SSZ` (second resolution). |
@@ -328,6 +332,7 @@ Every field the example shows, normatively. `null` always means *not measured or
 | `harnesses[].contract.recursion_tracker` | string | nullable | Non-null only for a `#[kani::recursive]` function. |
 | `harnesses[].is_automatically_generated` | bool | — | True for an `autoharness`-generated harness; see "Harnesses that are not `--harness`-selectable". |
 | `harnesses[].has_loop_contracts` | bool | — | Whether the harness uses loop contracts. |
+| `harnesses[].is_bounded` | bool | — | Mandatory (soundness-relevant, promoted out of the open questions); see "The bounded-result flag (`is_bounded`)" below. |
 | `harnesses[].attributes.kind` | `"Proof"` \| `"Test"` \| `{"ProofForContract": {"target_fn": string}}` | — | See "Fields that are not always strings" below. |
 | `harnesses[].attributes.should_panic` | bool | — | Whether `#[kani::should_panic]` is set. |
 | `harnesses[].attributes.solver` | string \| `{"Binary": string}` | nullable | The *requested* solver attribute; `null` when unset (default resolution applies). Compare `resolved_solver`. |
@@ -340,15 +345,15 @@ Every field the example shows, normatively. `null` always means *not measured or
 | `harnesses[].resolved_solver` | string | nullable | The solver CBMC actually runs with; `null` when CBMC chooses for itself (bare `--smt2`). Same spelling as `tools.solvers[].name`. |
 | `harnesses[].resolved_unwind` | integer | nullable | The effective `--unwind` bound; `null` when none applies. |
 | `harnesses[].generated_concrete_test` | bool | — | Whether `--concrete-playback` produced a test for this harness. |
-| `harnesses[].resources.verification_time_s` | number | — | |
-| `harnesses[].n_properties` | integer | — | `checks.total + covers.total`; excludes `code_coverage` properties. |
-| `harnesses[].n_failed` | integer | — | `failed_properties.len()`. |
-| `harnesses[].failure_kind` | `"NONE"` \| `"PANICS_ONLY"` \| `"OTHER"` \| `"ERROR"` | — | Raw failure classification; see the `failure_kind` fix below — **not** synonymous with `verdict != SUCCESS`. |
-| `harnesses[].failed_properties[]` | array of property objects | never null, may be empty | Full shape below. |
+| `harnesses[].resources.verification_time_s` | number | — | Present on every harness regardless of `outcome.kind`: on `TIMEOUT`/`OUT_OF_MEMORY`/`CRASHED` it is the time elapsed until that outcome fired, not a verification duration. |
+| `harnesses[].n_properties` | integer | nullable; `null` except on `COMPLETED` | `checks.total + covers.total`; excludes `code_coverage` properties. See the presence matrix below. |
+| `harnesses[].n_failed` | integer | nullable; `null` except on `COMPLETED` | `failed_properties.len()`. See the presence matrix below. |
+| `harnesses[].failure_kind` | `"NONE"` \| `"PANICS_ONLY"` \| `"OTHER"` \| `"ERROR"` | present only on `COMPLETED`, never null there | Raw failure classification; see the `failure_kind` truth table in "Value domains" below — **not** synonymous with `verdict != SUCCESS`. |
+| `harnesses[].failed_properties[]` | array of property objects | never null, may be empty (empty on a non-`COMPLETED` harness) | Full shape below. |
 | `harnesses[].unsupported_constructs[]` | array of property objects, same shape | never null, may be empty | Rust/MIR constructs Kani can't model; a reached one also appears in `failed_properties`. |
-| `harnesses[].warnings[]` | array of `{message: string}` | never null, may be empty | See the `warnings` section; non-contractual contents. |
+| `harnesses[].warnings[]` | array of `{message: string, truncated: bool, original_chars: integer\|null}` | never null, may be empty | See the `warnings` section; `message`'s contents are non-contractual, `truncated`/`original_chars` are structural and schema-versioned. |
 | `harnesses[].warnings_truncated` | integer | — | Count of warnings dropped by the cap; `0` when nothing was dropped. Proposed, not yet in the PoC. |
-| `harnesses[].checks` / `.covers` | objects | — | Bucket shape below. |
+| `harnesses[].checks` / `.covers` | objects | — (the object itself is never omitted) | Bucket shape below; see the presence matrix below for what the *fields inside* look like on a non-`COMPLETED` harness. |
 | `summary.*` (7 integer fields) | integer | — each | Run-level totals; see the `Summary` discussion in "Rationale". |
 
 **`failed_properties[]` / `unsupported_constructs[]` element shape** (a full property record):
@@ -379,14 +384,21 @@ the partition stays exhaustive, not to duplicate the full record for a rare, alr
 
 | Field | Type | Null? | Meaning |
 |---|---|---|---|
-| `total` | integer | — | Every property this bucket accounts for. |
-| `success` (checks only) | integer | — | A **count**, not an identity list (see "Rationale" for why). |
-| `satisfied` (covers only) | array of ids | never null, may be empty | An identity list (covers are user-authored and few). |
+| `total` | integer | nullable; `null` when the owning harness's `outcome.kind` is not `COMPLETED` | Every property this bucket accounts for. |
+| `success` (checks only) | integer | nullable; `null` under the same condition as `total` | A **count**, not an identity list (see "Rationale" for why). |
+| `satisfied` (covers only) | array of ids | never null, may be empty (empty, not absent, on a non-`COMPLETED` harness) | An identity list (covers are user-authored and few). |
 | `failure` (checks) / `unsatisfiable` (covers) | array of ids | never null, may be empty | |
 | `unreachable`, `undetermined`, `error`, `unknown` | array of ids, each | never null, may be empty | |
 | `other[]` | array of `{id, status}` | never null, may be empty | See above. |
 
-The bucket-arithmetic invariant holds unconditionally for both objects: `checks.total == success +
+On a `TIMEOUT`/`OUT_OF_MEMORY`/`CRASHED` harness, CBMC produced no property list to bucket at all: `total`
+(and `success`, for `checks`) is `null` — never `0`, which would misread as "measured, and none passed" —
+and every identity-list field is `[]`, since there is nothing to name, not nothing that was found. The
+bucket-arithmetic invariant below is trivially still consistent (`null` is not a number to sum against),
+but does not become a meaningful claim about that harness until it reaches `COMPLETED`.
+
+The bucket-arithmetic invariant holds unconditionally for both objects **on a `COMPLETED` harness**:
+`checks.total == success +
 len(failure) + len(unreachable) + len(undetermined) + len(error) + len(unknown) + len(other)`, and
 symmetrically for `covers` with `satisfied` in place of `success`. Combined with the exclusion of
 `code_coverage` properties from both buckets, this is also why `n_properties == checks.total +
@@ -394,7 +406,7 @@ covers.total` holds as a result, not as a separate promise (see "Rationale" belo
 
 **Tool provenance (`tools`).** A single object carries the version of every tool whose behaviour can
 change a result: `kani`, `rustc`, `cbmc`, `goto_cc`, `goto_instrument`, and a `solvers` array of
-`{name, version}`. This is the machine-readable form of the versions Kani already prints, closing the
+`{name, version, source}`. This is the machine-readable form of the versions Kani already prints, closing the
 gap in [#2572](https://github.com/model-checking/kani/issues/2572): a consumer comparing two runs, or
 bisecting a regression to a toolchain bump, no longer scrapes stdout for them.
 
@@ -417,18 +429,38 @@ the closed set. `version` is `null` for a solver CBMC has built in (`cadical`, `
 own version as CBMC's, so naming a version for them would be misleading) and otherwise the probed
 `--version` string, following the same null-means-undetermined rule as every other `tools.*` field.
 
+A bare `null` here is overloaded, though, and this proposal adds a sibling `source: "builtin" |
+"probed"` to disambiguate it: `null` for a built-in solver (`cadical`, `minisat`) means "this solver has
+no version of its own to report, by design," while `null` for every other solver name (`bitwuzla`,
+`cvc5`, `kissat`, `z3`, or a custom `--external-sat-solver`/`Binary` path) means "a version probe was
+attempted and failed" — the same two states `--sat-solver cadical` and a probe-failed
+`--external-sat-solver cadical` would otherwise collide on, since both can name `cadical` with a `null`
+version for entirely different reasons. `source == "builtin"` is exactly the two names `cadical` and
+`minisat`; every other name is `source == "probed"`, whether or not the probe actually returned a
+string. A consumer that wants to tell "this solver's version is unknowable in principle" from "this
+solver's version probe failed on this machine" reads `source`, not `version` alone.
+
 **The harness name (`name`) is already the re-runnable selector.** `name` is the harness's
 `pretty_name`: the fully qualified name the user gave the function, module path included (e.g.
 `sequence::proofs::no_over_read`; for a crate-root harness it equals the bare function name, since
 there is no module path to add). This is exactly the string `--harness --exact` accepts to re-run this
 one harness again — `name` is not a bare, local identifier that needs a separate "selector" field
-alongside it; it *is* the selector. Two things a consumer must still get right:
+alongside it; it *is* the selector. Three things a consumer must still get right:
 
 - **`name` is unique within a crate, not across a workspace.** Two different crates in one
   `cargo kani` workspace run can each define a harness with the same fully qualified `name` (a
   `sequence::proofs::no_over_read` in `crate_a` and another in `crate_b`). Within a multi-crate
   workspace, pair `name` with `crate_name` as the actual join key, and re-run with
   `-p <crate_name> --harness --exact <name>`.
+- **`crate_name` is not always what `-p` wants.** `crate_name` (`kani_metadata/src/lib.rs:29`) is
+  `krate().name`, the *rustc* crate identifier: always underscored, since Rust identifiers cannot
+  contain a hyphen. `cargo -p` takes the *Cargo package* name instead, which is whatever the package's
+  `Cargo.toml` names it and commonly contains hyphens (a package named `my-crate` compiles to a crate
+  named `my_crate`; Cargo does this substitution automatically and silently). This schema does not
+  export the Cargo package name today, so `-p <crate_name>` round-trips only when the two happen to
+  coincide (a package name with no hyphens). When they differ, a consumer must map `crate_name` back to
+  its owning package's `Cargo.toml`-declared name itself before re-running with `-p`; this schema gives
+  it the rustc name to look up, not the Cargo name to pass directly.
 - **Plain `--harness` is substring-matching; only `--exact` makes `name` round-trip.** Without
   `--exact`, `--harness <name>` can match more than the one harness `name` names (see
   `harness_selection.exact` above). A consumer that needs to reproduce *exactly* this result must pass
@@ -448,6 +480,22 @@ the CBMC symbol table — but this schema does not export it, and it would not s
 if it did: it identifies the harness to CBMC's internal machinery, not to Kani's own CLI, and is not a
 string `--harness` accepts. `name` (`pretty_name`) is the chosen key precisely because it is the one
 string that is simultaneously human-readable, already module-qualified, and directly re-runnable.
+
+**The bounded-result flag (`is_bounded`).** `is_bounded` is mandatory on every harness, not merely
+restored from the shipped writer: a bounded result read as an unrestricted one is exactly the
+over-claim class this schema exists to prevent, the same reasoning that makes the vacuity predicates
+below normative rather than advisory. It is `true` exactly when `kani autoharness` generated this
+harness *and* bound at least one of the function's arguments (for example a slice reference) to a
+*bounded* nondeterministic value, because `--autoharness-bounded-arguments` was passed and the
+argument's type had no unbounded `Arbitrary` strategy Kani could use instead; in that case the harness's
+`outcome.verdict == "SUCCESS"` proves the target only for inputs representable within that bound, not for
+every input of that type. A manually written harness (`is_automatically_generated == false`) always
+reports `false` — this field is never omitted, on any harness, so a consumer never has to branch on
+`is_automatically_generated` before reading it — and so does an autoharness-generated harness that
+needed no bounded argument at all. Compare `is_ctor_based` (still open, see "Shipped fields dropped or
+transformed" below): the two flags are orthogonal caveats on an autoharness result (one about bounding
+a value's range, the other about which values a constructor can reach), and only `is_bounded` changes
+whether the result can be read as an unrestricted proof.
 
 The consumer applies two named predicates (all fields are per-harness: `harnesses[].outcome.verdict`,
 `harnesses[].checks.*`, abbreviated below), both guarded on `verdict == "SUCCESS"` and both
@@ -492,23 +540,53 @@ intent. Successful-check *identities* are deliberately not exported today: a con
 know *what* was proven, not merely that everything passed, needs the full property list, which is
 future-work territory this proposal does not promise.
 
+**The `checks` / `covers` partition criterion.** A property goes into `covers` exactly when
+`property_id.class == "cover"` (`Property::is_cover_property`,
+`kani-driver/src/cbmc_output_parser.rs`); every other property (including `class == "assertion"`, the
+class that carries ordinary `assert!`/panic checks) goes into `checks`. This is a syntactic test on the
+property's own CBMC-assigned class, independent of its `status`; a cover-class property that happens to
+carry a status normally seen among checks (or vice versa) still partitions by `class`, and lands in the
+other bucket's `other[]` array rather than crossing over (see "the `other` bucket" in Value domains
+below). `code_coverage`-class properties are the one class excluded from both buckets entirely, per the
+scope note above.
+
+**`failed_properties[]` membership.** `failed_properties[]` names exactly the properties in
+`checks.failure` — that is, `class != "cover"` properties whose `status == "FAILURE"` — with the full
+per-property shape (`id`, `description`, `class`, `file`, `line`, `trace_available`, `status`) rather
+than `checks.failure`'s bare id list. It does **not** include `checks.error` (an `ERROR` status is a
+solver-level "could not determine," not a failure the harness's code caused, and is bucketed and
+counted separately: see `failure_kind == "ERROR"` above) or any cover-class property (`covers.unsatisfiable`
+is that bucket's own, separately-named list, and is never merged into `failed_properties[]`, keeping
+`failed_properties[]` scoped to `checks` alone). This is exactly why the invariant `n_failed ==
+len(checks.failure)` holds unconditionally on a `COMPLETED` harness: `n_failed` is defined as
+`failed_properties.len()`, and `failed_properties[]`'s membership is defined to be `checks.failure`'s,
+so the two counts are the same set counted twice, not two independent numbers that happen to agree.
+
 **`warnings`** is empty in this run because no CBMC warning fired. A run that does trigger one (a
 harness using `kani::forall!` over a symbolic range, which the SAT backend cannot discharge) produces
-a warning message like the one below, taken from that same class of run; the `warnings_truncated`
-field and the truncation marker are this proposal's addition and are not emitted by the
-proof-of-concept, which has no truncation logic today:
+a warning message like the one below, taken from that same class of run; the `warnings_truncated` field,
+and the `truncated`/`original_chars` pair on each entry, are this proposal's addition and are not
+emitted by the proof-of-concept, which has no truncation logic today:
 
 ```json
 {
   "warnings": [
     {
-      "message": "warning: ignoring forall\n  * type: bool\n  0: tuple\n      * type: \n      0: symbol\n          * type: unsignedbv\n              * #source_location: \n                * file: <built-in- ... [truncated; 11,669 chars total]"
+      "message": "warning: ignoring forall\n  * type: bool\n  0: tuple\n      * type: \n      0: symbol\n          * type: unsignedbv\n              * #source_location: \n                * file: <built-in- ...",
+      "truncated": true,
+      "original_chars": 11669
     }
   ]
 }
 ```
 
-See the `warnings` discussion below for what this field does and does not promise.
+`truncated`/`original_chars` replace encoding the same information as a `[truncated; N chars total]`
+suffix inside `message` itself: a structural field a consumer can check without pattern-matching
+free text stays true to this schema's own reason for existing, whereas the suffix was exactly the kind
+of "parse the string to learn a fact" this RFC otherwise argues against. `original_chars` is `null`
+when `truncated` is `false` (nothing was cut, so there is no original length distinct from `message`'s
+own length to report). See the `warnings` discussion below for what this field does and does not
+promise.
 
 **`configuration.checks.assertion_reach_checks`.** Records whether Kani inserted reachability checks
 ahead of ordinary assertions (`true` unless `--no-assertion-reach-checks` was passed). This exists
@@ -528,17 +606,51 @@ adds obligations for invalid pointers in relational operations and pointer-arith
 are otherwise not checked at all, so two runs that differ only in this flag are checking different
 sets of properties, and `checks.total`/`checks.success` are not comparable between them without it.
 
+**`configuration.checks.memory_safety`, `.overflow`, `.unwinding`, and `.undefined_function`.** The
+remaining four `checks` bools, each mirroring one of the four `--no-*-checks` flags (all default
+`true`; the field name records the check being *on*, not the flag that turns it off):
+
+- `memory_safety` mirrors `--no-memory-safety-checks` (and `--no-default-checks`, which turns off
+  every check in this group at once). `false` means Kani passed `--no-bounds-check` and
+  `--no-pointer-check` to CBMC, so out-of-bounds accesses and invalid-pointer dereferences are not
+  checked at all; a run with this `false` can pass while containing exactly the memory-safety bugs
+  Kani exists to find.
+- `overflow` mirrors `--no-overflow-checks`. `true` adds CBMC's `--nan-check` on top of Kani's own
+  `-C overflow-checks=on` instrumentation; `false` also disables the division-by-zero check
+  (`--no-div-by-zero-check`), so with this `false`, arithmetic overflow, NaN production, and division
+  by zero are all unchecked.
+- `unwinding` mirrors `--no-unwinding-checks`. `false` passes `--no-unwinding-assertions`, so CBMC no
+  longer asserts that a loop or recursion bound was sufficient to cover every execution; a bounded
+  proof under this flag can silently miss behavior past the bound instead of failing on it.
+- `undefined_function` mirrors `--no-undefined-function-checks`. `true` links Kani's model of the
+  standard library and asserts on any remaining call to a function with no body; `false` drops such
+  calls instead of flagging them, so behavior reachable only through an unmodeled function is simply
+  absent from the proof.
+
+Each meets the same "changes which properties are generated" test as `assertion_reach_checks`,
+`ignore_global_asm`, and `extra_pointer_checks` above, which is why all seven live in this block
+rather than being treated as ordinary CLI trivia.
+
+**`configuration.coverage_enabled`.** Mirrors `--coverage` (`session.args.coverage`, mandatory bool,
+default `false`). This flag is precisely what makes `code_coverage` (`COVERED`/`UNCOVERED`) properties
+exist at all — the properties this schema explicitly carves out of `checks`, `covers`, and
+`n_properties` (see "Rationale" below) — so it meets the `configuration` policy stated next as directly
+as `assertion_reach_checks` does, and dropping it would leave a consumer no way to tell "this run has no
+coverage properties because none exist in this schema yet" from "this run has no coverage properties
+because `--coverage` was never passed." It sits alongside `checks.*` rather than nested under it, since
+it is not itself a `checks` toggle.
+
 **Policy for `configuration`.** A flag belongs in this block when it changes *which properties are
 generated* or *what a status means*, that is, when two runs differing only in that flag are not
 apples-to-apples comparable, or when the flag can make a passing result mean less than it appears to.
-The three `checks` flags above meet that test; future flags are added under this rule rather than case
-by case, and adding one is a minor schema change (a new field). `cbmc_args` is the explicit catch-all for
-everything this rule cannot name individually: anything passed straight to CBMC via `--cbmc-args` can
-change results in ways Kani cannot introspect, so it is recorded and two runs with different `cbmc_args`
-are not assumed comparable. It is recorded *verbatim modulo UTF-8*: arguments are captured with
-`to_string_lossy`, so a non-UTF-8 argument is rendered with the U+FFFD replacement character rather than
-round-tripped byte-for-byte; this is sufficient for the comparability signal, but a consumer must not treat the
-list as an exact argv to replay.
+The seven `checks` flags and `coverage_enabled` above meet that test; future flags are added under this
+rule rather than case by case, and adding one is a minor schema change (a new field). `cbmc_args` is the
+explicit catch-all for everything this rule cannot name individually: anything passed straight to CBMC
+via `--cbmc-args` can change results in ways Kani cannot introspect, so it is recorded and two runs with
+different `cbmc_args` are not assumed comparable. It is recorded *verbatim modulo UTF-8*: arguments are
+captured with `to_string_lossy`, so a non-UTF-8 argument is rendered with the U+FFFD replacement
+character rather than round-tripped byte-for-byte; this is sufficient for the comparability signal, but a
+consumer must not treat the list as an exact argv to replay.
 
 **Failure scenarios.**
 
@@ -612,8 +724,69 @@ anchor) is distinct from the run-level `outcome.kind` (`COMPLETED`/`CRASHED`), w
 a consumer gates on `run_state`, not on `outcome.kind`. The contract assumes a single writer per path: two
 concurrent runs aiming `--export-json` at the same file are unsupported, and the last rename wins.
 
+**How `run_state` and `outcome.kind` co-occur.** The two axes are independent but not unconstrained:
+`run_state == "COMPLETE"` or `"PARTIAL"` can only co-occur with `outcome.kind == "COMPLETED"` (Kani
+itself finished the run either way; `PARTIAL` means some *harnesses* were skipped, e.g. by
+`--fail-fast`, not that Kani crashed). `run_state == "INCOMPLETE"` is the only state that can co-occur
+with `outcome.kind == "CRASHED"`, since a terminal write is what would have set `run_state` to anything
+else, and a crashed run by definition never reaches its terminal write. `NO_HARNESSES_SELECTED` implies
+`outcome.kind == "COMPLETED"` (Kani ran to completion; it simply had nothing selected to verify).
+
+**`NO_HARNESSES_SELECTED` versus a crate with no harnesses at all.** Both leave `harnesses[]` empty and
+`harness_selection.matched_count == 0`, but they are told apart by `harness_selection.requested_filters`:
+non-empty means a `--harness` filter matched nothing in a crate that does define harnesses (an
+`unmatched_filters` entry names which); empty means no filter was given and the crate itself defines no
+`#[kani::proof]` (or, under `autoharness`, no eligible function) at all. A consumer that wants to
+distinguish "my filter is wrong" from "there is nothing here to verify" reads `requested_filters`, not
+just `matched_count`.
+
+**A vacuity hole this schema does not close on its own: cover-only vacuity.** The normative and advisory
+vacuity predicates above read only `checks.*`; an `unreachable` *cover* statement lands in
+`covers.unreachable` and trips neither one. A consumer that wants the symmetric signal for cover
+properties should additionally apply
+`covers.total > 0 && covers.unreachable.len() == covers.total` per harness, mirroring the normative
+`checks` predicate, since this schema does not apply that check on the consumer's behalf.
+
 `null` always means *not measured or not applicable*, never a guess, and is always distinguishable
 from `0`, `false`, and `[]`.
+
+**Presence matrix — top-level fields, marker versus terminal document.** The marker and a terminal
+document are not the same shape, and the field table above states each field's presence in terms of
+"the document", which needs unpacking into these two cases:
+
+| Field(s) | `INCOMPLETE` marker | Terminal document (`COMPLETE` / `PARTIAL` / `NO_HARNESSES_SELECTED`) |
+|---|---|---|
+| `schema_version`, `kani_commit`, `kani_commit_dirty`, `tools.*`, `machine.*`, `enabled_unstable_features`, `harness_selection.*`, `harness_timeout_s`, `configuration.*`, `target`, `started_at` | present (all knowable before verification begins) | present |
+| `run_state` | present, always `"INCOMPLETE"` | present, one of `"COMPLETE"`/`"PARTIAL"`/`"NO_HARNESSES_SELECTED"` |
+| `outcome`, `wall_time_s` | absent | present — neither is knowable until Kani reaches a terminal state, so the marker (written *before* that state is known) carries neither |
+| `summary`, `harnesses[]` | absent, by design (stated above): a consumer that reads the marker has no verdict to read at all | present (`harnesses[]` may be empty, only under `NO_HARNESSES_SELECTED`) |
+
+A consumer that checks `run_state` before touching anything else never needs this table — `"INCOMPLETE"`
+already says "there is no verdict here, stop." It exists for a consumer inspecting the raw JSON, or
+writing a parser that must not panic on a field it expected unconditionally.
+
+**Presence matrix — per-harness fields, by `harnesses[].outcome.kind`.** Every "—" in the harness field
+table above implicitly means "on the harness object as CBMC/Kani produced it for that `outcome.kind`";
+the following spells that out for the three kinds where it is not simply "always":
+
+| Field(s) | `COMPLETED` | `TIMEOUT` / `OUT_OF_MEMORY` | `CRASHED` |
+|---|---|---|---|
+| `name`, `crate_name`, `file`, `line`, `contract`, `is_automatically_generated`, `has_loop_contracts`, `is_bounded`, `attributes.*`, `resolved_solver`, `resolved_unwind`, `generated_concrete_test` | present | present (all known before CBMC ran, or resolved as part of preparing to run it) | present |
+| `resources.verification_time_s` | present, a real verification duration | present, time elapsed until the timeout/OOM fired | present, time elapsed until the crash |
+| `outcome.verdict` | present | absent | absent |
+| `outcome.code` / `outcome.message` | absent | absent | present |
+| `failure_kind` | present | absent | absent |
+| `checks`, `covers` (the objects themselves) | present | present | present |
+| `checks.total`, `checks.success`, `covers.total` | integer | `null` | `null` |
+| `checks.failure`, `.unreachable`, …, `covers.satisfied`, … (identity-list fields) | array of ids, may be empty | `[]` | `[]` |
+| `n_properties`, `n_failed` | integer | `null` | `null` |
+| `failed_properties[]`, `unsupported_constructs[]` | array, may be empty | `[]` | `[]` |
+| `warnings[]`, `warnings_truncated` | array / integer | `[]` / `0` | `[]` / `0` |
+
+Nothing in the `TIMEOUT`/`OUT_OF_MEMORY`/`CRASHED` columns is a `0` standing in for "measured, and
+nothing found": every unmeasured *count* is `null`, and every unmeasured *identity list* is empty
+because there is nothing to name, which is the same "unmeasured is `null`, never `0`" rule stated for
+`tools.*` versions, applied consistently here.
 
 ## Rationale and alternatives
 
@@ -655,6 +828,52 @@ facts they both carry. This is a development discipline, not a design-level guar
 shares the *inputs*, and keeping the *interpretation* shared is an ongoing responsibility rather than a
 property the shape enforces on its own.
 
+### Summary (`summary.*`)
+
+The field reference above points here for `summary.*`'s meaning, since seven bare integers next to each
+other say nothing about how they relate. All seven are run-level totals over `harnesses[]`, always
+present, always integers, never `null`:
+
+| Field | Definition |
+|---|---|
+| `total` | `harnesses.len()`. |
+| `successful` | Count of harnesses with `outcome.kind == "COMPLETED" && outcome.verdict == "SUCCESS"`. |
+| `failed` | Count of harnesses with `outcome.kind == "COMPLETED" && outcome.verdict == "FAILURE"`. |
+| `checks_total` | Sum of `harnesses[].checks.total` over `COMPLETED` harnesses only. |
+| `checks_success` | Sum of `harnesses[].checks.success` over `COMPLETED` harnesses only. |
+| `covers_total` | Sum of `harnesses[].covers.total` over `COMPLETED` harnesses only. |
+| `covers_satisfied` | Sum of `len(harnesses[].covers.satisfied)` over `COMPLETED` harnesses only. |
+
+**`total == harnesses.len()`** always, regardless of `run_state`: `summary` describes exactly the
+harnesses this document actually reports on, not the harnesses that were selected (that comparison is
+`harness_selection.matched_count` versus `summary.total`, covered next).
+
+**How a non-`COMPLETED` harness counts.** `successful` and `failed` both require `outcome.kind ==
+"COMPLETED"`, so a `TIMEOUT`, `OUT_OF_MEMORY`, or `CRASHED` harness is deliberately counted in neither:
+it has no `outcome.verdict` to be `SUCCESS` or `FAILURE` (see the presence matrix above), and counting it
+as a failure would conflate "CBMC found a bug" with "CBMC never got to look." The identity holding is
+therefore `successful + failed <= total`, not `==`; the gap `total - successful - failed` is exactly the
+count of non-`COMPLETED` harnesses in this run. Equality holds iff every harness in `harnesses[]` reached
+`COMPLETED`. The four `checks_*`/`covers_*` sums follow the same rule for the same reason: a
+non-`COMPLETED` harness's `checks.total`/`covers.total` is `null` (see the presence matrix above), so it
+contributes nothing to these sums rather than contributing `0` as if it had been measured and found empty
+— the distinction that matters is "not counted" versus "counted as zero."
+
+**The `matched_count` / `total` / `run_state` invariant.** `harness_selection.matched_count` is the
+*pre-verification* match count; `summary.total` is the *post-verification* harness count; `run_state`
+says how the two relate:
+
+- `run_state == "COMPLETE"` ⟹ `summary.total == harness_selection.matched_count`: every matched harness
+  produced an entry in `harnesses[]` (with whatever `outcome.kind` it reached — `COMPLETE` does not mean
+  every harness passed, only that every one was accounted for).
+- `run_state == "PARTIAL"` ⟹ `summary.total < harness_selection.matched_count`: some matched harnesses
+  have no entry in `harnesses[]` at all, because Kani stopped before running them (e.g. `--fail-fast`
+  after the first failure) — they are missing from the array, not present with a `TIMEOUT`/`CRASHED`
+  placeholder, since Kani never attempted them.
+- `run_state == "NO_HARNESSES_SELECTED"` ⟹ `harness_selection.matched_count == 0 == summary.total`.
+- `run_state == "INCOMPLETE"` (the marker): `summary` is absent entirely (see the presence matrix
+  above), so this invariant does not apply.
+
 ### Value domains, casing, and which fields are not strings
 
 **Enum domains.** Every field whose value is drawn from a fixed set is *closed*: each vocabulary below
@@ -669,27 +888,74 @@ is a Kani-owned Rust enum (the CBMC-derived `CheckStatus` among them, which Kani
 | `harnesses[].outcome.verdict` | `SUCCESS`, `FAILURE` (field omitted at run level) | closed |
 | `harnesses[].failure_kind` | `NONE`, `PANICS_ONLY`, `OTHER`, `ERROR` | closed |
 | `…[].status` (in `failed_properties`, `unsupported_constructs`, `checks.other`, `covers.other`) | `SUCCESS`, `FAILURE`, `SATISFIED`, `UNSATISFIABLE`, `UNREACHABLE`, `UNDETERMINED`, `ERROR`, `UNKNOWN`, `COVERED`, `UNCOVERED` | closed |
+| `harnesses[].attributes.kind` | `"Proof"`, `"Test"`, `{"ProofForContract": {...}}` | closed (`HarnessKind`, 3 variants) |
+| `harnesses[].attributes.solver` | `"Cadical"`, `"Bitwuzla"`, `"Cvc5"`, `"Kissat"`, `"Minisat"`, `"Z3"`, or `{"Binary": "<path>"}` | **explicitly open** — see below |
+| `harnesses[].resolved_solver`, `tools.solvers[].name` | the lowercase spellings of the same six names, or an arbitrary binary-path string | **explicitly open** — see below |
 
 `outcome.kind` is deliberately asymmetric: `TIMEOUT` and `OUT_OF_MEMORY` describe a *harness* CBMC could
 not finish and never appear at run level, where the only two values are `COMPLETED` (Kani finished the
-run) and `CRASHED` (Kani itself aborted). `OUT_OF_MEMORY` is inferred from a `137` exit (SIGKILL, the
-usual OOM-killer signal), not a direct memory measurement; `TIMEOUT` arises only under
-`--harness-timeout`. `failure_kind` is present on every completed harness, but it is **not** simply
-`NONE` iff `outcome.verdict == "SUCCESS"`: it is the *raw* failure classification from
+run) and `CRASHED` (Kani itself aborted); `OUT_OF_MEMORY` is a harness-level-only outcome, and has no
+run-level counterpart (a run-level out-of-memory is a `CRASHED` run, since Kani itself is what died).
+`OUT_OF_MEMORY` is inferred from a `137` exit (SIGKILL, the usual OOM-killer signal), not a direct
+memory measurement; `TIMEOUT` arises only under `--harness-timeout`.
+
+`failure_kind` is scoped to `outcome.kind == "COMPLETED"`: a `TIMEOUT`, `OUT_OF_MEMORY`, or `CRASHED`
+harness never reaches `determine_failed_properties` at all (CBMC produced no property list to classify),
+so the field is **omitted** on those harnesses, the same "absent, not `null`" treatment as
+`outcome.verdict` above (see the presence matrix in "The completeness contract" below for the full
+picture). On a `COMPLETED` harness, `failure_kind` is the *raw* failure classification from
 `determine_failed_properties` (verbatim from `FailedProperties`: `NONE`, `PANICS_ONLY`, `OTHER`, or
-`ERROR`), computed independently of the interpreted verdict, and the two disagree in exactly one case.
-A passing `#[kani::should_panic]` harness has `outcome.verdict == "SUCCESS"` and `n_failed > 0` (its
-panic check is a `FAILURE`-status property that the verdict interprets as expected, per the vacuity
-predicates above), and its `failure_kind` is `PANICS_ONLY`, not `NONE`. So the correct reading is:
-`failure_kind == "NONE"` means *no property anywhere classified as a failure*, which is strictly
-stronger than, and usually but not always coincident with, `verdict == "SUCCESS"`. The `status` values are the
-closed `CheckStatus` set; the `checks.*`/`covers.*` `other` bucket is *not* a home for unknown statuses
+`ERROR`), computed independently of the interpreted `outcome.verdict`. The relationship between the two
+is a small truth table (`kani-driver/src/call_cbmc.rs`'s `verification_outcome_from_properties`), not a
+single rule, and it turns on `attributes.should_panic`:
+
+| `attributes.should_panic` | `failure_kind` | `outcome.verdict` |
+|---|---|---|
+| `false` | `NONE` | `SUCCESS` |
+| `false` | `PANICS_ONLY`, `OTHER`, or `ERROR` | `FAILURE` |
+| `true` | `PANICS_ONLY` | `SUCCESS` |
+| `true` | `NONE`, `OTHER`, or `ERROR` | `FAILURE` |
+
+For `should_panic == false`, `failure_kind == "NONE"` and `outcome.verdict == "SUCCESS"` are equivalent
+(`NONE ⟺ SUCCESS`): there is nothing to reconcile. For `should_panic == true`, the two vocabularies
+disagree in **two** places, not one, and disagree in *both directions*:
+
+- A harness that panics as expected has `outcome.verdict == "SUCCESS"` (a `#[kani::should_panic]`
+  proof doing exactly what it should) yet `failure_kind == "PANICS_ONLY"`, not `NONE`: its panic check is
+  a `FAILURE`-status property that the verdict interprets as expected, per the vacuity predicates below.
+- A harness that was expected to panic but did not has `outcome.verdict == "FAILURE"` yet
+  `failure_kind == "NONE"`: every property the harness actually contains held, but the missing panic
+  itself is what the should-panic check fails on, so `determine_failed_properties` — which only ever
+  looks at property statuses — finds nothing to classify as a failure while the interpreted verdict is
+  `FAILURE` regardless.
+
+So `should_panic == true` is exactly the condition under which `failure_kind` and `outcome.verdict` are
+*inverted* relative to the `should_panic == false` case (`SUCCESS ⟺ PANICS_ONLY` takes the place of
+`SUCCESS ⟺ NONE`); neither value is uniformly "stronger" than the other across both cases, and a
+consumer must read `attributes.should_panic` before drawing any conclusion from `failure_kind` alone.
+The `status` values are the closed `CheckStatus` set; the `checks.*`/`covers.*` `other` bucket is *not* a
+home for unknown statuses
 but for known `CheckStatus` values that do not map to a named bucket in that domain, for instance a
 cover-only status (`SATISFIED`/`UNSATISFIABLE`) surfacing among checks, which keeps the partition
 exhaustive without implying the status vocabulary is open. Should CBMC ever emit a status `CheckStatus`
 does not model, that is a parser-level concern resolved by adding a variant. That is a *major* schema change
 under the compatibility policy below, since `status` is a closed enum a consumer may match exhaustively,
 not something the `other` bucket silently absorbs.
+
+**`attributes.kind` is closed; the solver names are explicitly open.** `attributes.kind` is
+`HarnessKind`, a fixed 3-variant Rust enum (`Proof`, `ProofForContract { target_fn }`, `Test`); Kani
+adding a fourth kind of harness is exactly the closed-enum case above, and is a major change under the
+compatibility policy below. The solver-name fields (`attributes.solver`, `resolved_solver`,
+`tools.solvers[].name`) are the opposite case, and are the vocabulary the compatibility policy's minor-change
+allowance for a new enum value actually describes: `CbmcSolver` already ships with an open escape hatch
+(`Binary(String)`, any path a consumer has never seen), so a consumer of these fields is *already*
+required to treat an unrecognized name as "some solver, spelled this way" rather than to exhaustively
+match a closed set — there is no way to write an exhaustive match against a field that already accepts
+an arbitrary path string today. Kani adding a new *named* built-in solver (a new `CbmcSolver` variant
+alongside `Bitwuzla`/`Cadical`/`Cvc5`/`Kissat`/`Minisat`/`Z3`) is therefore a **minor** change: a
+consumer built against this schema already has to handle a solver name it doesn't recognize, so a new
+name changes nothing about how such a consumer must be written, unlike a new `status` or `failure_kind`
+variant, which a consumer is *entitled* to assume can never appear.
 
 **Casing.** The file mixes three conventions, and one rule explains all three: *a value keeps the
 serialization of the Rust type it comes from, and this schema does not fork types to re-case them.*
@@ -753,13 +1019,17 @@ a schema version as separate fields. This proposal does that; see **Compatibilit
 `schema_version` is a semantic version. It exists so the shape can be corrected while it is still being
 learned from real consumers, and it makes the rules of that correction explicit rather than implied:
 
-- **Minor (backward-compatible) changes** bump the minor version: adding a field, or adding an enum
-  variant that a consumer following the forward-compatibility rule below (a default/`_` arm) already
-  tolerates. Such a consumer keeps working across a minor bump.
+- **Minor (backward-compatible) changes** bump the minor version: adding a field, or adding a new value
+  to one of the **explicitly open** vocabularies named in "Value domains" above (today, just the solver
+  names: `attributes.solver`, `resolved_solver`, `tools.solvers[].name`) — a consumer of an open
+  vocabulary already treats an unrecognized value as "valid, but unfamiliar" rather than exhaustively
+  matching it, per the forward-compatibility rule below, so such a consumer keeps working across a minor
+  bump without change. Every other enum in this schema is closed (see the next bullet); this allowance
+  does not apply to them.
 - **Major (breaking) changes** bump the major version: renaming or removing a field, changing the meaning
   or type of an existing field, adding a variant to a *closed* enum (`outcome.kind`, `verdict`,
-  `failure_kind`, `run_state`, `status`) since a consumer may exhaustively match those, or moving a status
-  out of the
+  `failure_kind`, `run_state`, `status`, `attributes.kind`) since a consumer may exhaustively match those,
+  or moving a status out of the
   `checks.*`/`covers.*` `other` bucket into a named bucket. Adding a variant to a closed enum is a
   deliberately high bar (it forces, say, a new `failure_kind` to wait for a major bump), chosen so these
   core vocabularies do not change casually; consumers are nonetheless encouraged to keep a default arm
@@ -817,18 +1087,23 @@ to CBMC's rendered text everywhere else. Two consequences the schema states rath
 discovered:
 
 - **`warnings` is outside the `schema_version` compatibility guarantees.** The field's presence and its
-  `[{ "message": … }]` shape are contractual; the *contents* (wording, structure, count) are not, and
-  must not be pattern-matched or assumed stable across versions.
-- **`warnings` is bounded, with explicit truncation markers.** One CBMC warning already runs to
-  ~11.6 KB (the example above), and the standard-library-scale runs this RFC targets can emit many;
+  `[{ "message": …, "truncated": …, "original_chars": … }]` shape are contractual; the *contents* of
+  `message` (wording, structure) are not, and must not be pattern-matched or assumed stable across
+  versions.
+- **`warnings` is bounded, with explicit, structural truncation markers.** One CBMC warning already runs
+  to ~11.6 KB (the example above), and the standard-library-scale runs this RFC targets can emit many;
   left unbounded the field could dwarf everything else in the file and defeat the CI consumers it exists
-  to serve. So each `message` is capped at a fixed, implementation-defined length, truncated on a
-  character boundary with the marker `[truncated; N chars total]` appended (as shown above), and the
-  per-harness `warnings` array is capped at a fixed count with a sibling `warnings_truncated` integer on
-  each harness (`0` when nothing was dropped, shown in the example) recording how many entries were
-  omitted. A consumer can then always tell "no more warnings" from "we stopped recording", and never
-  infers completeness from absence. The structural fields here, `warnings_truncated` and the presence of
-  a marker, are schema-versioned; the warning text they bound is not.
+  to serve. So each `message` is capped at a fixed, implementation-defined length and truncated on a
+  character boundary; the fact and extent of that truncation are carried as sibling fields on the same
+  entry, `truncated: bool` and `original_chars: integer | null` (the pre-truncation character count,
+  `null` exactly when `truncated` is `false`), rather than as a suffix appended inside `message` itself
+  — a consumer that wants to know whether a warning was cut, or by how much, reads a field, not a
+  string. The per-harness `warnings` array is separately capped at a fixed count, with a sibling
+  `warnings_truncated` integer on each harness (`0` when nothing was dropped, shown in the example)
+  recording how many *entries* (not characters) were omitted. A consumer can then always tell "no more
+  warnings" from "we stopped recording", and never infers completeness from absence. The structural
+  fields here — `truncated`, `original_chars`, and `warnings_truncated` — are schema-versioned; the
+  warning text `message` itself carries is not.
 
 ### What if we do nothing?
 
@@ -880,28 +1155,29 @@ second cost: the shipped v1 document becomes the de-facto contract, unversioned 
     time, VCC counts, solver time — already addressed by "Why is CBMC statistics data excluded?" below
     and by the "Per-check timing and resource data" future-work item, restated here only so this bullet
     is a complete inventory).
-  - **Dropped, and soundness-relevant — proposed as *mandatory* fields, not merely restored:**
-    `is_bounded` (the autoharness bounded-arguments flag) and the effective `--object-bits` value
-    (`effective_object_bits` in the shipped code) both change what "this harness passed" is allowed to
-    mean. A bounded or object-bits-limited result must not be read as an unrestricted one: a consumer
-    that only sees `outcome.verdict == "SUCCESS"` cannot tell "proved for all inputs" from "proved for
-    inputs the harness's bounds could represent." Unlike the `configuration.checks.*` flags (which are
-    already mandatory booleans because they are always meaningful), these two are proposed as mandatory
-    only **when the corresponding mode is in scope** — `is_bounded` on every harness (it is a per-harness
-    flag already), and the effective `object_bits` at least at the run level (it is presently a
-    per-run/per-harness CBMC argument, not a per-harness *attribute*, so it does not yet have an obvious
-    per-harness home in this schema; resolving that is part of adopting this fix, not a detail this RFC
-    settles here). Leaving both out, as this schema currently does, is the one item in this list this
-    RFC does not endorse keeping dropped.
-  - **`coverage.enabled`: dropping it contradicts this RFC's own "Policy for `configuration`."** The
-    shipped shape's `coverage.enabled` boolean (from `session.args.coverage`) records whether `--coverage`
-    was passed. Under the configuration policy stated above — a flag belongs in `configuration` when it
-    changes *which properties are generated* — `--coverage` unambiguously qualifies: it is precisely what
-    makes `code_coverage` (COVERED/UNCOVERED) properties exist at all, the properties this schema
-    explicitly carves out of `checks`/`covers`/`n_properties` (see "Rationale" below). Dropping the one
-    flag that explains why those properties are invisible, while keeping three other flags for the
-    identical reason, is inconsistent with the policy this RFC itself states. This schema should restore
-    it, most naturally as `configuration.coverage_enabled` alongside `configuration.checks.*`.
+  - **Dropped, and soundness-relevant — now `harnesses[].is_bounded`, a *mandatory* field:** resolved
+    above, in "The bounded-result flag (`is_bounded`)"; no longer an open question.
+  - **The effective `--object-bits` value stays an open question.** `effective_object_bits`
+    (`effective_object_bits` in the shipped code, computed per run in
+    `kani-driver/src/frontend/schema_utils.rs`) is soundness-adjacent in the same direction as
+    `is_bounded` — an object-bits-limited pointer-encoding scheme narrows what a `SUCCESS` verdict
+    covers — but it is not promoted alongside it, for a reason specific to this field rather than to the
+    soundness argument: `effective_object_bits` is presently a per-run CBMC argument
+    (`VerificationArgs::cbmc_object_bits`, reconciled against any `--object-bits` inside `--cbmc-args`),
+    not a per-harness *attribute*, so unlike `is_bounded` it has no obvious per-harness home in this
+    schema today, and different harnesses in one run cannot currently be told apart by their own
+    effective bound. On triage of the shipped issue tracking this gap
+    (model-checking/kani#4731), a Kani maintainer (feliperodri) classed `object_bits` as a niche
+    concern relative to the harness-level `is_bounded` fix, which is the basis for treating it
+    differently here rather than as a parallel promotion. It remains this RFC's position that leaving it
+    dropped is a real gap, not an endorsement of the status quo: adopting this RFC should include filing
+    (or updating) a tracking issue for a per-harness `object_bits` home, to be resolved before, or as
+    part of, this schema's stabilization, per the "What must be true before this leaves `-Z`" list above.
+  - **`coverage.enabled` is resolved — now `configuration.coverage_enabled`, a *mandatory* field:** see
+    the `configuration.coverage_enabled` entry above; no longer an open question. (Restoring it under the
+    stated `configuration` policy, rather than dropping the one flag that explains why `code_coverage`
+    properties are invisible to this schema while keeping three other flags for the identical reason, is
+    why this stopped being optional.)
   - **The Cargo provenance `project.workspace_root` / `output_dir`, and `harnesses[].file`'s base
     directory.** These two are linked: `harnesses[].file` is written relative to the directory Kani was
     invoked from (`relativize_path`, via `std::env::current_dir()`), not to any field this document
@@ -915,10 +1191,11 @@ second cost: the shipped v1 document becomes the de-facto contract, unversioned 
   - **`is_ctor_based`** (the autoharness constructor-args flag, orthogonal to the `chosen`/`skipped`
     question above) is confirmed present in the shipped writer and in `HarnessMetadata` today
     (`kani_metadata::HarnessMetadata::is_ctor_based`); the removal claim above is accurate, not
-    speculative, and this bullet keeps it in the same disposition as `is_bounded`: cheap to restore,
+    speculative. Unlike `is_bounded`, it stays dropped-but-open rather than promoted: cheap to restore,
     called out as a decision rather than a silent regression, but not soundness-mandatory in the same
-    direct way `is_bounded`/`object_bits` are, since a constructor-based generation strategy narrows
-    which *values* are covered rather than silently mislabeling an unrestricted result as one.
+    direct way `is_bounded` is (see "The bounded-result flag" above) or `object_bits` is argued to be
+    just above, since a constructor-based generation strategy narrows which *values* are covered rather
+    than silently mislabeling an unrestricted result as one.
 - **Final flag name.** `--export-json` versus `--results-json` (see the flag-name note under User
   Experience). The CLI spelling is provisional and this is a stabilization-blocking decision: the name
   must be settled before the flag leaves `-Z`.
