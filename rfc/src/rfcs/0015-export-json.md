@@ -290,7 +290,10 @@ properties that could not actually be exercised, so a consumer no longer has to 
 ### Field reference
 
 Every field the example shows, normatively. `null` always means *not measured or not applicable*
-(see "Value domains" below); "—" in the Null? column means the field is never absent and never `null`.
+(see "Value domains" below); "—" in the Null? column means the field is never absent and never `null`
+**in a terminal document** (`COMPLETE` / `PARTIAL` / `NO_HARNESSES_SELECTED`). The `INCOMPLETE` marker is
+a separate, narrower shape governed by its own presence matrix below, not by this column: several fields
+marked "—" here (`outcome`, `wall_time_s`, `summary`, `harnesses[]`) are absent from the marker entirely.
 
 | Field | Type | Null? | Meaning |
 |---|---|---|---|
@@ -315,9 +318,7 @@ Every field the example shows, normatively. `null` always means *not measured or
 | `configuration.checks.*` (7 bools) | bool | — each | See the `configuration.checks.*` entries below and the "Policy for `configuration`" section. |
 | `configuration.coverage_enabled` | bool | — | Whether `--coverage` was passed; see the `configuration.coverage_enabled` entry below. |
 | `configuration.cbmc_args` | array of strings | never null, may be empty | Verbatim (UTF-8-lossy) `--cbmc-args`; a comparability signal, not a replayable argv. |
-| `outcome.kind` (run level) | `"COMPLETED"` \| `"CRASHED"` | — | Whether Kani itself finished the run, independent of harness verdicts. |
-| `outcome.code` | integer | nullable, present only on `CRASHED` | Process exit code, when known. |
-| `outcome.message` | string | nullable, present only on `CRASHED` | Free-text crash reason, run-scoped (e.g. `"kani-compiler exited unexpectedly (signal 11) while building the crate"`); non-contractual wording. Contrast `harnesses[].outcome.message`, whose text is scoped to one harness (e.g. naming the harness CBMC crashed on). |
+| `outcome.kind` (run level) | `"COMPLETED"` | — | Always `COMPLETED` in a terminal document; absent in the `INCOMPLETE` marker. There is no run-level `"CRASHED"` value: see "How `run_state` and `outcome.kind` co-occur" below for why the writer can never produce one. |
 | `run_state` | `"INCOMPLETE"` \| `"COMPLETE"` \| `"PARTIAL"` \| `"NO_HARNESSES_SELECTED"` | — | See "The completeness contract" below; this is the trust anchor, not `outcome.kind`. |
 | `target` | string | — | The Rust target triple Kani itself was built for. |
 | `started_at` | string | — | UTC, `YYYY-MM-DDTHH:MM:SSZ` (second resolution). |
@@ -341,7 +342,8 @@ Every field the example shows, normatively. `null` always means *not measured or
 | `harnesses[].attributes.verified_stubs[]` | array of strings | never null, may be empty | Functions stubbed by their verified contract. |
 | `harnesses[].outcome.kind` | `"COMPLETED"` \| `"TIMEOUT"` \| `"OUT_OF_MEMORY"` \| `"CRASHED"` | — | |
 | `harnesses[].outcome.verdict` | `"SUCCESS"` \| `"FAILURE"` | present only on `COMPLETED`, never null there | The per-harness pass/fail call. |
-| `harnesses[].outcome.code` / `.message` | as run level | nullable, present only on `CRASHED` | |
+| `harnesses[].outcome.code` | integer | nullable, present only on `CRASHED` | Process exit code, when known. Unlike the run level, this field is real: a per-harness crash still reaches the shared terminal write (see below), so it is actually producible. |
+| `harnesses[].outcome.message` | string | nullable, present only on `CRASHED` | Free-text crash reason, scoped to this one harness (e.g. naming what CBMC crashed on); non-contractual wording. |
 | `harnesses[].resolved_solver` | string | nullable | The solver CBMC actually runs with; `null` when CBMC chooses for itself (bare `--smt2`). Same spelling as `tools.solvers[].name`. |
 | `harnesses[].resolved_unwind` | integer | nullable | The effective `--unwind` bound; `null` when none applies. |
 | `harnesses[].generated_concrete_test` | bool | — | Whether `--concrete-playback` produced a test for this harness. |
@@ -411,12 +413,13 @@ gap in [#2572](https://github.com/model-checking/kani/issues/2572): a consumer c
 bisecting a regression to a toolchain bump, no longer scrapes stdout for them.
 
 `goto_synthesizer` is a seventh, *conditional* key: it is present only when the run requested
-loop-contract synthesis (`--synthesize-loop-contracts`), and absent otherwise, since that tool does
-not run at all for a run that never asks for it. Every key that is present follows one null rule,
-generalizing beyond `cbmc` alone: **a version that cannot be determined is `null`, never guessed**,
+loop-contract synthesis (`--synthesize-loop-contracts`), and absent otherwise, since that tool has no
+reason to be probed at all for a run that never asks for it. Every key that is present follows one null
+rule, generalizing beyond `cbmc` alone: **a version that cannot be determined is `null`, never guessed**,
 whether the probe binary is missing, refuses `--version`, or prints nothing parseable. A missing key
-(only possible for `goto_synthesizer`) means the tool did not run this time; a present `null` means it
-ran but its version could not be pinned down.
+(only possible for `goto_synthesizer`) means the tool was not *requested* this time — presence tracks the
+`--synthesize-loop-contracts` request, not whether synthesis subsequently succeeded, per the field
+reference above; a present `null` means it was requested but its version could not be pinned down.
 
 `solvers` is the deduplicated set of solvers actually resolved across every harness in `harnesses[]`
 (not merely requested): a run whose harnesses all resolve to the same solver reports one entry, and a
@@ -430,15 +433,23 @@ own version as CBMC's, so naming a version for them would be misleading) and oth
 `--version` string, following the same null-means-undetermined rule as every other `tools.*` field.
 
 A bare `null` here is overloaded, though, and this proposal adds a sibling `source: "builtin" |
-"probed"` to disambiguate it: `null` for a built-in solver (`cadical`, `minisat`) means "this solver has
-no version of its own to report, by design," while `null` for every other solver name (`bitwuzla`,
-`cvc5`, `kissat`, `z3`, or a custom `--external-sat-solver`/`Binary` path) means "a version probe was
-attempted and failed" — the same two states `--sat-solver cadical` and a probe-failed
-`--external-sat-solver cadical` would otherwise collide on, since both can name `cadical` with a `null`
-version for entirely different reasons. `source == "builtin"` is exactly the two names `cadical` and
-`minisat`; every other name is `source == "probed"`, whether or not the probe actually returned a
-string. A consumer that wants to tell "this solver's version is unknowable in principle" from "this
-solver's version probe failed on this machine" reads `source`, not `version` alone.
+"external"` to disambiguate it: `null` for a built-in solver means "this solver has no version of its own
+to report, by design," while `null` for a solver run as a separate binary means "a version probe was
+attempted and failed." Critically, `source` cannot be derived from the solver *name* string, because the
+name alone does not disambiguate these two cases: `--sat-solver cadical` (CBMC's own built-in CaDiCaL) and
+a probe-failed `--external-sat-solver cadical` (a same-named binary on `PATH`, run as a separate process)
+both resolve to `name == "cadical"` with a `null` version, for entirely different reasons, and a
+name-keyed rule cannot tell them apart. `source` instead reflects the actual resolution path, matching
+`effective_solver`/`CbmcSolver` in the code: it is `"builtin"` exactly when CBMC resolved the solver
+without a separate binary to probe — the default resolution to `CbmcSolver::Cadical`/`CbmcSolver::Minisat`,
+or a `--sat-solver <name>` override, both of which select a solver CBMC already has built in and never
+name an external binary — and `"external"` in every other case: a resolved `CbmcSolver::Binary` (a custom
+`--external-sat-solver` path) or one of `Bitwuzla`/`Cvc5`/`Kissat`/`Z3`, all of which CBMC runs as a
+separate process Kani can, and does, attempt to probe. This is what correctly separates `--sat-solver
+cadical` (`source: "builtin"`, no probe ever attempted) from `--external-sat-solver cadical` (`source:
+"external"`, a probe was attempted and, here, failed) even though both spell the resolved name identically.
+A consumer that wants to tell "this solver's version is unknowable in principle" from "this solver's
+version probe failed on this machine" reads `source`, not `version` alone.
 
 **The harness name (`name`) is already the re-runnable selector.** `name` is the harness's
 `pretty_name`: the fully qualified name the user gave the function, module path included (e.g.
@@ -670,6 +681,16 @@ consumer must not treat the list as an exact argv to replay.
   still `COMPLETE` (a suite where every harness times out is a complete run of failing harnesses, not an
   incomplete run). `run_state` is only `INCOMPLETE`/`PARTIAL` when Kani itself did not reach the terminal
   write for every selected harness; see the completeness contract below.
+- Kani itself crashes (a `kani-compiler` ICE, a panic in `kani-driver`, a `SIGKILL`) → no terminal
+  document is ever written for this run, because the single terminal write happens once, at the very
+  end, after every harness result is already known (`verify_project` in `kani-driver/src/main.rs`); a
+  hard error anywhere before that point — including one raised for a single harness, such as a failed
+  CBMC spawn (`run_cbmc_piped`'s `.map_err(...)?` in `kani-driver/src/call_cbmc.rs`), or one propagated
+  through `run_until_abort` in `kani-driver/src/harness_runner.rs` — unwinds straight out of
+  `verify_project` and skips it. There is therefore no code path that produces a run-level `"CRASHED"`
+  document; the only observable residue is whatever the `INCOMPLETE` marker last wrote (left stale,
+  never overwritten), or, if the crash preceded even that write, whatever file already existed at the
+  path (untouched). See "How `run_state` and `outcome.kind` co-occur" below.
 - The `--export-json` path already holds a file → it is **overwritten up front with an atomic
   `run_state: "INCOMPLETE"` marker** once harness verification begins (after the crate is built), so an
   *earlier* run's results cannot then sit at the path to be misread as this run's, and a run that dies
@@ -700,9 +721,14 @@ pre-verification fields it already knows (schema/tool versions, `machine`, `conf
 invalidates any stale earlier file at the path and records that a run started here. On normal completion
 the terminal write sets `run_state` to one of three **terminal, successfully-published** values:
 `COMPLETE` (every selected harness produced a result), `PARTIAL` (some did not, e.g. a `--fail-fast`
-run aborted after the first failure), or `NO_HARNESSES_SELECTED` (a non-`--exact` filter matched nothing).
+run aborted after the first failure), or `NO_HARNESSES_SELECTED` (no harness was selected for
+verification at all — see "`NO_HARNESSES_SELECTED` versus a crate with no harnesses at all" below for the
+two ways that can happen).
 
-Reading `run_state` is therefore not optional for a consumer that means to read the file correctly:
+A consumer reads the document in that order, not either one alone: first confirm `schema_version` is one
+it supports (see Compatibility policy below — on an unrecognized major, or, pre-1.0, an unrecognized
+minor, refuse to parse), *then* read `run_state`, which is not optional for a consumer that means to read
+the rest of the file correctly:
 
 - **`run_state == "COMPLETE"`** is the only value a consumer may treat as *complete verification evidence*.
   It is strictly stronger than "a file exists": a `--fail-fast` run that skipped harnesses, or a zero-match
@@ -720,17 +746,41 @@ path untouched; existence-based staleness is only defeated from the marker onwar
 anchoring on the marker rather than on delete-then-existence: a legacy consumer that checks only the
 file's *presence* and never reads `run_state` now finds the marker and fails *open* on a file that carries
 no verdict, where the older delete-up-front design failed *closed* on `ENOENT`. `run_state` (the trust
-anchor) is distinct from the run-level `outcome.kind` (`COMPLETED`/`CRASHED`), which is diagnostic only:
-a consumer gates on `run_state`, not on `outcome.kind`. The contract assumes a single writer per path: two
-concurrent runs aiming `--export-json` at the same file are unsupported, and the last rename wins.
+anchor) is distinct from the run-level `outcome.kind`, which is diagnostic only and, as established next,
+carries strictly less information than `run_state` at the run level: a consumer gates on `run_state`, not
+on `outcome.kind`. The contract assumes a single writer per path: two concurrent runs aiming
+`--export-json` at the same file are unsupported, and the last rename wins.
 
-**How `run_state` and `outcome.kind` co-occur.** The two axes are independent but not unconstrained:
-`run_state == "COMPLETE"` or `"PARTIAL"` can only co-occur with `outcome.kind == "COMPLETED"` (Kani
-itself finished the run either way; `PARTIAL` means some *harnesses* were skipped, e.g. by
-`--fail-fast`, not that Kani crashed). `run_state == "INCOMPLETE"` is the only state that can co-occur
-with `outcome.kind == "CRASHED"`, since a terminal write is what would have set `run_state` to anything
-else, and a crashed run by definition never reaches its terminal write. `NO_HARNESSES_SELECTED` implies
-`outcome.kind == "COMPLETED"` (Kani ran to completion; it simply had nothing selected to verify).
+**How `run_state` and `outcome.kind` co-occur.** `outcome` is meaningful only once Kani reaches a
+terminal write, and at run level its `kind` has exactly one possible value: `COMPLETED`. The marker
+(`run_state == "INCOMPLETE"`) is written *before* that point and does not carry `outcome` at all (see the
+presence matrix above) — the field is absent there, not set to some other value. A run-level
+`outcome.kind == "CRASHED"` does not exist in this schema: nothing in the writer's design, current or
+proposed, is positioned to ever produce it. The terminal write is a single step, at the very end of
+`verify_project`, after every harness result and the `summary` are already known; a hard error anywhere
+before that point — a `kani-compiler` crash, a panic in `kani-driver`, or even a failure raised while
+processing one harness (e.g. a failed CBMC spawn) — unwinds past the point where `outcome` would be set
+and the terminal write never happens. What a consumer observes instead is the `INCOMPLETE` marker, left
+stale because nothing overwrote it (or, if the crash preceded the marker's own write, whatever pre-existing
+file was at the path, untouched — see the two limits below). That staleness — an `INCOMPLETE` marker, or
+a missing file, that never turns into a terminal document — *is* the crash signal a consumer reads; it is
+not a value it looks up. Every `run_state`/`outcome` combination this schema can actually produce is:
+
+| `run_state` | `outcome` |
+|---|---|
+| `INCOMPLETE` (marker) | absent |
+| `COMPLETE` | `{"kind": "COMPLETED"}` |
+| `PARTIAL` | `{"kind": "COMPLETED"}` |
+| `NO_HARNESSES_SELECTED` | `{"kind": "COMPLETED"}` |
+
+(`PARTIAL` means some *harnesses* were skipped, e.g. by `--fail-fast`, not that Kani crashed;
+`NO_HARNESSES_SELECTED` means Kani ran to completion and simply had nothing selected to verify — both are
+finished exports, hence `outcome.kind == "COMPLETED"` in both, per "The completeness contract" above.)
+Per-harness `outcome.kind == "CRASHED"` is unaffected by any of this and remains a real, producible value
+(see the per-harness presence matrix below): the run itself can finish normally, reach its terminal write,
+and still report that CBMC crashed while checking one specific harness — that is a fact about *one
+harness*, recorded in a document Kani *did* finish writing, which is a different claim entirely from Kani
+itself never reaching the write at all.
 
 **`NO_HARNESSES_SELECTED` versus a crate with no harnesses at all.** Both leave `harnesses[]` empty and
 `harness_selection.matched_count == 0`, but they are told apart by `harness_selection.requested_filters`:
@@ -761,9 +811,10 @@ document are not the same shape, and the field table above states each field's p
 | `outcome`, `wall_time_s` | absent | present — neither is knowable until Kani reaches a terminal state, so the marker (written *before* that state is known) carries neither |
 | `summary`, `harnesses[]` | absent, by design (stated above): a consumer that reads the marker has no verdict to read at all | present (`harnesses[]` may be empty, only under `NO_HARNESSES_SELECTED`) |
 
-A consumer that checks `run_state` before touching anything else never needs this table — `"INCOMPLETE"`
-already says "there is no verdict here, stop." It exists for a consumer inspecting the raw JSON, or
-writing a parser that must not panic on a field it expected unconditionally.
+A consumer that has already confirmed `schema_version` is one it supports, and then checks `run_state`
+before touching anything else, never needs this table — `"INCOMPLETE"` already says "there is no verdict
+here, stop." It exists for a consumer inspecting the raw JSON, or writing a parser that must not panic on
+a field it expected unconditionally.
 
 **Presence matrix — per-harness fields, by `harnesses[].outcome.kind`.** Every "—" in the harness field
 table above implicitly means "on the harness object as CBMC/Kani produced it for that `outcome.kind`";
@@ -832,7 +883,9 @@ property the shape enforces on its own.
 
 The field reference above points here for `summary.*`'s meaning, since seven bare integers next to each
 other say nothing about how they relate. All seven are run-level totals over `harnesses[]`, always
-present, always integers, never `null`:
+present in a terminal document, always integers, never `null` there — `summary` is absent entirely in the
+`INCOMPLETE` marker (see the presence matrix above), so "always present" is scoped to the shape that has
+a `summary` to begin with:
 
 | Field | Definition |
 |---|---|
@@ -844,9 +897,11 @@ present, always integers, never `null`:
 | `covers_total` | Sum of `harnesses[].covers.total` over `COMPLETED` harnesses only. |
 | `covers_satisfied` | Sum of `len(harnesses[].covers.satisfied)` over `COMPLETED` harnesses only. |
 
-**`total == harnesses.len()`** always, regardless of `run_state`: `summary` describes exactly the
-harnesses this document actually reports on, not the harnesses that were selected (that comparison is
-`harness_selection.matched_count` versus `summary.total`, covered next).
+**`total == harnesses.len()`** always, in any document where `summary` is present — that is, any terminal
+document, regardless of which of the three terminal `run_state` values it carries: `summary` describes
+exactly the harnesses this document actually reports on, not the harnesses that were selected (that
+comparison is `harness_selection.matched_count` versus `summary.total`, covered next). The `INCOMPLETE`
+marker has no `summary` to apply this identity to, so the identity is vacuous there, not violated.
 
 **How a non-`COMPLETED` harness counts.** `successful` and `failed` both require `outcome.kind ==
 "COMPLETED"`, so a `TIMEOUT`, `OUT_OF_MEMORY`, or `CRASHED` harness is deliberately counted in neither:
@@ -882,7 +937,7 @@ is a Kani-owned Rust enum (the CBMC-derived `CheckStatus` among them, which Kani
 
 | Field | Values | Closed? |
 |---|---|---|
-| `outcome.kind` (run level) | `COMPLETED`, `CRASHED` | closed |
+| `outcome.kind` (run level) | `COMPLETED` (single value; see below) | closed |
 | `run_state` (run level) | `INCOMPLETE`, `COMPLETE`, `PARTIAL`, `NO_HARNESSES_SELECTED` | closed |
 | `harnesses[].outcome.kind` | `COMPLETED`, `TIMEOUT`, `OUT_OF_MEMORY`, `CRASHED` | closed |
 | `harnesses[].outcome.verdict` | `SUCCESS`, `FAILURE` (field omitted at run level) | closed |
@@ -891,13 +946,16 @@ is a Kani-owned Rust enum (the CBMC-derived `CheckStatus` among them, which Kani
 | `harnesses[].attributes.kind` | `"Proof"`, `"Test"`, `{"ProofForContract": {...}}` | closed (`HarnessKind`, 3 variants) |
 | `harnesses[].attributes.solver` | `"Cadical"`, `"Bitwuzla"`, `"Cvc5"`, `"Kissat"`, `"Minisat"`, `"Z3"`, or `{"Binary": "<path>"}` | **explicitly open** — see below |
 | `harnesses[].resolved_solver`, `tools.solvers[].name` | the lowercase spellings of the same six names, or an arbitrary binary-path string | **explicitly open** — see below |
+| `tools.solvers[].source` | `"builtin"`, `"external"` | closed |
 
 `outcome.kind` is deliberately asymmetric: `TIMEOUT` and `OUT_OF_MEMORY` describe a *harness* CBMC could
-not finish and never appear at run level, where the only two values are `COMPLETED` (Kani finished the
-run) and `CRASHED` (Kani itself aborted); `OUT_OF_MEMORY` is a harness-level-only outcome, and has no
-run-level counterpart (a run-level out-of-memory is a `CRASHED` run, since Kani itself is what died).
-`OUT_OF_MEMORY` is inferred from a `137` exit (SIGKILL, the usual OOM-killer signal), not a direct
-memory measurement; `TIMEOUT` arises only under `--harness-timeout`.
+not finish and never appear at run level, where the only value a terminal document can ever carry is
+`COMPLETED` (Kani finished the run); `OUT_OF_MEMORY` is a harness-level-only outcome, and has no run-level
+counterpart. A run-level out-of-memory — Kani itself killed — is not representable as a run-level
+`outcome.kind` value at all, since Kani never reaches the terminal write that would set `outcome`; it
+surfaces instead as a stale `INCOMPLETE` marker (see "How `run_state` and `outcome.kind` co-occur" above).
+`OUT_OF_MEMORY` at the harness level is inferred from a `137` exit (SIGKILL, the usual OOM-killer signal),
+not a direct memory measurement; `TIMEOUT` arises only under `--harness-timeout`.
 
 `failure_kind` is scoped to `outcome.kind == "COMPLETED"`: a `TIMEOUT`, `OUT_OF_MEMORY`, or `CRASHED`
 harness never reaches `determine_failed_properties` at all (CBMC produced no property list to classify),
@@ -1041,6 +1099,18 @@ learned from real consumers, and it makes the rules of that correction explicit 
   schema exists to remove.
 - **`warnings` is outside these guarantees** (see its own section): its presence and shape are
   contractual; its contents, wording and size are not, and are not covered by `schema_version`.
+
+**This schema is deliberately open to growing richer, not a closed shape frozen at v1.** Today's fields
+are the honest core this RFC could verify against the shipped writer, not a ceiling on what the format
+will ever carry. The additive minor-version rule above — new fields land without a major bump, and a
+conformant consumer already ignores fields it does not recognize — is the mechanism by which that growth
+happens: as real downstream evidence consumers (CI gates, dashboards, external verification-tracking or
+evidence formats that want to ingest a Kani run as one input among several) show up with a concrete need
+this v1 does not yet meet — finer per-harness provenance, additional resource or environment data,
+tighter linkage between a property and the evidence that discharged it — the schema is expected to grow
+to carry it, one additive minor version at a time, rather than being redesigned from scratch or left to a
+second, competing artifact. Nothing about this shape should be read as asserting that today's fields are
+all a downstream consumer will ever need from Kani.
 
 **Semver-zero, while it is `-Z` gated.** Until stabilization the schema is `0.x`, and the minor/major
 *distinction above describes intent* rather than a promise: a `0.x` consumer must match an exact minor
