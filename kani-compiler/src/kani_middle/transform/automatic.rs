@@ -1161,12 +1161,15 @@ fn call_kani_any_for_ty(
         let lcl = body.new_local(ty, span, mutability);
         body.assign_to(
             Place::from(lcl),
-            Rvalue::Use(Operand::Constant(ConstOperand {
-                span,
-                user_ty: None,
-                const_: MirConst::try_new_zero_sized(ty)
-                    .expect("function item types are zero-sized"),
-            })),
+            Rvalue::Use(
+                Operand::Constant(ConstOperand {
+                    span,
+                    user_ty: None,
+                    const_: MirConst::try_new_zero_sized(ty)
+                        .expect("function item types are zero-sized"),
+                }),
+                WithRetag::No,
+            ),
             source,
             InsertPosition::Before,
         );
