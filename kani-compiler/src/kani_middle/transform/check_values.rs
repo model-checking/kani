@@ -629,7 +629,7 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                         })
                     }
                 }
-                CastKind::Transmute | CastKind::Subtype => {
+                CastKind::Transmute | CastKind::BoxDerefTransmute | CastKind::Subtype => {
                     debug!(?dest_ty, "transmute");
                     // For transmute, we care about the destination type only.
                     // This could be optimized to only add a check if the requirements of the

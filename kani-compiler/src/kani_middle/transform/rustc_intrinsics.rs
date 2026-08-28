@@ -13,7 +13,7 @@ use crate::kani_middle::transform::body::{
 };
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
-use rustc_hir::LangItem;
+use rustc_hir::attrs::lang_items::LangItem;
 use rustc_middle::ty::TyCtxt;
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::{

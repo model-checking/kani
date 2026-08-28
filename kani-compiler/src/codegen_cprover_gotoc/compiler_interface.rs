@@ -30,7 +30,7 @@ use rustc_codegen_ssa::back::link::link_binary;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CompiledModules, CrateInfo, TargetConfig};
 use rustc_data_structures::fx::FxHashMap;
-use rustc_data_structures::unord::UnordMap;
+use rustc_data_structures::unord::{UnordMap, UnordSet};
 use rustc_hir::def_id::{DefId as InternalDefId, LOCAL_CRATE};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
@@ -40,9 +40,9 @@ use rustc_public::CrateDef;
 use rustc_public::mir::mono::{Instance, MonoItem};
 use rustc_public::rustc_internal;
 use rustc_public::ty::FnDef;
-use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
+use rustc_session::{IncrCompSession, Session};
 use rustc_span::{Symbol, sym};
 use rustc_target::spec::{Arch, Os, PanicStrategy};
 use std::any::Any;
@@ -311,15 +311,13 @@ impl CodegenBackend for GotocCodegenBackend {
         } else {
             vec![]
         };
-        // FIXME do `unstable_target_features` properly
-        let unstable_target_features = target_features.clone();
-
         let has_reliable_f128 = true;
         let has_reliable_f16 = true;
 
         TargetConfig {
-            target_features,
-            unstable_target_features,
+            // As of nightly-2026-08-21 the separate stable/unstable `Vec<Symbol>` feature lists
+            // are a single `UnordSet`, so there is no longer an unstable list to populate.
+            internal_target_features: UnordSet::from_iter(target_features),
             has_reliable_f16,
             has_reliable_f16_math: has_reliable_f16,
             has_reliable_f128,
@@ -525,6 +523,7 @@ impl CodegenBackend for GotocCodegenBackend {
         &self,
         ongoing_codegen: Box<dyn Any>,
         _sess: &Session,
+        _incr_comp_session: Option<&IncrCompSession>,
         _filenames: &OutputFilenames,
         _crate_info: &CrateInfo,
     ) -> (CompiledModules, UnordMap<WorkProductId, WorkProduct>) {
