@@ -129,7 +129,7 @@ reads `** 0 of 2 failed (2 unreachable)`. That text output, and the harness and 
 verbatim from a real proof-of-concept run at commit `7b125f1b47e36ca4cc50c4041abeca01912f80f9`. **The
 JSON is not** a verbatim dump of that commit's `--export-json` output: the PoC emits flat
 `kani_version`/`cbmc_version` fields (not the grouped `tools` object) and a boolean `run_complete`
-(not `run_state`), and lacks `is_bounded`, `configuration.coverage_enabled`, `tools.solvers[].source`,
+(not `run_state`), and lacks `is_bounded`, `configuration.coverage_enabled`,
 and `summary`, all proposed additions covered in their own sections below. Treat the JSON as an
 instance of the *proposed* schema against the PoC's real vacuity run, not a capture of what the PoC
 prints today.
@@ -156,17 +156,7 @@ kani-driver src/main.rs -Z export-json --export-json out.json
   "tools": {
     "kani": "0.67.0",
     "rustc": "1.98.0-nightly (14210df0e 2026-05-31)",
-    "cbmc": "6.10.0 (cbmc-6.10.0)",
-    "goto_cc": "6.10.0 (cbmc-6.10.0)",
-    "goto_instrument": "6.10.0 (cbmc-6.10.0)",
-    "solvers": [{ "name": "cadical", "version": null, "source": "builtin" }]
-  },
-  "machine": {
-    "cpu_count": 16,
-    "total_memory_bytes": 32159113216,
-    "memory_limit_bytes": null,
-    "os": "linux",
-    "arch": "x86_64"
+    "cbmc": "6.10.0 (cbmc-6.10.0)"
   },
   "enabled_unstable_features": ["export-json"],
   "harness_selection": {
@@ -336,7 +326,7 @@ a partial write and a mid-write kill leaves the previous file in place (at worst
 beside it, never mistaken for the target).
 
 Once harness verification begins, Kani writes an atomic **marker**: the pre-verification fields it
-already knows (schema/tool versions, `machine`, `configuration`, `harness_selection`) plus
+already knows (schema/tool versions, `configuration`, `harness_selection`) plus
 `run_state: "INCOMPLETE"`, and *not* `summary` or `harnesses[]`, so a consumer reading the marker sees
 no verdict to trust. Writing it invalidates any stale earlier file and records that a run started. On
 normal completion the terminal write sets `run_state` to one of three **terminal, successfully-published**
@@ -445,7 +435,7 @@ learned from real consumers, and it makes the rules of that correction explicit 
 
 - **Minor (backward-compatible) changes** bump the minor: adding a field, or adding a value to one of
   the **explicitly open** vocabularies named in "Value domains" (today, just the solver names:
-  `attributes.solver`, `resolved_solver`, `tools.solvers[].name`). A consumer of an open vocabulary
+  `attributes.solver` and `resolved_solver`). A consumer of an open vocabulary
   already treats an unrecognized value as "valid, but unfamiliar", so it keeps working across such a
   bump. Every other enum is closed (next bullet); this allowance does not apply to them.
 - **Major (breaking) changes** bump the major: renaming or removing a field, changing an existing field's
@@ -553,8 +543,8 @@ second cost: the shipped v1 document becomes the de-facto contract, unversioned 
     `description`/`location` for every property, not just the failed and `other`-bucketed ones (the
     shipped shape records full detail for every check; this schema records identities only for
     `success`/`unreachable`/`undetermined`/`error`/`unknown`, and full records only for
-    `failed_properties`/`unsupported_constructs`/`other[]`); CBMC's OS banner (`cbmc_metadata.os_info`,
-    distinct from the run-level `machine.os`, which is Kani's host OS); and CBMC execution statistics
+    `failed_properties`/`unsupported_constructs`/`other[]`); CBMC's OS banner (`cbmc_metadata.os_info`);
+    and CBMC execution statistics
     (`cbmc_stats`: symex time, VCC counts, solver time — see "Why is CBMC statistics data excluded?" and
     the "Per-check timing" future-work item).
   - **Dropped, and soundness-relevant — now `harnesses[].is_bounded`, a *mandatory* field:** resolved
@@ -593,6 +583,20 @@ or what a status means, with `cbmc_args` as the verbatim catch-all.)
 
 The schema deliberately leaves room for these; none is proposed now.
 
+- **Full tool & solver provenance beyond `kani`/`rustc`/`cbmc`.** An earlier draft of this schema
+  recorded `goto_cc`/`goto_instrument`/`goto_synthesizer` versions and a `tools.solvers[]` array of
+  `{name, version}` per resolved solver (the shape the shipped #4472 writer already emits), plus a
+  proposed `source: "builtin"|"external"` discriminator — this schema's own addition, not part of #4472 —
+  to disambiguate a `null` version. Cut from v1 to keep it to the core (per
+  [model-checking/kani#4731](https://github.com/model-checking/kani/issues/4731)): probing the extra
+  tools' and external solvers' `--version` spawns a process per tool beyond the probes v1 already needs,
+  and the solver CBMC ran with is already recoverable per harness from `harnesses[].resolved_solver`. A
+  follow-up can restore the fuller `tools.solvers[]` block if a consumer needs the solver *binary*
+  versions. **File a tracking issue on adoption.**
+- **Host machine environment (`machine`).** An earlier draft carried `machine.cpu_count`,
+  `.total_memory_bytes`, `.memory_limit_bytes`, `.os`, `.arch`. Cut from v1: environment metadata that
+  helps triage performance/OOM but is not needed to reproduce a verdict. A follow-up can reintroduce a
+  `machine` block if performance-oriented consumers ask for it. **File a tracking issue on adoption.**
 - **Per-check timing and resource data.** Precedented elsewhere (GNATprove reports per-obligation
   prover data), but not available from CBMC's structured output today.
 - **A machine-reproducible counterexample.** `--concrete-playback` already derives a concrete value
@@ -634,13 +638,7 @@ separate, narrower shape governed by its own presence matrix below: several fiel
 | `kani_commit_dirty` | bool | nullable | Whether the build tree had uncommitted changes; `null` exactly when `kani_commit` is `null`. |
 | `tools.kani` | string | — | The Kani release that produced this document (`env!("CARGO_PKG_VERSION")` at build time). Unlike every other `tools.*` entry, this one is never `null`: Kani always knows its own version. |
 | `tools.rustc` | string | nullable | rustc toolchain `kani-compiler` was built against; `null` if the probe failed. |
-| `tools.cbmc` / `.goto_cc` / `.goto_instrument` | string | nullable | Each tool's own `--version` output; `null` if it could not be probed. |
-| `tools.goto_synthesizer` | string | nullable, key conditional | Present only when the run *requested* loop-contract synthesis (`--synthesize-loop-contracts`), regardless of whether synthesis subsequently succeeded; see "Tool provenance" below. |
-| `tools.solvers[]` | array of `{name, version, source}` | array never null, may be empty | Deduplicated, name-sorted; see "Tool provenance" below. |
-| `machine.cpu_count` | integer | nullable | Logical CPUs available; `null` if undetermined. |
-| `machine.total_memory_bytes` | integer | nullable | Total system RAM; Linux only today. |
-| `machine.memory_limit_bytes` | integer | nullable | The enforced ceiling (cgroup/ulimit), not installed RAM; `null` when unlimited or unreadable. |
-| `machine.os` / `.arch` | string | — | e.g. `"linux"` / `"x86_64"`. |
+| `tools.cbmc` | string | nullable | CBMC's own `--version` output; `null` if it could not be probed. |
 | `enabled_unstable_features` | array of strings | never null, may be empty | Sorted `-Z` flags active for this run. |
 | `harness_selection.requested_filters` | array of strings | never null, may be empty | Raw `--harness` values; empty means no filter. |
 | `harness_selection.exact` | bool | — | Whether `--exact` was passed. |
@@ -676,7 +674,7 @@ separate, narrower shape governed by its own presence matrix below: several fiel
 | `harnesses[].outcome.verdict` | `"SUCCESS"` \| `"FAILURE"` | present only on `COMPLETED`, never null there | The per-harness pass/fail call. |
 | `harnesses[].outcome.code` | integer | nullable, present only on `CRASHED` | Process exit code, when known. Unlike the run level, this field is real: a per-harness crash still reaches the shared terminal write (see below), so it is actually producible. |
 | `harnesses[].outcome.message` | string | nullable, present only on `CRASHED` | Free-text crash reason, scoped to this one harness (e.g. naming what CBMC crashed on); non-contractual wording. |
-| `harnesses[].resolved_solver` | string | nullable | The solver CBMC actually runs with; `null` when CBMC chooses for itself (bare `--smt2`). Same spelling as `tools.solvers[].name`. |
+| `harnesses[].resolved_solver` | string | nullable | The solver CBMC actually runs with; `null` when CBMC chooses for itself (bare `--smt2`). |
 | `harnesses[].resolved_unwind` | integer | nullable | The effective `--unwind` bound; `null` when none applies. |
 | `harnesses[].generated_concrete_test` | bool | — | Whether `--concrete-playback` produced a test for this harness. |
 | `harnesses[].resources.verification_time_s` | number | — | Present on every harness regardless of `outcome.kind`: on `TIMEOUT`/`OUT_OF_MEMORY`/`CRASHED` it is the time elapsed until that outcome fired, not a verification duration. |
@@ -736,31 +734,16 @@ len(other)`, and symmetrically for `covers` with `satisfied` for `success`. Comb
 exclusion of `code_coverage` properties, this is why `n_properties == checks.total + covers.total`
 holds as a result, not a separate promise (see "Rationale").
 
-**Tool provenance (`tools`).** The `tools` object gives the version of every tool whose behaviour can
-change a result — the machine-readable form of the versions Kani already prints, closing the gap in
-[#2572](https://github.com/model-checking/kani/issues/2572).
-
-`goto_synthesizer` is conditional: present only when the run requested `--synthesize-loop-contracts` (a
-missing key, possible only here, means it was not requested). Every present key follows one rule: **a
-version that cannot be determined is `null`, never guessed** — whether the probe binary is missing,
-refuses `--version`, or prints nothing parseable.
-
-`solvers` is the deduplicated set of solvers actually *resolved* across `harnesses[]` (not merely
-requested): all-same-solver runs report one entry, a run with no named-solver harness (every harness
-leaves the choice to CBMC, e.g. bare `--smt2`) reports an empty array. Entries are sorted by `name`,
-so two runs resolving the same set produce the same document. Each `name` is spelled as
-`harnesses[].resolved_solver` spells it: a closed lowercase name (`bitwuzla`, `cadical`, `cvc5`,
-`kissat`, `minisat`, `z3`) or, for a custom `--external-sat-solver`/`Binary` override, the literal
-binary path (open-ended). `version` is `null` for a solver CBMC has built in (`cadical`, `minisat`
-report their own version as CBMC's) and otherwise the probed `--version` string.
-
-A bare `null` is overloaded, so a sibling `source: "builtin" | "external"` disambiguates it: `null` on a
-built-in solver means "no version of its own, by design"; on a separate-binary solver, "a probe failed."
-It cannot be derived from the *name* — `--sat-solver cadical` (built-in) and a probe-failed
-`--external-sat-solver cadical` both give `name == "cadical"`, `null` version — so it reflects the
-resolution path (`effective_solver`/`CbmcSolver`): `"builtin"` when CBMC resolved without a separate
-binary to probe (default `Cadical`/`Minisat`, or a `--sat-solver <name>` override), `"external"`
-otherwise (a `CbmcSolver::Binary` path, or `Bitwuzla`/`Cvc5`/`Kissat`/`Z3`, run as a probed subprocess).
+**Tool provenance (`tools`).** The `tools` object records the versions of the core tools whose behaviour
+can change a result: `kani` itself (always known, so never `null`), the `rustc` toolchain `kani-compiler`
+was built against, and `cbmc`. It is the machine-readable form of the versions Kani already prints,
+narrowing the gap in [#2572](https://github.com/model-checking/kani/issues/2572). One rule for the two
+probed entries: **a version that cannot be determined is `null`, never guessed** — whether the probe
+binary is missing, refuses `--version`, or prints nothing parseable. (An earlier draft also carried
+`goto_cc`/`goto_instrument`/`goto_synthesizer` versions and a `solvers[]` array of every resolved
+solver; those are cut from v1 to keep it to the core — see the "Full tool & solver provenance"
+future-work item. The solver CBMC actually ran with is still recoverable per harness from
+`harnesses[].resolved_solver`.)
 
 **Harnesses that are not `--harness`-selectable.** An `is_automatically_generated` harness (from `kani
 autoharness`) cannot be selected by `--harness`/`--exact` at all: `find_proof_harnesses` skips
@@ -937,7 +920,7 @@ unpacked here:
 
 | Field(s) | `INCOMPLETE` marker | Terminal document (`COMPLETE` / `PARTIAL` / `NO_HARNESSES_SELECTED`) |
 |---|---|---|
-| `schema_version`, `kani_commit`, `kani_commit_dirty`, `tools.*`, `machine.*`, `enabled_unstable_features`, `harness_selection.*`, `harness_timeout_s`, `configuration.*`, `target`, `started_at` | present (all knowable before verification begins) | present |
+| `schema_version`, `kani_commit`, `kani_commit_dirty`, `tools.*`, `enabled_unstable_features`, `harness_selection.*`, `harness_timeout_s`, `configuration.*`, `target`, `started_at` | present (all knowable before verification begins) | present |
 | `run_state` | present, always `"INCOMPLETE"` | present, one of `"COMPLETE"`/`"PARTIAL"`/`"NO_HARNESSES_SELECTED"` |
 | `outcome`, `wall_time_s` | absent | present — neither is knowable until Kani reaches a terminal state, so the marker (written *before* that state is known) carries neither |
 | `summary`, `harnesses[]` | absent, by design (stated above): a consumer that reads the marker has no verdict to read at all | present (`harnesses[]` may be empty, only under `NO_HARNESSES_SELECTED`) |
@@ -976,8 +959,7 @@ is a Kani-owned Rust enum (the CBMC-derived `CheckStatus` among them, which Kani
 | `…[].status` (in `failed_properties`, `unsupported_constructs`, `checks.other`, `covers.other`) | `SUCCESS`, `FAILURE`, `SATISFIED`, `UNSATISFIABLE`, `UNREACHABLE`, `UNDETERMINED`, `ERROR`, `UNKNOWN`, `COVERED`, `UNCOVERED` | closed |
 | `harnesses[].attributes.kind` | `"Proof"`, `"Test"`, `{"ProofForContract": {...}}` | closed (`HarnessKind`, 3 variants) |
 | `harnesses[].attributes.solver` | `"Cadical"`, `"Bitwuzla"`, `"Cvc5"`, `"Kissat"`, `"Minisat"`, `"Z3"`, or `{"Binary": "<path>"}` | **explicitly open** — see below |
-| `harnesses[].resolved_solver`, `tools.solvers[].name` | the lowercase spellings of the same six names, or an arbitrary binary-path string | **explicitly open** — see below |
-| `tools.solvers[].source` | `"builtin"`, `"external"` | closed |
+| `harnesses[].resolved_solver` | the lowercase spellings of the same six names, or an arbitrary binary-path string | **explicitly open** — see below |
 
 `outcome.kind` is deliberately asymmetric: `TIMEOUT`/`OUT_OF_MEMORY` describe a *harness* CBMC could not
 finish and never appear at run level (a terminal document only carries `COMPLETED`; a run-level OOM
@@ -1013,7 +995,7 @@ enum a consumer may match exhaustively.
 
 **`attributes.kind` is closed; the solver names are explicitly open.** `attributes.kind` is `HarnessKind`
 (3 variants: `Proof`, `ProofForContract { target_fn }`, `Test`); a fourth is a major change. The
-solver-name fields (`attributes.solver`, `resolved_solver`, `tools.solvers[].name`) are the opposite:
+solver-name fields (`attributes.solver`, `resolved_solver`) are the opposite:
 `CbmcSolver` already has an open escape hatch (`Binary(String)`, any path), so a consumer already treats
 an unrecognized name as valid-but-unfamiliar. Adding a new *named* built-in solver is therefore a
 **minor** change, unlike a new `status` or `failure_kind` variant, which a consumer is *entitled* to
@@ -1049,10 +1031,11 @@ These are the *requested* attributes, carried verbatim from `.kani-metadata.json
 counterparts (`resolved_solver`, `resolved_unwind`) are plain scalars — a string or number, or `null` —
 never the object forms above.
 
-**Reconciling the three solver spellings.** `resolved_solver` and `tools.solvers[].name` are always
-spelled identically (both from the same resolution — CLI `--solver` > harness attribute > `--cbmc-args`
-override > default); only `attributes.solver` differs, being the *requested* value in `CbmcSolver`'s
-PascalCase. Compare `attributes.solver` against `resolved_solver` for "asked for" vs "ran".
+**Reconciling the two solver spellings.** `attributes.solver` is the *requested* value in `CbmcSolver`'s
+PascalCase (`"Cadical"`, or `{"Binary": "<path>"}` for a custom solver); `resolved_solver` is the
+lowercase name CBMC actually ran with (from the resolution CLI `--solver` > harness attribute >
+`--cbmc-args` override > default). Compare `attributes.solver` against `resolved_solver` for "asked for"
+vs "ran".
 
 Worth adopting from `kani list` is its versioning idiom: tool version and schema version as separate
 fields. This proposal does that; see **Compatibility policy** below.
