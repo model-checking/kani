@@ -306,12 +306,6 @@ impl KaniSession {
     /// Note: Takes `self` "by ownership". This function wants to be able to drop before
     /// exiting with an error code, if needed.
     pub(crate) fn print_final_summary(self, results: &[HarnessResult<'_>]) -> Result<()> {
-        // `--quiet` promises "no output, just an exit code and requested artifacts". It must
-        // suppress the summary output only -- the exit code and any error returns below have to be
-        // identical to a non-quiet run. So compute the counts unconditionally, gate the printing
-        // on `!quiet`, and keep the control flow (error return, `exit(1)`) quiet-independent.
-        // See issue #4745: previously an early `return Ok(())` here skipped the `exit(1)` below, so
-        // `--quiet` reported a failing run as exit 0.
         let quiet = self.args.common_args.quiet;
 
         let (automatic, manual): (Vec<_>, Vec<_>) =
@@ -365,11 +359,11 @@ impl KaniSession {
             self.show_coverage_summary()?;
         }
 
-        let autoharness_failing = if self.autoharness_compiler_flags.is_some() {
-            self.print_autoharness_summary(automatic, quiet)?
-        } else {
-            0
-        };
+        let autoharness_result = self.autoharness_result(automatic);
+        let autoharness_failing = autoharness_result.as_ref().map_or(0, |r| r.failing.len());
+        if !quiet && let Some(autoharness_result) = autoharness_result {
+            self.print_autoharness_summary(autoharness_result);
+        }
 
         if failing + autoharness_failing > 0 {
             // Failure exit code without additional error message
