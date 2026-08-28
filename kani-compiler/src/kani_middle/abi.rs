@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! This module contains code for handling type abi information.
 
+use rustc_public::CrateDefType;
 use rustc_public::abi::{FieldsShape, LayoutShape};
 use rustc_public::ty::{RigidTy, Ty, TyKind, UintTy};
 use tracing::debug;

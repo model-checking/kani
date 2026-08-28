@@ -1338,7 +1338,10 @@ fn attr_kind(tcx: TyCtxt, attr: &Attribute) -> Option<KaniAttributeKind> {
 ///
 /// This provides a user-friendly interface to manipulate than the internal compiler AST.
 fn syn_attr(tcx: TyCtxt, attr: &Attribute) -> syn::Attribute {
-    let attr_str = rustc_hir_pretty::attribute_to_string(&tcx, attr);
+    // As of nightly-2026-08-21 `TyCtxt` no longer implements `PpAnn` directly; the impl is on
+    // `&dyn HirTyCtxt`, which `TyCtxt` does implement.
+    let hir_tcx: &dyn rustc_hir::intravisit::HirTyCtxt<'_> = &tcx;
+    let attr_str = rustc_hir_pretty::attribute_to_string(&hir_tcx, attr);
     let parser = syn::Attribute::parse_outer;
     parser.parse_str(&attr_str).unwrap().pop().unwrap()
 }

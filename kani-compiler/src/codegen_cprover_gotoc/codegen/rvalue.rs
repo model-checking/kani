@@ -556,6 +556,11 @@ impl GotocCtx<'_, '_> {
             let variant_proj = self.codegen_variant_lvalue(initial_projection, variant_index, loc);
             let variant_expr = variant_proj.goto_expr.clone();
             let layout = self.layout_of_stable(res_ty);
+            // `Variants::Multiple` stores a `VariantLayout`, which has no `FieldsShape` and so no
+            // field order, so ask rustc for the variant's own layout. `variant_layout` is what the
+            // type side (`codegen_enum_cases`) uses too, so the operands below are ordered exactly
+            // like the goto struct's components.
+            let variant_layout;
             let fields = match &layout.variants {
                 Variants::Empty => {
                     unreachable!("Aggregate expression for uninhabited enum with no variants")
@@ -570,8 +575,12 @@ impl GotocCtx<'_, '_> {
                     }
                     &layout.fields
                 }
-                Variants::Multiple { variants, .. } => {
-                    &variants[rustc_internal::internal(self.tcx, variant_index)].fields
+                Variants::Multiple { .. } => {
+                    variant_layout = self.variant_layout(
+                        rustc_internal::internal(self.tcx, res_ty),
+                        rustc_internal::internal(self.tcx, variant_index),
+                    );
+                    &variant_layout.fields
                 }
             };
 
@@ -702,13 +711,11 @@ impl GotocCtx<'_, '_> {
                                     slice_fat_ptr(typ, data_cast, meta, &self.symbol_table)
                                 }
                                 RigidTy::Dynamic(..) => {
-                                    let vtable_expr = meta
-                                        .member("_vtable_ptr", &self.symbol_table)
-                                        .member("pointer", &self.symbol_table)
-                                        .cast_to(
-                                            typ.lookup_field_type("vtable", &self.symbol_table)
-                                                .unwrap(),
-                                        );
+                                    let vtable_expr = self.codegen_ptr_out_of_wrappers(
+                                        meta,
+                                        typ.lookup_field_type("vtable", &self.symbol_table)
+                                            .unwrap(),
+                                    );
                                     dynamic_fat_ptr(typ, data_cast, vtable_expr, &self.symbol_table)
                                 }
                                 _ => {
@@ -722,10 +729,10 @@ impl GotocCtx<'_, '_> {
                         let data_cast =
                             data.cast_to(Type::Pointer { typ: Box::new(pointee_goto_typ) });
                         let meta = self.codegen_operand_stable(&operands[1]);
-                        let vtable_expr = meta
-                            .member("_vtable_ptr", &self.symbol_table)
-                            .member("pointer", &self.symbol_table)
-                            .cast_to(typ.lookup_field_type("vtable", &self.symbol_table).unwrap());
+                        let vtable_expr = self.codegen_ptr_out_of_wrappers(
+                            meta,
+                            typ.lookup_field_type("vtable", &self.symbol_table).unwrap(),
+                        );
                         dynamic_fat_ptr(typ, data_cast, vtable_expr, &self.symbol_table)
                     }
                     _ => {
@@ -751,7 +758,19 @@ impl GotocCtx<'_, '_> {
         let res_ty = self.rvalue_ty_stable(rv);
         debug!(?rv, ?res_ty, "codegen_rvalue");
         match rv {
-            Rvalue::Use(p) => self.codegen_operand_stable(p),
+            Rvalue::Use(p, _) => self.codegen_operand_stable(p),
+            // `Reborrow` is the new user-definable reborrowing of ADTs (`CoerceShared`). It is
+            // documented as a bitwise copy today, but the same docs anticipate it changing memory
+            // layout, so report it as unsupported rather than silently modelling it as a copy.
+            Rvalue::Reborrow(..) => {
+                let typ = self.codegen_ty_stable(res_ty);
+                self.codegen_unimplemented_expr(
+                    "Rvalue::Reborrow",
+                    typ,
+                    loc,
+                    "https://github.com/model-checking/kani/issues/4189",
+                )
+            }
             Rvalue::Repeat(op, sz) => self.codegen_rvalue_repeat(op, sz, loc),
             Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => {
                 let place_ref = self.codegen_place_ref_stable(p, loc);
@@ -794,7 +813,15 @@ impl GotocCtx<'_, '_> {
             Rvalue::Cast(CastKind::PointerCoercion(k), e, t) => {
                 self.codegen_pointer_cast(k, e, *t, loc)
             }
-            Rvalue::Cast(CastKind::Transmute | CastKind::Subtype, operand, ty) => {
+            // `BoxDerefTransmute` is an elaborated `Box` deref turning the inner pointer into a
+            // raw one. Its docs describe it as a regular transmute that is additionally UB if the
+            // input is not valid as a `Box<T>`, and say backends may treat it as a plain
+            // transmute; Kani checks pointer validity separately at the deref itself.
+            Rvalue::Cast(
+                CastKind::Transmute | CastKind::BoxDerefTransmute | CastKind::Subtype,
+                operand,
+                ty,
+            ) => {
                 let src_ty = operand.ty(self.current_fn().locals()).unwrap();
                 // Transmute requires sized types.
                 let src_sz = LayoutOf::new(src_ty).size_of().unwrap();
@@ -851,24 +878,17 @@ impl GotocCtx<'_, '_> {
                         assert!(dst_components[0].typ().is_struct_like());
                         assert_eq!(dst_components[1].name(), "_phantom");
                         self.assert_is_rust_phantom_data_like(&dst_components[1].typ());
-                        // accessing pointer type of _vtable_ptr, which is wrapped in NonNull
-                        let vtable_ptr_typ = dst_goto_typ
-                            .lookup_field_type("_vtable_ptr", &self.symbol_table)
-                            .unwrap()
-                            .lookup_components(&self.symbol_table)
-                            .unwrap()[0]
-                            .typ();
+                        // `_vtable_ptr` is a `NonNull`, which wraps the raw pointer in one or
+                        // more single-field structs, so rebuild those layers around the vtable
+                        // pointer rather than assuming a fixed nesting depth.
                         Expr::struct_expr(
                             dst_goto_typ.clone(),
                             btree_string_map![
                                 (
                                     "_vtable_ptr",
-                                    Expr::struct_expr_from_values(
-                                        dst_goto_typ
-                                            .lookup_field_type("_vtable_ptr", &self.symbol_table)
-                                            .unwrap(),
-                                        vec![vtable_expr.clone().cast_to(vtable_ptr_typ)],
-                                        &self.symbol_table
+                                    self.codegen_ptr_in_wrappers(
+                                        dst_components[0].typ(),
+                                        vtable_expr.clone()
                                     )
                                 ),
                                 (
@@ -987,8 +1007,7 @@ impl GotocCtx<'_, '_> {
                     let niche_val = self.codegen_get_niche(e, offset.bytes() as usize, discr_type);
                     let relative_discr =
                         wrapping_sub(&niche_val, u64::try_from(*niche_start).unwrap());
-                    let relative_max =
-                        niche_variants.end().as_u32() - niche_variants.start().as_u32();
+                    let relative_max = niche_variants.last.as_u32() - niche_variants.start.as_u32();
                     let is_niche = if relative_max == 0 {
                         relative_discr.clone().is_zero()
                     } else {
@@ -1003,7 +1022,7 @@ impl GotocCtx<'_, '_> {
                             relative_discr.cast_to(result_type.clone())
                         };
                         relative_discr.plus(Expr::int_constant(
-                            niche_variants.start().as_u32(),
+                            niche_variants.start.as_u32(),
                             result_type.clone(),
                         ))
                     };
@@ -1434,14 +1453,18 @@ impl GotocCtx<'_, '_> {
     /// source expression, except for the field being coerced.
     /// Coercion ignores phantom data structures, so do we.
     /// See <https://github.com/rust-lang/rust/issues/26905> for more details.
+    ///
+    /// Pattern types are accepted here as well: they are not ADTs, but they are codegen'd as a
+    /// struct with a single tuple-like field holding the type they constrain, so the field by
+    /// field assignment below applies unchanged.
     fn codegen_struct_unsized_coercion(
         &mut self,
         src_expr: Expr,
         info: CoerceUnsizedInfo,
         member_coercion: Expr,
     ) -> Expr {
-        assert!(info.src_ty.kind().is_adt(), "Expected struct. Found {:?}", info.src_ty);
-        assert!(info.dst_ty.kind().is_adt(), "Expected struct. Found {:?}", info.dst_ty);
+        assert!(is_struct_like(info.src_ty), "Expected struct. Found {:?}", info.src_ty);
+        assert!(is_struct_like(info.dst_ty), "Expected struct. Found {:?}", info.dst_ty);
         let dst_goto_type = self.codegen_ty_stable(info.dst_ty);
         let src_field_exprs = src_expr.struct_field_exprs(&self.symbol_table);
         let dst_field_exprs = src_field_exprs
@@ -1637,7 +1660,19 @@ impl GotocCtx<'_, '_> {
                         }
                         VtblEntry::MetadataSize => Some(vt_size.clone()),
                         VtblEntry::MetadataAlign => Some(vt_align.clone()),
-                        VtblEntry::Vacant => None,
+                        VtblEntry::Vacant => {
+                            // vtable_entries with the CONCRETE self type may mark a slot
+                            // vacant where the vtable struct type (built with dyn self in
+                            // trait_vtable_field_types) declares a method pointer: e.g. a
+                            // method with an HRTB predicate a fixed-region function item
+                            // does not satisfy. rustc pads such slots with null; mirror
+                            // that, typed as the declared field. If the type side skipped
+                            // the slot too, keep skipping it.
+                            let field_name = ctx.vtable_field_name(idx);
+                            Type::struct_tag(vtable_name)
+                                .lookup_field_type(field_name, &ctx.symbol_table)
+                                .map(|field_ty| Expr::pointer_constant(0, field_ty))
+                        }
                         VtblEntry::TraitVPtr(trait_ref) => {
                             let projections = match dst_mir_type.kind() {
                                 TyKind::RigidTy(RigidTy::Dynamic(predicates, ..)) => predicates
@@ -1851,6 +1886,15 @@ fn wrapping_sub(expr: &Expr, constant: u64) -> Expr {
         let constant = Expr::int_constant(constant, unsigned_expr.typ().clone());
         unsigned_expr.sub(constant)
     }
+}
+
+/// Whether `ty` is codegen'd as a struct whose fields can be assigned one by one.
+///
+/// Besides ADTs, this covers pattern types (e.g. the `pattern_type!(*const T is !null)` inside
+/// `NonNull<T>`), which are codegen'd as a struct with a single tuple-like field holding the type
+/// they constrain.
+fn is_struct_like(ty: Ty) -> bool {
+    matches!(ty.kind(), TyKind::RigidTy(RigidTy::Adt(..)) | TyKind::RigidTy(RigidTy::Pat(..)))
 }
 
 /// Remove the equality from an operator. Translates `<=` to `<` and `>=` to `>`

@@ -11,8 +11,6 @@
 // compile-flags: --edition 2021
 // kani-flags: -Zfunction-contracts
 
-#![feature(rustc_attrs)]
-
 extern crate kani;
 
 use std::boxed::Box;
@@ -21,15 +19,21 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 /// Type representing a valid ASCII value going from `0..=128`.
+///
+/// This used to carry a `rustc_layout_scalar_valid_range` niche, which made the setters below
+/// genuinely unsafe. That attribute was removed in nightly-2026-06-01 in favour of pattern types,
+/// and expressing the range as `pattern_type!(u8 is 0..=128)` would mean transmuting in every
+/// contract that reads `self.0`. Since what this test checks is that contracts work across
+/// receiver types -- no assertion here depends on the layout niche -- the range is kept as a
+/// documented invariant on a plain `u8` instead. Niche layouts are covered by
+/// `tests/script-based-pre/autoharness_niche`.
 #[derive(Copy, Clone, PartialEq, Eq)]
-#[rustc_layout_scalar_valid_range_start(0)]
-#[rustc_layout_scalar_valid_range_end(128)]
 struct CharASCII(u8);
 
 impl kani::Arbitrary for CharASCII {
     fn any() -> CharASCII {
         let val = kani::any_where(|inner: &u8| *inner <= 128);
-        unsafe { CharASCII(val) }
+        CharASCII(val)
     }
 }
 

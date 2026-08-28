@@ -118,7 +118,7 @@ fn setup_kani_bundle(kani_dir: &Path, use_local_bundle: Option<OsString>) -> Res
             )?;
     } else {
         let filename = download_filename();
-        println!("[2/5] Downloading Kani release bundle: {}", &filename);
+        println!("[2/5] Downloading Kani release bundle: {}", filename);
         fail_if_unsupported_target()?;
         let bundle = base_dir.join(filename);
         Command::new("curl")
@@ -164,7 +164,7 @@ fn setup_rust_toolchain(kani_dir: &Path, use_local_toolchain: Option<OsString>) 
             symlink_rust_toolchain(toolchain_path, kani_dir)?;
             println!(
                 "[3/5] Installing rust toolchain from path provided: {}",
-                &toolchain_path.to_string_lossy()
+                toolchain_path.to_string_lossy()
             );
             return Ok(toolchain_version);
         } else {
@@ -177,7 +177,7 @@ fn setup_rust_toolchain(kani_dir: &Path, use_local_toolchain: Option<OsString>) 
     }
 
     // This is the default behaviour when no explicit path to a toolchain is mentioned
-    println!("[3/5] Installing rust toolchain version: {}", &toolchain_version);
+    println!("[3/5] Installing rust toolchain version: {}", toolchain_version);
     Command::new("rustup").args(["toolchain", "install", &toolchain_version]).run()?;
     let toolchain = home::rustup_home()?.join("toolchains").join(&toolchain_version);
     symlink_rust_toolchain(&toolchain, kani_dir)?;

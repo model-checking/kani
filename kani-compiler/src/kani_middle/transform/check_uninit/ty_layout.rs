@@ -5,6 +5,7 @@
 
 use std::fmt::Display;
 
+use rustc_public::CrateDefType;
 use rustc_public::{
     abi::{FieldsShape, Scalar, TagEncoding, ValueAbi, VariantsShape},
     target::{MachineInfo, MachineSize},
@@ -362,10 +363,11 @@ fn data_bytes_for_ty(
                         // Thin pointer, ABI is a single scalar.
                         vec![DataBytes { offset: current_offset, size: value.size(machine_info) }]
                     }
-                    ValueAbi::ScalarPair(
-                        Scalar::Initialized { value: value_first, .. },
-                        Scalar::Initialized { value: value_second, .. },
-                    ) => {
+                    ValueAbi::ScalarPair {
+                        a: Scalar::Initialized { value: value_first, .. },
+                        b: Scalar::Initialized { value: value_second, .. },
+                        ..
+                    } => {
                         // Fat pointer, ABI is a scalar pair.
                         let FieldsShape::Arbitrary { offsets } = layout.fields else {
                             unreachable!()

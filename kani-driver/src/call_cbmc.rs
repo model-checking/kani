@@ -51,20 +51,9 @@ pub struct CbmcStats {
 impl KaniSession {
     /// Get CBMC version and system information
     pub fn get_cbmc_info(&self) -> Result<CbmcInfo> {
-        let output = std::process::Command::new("cbmc")
-            .arg("--version")
-            .output()
-            .map_err(|_| anyhow::Error::msg("Failed to run cbmc --version"))?;
-
-        let version_output = String::from_utf8_lossy(&output.stdout);
-        let lines: Vec<&str> = version_output.lines().collect();
-
-        // Extract version from first line (e.g., "6.7.1 (cbmc-6.7.1)")
-        let version = lines
-            .first()
-            .and_then(|line| line.split_whitespace().next())
-            .unwrap_or("unknown")
-            .to_string();
+        // Shares the single `cbmc --version` probe with the version-pin check.
+        let version =
+            crate::version::cbmc_version_on_path().unwrap_or_else(|| "unknown".to_string());
 
         // For OS info, we'll use the system information since CBMC --version doesn't provide it
         let os_info = format!(
@@ -225,7 +214,7 @@ impl KaniSession {
         let mut cmd = TokioCommand::new("cbmc");
         cmd.args(args);
 
-        let verification_results = if self.args.output_format == crate::args::OutputFormat::Old {
+        let verification_results = if self.args.output_format() == crate::args::OutputFormat::Old {
             if self.run_terminal_timeout(cmd).is_err() {
                 VerificationResult::mock_failure()
             } else {
@@ -267,7 +256,7 @@ impl KaniSession {
                         i,
                         self.args.extra_pointer_checks,
                         self.args.common_args.quiet,
-                        &self.args.output_format,
+                        &self.args.output_format(),
                         self.args.log_file.as_ref(),
                     )
                 }),
@@ -279,7 +268,7 @@ impl KaniSession {
                     i,
                     self.args.extra_pointer_checks,
                     self.args.common_args.quiet,
-                    &self.args.output_format,
+                    &self.args.output_format(),
                     self.args.log_file.as_ref(),
                 )
             })
