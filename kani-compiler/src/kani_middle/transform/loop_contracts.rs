@@ -9,7 +9,9 @@ use crate::kani_middle::KaniAttributes;
 use crate::kani_middle::codegen_units::CodegenUnit;
 use crate::kani_middle::kani_functions::KaniModel;
 use crate::kani_middle::transform::TransformationType;
-use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
+use crate::kani_middle::transform::body::{
+    InsertPosition, MutableBody, SourceInstruction, synthetic_source_info,
+};
 use crate::kani_queries::QueryDb;
 use crate::rustc_public::CrateDef;
 use itertools::Itertools;
@@ -274,9 +276,12 @@ impl LoopContractPass {
                 &SourceInstruction::Terminator { bb: first_blockid },
                 new_terminator,
             );
-            let span = body.blocks()[first_blockid].statements.first().unwrap().span;
+            let span = body.blocks()[first_blockid].statements.first().unwrap().source_info.span;
             // Add the StorageLive(nthpat) statement at the begining of the same block
-            let storagelive_stmt = Statement { kind: StatementKind::StorageLive(nthvar), span };
+            let storagelive_stmt = Statement {
+                kind: StatementKind::StorageLive(nthvar),
+                source_info: synthetic_source_info(span),
+            };
             body.insert_stmt(
                 storagelive_stmt,
                 &mut SourceInstruction::Statement { idx: 0, bb: first_blockid },
@@ -452,7 +457,7 @@ impl LoopContractPass {
                         let new_rval = Rvalue::Aggregate(aggrkind.clone(), new_operands);
                         new_loophead_stmts.push(Statement {
                             kind: StatementKind::Assign(lhs.clone(), new_rval),
-                            span: stmt.span,
+                            source_info: synthetic_source_info(stmt.source_info.span),
                         });
                     } else if let StatementKind::Assign(
                         lhs,
@@ -468,7 +473,7 @@ impl LoopContractPass {
                         );
                         new_loophead_stmts.push(Statement {
                             kind: StatementKind::Assign(lhs.clone(), new_rval),
-                            span: stmt.span,
+                            source_info: synthetic_source_info(stmt.source_info.span),
                         });
                     } else {
                         new_loophead_stmts.push(stmt.clone());
@@ -847,10 +852,13 @@ impl LoopContractPass {
         // For the performance benefits remove the re-assign statements of kaniiter variables
         // after adding the same one at loop head
         for block_idx in kaniiter_blocks {
-            let span = body.blocks()[block_idx].terminator.span;
+            let span = body.blocks()[block_idx].terminator.source_info.span;
             body.replace_terminator(
                 &SourceInstruction::Terminator { bb: block_idx },
-                Terminator { kind: TerminatorKind::Goto { target: block_idx + 1 }, span },
+                Terminator {
+                    kind: TerminatorKind::Goto { target: block_idx + 1 },
+                    source_info: synthetic_source_info(span),
+                },
             );
         }
     }
@@ -1017,7 +1025,7 @@ impl LoopContractPass {
                 &SourceInstruction::Terminator { bb: bb_idx },
                 Terminator {
                     kind: TerminatorKind::Goto { target: self.new_loop_latches[terminator_target] },
-                    span: terminator.span,
+                    source_info: synthetic_source_info(terminator.source_info.span),
                 },
             );
         }
@@ -1045,7 +1053,7 @@ impl LoopContractPass {
                 &SourceInstruction::Terminator { bb: bb_idx },
                 Terminator {
                     kind: TerminatorKind::SwitchInt { discr: discr.clone(), targets: new_targets },
-                    span: terminator.span,
+                    source_info: synthetic_source_info(terminator.source_info.span),
                 },
             );
         }
@@ -1180,7 +1188,7 @@ impl LoopContractPass {
                     terminator_destination.clone(),
                     Rvalue::Use(
                         Operand::Constant(ConstOperand {
-                            span: terminator.span,
+                            span: terminator.source_info.span,
                             user_ty: None,
                             const_: MirConst::from_bool(true),
                         }),
@@ -1206,7 +1214,7 @@ impl LoopContractPass {
                 let new_args = vec![
                     terminator_args[0].clone(),
                     Operand::Constant(ConstOperand {
-                        span: terminator.span,
+                        span: terminator.source_info.span,
                         user_ty: None,
                         const_: MirConst::try_from_uint(1, UintTy::Usize).unwrap(),
                     }),
@@ -1221,14 +1229,14 @@ impl LoopContractPass {
                             target: *terminator_target,
                             unwind: *terminator_unwind,
                         },
-                        span: terminator.span,
+                        source_info: synthetic_source_info(terminator.source_info.span),
                     },
                 );
                 new_body.replace_terminator(
                     &SourceInstruction::Terminator { bb: bb_idx },
                     Terminator {
                         kind: TerminatorKind::Goto { target: terminator_target.unwrap() },
-                        span: terminator.span,
+                        source_info: synthetic_source_info(terminator.source_info.span),
                     },
                 );
                 // Cache the new loop latch.

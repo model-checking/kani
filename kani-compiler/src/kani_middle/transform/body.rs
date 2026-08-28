@@ -13,6 +13,15 @@ use rustc_public::ty::{GenericArgs, MirConst, Span, Ty, UintTy};
 use std::fmt::Debug;
 use std::mem;
 
+/// The `SourceInfo` for a statement or terminator that Kani synthesizes at `span`.
+///
+/// As of nightly-2026-08-01 `Statement` and `Terminator` carry a `SourceInfo` (span plus source
+/// scope) instead of a bare `Span`. Kani-synthesized MIR does not belong to any inlined scope, so
+/// it uses the outermost one -- scope 0, which `Body::new` always allocates.
+pub fn synthetic_source_info(span: Span) -> SourceInfo {
+    SourceInfo { span, scope: 0 }
+}
+
 #[derive(Debug)]
 /// This structure mimics a Body that can actually be modified.
 pub struct MutableBody {
@@ -153,7 +162,10 @@ impl MutableBody {
         let span = source.span(&self.blocks);
         let ret_ty = rvalue.ty(&self.locals).unwrap();
         let result = self.new_local(ret_ty, span, Mutability::Not);
-        let stmt = Statement { kind: StatementKind::Assign(Place::from(result), rvalue), span };
+        let stmt = Statement {
+            kind: StatementKind::Assign(Place::from(result), rvalue),
+            source_info: synthetic_source_info(span),
+        };
         self.insert_stmt(stmt, source, position);
         result
     }
@@ -167,7 +179,10 @@ impl MutableBody {
         position: InsertPosition,
     ) {
         let span = source.span(&self.blocks);
-        let stmt = Statement { kind: StatementKind::Assign(place, rvalue), span };
+        let stmt = Statement {
+            kind: StatementKind::Assign(place, rvalue),
+            source_info: synthetic_source_info(span),
+        };
         self.insert_stmt(stmt, source, position);
     }
 
@@ -214,7 +229,7 @@ impl MutableBody {
             target: Some(new_bb),
             unwind: UnwindAction::Terminate,
         };
-        let terminator = Terminator { kind, span };
+        let terminator = Terminator { kind, source_info: synthetic_source_info(span) };
         self.insert_terminator(source, position, terminator);
     }
 
@@ -243,7 +258,7 @@ impl MutableBody {
             target: Some(new_bb),
             unwind: UnwindAction::Terminate,
         };
-        let terminator = Terminator { kind, span };
+        let terminator = Terminator { kind, source_info: synthetic_source_info(span) };
         self.insert_terminator(source, position, terminator);
     }
 
@@ -344,7 +359,7 @@ impl MutableBody {
         *target = split_bb_idx;
         let new_term = Terminator {
             kind: TerminatorKind::Goto { target: inserted_bb_idx },
-            span: source.span(&self.blocks),
+            source_info: synthetic_source_info(source.span(&self.blocks)),
         };
         self.split_bb(source, position, new_term);
         self.blocks.push(bb);
@@ -422,7 +437,7 @@ impl MutableBody {
                             statements: vec![new_stmt],
                             terminator: Terminator {
                                 kind: TerminatorKind::Goto { target: *target_bb },
-                                span,
+                                source_info: synthetic_source_info(span),
                             },
                         };
                         *target_bb = new_bb_idx;
@@ -443,7 +458,7 @@ impl MutableBody {
     /// Keep all the locals untouched, so they can be reused by the passes if needed.
     pub fn clear_body(&mut self, kind: TerminatorKind) {
         self.blocks.clear();
-        let terminator = Terminator { kind, span: self.span };
+        let terminator = Terminator { kind, source_info: synthetic_source_info(self.span) };
         self.blocks.push(BasicBlock { statements: Vec::default(), terminator })
     }
 
@@ -513,8 +528,8 @@ pub enum SourceInstruction {
 impl SourceInstruction {
     pub fn span(&self, blocks: &[BasicBlock]) -> Span {
         match *self {
-            SourceInstruction::Statement { idx, bb } => blocks[bb].statements[idx].span,
-            SourceInstruction::Terminator { bb } => blocks[bb].terminator.span,
+            SourceInstruction::Statement { idx, bb } => blocks[bb].statements[idx].source_info.span,
+            SourceInstruction::Terminator { bb } => blocks[bb].terminator.source_info.span,
         }
     }
 

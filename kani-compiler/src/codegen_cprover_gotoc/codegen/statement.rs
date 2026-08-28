@@ -127,9 +127,9 @@ impl GotocCtx<'_, '_> {
             // closure capture of a contract-clause closure, which is valid by
             // construction (see `CurrentFnCtx::is_capture_ref_local`), so tell
             // CBMC not to generate pointer-validity checks for it.
-            self.codegen_span_stable_with_pragmas(stmt.span, &["disable:pointer-check"])
+            self.codegen_span_stable_with_pragmas(stmt.source_info.span, &["disable:pointer-check"])
         } else {
-            self.codegen_span_stable(stmt.span)
+            self.codegen_span_stable(stmt.source_info.span)
         };
         match &stmt.kind {
             StatementKind::Assign(lhs, rhs) => {
@@ -151,7 +151,8 @@ impl GotocCtx<'_, '_> {
                         let msg = "found `#[kani::loop_decreases]` without \
                                    `-Z loop-contracts`. The decreases clause \
                                    will be ignored.";
-                        let internal_span = rustc_internal::internal(self.tcx, stmt.span);
+                        let internal_span =
+                            rustc_internal::internal(self.tcx, stmt.source_info.span);
                         self.tcx.dcx().span_warn(internal_span, msg);
                         return Stmt::skip(location);
                     }
@@ -293,8 +294,12 @@ impl GotocCtx<'_, '_> {
                 let maybe_source_region =
                     region_from_coverage_opaque(self.tcx, coverage_opaque, instance);
                 if let Some((source_region, file_name)) = maybe_source_region {
-                    let coverage_stmt =
-                        self.codegen_coverage(&counter_data, stmt.span, source_region, &file_name);
+                    let coverage_stmt = self.codegen_coverage(
+                        &counter_data,
+                        stmt.source_info.span,
+                        source_region,
+                        &file_name,
+                    );
                     // TODO: Avoid single-statement blocks when conversion of
                     // standalone statements to the irep format is fixed.
                     // More details in <https://github.com/model-checking/kani/issues/3012>
@@ -318,7 +323,7 @@ impl GotocCtx<'_, '_> {
     ///
     /// See also [`GotocCtx::codegen_statement`] for ordinary [Statement]s.
     pub fn codegen_terminator(&mut self, term: &Terminator) -> Stmt {
-        let loc = self.codegen_span_stable(term.span);
+        let loc = self.codegen_span_stable(term.source_info.span);
         let _trace_span = debug_span!("CodegenTerminator", statement = ?term.kind).entered();
         debug!("handling terminator {:?}", term);
         //TODO: Instead of doing location::none(), and updating, just putit in when we make the stmt.
@@ -369,7 +374,7 @@ impl GotocCtx<'_, '_> {
                 self.codegen_drop(place, target, loc)
             }
             TerminatorKind::Call { func, args, destination, target, .. } => {
-                self.codegen_funcall(func, args, destination, target, term.span)
+                self.codegen_funcall(func, args, destination, target, term.source_info.span)
             }
             TerminatorKind::Assert { cond, expected, msg, target, .. } => {
                 let cond = {
@@ -395,7 +400,8 @@ impl GotocCtx<'_, '_> {
                         PropertyClass::SafetyCheck,
                     ),
                     // For all other assert kind we can get the static message.
-                    AssertMessage::NullPointerDereference => {
+                    AssertMessage::NullPointerDereference
+                    | AssertMessage::NullReferenceConstructed => {
                         (msg.description().unwrap(), PropertyClass::SafetyCheck)
                     }
                     AssertMessage::Overflow { .. }
@@ -410,7 +416,7 @@ impl GotocCtx<'_, '_> {
                 };
 
                 let (msg_str, reach_stmt) =
-                    self.codegen_reachability_check(msg.to_owned(), term.span);
+                    self.codegen_reachability_check(msg.to_owned(), term.source_info.span);
 
                 Stmt::block(
                     vec![
@@ -799,7 +805,10 @@ impl GotocCtx<'_, '_> {
                         self.codegen_virtual_funcall(self_ty, idx, destination, &mut fargs, loc)
                     }
                     // Normal, non-virtual function calls
-                    InstanceKind::Item | InstanceKind::Intrinsic | InstanceKind::Shim => {
+                    InstanceKind::Item
+                    | InstanceKind::Intrinsic
+                    | InstanceKind::LlvmIntrinsic
+                    | InstanceKind::Shim => {
                         // We need to handle FnDef items in a special way because `codegen_operand` compiles them to dummy structs.
                         // (cf. the function documentation)
                         let func_exp = self.codegen_func_expr(instance, loc);

@@ -640,7 +640,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                     self.tcx,
                     ty::TypingEnv::fully_monomorphized(),
                     *def_id,
-                    args,
+                    args.skip_binder(),
                 )
                 .unwrap()
                 .unwrap();
