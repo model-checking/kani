@@ -820,20 +820,26 @@ fn last_two_items_of_path_match(item_path: &str, generic_args: &str, name: &str)
 
     let last_two = format!("{}{}{}", generic_args, "::", name);
 
-    // The last two components of the item_path should be the same as ::{generic_args}::{name}
-    if last_two.chars().eq(actual_last_two.chars().filter(|c| !c.is_whitespace())) {
+    // The last two components of the item_path should be the same as ::{generic_args}::{name},
+    // compared whitespace-insensitively on both sides (the caller pre-strips generic_args,
+    // but the helper shouldn't rely on that).
+    if last_two
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .eq(actual_last_two.chars().filter(|c| !c.is_whitespace()))
+    {
         return true;
     }
 
     // A method whose impl block lives outside its self type's home module is rendered
     // by def_path_str as `<impl path::to::Type<Args>>` instead of `Type::<Args>`; unwrap
     // that form and retry against Args. def_path_str also wraps trait-object bounds in
-    // redundant parens inside a generic-argument list (e.g. `(dyn Any + 'static)`), so
-    // strip those, and whitespace, from both sides before comparing.
+    // redundant parens inside a generic-argument list (e.g. `(dyn Any + 'static)`);
+    // strip those from the candidate side; the user spells the bound bare.
     if let Some(self_type_args) = impl_self_type_generic_args(parts[parts.len() - 2]) {
         let unwrapped_last_two =
             format!("::<{}>::{}", strip_redundant_parens(self_type_args), parts[parts.len() - 1]);
-        let last_two = format!("{}::{}", strip_redundant_parens(generic_args), name);
+        let last_two = format!("{}::{}", generic_args, name);
         return last_two
             .chars()
             .filter(|c| !c.is_whitespace())
@@ -846,7 +852,8 @@ fn last_two_items_of_path_match(item_path: &str, generic_args: &str, name: &str)
 /// If `part` is the `<impl SELF_TYPE>` form def_path_str uses for a method whose impl
 /// block lives outside SELF_TYPE's home module, returns the bracket-balanced contents
 /// of SELF_TYPE's outermost `<...>` (its generic arguments). `None` if `part` isn't
-/// that form, or SELF_TYPE isn't generic.
+/// that form, SELF_TYPE isn't generic, or its generic list can't be parsed by bracket
+/// counting (e.g. an argument contains `->`).
 fn impl_self_type_generic_args(part: &str) -> Option<&str> {
     let self_type = part.strip_prefix("<impl ")?.strip_suffix('>')?;
     let start = self_type.find('<')?;
@@ -857,7 +864,12 @@ fn impl_self_type_generic_args(part: &str) -> Option<&str> {
             '>' => {
                 depth -= 1;
                 if depth == 0 {
-                    return Some(&self_type[start + 1..start + i]);
+                    // A close before the final char means bracket counting mis-parsed
+                    // the list (e.g. the `>` of a fn-pointer's `->`): decline.
+                    if start + i == self_type.len() - 1 {
+                        return Some(&self_type[start + 1..start + i]);
+                    }
+                    return None;
                 }
             }
             _ => {}
@@ -868,8 +880,15 @@ fn impl_self_type_generic_args(part: &str) -> Option<&str> {
 
 /// Splits a `,`-separated generic-argument list on its top-level commas and strips one
 /// layer of parens from a top-level argument only when it wraps a trait-object bound
-/// (`(dyn …)`); tuple-type parens are semantic and preserved.
+/// (`(dyn …)`); tuple-type parens are semantic and preserved. Lists containing `->`
+/// are returned unchanged.
 fn strip_redundant_parens(args: &str) -> String {
+    // `->` (fn-pointer / `Fn`-sugar renderings) would corrupt the depth counting
+    // below; skip normalization for such lists.
+    if args.contains("->") {
+        return args.to_string();
+    }
+
     let mut depth = 0i32;
     let mut parts = Vec::new();
     let mut part_start = 0;
@@ -890,6 +909,9 @@ fn strip_redundant_parens(args: &str) -> String {
     parts
         .into_iter()
         .map(|part| {
+            // The top-level split leaves the ", " separator's space on every part
+            // after the first; trim so the paren check sees the argument itself.
+            let part = part.trim();
             if fully_parenthesized(part) && part[1..].trim_start().starts_with("dyn ") {
                 &part[1..part.len() - 1]
             } else {
@@ -926,7 +948,9 @@ fn fully_parenthesized(s: &str) -> bool {
 #[cfg(test)]
 mod tests {
     mod simple_last_two_items_of_path_match {
-        use crate::kani_middle::resolve::last_two_items_of_path_match;
+        use crate::kani_middle::resolve::{
+            impl_self_type_generic_args, last_two_items_of_path_match, strip_redundant_parens,
+        };
 
         #[test]
         fn length_one_item_prefix() {
@@ -1004,6 +1028,58 @@ mod tests {
             let name = "method";
             let item_path = format!("m::<impl m::S>::{name}");
             assert!(!last_two_items_of_path_match(&item_path, generic_args, name))
+        }
+
+        // A generic argument containing `->` (fn-pointer / `Fn`-sugar rendering) defeats
+        // simple bracket counting: the arrow's `>` reads as a close. Extraction must
+        // decline (clean no-match), never return a truncated argument list. Note the
+        // full pipeline declines such candidates one stage earlier (the top-level `::`
+        // split leaves them unmatchable), so the direct assert is what exercises this
+        // guard; the end-to-end assert pins the pipeline's own no-match.
+        #[test]
+        fn impl_self_type_fn_ptr_args_decline() {
+            assert_eq!(impl_self_type_generic_args("<impl m::S<fn() -> u32, A>>"), None);
+            let name = "method";
+            let item_path = format!("m::x::<impl m::S<fn() -> u32, A>>::{name}");
+            assert!(!last_two_items_of_path_match(&item_path, "::<fn()->u32,A>", name));
+        }
+
+        // An arrow-bearing list corrupts the comma-depth scan (the `>` of `->` closes
+        // nothing), which could split at a nested comma and strip parens that aren't
+        // top-level. Normalization is skipped wholesale for such lists; unstripped
+        // parens can only fail to match, never match the wrong candidate.
+        #[test]
+        fn strip_redundant_parens_arrow_list_unchanged() {
+            let args = "::<fn()->u32,(dyn Any + 'static),B>";
+            assert_eq!(strip_redundant_parens(args), args);
+        }
+
+        // generic_args_to_string strips whitespace before this helper ever runs, but the
+        // helper shouldn't rely on its caller: a spaced turbofish must match on the
+        // primary (same-module) path too, as it already does on the fallback path.
+        #[test]
+        fn whitespace_insensitive_primary_match() {
+            assert!(last_two_items_of_path_match("m::S::<u32, A>::f", "::<u32, A>", "f"));
+        }
+
+        // def_path_str separates arguments with ", ", so every argument after the first
+        // arrives from the top-level split with a leading space. The paren-strip must
+        // still recognize a trait-object bound there; the bare spelling matches
+        // regardless of the bound's position in the list.
+        #[test]
+        fn impl_self_type_dyn_second_position() {
+            assert_eq!(
+                strip_redundant_parens("u32, (dyn core::any::Any + 'static)"),
+                "u32,dyn core::any::Any + 'static"
+            );
+            let name = "method";
+            let item_path =
+                format!("m::x::<impl m::Q<u32, (dyn core::any::Any + 'static)>>::{name}");
+            assert!(last_two_items_of_path_match(
+                &item_path,
+                "::<u32, dyn core::any::Any + 'static>",
+                name
+            ));
         }
     }
 }
