@@ -106,6 +106,7 @@ For division and modulo operations specifically, bounding only one operand is of
 fn test_division_divisor_only() {
     let dividend: i64 = kani::any();
     let divisor: i64 = kani::any_where(|d| *d != 0);
+    kani::assume(!(dividend == i64::MIN && divisor == -1));
     let _ = dividend / divisor;
 }
 
