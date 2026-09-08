@@ -1121,9 +1121,8 @@ fn can_derive_arbitrary(
                     // the harness itself owns the storage.
                     fields_impl_arbitrary = false;
                 } else if let TyKind::RigidTy(RigidTy::Pat(base_ty, _)) = ty.kind() {
-                    fields_impl_arbitrary &= pat_base_is_derivable(
-                        base_ty, kani_any_def, ty_arbitrary_cache,
-                    );
+                    fields_impl_arbitrary &=
+                        pat_base_is_derivable(base_ty, kani_any_def, ty_arbitrary_cache);
                 } else {
                     fields_impl_arbitrary &=
                         implements_arbitrary(ty, kani_any_def, ty_arbitrary_cache);

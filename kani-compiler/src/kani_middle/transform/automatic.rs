@@ -1383,7 +1383,14 @@ fn call_kani_any_for_ty(
         // base type. Generate an arbitrary value of the base type, transmute it to the pattern
         // type, then constrain it to the pattern's validity range via `assume_scalar_niche`.
         let base_lcl = call_kani_any_for_ty(
-            tcx, models, body, base_ty, mutability, source, invariant_cache, mined_cache,
+            tcx,
+            models,
+            body,
+            base_ty,
+            mutability,
+            source,
+            invariant_cache,
+            mined_cache,
         );
         let pat_lcl = body.new_local(ty, source.span(body.blocks()), mutability);
         body.assign_to(
