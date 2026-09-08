@@ -15,12 +15,27 @@ where
     }
 }
 
+/// Reference-count observers (`strong_count`, `weak_count`, `get_mut`, `try_unwrap`,
+/// `make_mut`) branch only on *uniqueness*: every documented count-dependent behavior of
+/// `Rc`/`Arc` is decided by whether `strong_count == 1` and whether `weak_count == 0`.
+/// A nondeterministic value therefore covers all behavioral equivalence classes of real
+/// reference-count states by generating one representative per class:
+/// `strong_count ∈ {1, 2}` (2 stands in for every shared count) and
+/// `weak_count ∈ {0, 1}`. Extra references are leaked, which is observationally identical
+/// to references held by a caller for the duration of the function under verification.
 impl<T> Arbitrary for std::rc::Rc<T>
 where
     T: Arbitrary,
 {
     fn any() -> Self {
-        std::rc::Rc::new(T::any())
+        let rc = std::rc::Rc::new(T::any());
+        if bool::any() {
+            std::mem::forget(rc.clone());
+        }
+        if bool::any() {
+            std::mem::forget(std::rc::Rc::downgrade(&rc));
+        }
+        rc
     }
 }
 
@@ -29,7 +44,14 @@ where
     T: Arbitrary,
 {
     fn any() -> Self {
-        std::sync::Arc::new(T::any())
+        let arc = std::sync::Arc::new(T::any());
+        if bool::any() {
+            std::mem::forget(arc.clone());
+        }
+        if bool::any() {
+            std::mem::forget(std::sync::Arc::downgrade(&arc));
+        }
+        arc
     }
 }
 
@@ -52,14 +74,28 @@ pub fn any_box<T: Arbitrary>() -> Box<T> {
 #[inline(never)]
 #[doc(hidden)]
 pub fn any_rc<T: Arbitrary>() -> std::rc::Rc<T> {
-    std::rc::Rc::new(crate::any())
+    let rc: std::rc::Rc<T> = std::rc::Rc::new(crate::any());
+    if crate::any() {
+        std::mem::forget(rc.clone());
+    }
+    if crate::any() {
+        std::mem::forget(std::rc::Rc::downgrade(&rc));
+    }
+    rc
 }
 
 #[kanitool::fn_marker = "AnyArcModel"]
 #[inline(never)]
 #[doc(hidden)]
 pub fn any_arc<T: Arbitrary>() -> std::sync::Arc<T> {
-    std::sync::Arc::new(crate::any())
+    let arc: std::sync::Arc<T> = std::sync::Arc::new(crate::any());
+    if crate::any() {
+        std::mem::forget(arc.clone());
+    }
+    if crate::any() {
+        std::mem::forget(std::sync::Arc::downgrade(&arc));
+    }
+    arc
 }
 
 impl Arbitrary for std::time::Duration {

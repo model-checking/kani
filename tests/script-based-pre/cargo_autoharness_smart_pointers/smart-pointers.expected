@@ -6,4 +6,6 @@
 | cargo_autoharness_smart_pointers | box_derived       | #[kani::proof]            | Success             |
 | cargo_autoharness_smart_pointers | rc_derivable      | #[kani::proof]            | Success             |
 | cargo_autoharness_smart_pointers | arc_assert        | #[kani::proof]            | Failure             |
-Complete - 4 successfully verified functions, 1 failures, 5 total.
+| cargo_autoharness_smart_pointers | arc_count         | #[kani::proof]            | Failure             |
+assertion failed: Arc::strong_count(&a) == 1
+Complete - 4 successfully verified functions, 2 failures, 6 total.

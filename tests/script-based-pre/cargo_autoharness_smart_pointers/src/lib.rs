@@ -3,8 +3,10 @@
 
 // Test that the autoharness subcommand supports Box<T>, Rc<T>, and Arc<T> arguments, both for
 // pointee types that implement Arbitrary and for pointees whose Arbitrary implementation the
-// compiler derives (via the AnyBox/AnyRc/AnyArc models). These values are *unbounded*: a smart
-// pointer to T covers exactly the values of T, so no --bounded-arguments is needed.
+// compiler derives (via the AnyBox/AnyRc/AnyArc models). These values are *unbounded* in the
+// pointee: a smart pointer to T covers all values of T, so no --bounded-arguments is needed.
+// Nondeterministic Rc/Arc values additionally cover the reference-count classes (unique vs.
+// shared, with/without weak references), since count observers branch on uniqueness (#4752).
 // The "TEST NOTE" comments explain the expected result per function.
 
 use std::rc::Rc;
@@ -47,6 +49,12 @@ pub fn arc_derivable(a: Arc<OnlyDerivable>) -> u8 {
 pub fn arc_assert(a: Arc<OnlyDerivable>) {
     kani::cover!(a.x == 255, "extreme pointee values are generated");
     assert!(a.x < 255);
+}
+
+// TEST NOTE: should FAIL: a nondeterministic Arc can be shared (strong_count > 1 reachable
+// through the AnyArc model), so uniqueness is not guaranteed (#4752).
+pub fn arc_count(a: Arc<OnlyDerivable>) {
+    assert!(Arc::strong_count(&a) == 1);
 }
 
 // TEST NOTE: skipped (gracefully, without crashing the compiler): unsized pointees are not
