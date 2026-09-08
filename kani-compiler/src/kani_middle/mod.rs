@@ -817,8 +817,11 @@ pub fn scalar_niche(tcx: TyCtxt, ty: Ty) -> Option<ScalarNiche> {
         .ok()?;
     let BackendRepr::Scalar(scalar) = layout.backend_repr else { return None };
     let Scalar::Initialized { value, valid_range } = scalar else { return None };
-    let Primitive::Int(int, _signed) = value else { return None };
-    let bits = int.size().bits();
+    let bits = match value {
+        Primitive::Int(int, _) => int.size().bits(),
+        Primitive::Pointer(_) => tcx.data_layout.pointer_size().bits(),
+        Primitive::Float(_) => return None,
+    };
     let full = if bits == 128 { u128::MAX } else { (1u128 << bits) - 1 };
     if valid_range.start == 0 && valid_range.end == full {
         return None;

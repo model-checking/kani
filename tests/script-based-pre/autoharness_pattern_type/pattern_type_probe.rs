@@ -21,7 +21,9 @@ pub fn wrapper_get_ptr(w: Wrapper) -> *mut u32 {
     w.inner.as_ptr()
 }
 
-// Cover check: the generated NonNull must actually be non-null.
+// The generated NonNull must actually be non-null: assert proves null is never
+// generated, cover proves a non-null value is reachable.
 pub fn nonnull_is_not_null(p: NonNull<u8>) {
+    kani::assert(p.as_ptr() as usize != 0, "generated pointer must be non-null");
     kani::cover!(p.as_ptr() as usize != 0, "non-null pointer");
 }
