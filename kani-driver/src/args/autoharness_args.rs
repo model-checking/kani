@@ -8,7 +8,10 @@ use crate::args::list_args::Format;
 use crate::args::{ValidateArgs, VerificationArgs, validate_std_path};
 use crate::util::warning;
 use clap::{Error, Parser, error::ErrorKind};
-use kani_metadata::UnstableFeature;
+use kani_metadata::{
+    AUTOHARNESS_BOUNDED_ARBITRARY_BOUND, AUTOHARNESS_SLICE_BOUND, AUTOHARNESS_STR_BOUND,
+    UnstableFeature,
+};
 use regex::Regex;
 
 #[derive(Debug, Parser)]
@@ -29,6 +32,22 @@ pub struct CommonAutoharnessArgs {
     /// bounds; a bug that requires a larger input will not be found.
     #[arg(long)]
     pub bounded_arguments: bool,
+
+    /// The maximum length for nondeterministic `&[T]`/`&mut [T]` arguments generated under
+    /// `--bounded-arguments`. Verification results only hold up to this bound.
+    #[arg(long, default_value_t = AUTOHARNESS_SLICE_BOUND, value_name = "N")]
+    pub slice_bound: u64,
+
+    /// The maximum length, in bytes, for nondeterministic `&str` arguments generated under
+    /// `--bounded-arguments`. Verification results only hold up to this bound.
+    #[arg(long, default_value_t = AUTOHARNESS_STR_BOUND, value_name = "N")]
+    pub string_bound: u64,
+
+    /// The bound for nondeterministic arguments whose type implements `BoundedArbitrary`
+    /// (`Vec<T>`, `String`, or user types deriving it) generated under `--bounded-arguments`.
+    /// Verification results only hold up to this bound.
+    #[arg(long, default_value_t = AUTOHARNESS_BOUNDED_ARBITRARY_BOUND, value_name = "N")]
+    pub bounded_arbitrary_bound: u64,
 
     /// Generate nondeterministic values for types without an Arbitrary implementation through
     /// one of the type's own constructors with nondeterministic arguments: either an inlined
@@ -55,6 +74,38 @@ pub struct CommonAutoharnessArgs {
     /// The format of the `list` output. Requires --list.
     #[arg(long, default_value = "pretty", requires = "list")]
     pub format: Format,
+}
+
+/// The bounds automatic harnesses use for arguments that can only be generated up to a bound,
+/// c.f. `--bounded-arguments`.
+#[derive(Debug, Clone, Copy)]
+pub struct AutoharnessBounds {
+    /// The maximum length for `&[T]`/`&mut [T]` arguments.
+    pub slice: u64,
+    /// The maximum length, in bytes, for `&str` arguments.
+    pub string: u64,
+    /// The bound for arguments whose type implements `BoundedArbitrary`.
+    pub bounded_arbitrary: u64,
+}
+
+impl Default for AutoharnessBounds {
+    fn default() -> Self {
+        Self {
+            slice: AUTOHARNESS_SLICE_BOUND,
+            string: AUTOHARNESS_STR_BOUND,
+            bounded_arbitrary: AUTOHARNESS_BOUNDED_ARBITRARY_BOUND,
+        }
+    }
+}
+
+impl CommonAutoharnessArgs {
+    pub fn bounds(&self) -> AutoharnessBounds {
+        AutoharnessBounds {
+            slice: self.slice_bound,
+            string: self.string_bound,
+            bounded_arbitrary: self.bounded_arbitrary_bound,
+        }
+    }
 }
 
 /// Automatically verify functions in a crate.

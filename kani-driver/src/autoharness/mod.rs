@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use crate::args::Timeout;
 use crate::args::autoharness_args::{
-    CargoAutoharnessArgs, CommonAutoharnessArgs, StandaloneAutoharnessArgs,
+    AutoharnessBounds, CargoAutoharnessArgs, CommonAutoharnessArgs, StandaloneAutoharnessArgs,
 };
 use crate::args::common::UnstableFeature;
 use crate::call_cbmc::VerificationStatus;
@@ -14,6 +14,7 @@ use crate::list::collect_metadata::process_metadata;
 use crate::list::output::output_list_results;
 use crate::project::{Project, standalone_project, std_project};
 use crate::session::KaniSession;
+use crate::util::warning;
 use crate::{InvocationType, print_kani_version, project, verify_project};
 use anyhow::Result;
 use comfy_table::Table as PrettyTable;
@@ -58,13 +59,38 @@ fn setup_session(session: &mut KaniSession, common_autoharness_args: &CommonAuto
     session.args.apply_autoharness_parallel_defaults();
     session.enable_autoharness();
     session.add_default_bounds();
+    let bounds = common_autoharness_args.bounds();
+    if common_autoharness_args.bounded_arguments {
+        // `add_default_bounds` has already run, so the unwinding bound is resolved here.
+        warn_if_bounds_exceed_unwind(bounds, session.args.default_unwind);
+    }
     session.add_auto_harness_args(
         &common_autoharness_args.include_pattern,
         &common_autoharness_args.exclude_pattern,
         common_autoharness_args.bounded_arguments,
         common_autoharness_args.constructor_args,
         common_autoharness_args.check_invariants,
+        bounds,
     );
+}
+
+/// Warn about a bound that is not below the effective unwinding bound: loops iterating over such
+/// an argument are then not fully unwound, so results do not hold up to the bound after all.
+fn warn_if_bounds_exceed_unwind(bounds: AutoharnessBounds, unwind: Option<u32>) {
+    let Some(unwind) = unwind else { return };
+    for (option, value) in [
+        ("--slice-bound", bounds.slice),
+        ("--string-bound", bounds.string),
+        ("--bounded-arbitrary-bound", bounds.bounded_arbitrary),
+    ] {
+        if value >= u64::from(unwind) {
+            warning(&format!(
+                "{option} is {value}, which is not below the unwinding bound ({unwind}). Loops \
+                 iterating over such an argument may not be fully unwound, so verification \
+                 results may not hold up to the bound."
+            ));
+        }
+    }
 }
 
 /// After generating the automatic harnesses, postprocess metadata and run verification.
@@ -177,6 +203,7 @@ impl KaniSession {
         bounded_arguments: bool,
         constructor_args: bool,
         check_invariants: bool,
+        bounds: AutoharnessBounds,
     ) {
         let mut args = vec![];
         for pattern in included {
@@ -187,6 +214,12 @@ impl KaniSession {
         }
         if bounded_arguments {
             args.push("--autoharness-bounded-arguments".to_string());
+            args.push(format!("--autoharness-slice-bound {}", bounds.slice));
+            args.push(format!("--autoharness-string-bound {}", bounds.string));
+            args.push(format!(
+                "--autoharness-bounded-arbitrary-bound {}",
+                bounds.bounded_arbitrary
+            ));
         }
         if constructor_args {
             args.push("--autoharness-constructor-args".to_string());
@@ -195,6 +228,7 @@ impl KaniSession {
             args.push("--autoharness-check-invariants".to_string());
         }
         self.autoharness_compiler_flags = Some(args);
+        self.autoharness_bounds = bounds;
     }
 
     /// Add global harness timeout and loop unwinding bounds if not provided.
@@ -272,9 +306,12 @@ impl KaniSession {
         }
 
         if any_bounded {
+            let bounds = self.autoharness_bounds;
             println!(
-                "Note: harnesses marked \"(bounded)\" use bounded nondeterministic values for some arguments (--bounded-arguments);\n\
-                 their verification results only hold up to the bounds, i.e., bugs that require larger input values may be missed."
+                "Note: harnesses marked \"(bounded)\" use bounded nondeterministic values for some arguments (--bounded-arguments):\n\
+                 slices up to {} elements, strings up to {} bytes, and BoundedArbitrary values up to {} elements.\n\
+                 Their verification results only hold up to those bounds, i.e., bugs that require larger input values may be missed.",
+                bounds.slice, bounds.string, bounds.bounded_arbitrary
             );
         }
         if any_ctor {
