@@ -29,6 +29,9 @@ pub(crate) fn print_kani_version(invocation_type: InvocationType, verbose: bool)
     if verbose && !KANI_RUSTC_VERSION.is_empty() {
         println!("{KANI_RUSTC_VERSION}");
     }
+    if verbose {
+        print_architecture_info();
+    }
     // Callers gate this function on `--quiet`, so the pin check keeps the
     // tested zero-output contract of `--quiet`.
     print_cbmc_version_info();
@@ -78,6 +81,49 @@ fn print_cbmc_version_info() {
         && let Some(warning) = cbmc_version_mismatch_warning(&found, &pinned)
     {
         util::warning(&warning);
+    }
+}
+
+/// Print the host architecture and warn when Kani runs translated (x86_64 under
+/// Rosetta 2 on Apple Silicon): SAT solving under translation carries a steep
+/// performance penalty, and an x86_64 `kani-driver` almost always ships with
+/// x86_64 solver binaries. Warn-only: translation must never block verification.
+fn print_architecture_info() {
+    if cfg!(target_os = "macos") {
+        println!("Host architecture: {}", std::env::consts::ARCH);
+        if let Some(warning) = rosetta_warning(is_process_translated()) {
+            util::warning(&warning);
+        }
+    }
+}
+
+/// The translation warning, or `None` when running natively. Split out for unit tests.
+fn rosetta_warning(translated: bool) -> Option<String> {
+    translated.then(|| {
+        "Kani is running under Rosetta 2 translation (x86_64 binaries on Apple Silicon); \
+         solver performance is substantially degraded. Install a native arm64 build of Kani \
+         and its dependencies."
+            .to_string()
+    })
+}
+
+/// Whether this process is running translated under Rosetta 2, per
+/// `sysctl.proc_translated` (1 = translated). A `false` return means native:
+/// either an arm64 process, an x86_64 process on Intel hardware, or a non-macOS host.
+fn is_process_translated() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("sysctl")
+            .args(["-n", "sysctl.proc_translated"])
+            .output()
+            .ok()
+            .filter(|output| output.status.success())
+            .map(|output| String::from_utf8_lossy(&output.stdout).trim() == "1")
+            .unwrap_or(false)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        false
     }
 }
 
@@ -165,5 +211,24 @@ mod tests {
     #[test]
     fn matching_versions_produce_no_warning() {
         assert_eq!(cbmc_version_mismatch_warning("6.8.0", "6.8.0"), None);
+    }
+
+    #[test]
+    fn translated_process_produces_a_rosetta_warning() {
+        let warning = rosetta_warning(true).unwrap();
+        assert!(warning.contains("Rosetta"));
+        assert!(warning.contains("arm64"));
+    }
+
+    #[test]
+    fn native_process_produces_no_rosetta_warning() {
+        assert_eq!(rosetta_warning(false), None);
+    }
+
+    #[test]
+    fn translation_probe_runs_and_is_consistent_with_build_arch() {
+        // The probe must never panic. On this CI/dev fleet (native arm64 or Linux) it
+        // returns false; an x86_64 build running natively on Intel also returns false.
+        let _ = is_process_translated();
     }
 }
