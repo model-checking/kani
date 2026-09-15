@@ -26,7 +26,7 @@ regex = "1.11.1"
 rustc-demangle = "0.1.21"
 pathdiff = "0.2.1"
 rayon = "1.5.3"
-comfy-table = "7.0.1"
+comfy-table = "8.0.0"
 strum = {version = "0.28"}
 strum_macros = {version = "0.28"}
 tempfile = "3"
