@@ -1,0 +1,5 @@
+Status: SATISFIED
+| pattern_type_probe | nonnull_as_ptr      | #[kani::proof]            | Success             |
+| pattern_type_probe | nonnull_is_not_null | #[kani::proof]            | Success             |
+| pattern_type_probe | wrapper_get_ptr     | #[kani::proof]            | Success             |
+Complete - 3 successfully verified functions, 0 failures, 3 total.
