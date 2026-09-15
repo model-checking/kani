@@ -1,0 +1,243 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `library/kani/src/arbitrary.rs`."><title>arbitrary.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-0c87338a.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="kani" data-themes="" data-resource-suffix="" data-rustdoc-version="1.100.0-nightly (8925ea358 2026-08-20)" data-channel="nightly" data-search-js="search-b167f383.js" data-stringdex-js="stringdex-b5109af9.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../../static.files/src-script-813739b1.js"></script><script defer src="../../src-files.js"></script><script defer src="../../static.files/main-1814ead3.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-9f56287d.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">kani/</div>arbitrary.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="comment">// Copyright Kani Contributors
+<a href=#2 id=2 data-nosnippet>2</a>// SPDX-License-Identifier: Apache-2.0 OR MIT
+<a href=#3 id=3 data-nosnippet>3</a>
+<a href=#4 id=4 data-nosnippet>4</a></span><span class="doccomment">//! This module introduces the `Arbitrary` trait as well as implementation for
+<a href=#5 id=5 data-nosnippet>5</a>//! primitive types and other std containers.
+<a href=#6 id=6 data-nosnippet>6</a>
+<a href=#7 id=7 data-nosnippet>7</a></span><span class="kw">use </span><span class="kw">crate</span>::Arbitrary;
+<a href=#8 id=8 data-nosnippet>8</a>
+<a href=#9 id=9 data-nosnippet>9</a><span class="kw">impl</span>&lt;T&gt; Arbitrary <span class="kw">for </span>std::boxed::Box&lt;T&gt;
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">where
+<a href=#11 id=11 data-nosnippet>11</a>    </span>T: Arbitrary,
+<a href=#12 id=12 data-nosnippet>12</a>{
+<a href=#13 id=13 data-nosnippet>13</a>    <span class="kw">fn </span>any() -&gt; <span class="self">Self </span>{
+<a href=#14 id=14 data-nosnippet>14</a>        Box::new(T::any())
+<a href=#15 id=15 data-nosnippet>15</a>    }
+<a href=#16 id=16 data-nosnippet>16</a>}
+<a href=#17 id=17 data-nosnippet>17</a>
+<a href=#18 id=18 data-nosnippet>18</a><span class="kw">impl</span>&lt;T&gt; Arbitrary <span class="kw">for </span>std::rc::Rc&lt;T&gt;
+<a href=#19 id=19 data-nosnippet>19</a><span class="kw">where
+<a href=#20 id=20 data-nosnippet>20</a>    </span>T: Arbitrary,
+<a href=#21 id=21 data-nosnippet>21</a>{
+<a href=#22 id=22 data-nosnippet>22</a>    <span class="kw">fn </span>any() -&gt; <span class="self">Self </span>{
+<a href=#23 id=23 data-nosnippet>23</a>        std::rc::Rc::new(T::any())
+<a href=#24 id=24 data-nosnippet>24</a>    }
+<a href=#25 id=25 data-nosnippet>25</a>}
+<a href=#26 id=26 data-nosnippet>26</a>
+<a href=#27 id=27 data-nosnippet>27</a><span class="kw">impl</span>&lt;T&gt; Arbitrary <span class="kw">for </span>std::sync::Arc&lt;T&gt;
+<a href=#28 id=28 data-nosnippet>28</a><span class="kw">where
+<a href=#29 id=29 data-nosnippet>29</a>    </span>T: Arbitrary,
+<a href=#30 id=30 data-nosnippet>30</a>{
+<a href=#31 id=31 data-nosnippet>31</a>    <span class="kw">fn </span>any() -&gt; <span class="self">Self </span>{
+<a href=#32 id=32 data-nosnippet>32</a>        std::sync::Arc::new(T::any())
+<a href=#33 id=33 data-nosnippet>33</a>    }
+<a href=#34 id=34 data-nosnippet>34</a>}
+<a href=#35 id=35 data-nosnippet>35</a>
+<a href=#36 id=36 data-nosnippet>36</a><span class="doccomment">/// The models below are used by the compiler to generate nondeterministic
+<a href=#37 id=37 data-nosnippet>37</a>/// `Box&lt;T&gt;`/`Rc&lt;T&gt;`/`Arc&lt;T&gt;` values for automatic harnesses when `T` does not implement
+<a href=#38 id=38 data-nosnippet>38</a>/// `Arbitrary` in source code but the compiler can derive it: the `kani::any::&lt;T&gt;()` calls in
+<a href=#39 id=39 data-nosnippet>39</a>/// their bodies are then replaced with the compiler-synthesized implementation. (For `T`s that
+<a href=#40 id=40 data-nosnippet>40</a>/// do implement `Arbitrary`, the `Arbitrary` implementations above are resolved directly
+<a href=#41 id=41 data-nosnippet>41</a>/// instead.)
+<a href=#42 id=42 data-nosnippet>42</a>/// These models are *optional*: they require `alloc` and thus have no `core::kani`
+<a href=#43 id=43 data-nosnippet>43</a>/// counterpart, c.f. `KaniModel::is_optional`.
+<a href=#44 id=44 data-nosnippet>44</a></span><span class="attr">#[kanitool::fn_marker = <span class="string">"AnyBoxModel"</span>]
+<a href=#45 id=45 data-nosnippet>45</a>#[inline(never)]
+<a href=#46 id=46 data-nosnippet>46</a>#[doc(hidden)]
+<a href=#47 id=47 data-nosnippet>47</a></span><span class="kw">pub fn </span>any_box&lt;T: Arbitrary&gt;() -&gt; Box&lt;T&gt; {
+<a href=#48 id=48 data-nosnippet>48</a>    Box::new(<span class="kw">crate</span>::any())
+<a href=#49 id=49 data-nosnippet>49</a>}
+<a href=#50 id=50 data-nosnippet>50</a>
+<a href=#51 id=51 data-nosnippet>51</a><span class="attr">#[kanitool::fn_marker = <span class="string">"AnyRcModel"</span>]
+<a href=#52 id=52 data-nosnippet>52</a>#[inline(never)]
+<a href=#53 id=53 data-nosnippet>53</a>#[doc(hidden)]
+<a href=#54 id=54 data-nosnippet>54</a></span><span class="kw">pub fn </span>any_rc&lt;T: Arbitrary&gt;() -&gt; std::rc::Rc&lt;T&gt; {
+<a href=#55 id=55 data-nosnippet>55</a>    std::rc::Rc::new(<span class="kw">crate</span>::any())
+<a href=#56 id=56 data-nosnippet>56</a>}
+<a href=#57 id=57 data-nosnippet>57</a>
+<a href=#58 id=58 data-nosnippet>58</a><span class="attr">#[kanitool::fn_marker = <span class="string">"AnyArcModel"</span>]
+<a href=#59 id=59 data-nosnippet>59</a>#[inline(never)]
+<a href=#60 id=60 data-nosnippet>60</a>#[doc(hidden)]
+<a href=#61 id=61 data-nosnippet>61</a></span><span class="kw">pub fn </span>any_arc&lt;T: Arbitrary&gt;() -&gt; std::sync::Arc&lt;T&gt; {
+<a href=#62 id=62 data-nosnippet>62</a>    std::sync::Arc::new(<span class="kw">crate</span>::any())
+<a href=#63 id=63 data-nosnippet>63</a>}
+<a href=#64 id=64 data-nosnippet>64</a>
+<a href=#65 id=65 data-nosnippet>65</a><span class="kw">impl </span>Arbitrary <span class="kw">for </span>std::time::Duration {
+<a href=#66 id=66 data-nosnippet>66</a>    <span class="kw">fn </span>any() -&gt; <span class="self">Self </span>{
+<a href=#67 id=67 data-nosnippet>67</a>        <span class="kw">const </span>NANOS_PER_SEC: u32 = <span class="number">1_000_000_000</span>;
+<a href=#68 id=68 data-nosnippet>68</a>        <span class="kw">let </span>nanos = u32::any();
+<a href=#69 id=69 data-nosnippet>69</a>        <span class="kw">crate</span>::assume(nanos &lt; NANOS_PER_SEC);
+<a href=#70 id=70 data-nosnippet>70</a>        std::time::Duration::new(u64::any(), nanos)
+<a href=#71 id=71 data-nosnippet>71</a>    }
+<a href=#72 id=72 data-nosnippet>72</a>}
+<a href=#73 id=73 data-nosnippet>73</a>
+<a href=#74 id=74 data-nosnippet>74</a><span class="doccomment">/// Generate a slice of *unbounded* nondeterministic length: a fresh allocation of
+<a href=#75 id=75 data-nosnippet>75</a>/// nondeterministic size whose contents are nondeterministic, with element validity
+<a href=#76 id=76 data-nosnippet>76</a>/// established by `slice_validity_assume` (a compiler hook that emits a quantified
+<a href=#77 id=77 data-nosnippet>77</a>/// assumption constraining each element's raw bits to the element type's layout niche;
+<a href=#78 id=78 data-nosnippet>78</a>/// a no-op for element types whose every bit pattern is valid, e.g. integers).
+<a href=#79 id=79 data-nosnippet>79</a>///
+<a href=#80 id=80 data-nosnippet>80</a>/// This model is used by the compiler to generate nondeterministic `&amp;[T]` arguments for
+<a href=#81 id=81 data-nosnippet>81</a>/// automatic harnesses (`kani autoharness`) when the element type qualifies; verification
+<a href=#82 id=82 data-nosnippet>82</a>/// results hold for ALL slice lengths (functions that iterate over the slice surface any
+<a href=#83 id=83 data-nosnippet>83</a>/// insufficient loop bound as an unwinding-assertion failure rather than passing silently).
+<a href=#84 id=84 data-nosnippet>84</a>///
+<a href=#85 id=85 data-nosnippet>85</a>/// This model is *optional*: it requires `alloc` and thus has no `core::kani` counterpart,
+<a href=#86 id=86 data-nosnippet>86</a>/// c.f. `KaniModel::is_optional`.
+<a href=#87 id=87 data-nosnippet>87</a></span><span class="attr">#[kanitool::fn_marker = <span class="string">"AnySliceRefUnboundedModel"</span>]
+<a href=#88 id=88 data-nosnippet>88</a>#[inline(never)]
+<a href=#89 id=89 data-nosnippet>89</a>#[doc(hidden)]
+<a href=#90 id=90 data-nosnippet>90</a></span><span class="kw">pub fn </span>any_slice_ref_unbounded&lt;T&gt;() -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>[T] {
+<a href=#91 id=91 data-nosnippet>91</a>    <span class="kw">let </span>len: usize = <span class="kw">crate</span>::any();
+<a href=#92 id=92 data-nosnippet>92</a>    <span class="kw">let </span>elem = std::mem::size_of::&lt;T&gt;();
+<a href=#93 id=93 data-nosnippet>93</a>    <span class="kw">if </span>elem == <span class="number">0 </span>{
+<a href=#94 id=94 data-nosnippet>94</a>        <span class="comment">// ZST slices: no storage needed, any length is fine.
+<a href=#95 id=95 data-nosnippet>95</a>        </span><span class="kw">return unsafe </span>{ std::slice::from_raw_parts(std::ptr::NonNull::dangling().as_ptr(), len) };
+<a href=#96 id=96 data-nosnippet>96</a>    }
+<a href=#97 id=97 data-nosnippet>97</a>    <span class="kw">crate</span>::assume(len &lt;= (isize::MAX <span class="kw">as </span>usize) / elem);
+<a href=#98 id=98 data-nosnippet>98</a>    <span class="kw">let </span>layout = std::alloc::Layout::array::&lt;T&gt;(len.max(<span class="number">1</span>)).unwrap();
+<a href=#99 id=99 data-nosnippet>99</a>    <span class="kw">let </span>ptr = <span class="kw">unsafe </span>{ std::alloc::alloc(layout) };
+<a href=#100 id=100 data-nosnippet>100</a>    <span class="kw">crate</span>::assume(!ptr.is_null());
+<a href=#101 id=101 data-nosnippet>101</a>    slice_validity_assume::&lt;T&gt;(ptr, len);
+<a href=#102 id=102 data-nosnippet>102</a>    <span class="kw">unsafe </span>{ std::slice::from_raw_parts(ptr <span class="kw">as </span><span class="kw-2">*const </span>T, len) }
+<a href=#103 id=103 data-nosnippet>103</a>}
+<a href=#104 id=104 data-nosnippet>104</a>
+<a href=#105 id=105 data-nosnippet>105</a><span class="doccomment">/// Generate a mutable slice of *unbounded* nondeterministic length: as
+<a href=#106 id=106 data-nosnippet>106</a>/// `any_slice_ref_unbounded`, but returning `&amp;mut [T]`. Each call produces a fresh (leaked)
+<a href=#107 id=107 data-nosnippet>107</a>/// allocation, so the returned slice is exclusive by construction; writes through it are
+<a href=#108 id=108 data-nosnippet>108</a>/// unconstrained by other generated values.
+<a href=#109 id=109 data-nosnippet>109</a>///
+<a href=#110 id=110 data-nosnippet>110</a>/// This model is *optional*: it requires `alloc`, c.f. `KaniModel::is_optional`.
+<a href=#111 id=111 data-nosnippet>111</a></span><span class="attr">#[kanitool::fn_marker = <span class="string">"AnySliceMutUnboundedModel"</span>]
+<a href=#112 id=112 data-nosnippet>112</a>#[inline(never)]
+<a href=#113 id=113 data-nosnippet>113</a>#[doc(hidden)]
+<a href=#114 id=114 data-nosnippet>114</a></span><span class="kw">pub fn </span>any_slice_mut_unbounded&lt;T&gt;() -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span><span class="kw-2">mut </span>[T] {
+<a href=#115 id=115 data-nosnippet>115</a>    <span class="kw">let </span>len: usize = <span class="kw">crate</span>::any();
+<a href=#116 id=116 data-nosnippet>116</a>    <span class="kw">let </span>elem = std::mem::size_of::&lt;T&gt;();
+<a href=#117 id=117 data-nosnippet>117</a>    <span class="kw">if </span>elem == <span class="number">0 </span>{
+<a href=#118 id=118 data-nosnippet>118</a>        <span class="kw">return unsafe </span>{
+<a href=#119 id=119 data-nosnippet>119</a>            std::slice::from_raw_parts_mut(std::ptr::NonNull::dangling().as_ptr(), len)
+<a href=#120 id=120 data-nosnippet>120</a>        };
+<a href=#121 id=121 data-nosnippet>121</a>    }
+<a href=#122 id=122 data-nosnippet>122</a>    <span class="kw">crate</span>::assume(len &lt;= (isize::MAX <span class="kw">as </span>usize) / elem);
+<a href=#123 id=123 data-nosnippet>123</a>    <span class="kw">let </span>layout = std::alloc::Layout::array::&lt;T&gt;(len.max(<span class="number">1</span>)).unwrap();
+<a href=#124 id=124 data-nosnippet>124</a>    <span class="kw">let </span>ptr = <span class="kw">unsafe </span>{ std::alloc::alloc(layout) };
+<a href=#125 id=125 data-nosnippet>125</a>    <span class="kw">crate</span>::assume(!ptr.is_null());
+<a href=#126 id=126 data-nosnippet>126</a>    slice_validity_assume::&lt;T&gt;(ptr, len);
+<a href=#127 id=127 data-nosnippet>127</a>    <span class="kw">unsafe </span>{ std::slice::from_raw_parts_mut(ptr <span class="kw">as </span><span class="kw-2">*mut </span>T, len) }
+<a href=#128 id=128 data-nosnippet>128</a>}
+<a href=#129 id=129 data-nosnippet>129</a>
+<a href=#130 id=130 data-nosnippet>130</a><span class="doccomment">/// Generate a `Vec` of *unbounded* nondeterministic length: a fresh allocation of
+<a href=#131 id=131 data-nosnippet>131</a>/// nondeterministic size whose contents are nondeterministic, with element validity
+<a href=#132 id=132 data-nosnippet>132</a>/// established by `slice_validity_assume` (c.f. `any_slice_ref_unbounded`), handed to
+<a href=#133 id=133 data-nosnippet>133</a>/// `Vec::from_raw_parts` with `capacity` equal to the allocated element count (`len.max(1)`
+<a href=#134 id=134 data-nosnippet>134</a>/// for non-ZSTs, since the allocation uses `Layout::array::&lt;T&gt;(len.max(1))` to avoid a
+<a href=#135 id=135 data-nosnippet>135</a>/// zero-sized allocation; `usize::MAX` for ZSTs). The allocation thus came from the global
+<a href=#136 id=136 data-nosnippet>136</a>/// allocator with exactly the layout `Vec`'s safety contract requires for `capacity`, so `Vec`
+<a href=#137 id=137 data-nosnippet>137</a>/// frees it correctly on drop.
+<a href=#138 id=138 data-nosnippet>138</a>///
+<a href=#139 id=139 data-nosnippet>139</a>/// This model is used by the compiler to generate nondeterministic `Vec&lt;T&gt;` arguments for
+<a href=#140 id=140 data-nosnippet>140</a>/// automatic harnesses (`kani autoharness`) when the element type qualifies; verification
+<a href=#141 id=141 data-nosnippet>141</a>/// results hold for ALL lengths. Optional: requires `alloc`.
+<a href=#142 id=142 data-nosnippet>142</a></span><span class="attr">#[kanitool::fn_marker = <span class="string">"AnyVecUnboundedModel"</span>]
+<a href=#143 id=143 data-nosnippet>143</a>#[inline(never)]
+<a href=#144 id=144 data-nosnippet>144</a>#[doc(hidden)]
+<a href=#145 id=145 data-nosnippet>145</a></span><span class="kw">pub fn </span>any_vec_unbounded&lt;T&gt;() -&gt; Vec&lt;T&gt; {
+<a href=#146 id=146 data-nosnippet>146</a>    <span class="kw">let </span>len: usize = <span class="kw">crate</span>::any();
+<a href=#147 id=147 data-nosnippet>147</a>    <span class="kw">let </span>elem = std::mem::size_of::&lt;T&gt;();
+<a href=#148 id=148 data-nosnippet>148</a>    <span class="kw">if </span>elem == <span class="number">0 </span>{
+<a href=#149 id=149 data-nosnippet>149</a>        <span class="comment">// For ZSTs, Vec never allocates and uses a dangling pointer; constructing from a
+<a href=#150 id=150 data-nosnippet>150</a>        // dangling pointer with any len is the documented pattern (and loop-free, which
+<a href=#151 id=151 data-nosnippet>151</a>        // matters: generation code must not itself be bounded by unwinding).
+<a href=#152 id=152 data-nosnippet>152</a>        </span><span class="kw">return unsafe </span>{
+<a href=#153 id=153 data-nosnippet>153</a>            Vec::from_raw_parts(std::ptr::NonNull::dangling().as_ptr(), len, usize::MAX)
+<a href=#154 id=154 data-nosnippet>154</a>        };
+<a href=#155 id=155 data-nosnippet>155</a>    }
+<a href=#156 id=156 data-nosnippet>156</a>    <span class="kw">crate</span>::assume(len &lt;= (isize::MAX <span class="kw">as </span>usize) / elem);
+<a href=#157 id=157 data-nosnippet>157</a>    <span class="kw">let </span>layout = std::alloc::Layout::array::&lt;T&gt;(len.max(<span class="number">1</span>)).unwrap();
+<a href=#158 id=158 data-nosnippet>158</a>    <span class="kw">let </span>ptr = <span class="kw">unsafe </span>{ std::alloc::alloc(layout) };
+<a href=#159 id=159 data-nosnippet>159</a>    <span class="kw">crate</span>::assume(!ptr.is_null());
+<a href=#160 id=160 data-nosnippet>160</a>    slice_validity_assume::&lt;T&gt;(ptr, len);
+<a href=#161 id=161 data-nosnippet>161</a>    <span class="kw">unsafe </span>{ Vec::from_raw_parts(ptr <span class="kw">as </span><span class="kw-2">*mut </span>T, len, len.max(<span class="number">1</span>)) }
+<a href=#162 id=162 data-nosnippet>162</a>}
+<a href=#163 id=163 data-nosnippet>163</a>
+<a href=#164 id=164 data-nosnippet>164</a><span class="doccomment">/// Compiler hook (c.f. `KaniHook::SliceValidityAssume`): assume that every element of the
+<a href=#165 id=165 data-nosnippet>165</a>/// `len`-element `T`-array at `ptr` has raw bits within `T`'s layout niche. Lowered directly
+<a href=#166 id=166 data-nosnippet>166</a>/// to a quantified goto assumption; a no-op when `T` has no niche. The default body is
+<a href=#167 id=167 data-nosnippet>167</a>/// unreachable: calls are always intercepted during code generation.
+<a href=#168 id=168 data-nosnippet>168</a></span><span class="attr">#[kanitool::fn_marker = <span class="string">"SliceValidityAssumeHook"</span>]
+<a href=#169 id=169 data-nosnippet>169</a>#[inline(never)]
+<a href=#170 id=170 data-nosnippet>170</a>#[doc(hidden)]
+<a href=#171 id=171 data-nosnippet>171</a></span><span class="kw">pub fn </span>slice_validity_assume&lt;T&gt;(_ptr: <span class="kw-2">*const </span>u8, _len: usize) {
+<a href=#172 id=172 data-nosnippet>172</a>    <span class="attr">#[cfg(not(kani))]
+<a href=#173 id=173 data-nosnippet>173</a>    </span><span class="macro">unreachable!</span>(<span class="string">"kani::slice_validity_assume is a verification-only hook"</span>);
+<a href=#174 id=174 data-nosnippet>174</a>}
+<a href=#175 id=175 data-nosnippet>175</a>
+<a href=#176 id=176 data-nosnippet>176</a><span class="doccomment">/// Nondeterministic functions for instantiating `Fn`/`FnMut`/`FnOnce`-bounded type
+<a href=#177 id=177 data-nosnippet>177</a>/// parameters of automatic harnesses: the parameter is instantiated with the *function
+<a href=#178 id=178 data-nosnippet>178</a>/// item type* of the matching-arity model below (function items implement all three `Fn`
+<a href=#179 id=179 data-nosnippet>179</a>/// traits and are zero-sized, so generating the value is trivial). Each call returns a
+<a href=#180 id=180 data-nosnippet>180</a>/// fresh nondeterministic value, which over-approximates the behavior of every real
+<a href=#181 id=181 data-nosnippet>181</a>/// closure with that signature (including stateful `FnMut` closures); verifying the
+<a href=#182 id=182 data-nosnippet>182</a>/// harness against this instantiation therefore covers the function-under-test's own code
+<a href=#183 id=183 data-nosnippet>183</a>/// for any closure behavior.
+<a href=#184 id=184 data-nosnippet>184</a>///
+<a href=#185 id=185 data-nosnippet>185</a>/// These models are *optional* (c.f. `KaniModel::is_optional`).
+<a href=#186 id=186 data-nosnippet>186</a></span><span class="attr">#[kanitool::fn_marker = <span class="string">"NondetFn0Model"</span>]
+<a href=#187 id=187 data-nosnippet>187</a>#[inline(never)]
+<a href=#188 id=188 data-nosnippet>188</a>#[doc(hidden)]
+<a href=#189 id=189 data-nosnippet>189</a></span><span class="kw">pub fn </span>nondet_fn0&lt;R: Arbitrary&gt;() -&gt; R {
+<a href=#190 id=190 data-nosnippet>190</a>    <span class="kw">crate</span>::any()
+<a href=#191 id=191 data-nosnippet>191</a>}
+<a href=#192 id=192 data-nosnippet>192</a>
+<a href=#193 id=193 data-nosnippet>193</a><span class="attr">#[kanitool::fn_marker = <span class="string">"NondetFn1Model"</span>]
+<a href=#194 id=194 data-nosnippet>194</a>#[inline(never)]
+<a href=#195 id=195 data-nosnippet>195</a>#[doc(hidden)]
+<a href=#196 id=196 data-nosnippet>196</a></span><span class="kw">pub fn </span>nondet_fn1&lt;A, R: Arbitrary&gt;(_a: A) -&gt; R {
+<a href=#197 id=197 data-nosnippet>197</a>    <span class="kw">crate</span>::any()
+<a href=#198 id=198 data-nosnippet>198</a>}
+<a href=#199 id=199 data-nosnippet>199</a>
+<a href=#200 id=200 data-nosnippet>200</a><span class="attr">#[kanitool::fn_marker = <span class="string">"NondetFn1RefModel"</span>]
+<a href=#201 id=201 data-nosnippet>201</a>#[inline(never)]
+<a href=#202 id=202 data-nosnippet>202</a>#[doc(hidden)]
+<a href=#203 id=203 data-nosnippet>203</a></span><span class="doccomment">/// Region-polymorphic: the fn item's late-bound lifetime lets it satisfy HRTB bounds
+<a href=#204 id=204 data-nosnippet>204</a>/// like `for&lt;'a&gt; Fn(&amp;'a T) -&gt; R` that the early-bound by-value models cannot.
+<a href=#205 id=205 data-nosnippet>205</a></span><span class="kw">pub fn </span>nondet_fn1_ref&lt;T, R: Arbitrary&gt;(_a: <span class="kw-2">&amp;</span>T) -&gt; R {
+<a href=#206 id=206 data-nosnippet>206</a>    <span class="kw">crate</span>::any()
+<a href=#207 id=207 data-nosnippet>207</a>}
+<a href=#208 id=208 data-nosnippet>208</a>
+<a href=#209 id=209 data-nosnippet>209</a><span class="attr">#[kanitool::fn_marker = <span class="string">"NondetFn2RefRefModel"</span>]
+<a href=#210 id=210 data-nosnippet>210</a>#[inline(never)]
+<a href=#211 id=211 data-nosnippet>211</a>#[doc(hidden)]
+<a href=#212 id=212 data-nosnippet>212</a></span><span class="kw">pub fn </span>nondet_fn2_ref_ref&lt;A, B, R: Arbitrary&gt;(_a: <span class="kw-2">&amp;</span>A, _b: <span class="kw-2">&amp;</span>B) -&gt; R {
+<a href=#213 id=213 data-nosnippet>213</a>    <span class="kw">crate</span>::any()
+<a href=#214 id=214 data-nosnippet>214</a>}
+<a href=#215 id=215 data-nosnippet>215</a>
+<a href=#216 id=216 data-nosnippet>216</a><span class="attr">#[kanitool::fn_marker = <span class="string">"NondetFn2RefValModel"</span>]
+<a href=#217 id=217 data-nosnippet>217</a>#[inline(never)]
+<a href=#218 id=218 data-nosnippet>218</a>#[doc(hidden)]
+<a href=#219 id=219 data-nosnippet>219</a></span><span class="kw">pub fn </span>nondet_fn2_ref_val&lt;A, B, R: Arbitrary&gt;(_a: <span class="kw-2">&amp;</span>A, _b: B) -&gt; R {
+<a href=#220 id=220 data-nosnippet>220</a>    <span class="kw">crate</span>::any()
+<a href=#221 id=221 data-nosnippet>221</a>}
+<a href=#222 id=222 data-nosnippet>222</a>
+<a href=#223 id=223 data-nosnippet>223</a><span class="attr">#[kanitool::fn_marker = <span class="string">"NondetFn2ValRefModel"</span>]
+<a href=#224 id=224 data-nosnippet>224</a>#[inline(never)]
+<a href=#225 id=225 data-nosnippet>225</a>#[doc(hidden)]
+<a href=#226 id=226 data-nosnippet>226</a></span><span class="kw">pub fn </span>nondet_fn2_val_ref&lt;A, B, R: Arbitrary&gt;(_a: A, _b: <span class="kw-2">&amp;</span>B) -&gt; R {
+<a href=#227 id=227 data-nosnippet>227</a>    <span class="kw">crate</span>::any()
+<a href=#228 id=228 data-nosnippet>228</a>}
+<a href=#229 id=229 data-nosnippet>229</a>
+<a href=#230 id=230 data-nosnippet>230</a><span class="attr">#[kanitool::fn_marker = <span class="string">"NondetFn2Model"</span>]
+<a href=#231 id=231 data-nosnippet>231</a>#[inline(never)]
+<a href=#232 id=232 data-nosnippet>232</a>#[doc(hidden)]
+<a href=#233 id=233 data-nosnippet>233</a></span><span class="kw">pub fn </span>nondet_fn2&lt;A, B, R: Arbitrary&gt;(_a: A, _b: B) -&gt; R {
+<a href=#234 id=234 data-nosnippet>234</a>    <span class="kw">crate</span>::any()
+<a href=#235 id=235 data-nosnippet>235</a>}
+<a href=#236 id=236 data-nosnippet>236</a>
+<a href=#237 id=237 data-nosnippet>237</a><span class="attr">#[kanitool::fn_marker = <span class="string">"NondetFn3Model"</span>]
+<a href=#238 id=238 data-nosnippet>238</a>#[inline(never)]
+<a href=#239 id=239 data-nosnippet>239</a>#[doc(hidden)]
+<a href=#240 id=240 data-nosnippet>240</a></span><span class="kw">pub fn </span>nondet_fn3&lt;A, B, C, R: Arbitrary&gt;(_a: A, _b: B, _c: C) -&gt; R {
+<a href=#241 id=241 data-nosnippet>241</a>    <span class="kw">crate</span>::any()
+<a href=#242 id=242 data-nosnippet>242</a>}
+</code></pre></div></section></main></body></html>
