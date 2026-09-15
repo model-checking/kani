@@ -1,1 +1,2 @@
-success: `--quiet` produced NO output
+success: passing run under `--quiet` produced no output and exited 0
+success: failing run under `--quiet` produced no output and exited non-zero

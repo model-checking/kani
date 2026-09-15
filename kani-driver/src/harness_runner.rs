@@ -306,9 +306,7 @@ impl KaniSession {
     /// Note: Takes `self` "by ownership". This function wants to be able to drop before
     /// exiting with an error code, if needed.
     pub(crate) fn print_final_summary(self, results: &[HarnessResult<'_>]) -> Result<()> {
-        if self.args.common_args.quiet {
-            return Ok(());
-        }
+        let quiet = self.args.common_args.quiet;
 
         let (automatic, manual): (Vec<_>, Vec<_>) =
             results.iter().partition(|r| r.harness.is_automatically_generated);
@@ -320,53 +318,52 @@ impl KaniSession {
         let failing = failures.len();
         let total = succeeding + failing;
 
-        if self.args.concrete_playback.is_some() {
-            if failures.is_empty() {
+        if !quiet {
+            if self.args.concrete_playback.is_some() {
+                if failures.is_empty() {
+                    println!(
+                        "INFO: The concrete playback feature never generated unit tests because there were no failing harnesses."
+                    )
+                } else if failures.iter().all(|r| !r.result.generated_concrete_test) {
+                    eprintln!(
+                        "The concrete playback feature did not generate unit tests, but there were failing harnesses. Please file a bug report at {BUG_REPORT_URL}"
+                    )
+                }
+            }
+
+            println!("Manual Harness Summary:");
+
+            for failure in failures.iter() {
+                println!("Verification failed for - {}", failure.harness.pretty_name);
+            }
+
+            if total > 0 {
                 println!(
-                    "INFO: The concrete playback feature never generated unit tests because there were no failing harnesses."
-                )
-            } else if failures.iter().all(|r| !r.result.generated_concrete_test) {
-                eprintln!(
-                    "The concrete playback feature did not generate unit tests, but there were failing harnesses. Please file a bug report at {BUG_REPORT_URL}"
-                )
+                    "Complete - {succeeding} successfully verified harnesses, {failing} failures, {total} total."
+                );
+            } else if self.args.harnesses.is_empty() {
+                // TODO: This could use a better message, possibly with links to Kani documentation.
+                // New users may encounter this and could use a pointer to how to write proof harnesses.
+                println!("No proof harnesses (functions with #[kani::proof]) were found to verify.")
             }
         }
 
-        println!("Manual Harness Summary:");
-
-        for failure in failures.iter() {
-            println!("Verification failed for - {}", failure.harness.pretty_name);
+        // `determine_targets` fails a zero-match filter before codegen, so this only guards paths
+        // that skip harness filtering. Kept outside the `!quiet` block so the error (and its
+        // non-zero exit) is raised in both output modes.
+        if total == 0 && !self.args.harnesses.is_empty() {
+            return Err(crate::metadata::no_harness_match_error(&self.args.harnesses));
         }
 
-        if total > 0 {
-            println!(
-                "Complete - {succeeding} successfully verified harnesses, {failing} failures, {total} total."
-            );
-        } else {
-            match self.args.harnesses.as_slice() {
-                [] =>
-                // TODO: This could use a better message, possibly with links to Kani documentation.
-                // New users may encounter this and could use a pointer to how to write proof harnesses.
-                {
-                    println!(
-                        "No proof harnesses (functions with #[kani::proof]) were found to verify."
-                    )
-                }
-                // `determine_targets` fails a zero-match filter before codegen, so this arm
-                // only guards paths that skip harness filtering.
-                _ => return Err(crate::metadata::no_harness_match_error(&self.args.harnesses)),
-            };
-        }
-
-        if self.args.coverage {
+        if self.args.coverage && !quiet {
             self.show_coverage_summary()?;
         }
 
-        let autoharness_failing = if self.autoharness_compiler_flags.is_some() {
-            self.print_autoharness_summary(automatic)?
-        } else {
-            0
-        };
+        let autoharness_result = self.autoharness_result(automatic);
+        let autoharness_failing = autoharness_result.as_ref().map_or(0, |r| r.failing.len());
+        if !quiet && let Some(autoharness_result) = autoharness_result {
+            self.print_autoharness_summary(autoharness_result);
+        }
 
         if failing + autoharness_failing > 0 {
             // Failure exit code without additional error message
