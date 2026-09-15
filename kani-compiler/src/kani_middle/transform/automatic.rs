@@ -68,6 +68,12 @@ struct AnyModels {
     /// Whether --constructor-args is enabled: under this heuristic-filter umbrella, generated
     /// ADT values additionally assume the type's mined invariant conjuncts.
     constructor_args: bool,
+    /// The maximum length for nondeterministic `&[T]`/`&mut [T]` values.
+    slice_bound: u64,
+    /// The maximum length, in bytes, for nondeterministic `&str` values.
+    string_bound: u64,
+    /// The bound for nondeterministic values of types implementing `BoundedArbitrary`.
+    bounded_arbitrary_bound: u64,
 }
 
 impl AnyModels {
@@ -85,6 +91,9 @@ impl AnyModels {
             smart_pointer_models: SmartPointerModels::from_kani_functions(kani_fns),
             unbounded_models: UnboundedModels::from_kani_functions(kani_fns),
             constructor_args: query_db.args().autoharness_constructor_args,
+            slice_bound: query_db.args().autoharness_slice_bound,
+            string_bound: query_db.args().autoharness_string_bound,
+            bounded_arbitrary_bound: query_db.args().autoharness_bounded_arbitrary_bound,
         }
     }
 }
@@ -223,31 +232,6 @@ impl TransformPass for AutomaticArbitraryPass {
         }
     }
 }
-
-/// The maximum length for nondeterministic slices that automatic harnesses generate.
-/// Verification results for functions taking `&[T]`/`&mut [T]` arguments are only valid up to
-/// this bound. The value must stay below Kani's default unwinding bound (20), so that loops
-/// iterating over such a slice can be fully unwound by default.
-const AUTOHARNESS_SLICE_BOUND: u64 = 16;
-
-/// The maximum length (in bytes) for nondeterministic strings that automatic harnesses
-/// generate. Strings use a much smaller bound than slices: the generated string is the longest
-/// valid-UTF-8 prefix of nondeterministic bytes, and reasoning about UTF-8 validity is
-/// expensive. On top of that, a harness that decodes every `char` (e.g. `s.chars().count()`)
-/// unwinds the decoding loop up to the default bound (20) over symbolic bytes, so the cost grows
-/// steeply with the number of bytes: on a typical machine 8 bytes already exceed Kani's default
-/// 60s harness timeout for such harnesses, while 4 stay comfortably within it (though a
-/// char-decoding harness can still approach the timeout on slow machines, so callers that must
-/// not time out should raise `--harness-timeout`).
-const AUTOHARNESS_STR_BOUND: u64 = 4;
-
-/// The bound for nondeterministic values of types that implement `BoundedArbitrary` (rather
-/// than `Arbitrary`) that automatic harnesses generate, e.g. `Vec<T>` or `String`.
-/// Verification results for functions with such arguments are only valid up to this bound.
-/// This is smaller than the slice/str bounds since `BoundedArbitrary` values are heap
-/// allocated, and for `String` additionally involve UTF-8 reasoning; a bound of 8 already
-/// makes simple `String` harnesses exceed Kani's default 60s harness timeout.
-const AUTOHARNESS_BOUNDED_ANY_BOUND: u64 = 4;
 
 /// Remap all locals and block targets of an inlined basic block. Returns false (bail out)
 /// when the block contains a construct the remapper does not support; the caller then falls
@@ -996,11 +980,11 @@ fn check_mined_invariants(
 /// of `body`, which keeps it alive for as long as the transformed body executes.
 /// For `&[T]`/`&mut [T]`/`&str`, insert calls to the `KaniModel::AnySliceRef`/`AnyStrRef`
 /// models instead, which return a slice of nondeterministic length (bounded by
-/// [AUTOHARNESS_SLICE_BOUND]) backed by a nondeterministic array stored in a dedicated local,
+/// the configured slice bound) backed by a nondeterministic array stored in a dedicated local,
 /// which stays alive for the entire harness.
 /// If `ty` does not implement `Arbitrary` (and cannot derive it) but implements `BoundedArbitrary`
 /// (e.g. `Vec<T>` or `String`), insert a call to the `KaniModel::BoundedAny` model, which returns
-/// a *bounded* nondeterministic value (bounded by [AUTOHARNESS_BOUNDED_ANY_BOUND]).
+/// a *bounded* nondeterministic value (bounded by the configured `BoundedArbitrary` bound).
 /// If `ty` is an ADT that implements `Invariant`, additionally insert a call to the
 /// `KaniModel::AssumeSafe` model (`kani_assume_safe`), which assumes that the nondeterministic
 /// value respects the type's safety invariant, c.f.
@@ -1202,7 +1186,7 @@ fn call_kani_any_for_ty(
                 GenericArgs(vec![
                     GenericArgKind::Type(elem_ty),
                     GenericArgKind::Const(
-                        TyConst::try_from_target_usize(AUTOHARNESS_SLICE_BOUND).unwrap(),
+                        TyConst::try_from_target_usize(models.slice_bound).unwrap(),
                     ),
                 ]),
             ),
@@ -1210,7 +1194,7 @@ fn call_kani_any_for_ty(
                 Ty::unsigned_ty(UintTy::U8),
                 models.kani_any_str_ref,
                 GenericArgs(vec![GenericArgKind::Const(
-                    TyConst::try_from_target_usize(AUTOHARNESS_STR_BOUND).unwrap(),
+                    TyConst::try_from_target_usize(models.string_bound).unwrap(),
                 )]),
             ),
             _ => unreachable!(),
@@ -1223,7 +1207,7 @@ fn call_kani_any_for_ty(
         // compiler derives are supported: `<[T; N] as Arbitrary>::any` is unresolvable for
         // such `T`, whereas each element can be generated through the same path as any other
         // value of that type.
-        let bound = if is_str { AUTOHARNESS_STR_BOUND } else { AUTOHARNESS_SLICE_BOUND };
+        let bound = if is_str { models.string_bound } else { models.slice_bound };
         let storage_ty = Ty::try_new_array(elem_ty, bound).unwrap();
         let elem_lcls = (0..bound)
             .map(|_| {
@@ -1410,7 +1394,7 @@ fn call_kani_any_for_ty(
                 &GenericArgs(vec![
                     GenericArgKind::Type(ty),
                     GenericArgKind::Const(
-                        TyConst::try_from_target_usize(AUTOHARNESS_BOUNDED_ANY_BOUND).unwrap(),
+                        TyConst::try_from_target_usize(models.bounded_arbitrary_bound).unwrap(),
                     ),
                 ]),
             )

@@ -1,0 +1,14 @@
+[bound not below the unwinding bound]
+--slice-bound is 20, which is not below the unwinding bound (20).
+[configured bounds]
+Status: SATISFIED\
+Description: "BoundedArbitrary value at the configured bound"
+Status: SATISFIED\
+Description: "string at the configured bound"
+Status: SATISFIED\
+Description: "slice at the configured bound"
+| cargo_autoharness_bounds | bounded_arbitrary_bound | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_bounds | slice_bound             | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_bounds | string_bound            | #[kani::proof] (bounded)  | Success             |
+slices up to 2 elements, strings up to 2 bytes, and BoundedArbitrary values up to 2 elements.
+Complete - 3 successfully verified functions, 0 failures, 3 total.
