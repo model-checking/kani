@@ -9,7 +9,7 @@
 #![feature(core_intrinsics)]
 #![feature(ptr_metadata)]
 
-use std::intrinsics::size_of;
+use std::mem::size_of;
 
 include!("../Helpers/vtable_utils_ignore.rs");
 // Different sized data fields on each struct

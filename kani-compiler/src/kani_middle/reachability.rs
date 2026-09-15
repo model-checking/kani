@@ -271,6 +271,11 @@ impl MonoItemsFnCollector<'_, '_> {
                 assert!(is_direct_call, "Expected direct call {instance:?}");
                 false
             }
+            InstanceKind::LlvmIntrinsic => {
+                // LLVM intrinsics have no Rust body to collect.
+                assert!(is_direct_call, "Expected direct call {instance:?}");
+                false
+            }
             InstanceKind::Intrinsic => {
                 // Intrinsics may have a fallback body.
                 assert!(is_direct_call, "Expected direct call {instance:?}");

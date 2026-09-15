@@ -149,6 +149,7 @@ impl RustcInternalMir for CastKind {
             CastKind::PtrToPtr => rustc_middle::mir::CastKind::PtrToPtr,
             CastKind::FnPtrToPtr => rustc_middle::mir::CastKind::FnPtrToPtr,
             CastKind::Transmute => rustc_middle::mir::CastKind::Transmute,
+            CastKind::BoxDerefTransmute => rustc_middle::mir::CastKind::BoxDerefTransmute,
             CastKind::Subtype => rustc_middle::mir::CastKind::Subtype,
         }
     }
@@ -400,7 +401,8 @@ impl RustcInternalMir for Statement {
     type T<'tcx> = rustc_middle::mir::Statement<'tcx>;
 
     fn internal_mir<'tcx>(&self, tcx: TyCtxt<'tcx>) -> Self::T<'tcx> {
-        let source_info = rustc_middle::mir::SourceInfo::outermost(internal(tcx, self.span));
+        let source_info =
+            rustc_middle::mir::SourceInfo::outermost(internal(tcx, self.source_info.span));
         let kind = self.kind.internal_mir(tcx);
         rustc_middle::mir::Statement::new(source_info, kind)
     }
@@ -504,6 +506,9 @@ impl RustcInternalMir for AssertMessage {
             AssertMessage::NullPointerDereference => {
                 rustc_middle::mir::AssertMessage::NullPointerDereference
             }
+            AssertMessage::NullReferenceConstructed => {
+                rustc_middle::mir::AssertMessage::NullReferenceConstructed
+            }
             AssertMessage::Overflow(bin_op, left_operand, right_operand) => {
                 rustc_middle::mir::AssertMessage::Overflow(
                     internal(tcx, bin_op),
@@ -561,7 +566,6 @@ impl RustcInternalMir for TerminatorKind {
                     unwind: unwind.internal_mir(tcx),
                     replace: false,
                     drop: None,
-                    async_fut: None,
                 }
             }
             TerminatorKind::Call { func, args, destination, target, unwind } => {
@@ -598,8 +602,14 @@ impl RustcInternalMir for Terminator {
 
     fn internal_mir<'tcx>(&self, tcx: TyCtxt<'tcx>) -> Self::T<'tcx> {
         rustc_middle::mir::Terminator {
-            source_info: rustc_middle::mir::SourceInfo::outermost(internal(tcx, self.span)),
+            source_info: rustc_middle::mir::SourceInfo::outermost(internal(
+                tcx,
+                self.source_info.span,
+            )),
             kind: self.kind.internal_mir(tcx),
+            // Terminators gained MIR-level attributes; the stable representation has no
+            // equivalent, and Kani-synthesized terminators carry none.
+            attributes: Default::default(),
         }
     }
 }

@@ -163,7 +163,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         defid: DefId,
     ) -> (CharonVector<CharonTraitClauseId, CharonTraitRef>, Vec<CharonSpan>) {
         let inter_defid = rustc_internal::internal(self.tcx, defid);
-        let predicates = self.tcx().predicates_of(inter_defid).predicates.to_vec();
+        let predicates = self.tcx().clauses_of(inter_defid).clauses.to_vec();
         let mut c_trait_refs: CharonVector<CharonTraitClauseId, CharonTraitRef> =
             CharonVector::new();
         let mut c_spans = Vec::new();
@@ -207,7 +207,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         defid: DefId,
     ) -> CharonVector<CharonTraitClauseId, CharonTraitClause> {
         let inter_defid = rustc_internal::internal(self.tcx, defid);
-        let predicates = self.tcx().predicates_of(inter_defid).predicates.to_vec();
+        let predicates = self.tcx().clauses_of(inter_defid).clauses.to_vec();
         let mut c_trait_clauses: CharonVector<CharonTraitClauseId, CharonTraitClause> =
             CharonVector::new();
         for (i, (clause, span)) in predicates.iter().enumerate() {
@@ -1531,7 +1531,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             _ => todo!(),
         };
         if let Some(content) = content {
-            let span = self.translate_span(stmt.span);
+            let span = self.translate_span(stmt.source_info.span);
             return Some(CharonStatement { span, content, comments_before: Vec::new() });
         };
         None
@@ -1541,7 +1541,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         &mut self,
         terminator: &Terminator,
     ) -> (Option<CharonStatement>, CharonTerminator) {
-        let span = self.translate_span(terminator.span);
+        let span = self.translate_span(terminator.source_info.span);
         let (statement, terminator) = match &terminator.kind {
             TerminatorKind::Return => (None, CharonRawTerminator::Return),
             TerminatorKind::Goto { target } => {

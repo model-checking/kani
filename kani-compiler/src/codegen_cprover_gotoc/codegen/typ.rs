@@ -246,7 +246,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             current_fn.instance().instantiate_mir_and_normalize_erasing_regions(
                 self.tcx,
                 ty::TypingEnv::fully_monomorphized(),
-                ty::EarlyBinder::bind(value),
+                ty::EarlyBinder::bind(self.tcx, value),
             )
         } else {
             // TODO: confirm with rust team there is no way to monomorphize
@@ -640,7 +640,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                     self.tcx,
                     ty::TypingEnv::fully_monomorphized(),
                     *def_id,
-                    args,
+                    args.skip_binder(),
                 )
                 .unwrap()
                 .unwrap();
@@ -1637,7 +1637,9 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
         let rust_type = self.codegen_prim_typ(prim_type);
         let cbmc_type = self.codegen_ty(rust_type);
 
-        Type::vector(cbmc_type, *size)
+        // As of nightly-2026-08-21 the lane count is a `BackendLaneCount` (a `NonZero<u16>`)
+        // rather than a bare `u64`.
+        Type::vector(cbmc_type, size.as_u64())
     }
 
     /// the function type of the current instance

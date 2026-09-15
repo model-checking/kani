@@ -199,6 +199,13 @@ pub struct VerificationResult {
     pub runtime: Duration,
     /// Whether concrete playback generated a test
     pub generated_concrete_test: bool,
+    /// The number of quantifier expressions CBMC's solver backend could not encode and
+    /// dropped (replaced with unconstrained values), c.f. CBMC's "warning: ignoring forall"
+    /// messages. A nonzero count makes the analysis unsound -- an `assume` containing such a
+    /// quantifier is not enforced (a successful result would be vacuous), and an `assert`
+    /// containing one may fail spuriously -- so it forces the verification to fail (see
+    /// `VerificationResult::from`).
+    pub ignored_quantifiers: usize,
     /// The coverage results
     pub coverage_results: Option<CoverageResults>,
     /// CBMC execution statistics extracted from messages
@@ -295,6 +302,7 @@ impl KaniSession {
                 results: Err(ExitStatus::Timeout),
                 runtime: start_time.elapsed(),
                 generated_concrete_test: false,
+                ignored_quantifiers: 0,
                 coverage_results: None,
                 cbmc_stats: None,
             })
@@ -460,6 +468,34 @@ impl KaniSession {
     }
 }
 
+/// Count CBMC messages reporting that a quantifier expression could not be encoded and was
+/// dropped. CBMC's SAT-based backends only support quantifiers with constant bounds; other
+/// quantifiers are replaced by unconstrained values, with only a low-visibility message
+/// (`prop_conv_solvert::ignoring`, printed as "warning: ignoring forall" followed by the
+/// pretty-printed expression).
+fn count_ignored_quantifiers(items: &[ParserItem]) -> usize {
+    items
+        .iter()
+        .filter(|item| {
+            matches!(item, ParserItem::Message { message_text, .. }
+                if message_text.starts_with("warning: ignoring forall")
+                    || message_text.starts_with("warning: ignoring exists"))
+        })
+        .count()
+}
+
+/// The error rendered when the solver backend dropped quantifier expressions.
+fn ignored_quantifiers_error(count: usize) -> String {
+    format!(
+        "error: the solver backend does not support quantifiers with non-constant bounds \
+and ignored {count} quantifier expression(s), replacing them with unconstrained values.\n\
+         Kani cannot soundly verify this harness: `kani::assume` calls containing such a \
+quantifier are NOT enforced (a successful result would not cover the intended property), and \
+`kani::assert` calls containing one may fail spuriously.\n\
+         Use an SMT solver backend that supports quantifiers, e.g. `#[kani::solver(z3)]`.\n"
+    )
+}
+
 impl VerificationResult {
     /// Computes a `VerificationResult` (kani-driver's notion of the result of a CBMC call) from a
     /// `VerificationOutput` (cbmc_output_parser's idea of CBMC results).
@@ -476,6 +512,7 @@ impl VerificationResult {
         collect_cbmc_stats: bool,
     ) -> VerificationResult {
         let runtime = start_time.elapsed();
+        let ignored_quantifiers = count_ignored_quantifiers(&output.processed_items);
         let (remaining_items, results) = extract_results(output.processed_items);
 
         // Only `--export-json` consumes these, and collecting them means running several regexes
@@ -483,8 +520,16 @@ impl VerificationResult {
         let cbmc_stats = if collect_cbmc_stats { merge_cbmc_stats(&remaining_items) } else { None };
 
         if let Some(results) = results {
-            let (status, failed_properties) =
+            let (mut status, mut failed_properties) =
                 verification_outcome_from_properties(&results, should_panic);
+            // A dropped quantifier makes the analysis unsound: a `kani::assume` containing one is
+            // silently not enforced, so a "successful" result may be vacuous. Kani must never
+            // report success in that case -- force a failure and (via the rendered error) direct
+            // the user to an SMT backend that supports quantifiers.
+            if ignored_quantifiers > 0 {
+                status = VerificationStatus::Failure;
+                failed_properties = FailedProperties::Error;
+            }
             let coverage_results = coverage_results_from_properties(&results);
             VerificationResult {
                 status,
@@ -492,6 +537,7 @@ impl VerificationResult {
                 results: Ok(results),
                 runtime,
                 generated_concrete_test: false,
+                ignored_quantifiers,
                 coverage_results,
                 cbmc_stats,
             }
@@ -508,6 +554,7 @@ impl VerificationResult {
                 results: Err(exit_status),
                 runtime,
                 generated_concrete_test: false,
+                ignored_quantifiers,
                 coverage_results: None,
                 cbmc_stats,
             }
@@ -521,6 +568,7 @@ impl VerificationResult {
             results: Ok(vec![]),
             runtime: Duration::from_secs(0),
             generated_concrete_test: false,
+            ignored_quantifiers: 0,
             coverage_results: None,
             cbmc_stats: None,
         }
@@ -536,6 +584,7 @@ impl VerificationResult {
             results: Err(ExitStatus::Other(42)),
             runtime: Duration::from_secs(0),
             generated_concrete_test: false,
+            ignored_quantifiers: 0,
             coverage_results: None,
             cbmc_stats: None,
         }
@@ -560,6 +609,20 @@ impl VerificationResult {
                 } else {
                     format_result(results, status, should_panic, failed_properties, show_checks)
                 };
+                if self.ignored_quantifiers > 0 {
+                    let error = ignored_quantifiers_error(self.ignored_quantifiers);
+                    // Surface the soundness error immediately before the overall
+                    // `VERIFICATION:- ...` line, so it explains the forced failure. Fall back to
+                    // appending it (e.g. coverage output, which has no such line) if the marker
+                    // isn't present.
+                    match result.find("\nVERIFICATION:- ") {
+                        Some(pos) => result.insert_str(pos + 1, &error),
+                        None => {
+                            result.push('\n');
+                            result.push_str(&error);
+                        }
+                    }
+                }
                 writeln!(result, "Verification Time: {}s", self.runtime.as_secs_f32()).unwrap();
                 result
             }

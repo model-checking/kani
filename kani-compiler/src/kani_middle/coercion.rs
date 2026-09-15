@@ -13,11 +13,12 @@
 //! definition of custom coercions for smart pointers can be found in the
 //! [RFC 982 DST Coercion](https://rust-lang.github.io/rfcs/0982-dst-coercion.html).
 
-use rustc_hir::lang_items::LangItem;
+use rustc_hir::attrs::lang_items::LangItem;
 use rustc_middle::traits::{ImplSource, ImplSourceUserDefinedData};
 use rustc_middle::ty::TraitRef;
 use rustc_middle::ty::adjustment::CustomCoerceUnsized;
 use rustc_middle::ty::{PseudoCanonicalInput, Ty, TyCtxt, TypingEnv};
+use rustc_public::CrateDefType;
 use rustc_public::Symbol;
 use rustc_public::rustc_internal;
 use rustc_public::ty::{RigidTy, Ty as TyStable, TyKind};

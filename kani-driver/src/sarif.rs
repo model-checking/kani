@@ -328,6 +328,7 @@ mod tests {
             results: Err(ExitStatus::Timeout),
             runtime: Duration::from_secs(1),
             generated_concrete_test: false,
+            ignored_quantifiers: 0,
             coverage_results: None,
             cbmc_stats: None,
         }
@@ -342,6 +343,7 @@ mod tests {
             results: Ok(vec![failure_property()]),
             runtime: Duration::from_secs(1),
             generated_concrete_test: false,
+            ignored_quantifiers: 0,
             coverage_results: None,
             cbmc_stats: None,
         };

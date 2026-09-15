@@ -15,6 +15,7 @@ use crate::{
         },
     },
 };
+use rustc_public::CrateDefType;
 use rustc_public::{
     mir::{
         AggregateKind, CastKind, LocalDecl, MirVisitor, NonDivergingIntrinsic, Operand, Place,

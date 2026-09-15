@@ -33,8 +33,9 @@ use tracing::{debug, trace};
 pub struct Project {
     /// Each target crate metadata.
     pub metadata: Vec<KaniMetadata>,
-    /// The directory where all outputs should be directed to. This path represents the canonical
-    /// version of outdir.
+    /// The directory where all outputs should be directed to. This path is canonical whenever the
+    /// directory exists, since it is either canonicalized here or derived from an already-canonical
+    /// [`Artifact`] path.
     /// NOTE: This needs to be marked as dead_code even when it's clearly not
     #[allow(dead_code)]
     pub outdir: PathBuf,
@@ -221,7 +222,10 @@ pub fn cargo_project(session: &mut KaniSession, keep_going: bool) -> Result<Proj
         );
         return Ok(Project::default());
     }
-    let outdir = outputs.outdir.canonicalize()?;
+    // No `canonicalize` here: `CargoOutputs::outdir` is the parent of an artifact path, and
+    // `Artifact::try_new` canonicalizes, so it is already canonical. Canonicalizing would also turn
+    // the artifact-less fallback -- a directory cargo had no reason to create -- into a hard error.
+    let outdir = outputs.outdir;
     // For the MIR Linker we know there is only one metadata per crate. Use that in our favor.
     let metadata =
         outputs.metadata.iter().map(|md_file| from_json(md_file)).collect::<Result<Vec<_>>>()?;

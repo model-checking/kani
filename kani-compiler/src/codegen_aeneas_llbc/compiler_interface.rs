@@ -26,7 +26,8 @@ use rustc_codegen_ssa::back::archive::{
 use rustc_codegen_ssa::back::link::link_binary;
 use rustc_codegen_ssa::traits::CodegenBackend;
 use rustc_codegen_ssa::{CompiledModules, CrateInfo};
-use rustc_data_structures::fx::{FxHashMap, FxIndexMap};
+use rustc_data_structures::fx::FxHashMap;
+use rustc_data_structures::unord::UnordMap;
 use rustc_errors::ErrorGuaranteed;
 use rustc_hir::def_id::{DefId as InternalDefId, LOCAL_CRATE};
 use rustc_metadata::EncodedMetadata;
@@ -37,9 +38,9 @@ use rustc_public::mir::mono::{Instance, MonoItem};
 use rustc_public::rustc_internal;
 use rustc_public::ty::FnDef;
 use rustc_public::{CrateDef, DefId};
-use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
+use rustc_session::{IncrCompSession, Session};
 use std::any::Any;
 use std::fs::File;
 use std::path::Path;
@@ -295,11 +296,11 @@ impl CodegenBackend for LlbcCodegenBackend {
         &self,
         ongoing_codegen: Box<dyn Any>,
         _sess: &Session,
+        _incr_comp_session: Option<&IncrCompSession>,
         _filenames: &OutputFilenames,
         _crate_info: &CrateInfo,
-    ) -> (CompiledModules, FxIndexMap<WorkProductId, WorkProduct>) {
-        match ongoing_codegen
-            .downcast::<(CompiledModules, FxIndexMap<WorkProductId, WorkProduct>)>()
+    ) -> (CompiledModules, UnordMap<WorkProductId, WorkProduct>) {
+        match ongoing_codegen.downcast::<(CompiledModules, UnordMap<WorkProductId, WorkProduct>)>()
         {
             Ok(val) => *val,
             Err(val) => panic!("unexpected error: {:?}", (*val).type_id()),
@@ -378,7 +379,7 @@ fn contract_metadata_for_harness(
 /// itself and passes it to `codegen_crate` and `link`, so there is nothing crate-specific to report
 /// here.
 fn codegen_results() -> Box<dyn Any> {
-    let work_products = FxIndexMap::<WorkProductId, WorkProduct>::default();
+    let work_products = UnordMap::<WorkProductId, WorkProduct>::default();
     Box::new((CompiledModules { modules: vec![], allocator_module: None }, work_products))
 }
 

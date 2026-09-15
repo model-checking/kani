@@ -113,7 +113,7 @@ fn resolve_rust_intrinsic<'tcx>(
     if let ty::FnDef(def_id, args) = *func_ty.kind()
         && let Some(symbol) = tcx.intrinsic(def_id)
     {
-        return Some((symbol, args));
+        return Some((symbol, args.skip_binder()));
     }
     None
 }

@@ -197,7 +197,7 @@ impl MutMirVisitor for ExternFnStubVisitor<'_> {
         {
             let instance = Instance::resolve(*new_def, &args).unwrap();
             let literal = MirConst::try_new_zero_sized(instance.ty()).unwrap();
-            let span = term.span;
+            let span = term.source_info.span;
             let new_func = ConstOperand { span, user_ty: None, const_: literal };
             *func = Operand::Constant(new_func);
             self.changed = true;

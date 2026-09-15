@@ -497,9 +497,9 @@ fn impl_derived_candidates(tcx: TyCtxt, def: FnDef) -> FxHashMap<usize, Vec<Ty>>
     // here would leave such a parameter with primitive candidates only.
     let mut next = Some(rustc_internal::internal(tcx, def.def_id()));
     while let Some(def_id) = next {
-        let generic_predicates = tcx.predicates_of(def_id);
-        next = generic_predicates.parent;
-        for (predicate, _span) in generic_predicates.predicates {
+        let generic_clauses = tcx.clauses_of(def_id);
+        next = generic_clauses.parent;
+        for (predicate, _span) in generic_clauses.clauses {
             let Some(trait_pred) = predicate.as_trait_clause() else { continue };
             let trait_pred = trait_pred.skip_binder();
             let ty::Param(param_ty) = trait_pred.self_ty().kind() else { continue };
@@ -538,7 +538,7 @@ fn args_satisfy_predicates(tcx: TyCtxt, def: FnDef, args: &GenericArgs) -> bool 
 
     let def_id = rustc_internal::internal(tcx, def.def_id());
     let args_internal = rustc_internal::internal(tcx, args);
-    let predicates = tcx.predicates_of(def_id).instantiate(tcx, args_internal);
+    let predicates = tcx.clauses_of(def_id).instantiate(tcx, args_internal);
     for (predicate, _span) in predicates {
         ocx.register_obligation(Obligation::new(
             tcx,
@@ -547,7 +547,8 @@ fn args_satisfy_predicates(tcx: TyCtxt, def: FnDef, args: &GenericArgs) -> bool 
             predicate.skip_normalization(),
         ));
     }
-    ocx.evaluate_obligations_error_on_ambiguity().is_empty()
+    // As of nightly-2026-08-21 this returns a `TraitErrors` enum rather than a vector of errors.
+    ocx.evaluate_obligations_error_on_ambiguity().no_errors()
 }
 
 /// The nondet closure-model FnDefs, keyed by input shape. By-value models fix their
@@ -623,7 +624,7 @@ fn fn_bound_candidates<'tcx>(
     let fn_tr = tcx.lang_items().fn_trait();
     // Collect Fn-ish trait predicates keyed by the self param index, with tupled inputs.
     let mut sig_inputs: FxHashMap<usize, rustc_middle::ty::Ty> = FxHashMap::default();
-    for (predicate, _span) in tcx.predicates_of(def_id).predicates {
+    for (predicate, _span) in tcx.clauses_of(def_id).clauses {
         let Some(tp) = predicate.as_trait_clause() else { continue };
         // HRTB bounds (e.g. for<'a> FnOnce(&'a Self)) carry late-bound regions; erase them
         // rather than skipping the binder, which would leak escaping bound vars into the
@@ -645,7 +646,7 @@ fn fn_bound_candidates<'tcx>(
     }
     // The return type comes from the FnOnce::Output projection bound.
     let mut sig_output: FxHashMap<usize, rustc_middle::ty::Ty> = FxHashMap::default();
-    for (predicate, _span) in tcx.predicates_of(def_id).predicates {
+    for (predicate, _span) in tcx.clauses_of(def_id).clauses {
         let Some(proj) = predicate.as_projection_clause() else { continue };
         let proj = tcx.instantiate_bound_regions_with_erased(proj);
         let rustc_middle::ty::TyKind::Param(param_ty) = proj.projection_term.self_ty().kind()
@@ -663,7 +664,7 @@ fn fn_bound_candidates<'tcx>(
         if inputs.has_param() || output.has_param() {
             // Signature references other generic parameters: defer construction until a
             // candidate choice for those parameters is made.
-            // SAFETY of the transmute-free 'static: predicates_of types live for the whole
+            // SAFETY of the transmute-free 'static: clauses_of types live for the whole
             // compilation session ('tcx); we only use them within this query's lifetime.
             deferred.insert(idx, DeferredFnSpec { inputs, output });
             continue;
@@ -737,9 +738,9 @@ fn resolve_deferred_fn_slots<'tcx>(
         // <i32 as Tap>::Val for a choice that does not satisfy the bound); normalize here and
         // skip the choice on failure, rather than letting Instance::resolve ICE on it.
         let inputs =
-            rustc_middle::ty::EarlyBinder::bind(spec.inputs).instantiate(tcx, args_internal);
+            rustc_middle::ty::EarlyBinder::bind(tcx, spec.inputs).instantiate(tcx, args_internal);
         let output =
-            rustc_middle::ty::EarlyBinder::bind(spec.output).instantiate(tcx, args_internal);
+            rustc_middle::ty::EarlyBinder::bind(tcx, spec.output).instantiate(tcx, args_internal);
         let typing_env = rustc_middle::ty::TypingEnv::fully_monomorphized();
         let Ok(inputs) = tcx.try_normalize_erasing_regions(typing_env, inputs) else {
             return false;
