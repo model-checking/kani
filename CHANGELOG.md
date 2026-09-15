@@ -93,6 +93,7 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 * Detect `stub_verified`/`Arbitrary` recursion at compile time by @feliperodri in https://github.com/model-checking/kani/pull/4571
 * Fix compiler crash on slice-modifies verified stubs (#4748) by @feliperodri in https://github.com/model-checking/kani/pull/4749
 * Skip ZST targets in loop_modifies assigns clause by @feliperodri in https://github.com/model-checking/kani/pull/4792
+* Fix macOS CI: trust diffblue/cbmc tap for Homebrew 6.0+ by @Tianshu-Huang in https://github.com/model-checking/kani/pull/4785
 
 ### New Contributors
 * @nmanthey made their first contribution in https://github.com/model-checking/kani/pull/4535
@@ -104,6 +105,7 @@ This file was introduced starting Kani 0.23.0, so it only contains changes from 
 * @yimingyinqwqq made their first contribution in https://github.com/model-checking/kani/pull/4472
 * @lovesegfault made their first contribution in https://github.com/model-checking/kani/pull/4601
 * @M00NLIG7 made their first contribution in https://github.com/model-checking/kani/pull/4762
+* @Tianshu-Huang made their first contribution in https://github.com/model-checking/kani/pull/4785
 
 **Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.67.0...kani-0.68.0
 
