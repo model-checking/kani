@@ -10,6 +10,9 @@ or large bounded collections, like a vector with a large size.
 
 ### Large Value Operations
 Mathematical operations on large values can be expensive, e.g., multiplication/division/modulo, especially with larger types (e.g., `u64`).
+The cost can grow sharply with bit-width rather than linearly.
+For example, on one local machine, an unconstrained proof harness for exact integer division took under 0.2 seconds to verify for `i8`, about 25 seconds for the full `i16` range, and about 55 seconds for the full `u16` range — despite each step only doubling the bit-width.
+This can reflect the SAT solver's worst-case exponential behavior on bit-blasted arithmetic circuits rather than a tooling inefficiency, and it means proofs that work fine on `i16` or smaller types may become impractical on `i32` and larger types without further bounding.
 
 ### Unbounded Loops
 If Kani cannot determine a loop bound, it will unwind forever, c.f. [the loop unwinding tutorial](./tutorial-loop-unwinding.md).
@@ -95,6 +98,31 @@ fn test_multiplication_small_values() {
 ```
 
 See this [tracking issue](https://github.com/model-checking/kani/issues/3006) for adding support for such partitioning automatically.
+
+#### Division: Bound Both Operands
+
+For division and modulo operations specifically, bounding only one operand is often insufficient — both operands typically need to be constrained to make verification tractable:
+
+```rust
+// May not converge in reasonable time: only the divisor is bounded
+#[kani::proof]
+fn test_division_divisor_only() {
+    let dividend: i64 = kani::any();
+    let divisor: i64 = kani::any_where(|d| *d != 0);
+    kani::assume(!(dividend == i64::MIN && divisor == -1));
+    let _ = dividend / divisor;
+}
+
+// Converges quickly: both operands are bounded
+#[kani::proof]
+fn test_division_both_bounded() {
+    let dividend: i64 = kani::any_where(|d| *d >= -1000 && *d <= 1000);
+    let divisor: i64 = kani::any_where(|d| *d != 0 && *d >= -1000 && *d <= 1000);
+    let _ = dividend / divisor;
+}
+```
+
+In practice, bounding both operands to a small representative range typically brings verification for `i32` and larger integer types down to well under a second, compared to unconstrained runs that may take significantly longer or fail to converge within a reasonable timeout.
 
 ### Use Stubs
 
