@@ -4,6 +4,111 @@ This file contains notable changes (e.g. breaking changes, major changes, etc.) 
 
 This file was introduced starting Kani 0.23.0, so it only contains changes from version 0.23.0 onwards.
 
+## [0.68.0]
+
+### What's Changed
+* Fixing the bug of moving (instead of cloning) the expression inside `old` of function contract   by @thanhnguyen-aws in https://github.com/model-checking/kani/pull/4513
+* env: enable THP via env by @nmanthey in https://github.com/model-checking/kani/pull/4535
+* Emit SARIF output for Code Scanning by @mizuki0x in https://github.com/model-checking/kani/pull/4547
+* Fix incorrect kani::index example in loop-contracts documentation by @tautschnig in https://github.com/model-checking/kani/pull/4539
+* Fix CBMC output parser panic when using SMT solvers by @tautschnig in https://github.com/model-checking/kani/pull/4540
+* Fix float-to-int saturating cast bug by @tautschnig in https://github.com/model-checking/kani/pull/4541
+* Fix workspace feature handling to filter features per-package by @tautschnig in https://github.com/model-checking/kani/pull/4545
+* Fix atomic compare_exchange to return correct failure status by @tautschnig in https://github.com/model-checking/kani/pull/4542
+* Create AGENTS.md to guide AI coding assistants by @tautschnig in https://github.com/model-checking/kani/pull/4543
+* Fix stubbing bugs: FFI name resolution and generic parameter validation by @feliperodri in https://github.com/model-checking/kani/pull/4565
+* Add pure expression inliner infrastructure for quantifier bodies by @feliperodri in https://github.com/model-checking/kani/pull/4567
+* fix saturating float-to-int cast by @Rexicon226 in https://github.com/model-checking/kani/pull/4573
+* Support arithmetic in quantifier predicates via pure expression inlining by @feliperodri in https://github.com/model-checking/kani/pull/4578
+* Warn when quantifier range exceeds SAT solver threshold by @feliperodri in https://github.com/model-checking/kani/pull/4579
+* Reject mutual recursion with `#[kani::recursion]` by @feliperodri in https://github.com/model-checking/kani/pull/4580
+* Towards stubbing stabilization by @feliperodri in https://github.com/model-checking/kani/pull/4566
+* Add `#[kani::loop_decreases]` for proving loop termination by @feliperodri in https://github.com/model-checking/kani/pull/4564
+* Support stubbing trait method implementations by @feliperodri in https://github.com/model-checking/kani/pull/4587
+* Fix floating-point remainder soundness and add soundness documentation by @feliperodri in https://github.com/model-checking/kani/pull/4570
+* Implement stub sets for reusable stub groups by @feliperodri in https://github.com/model-checking/kani/pull/4594
+* Support pointer arithmetic in quantifier predicates by @feliperodri in https://github.com/model-checking/kani/pull/4583
+* Replace deprecated proc-macro-error2 with proc-macro2-diagnostics by @tautschnig in https://github.com/model-checking/kani/pull/4613
+* Major-version update cargo dependencies by @tautschnig in https://github.com/model-checking/kani/pull/4615
+* compiletest: start cargo-kani tests from a clean target directory by @tautschnig in https://github.com/model-checking/kani/pull/4614
+* Emit explicit `contract::` symbols for functions with contracts by @tautschnig in https://github.com/model-checking/kani/pull/4612
+* Update CBMC dependency to 6.10.0 by @tautschnig in https://github.com/model-checking/kani/pull/4619
+* Bound each regression test's wall time to avoid unattributable hangs by @tautschnig in https://github.com/model-checking/kani/pull/4642
+* Do not inject macro overrides into external dependencies by @tautschnig in https://github.com/model-checking/kani/pull/4666
+* Run benchmark workflows on pull_request instead of pull_request_target by @tautschnig in https://github.com/model-checking/kani/pull/4664
+* Fix loop-contract transform for post-#145513 deref temporaries by @tautschnig in https://github.com/model-checking/kani/pull/4659
+* Fix unsound f128 -> i128 lower bound in float-to-int range check by @tautschnig in https://github.com/model-checking/kani/pull/4663
+* Fix ICE on ConstantIndex projection of DST trailing slice field by @tautschnig in https://github.com/model-checking/kani/pull/4681
+* Pass --compact-trace to CBMC for concrete playback by @tautschnig in https://github.com/model-checking/kani/pull/4680
+* Do not fire unused_crate_dependencies on Kani's injected std extern by @tautschnig in https://github.com/model-checking/kani/pull/4689
+* Implement Arbitrary for Rc<T> and Arc<T> by @tautschnig in https://github.com/model-checking/kani/pull/4697
+* Add support for `volatile_copy_memory`, `volatile_copy_nonoverlapping_memory` and `volatile_set_memory` by @ivmat in https://github.com/model-checking/kani/pull/4672
+* Fix codegen panic for calls through a function pointer returning `!` by @MavenRain in https://github.com/model-checking/kani/pull/4647
+* Degrade constant fat pointers to unsupported DSTs instead of crashing by @tautschnig in https://github.com/model-checking/kani/pull/4704
+* Add support for `unaligned_volatile_load` and `unaligned_volatile_store` by @ivmat in https://github.com/model-checking/kani/pull/4673
+* Implement BoundedArbitrary for BTreeMap and BTreeSet by @hz2 in https://github.com/model-checking/kani/pull/4626
+* Add `--export-json` for structured verification results by @yimingyinqwqq in https://github.com/model-checking/kani/pull/4472
+* Force-load the kani crate so no_std crates work out of the box by @tautschnig in https://github.com/model-checking/kani/pull/4682
+* Add --no-assert-overrides escape hatch for macro-override conflicts by @tautschnig in https://github.com/model-checking/kani/pull/4687
+* Do not fail on crates that forbid(unstable_features) by @tautschnig in https://github.com/model-checking/kani/pull/4688
+* Fix OffsetModel missing UB for offsets wrapping CBMC's pointer encoding by @tautschnig in https://github.com/model-checking/kani/pull/4671
+* Fix ICE on non-literal `cover`/`assert`/`check` message expressions by @ivmat in https://github.com/model-checking/kani/pull/4711
+* Codegen single-non-ZST-field constants with name-keyed struct fields by @tautschnig in https://github.com/model-checking/kani/pull/4724
+* Emit a diagnostic for a misapplied checked size/align intrinsic marker by @MavenRain in https://github.com/model-checking/kani/pull/4648
+* Dispatch clause-context calls to the check target to the original body by @tautschnig in https://github.com/model-checking/kani/pull/4709
+* Add git revision and rustc version info to verbose version output by @tautschnig in https://github.com/model-checking/kani/pull/4466
+* Add progress indicator and log file output for concise terminal output by @tautschnig in https://github.com/model-checking/kani/pull/4528
+* Set kani-compiler's required rustc flags unconditionally by @lovesegfault in https://github.com/model-checking/kani/pull/4601
+* Elide vacuous pointer checks on contract-closure capture loads by @tautschnig in https://github.com/model-checking/kani/pull/4715
+* Do not assert dependency contracts for calls made by contract clauses by @tautschnig in https://github.com/model-checking/kani/pull/4710
+* Add heuristic to order harness codegen by @AlexanderPortland in https://github.com/model-checking/kani/pull/4257
+* Add a unified codegen cache by @AlexanderPortland in https://github.com/model-checking/kani/pull/4313
+* Fail a zero-match harness filter before codegen and export by @ivmat in https://github.com/model-checking/kani/pull/4743
+* Autoharness: assume safety invariants of generated values by @tautschnig in https://github.com/model-checking/kani/pull/4677
+* Autoharness: support raw pointer arguments by @tautschnig in https://github.com/model-checking/kani/pull/4678
+* Autoharness: support generic functions by @tautschnig in https://github.com/model-checking/kani/pull/4679
+* Autoharness: support slice and string arguments (bounded) by @tautschnig in https://github.com/model-checking/kani/pull/4691
+* Autoharness: support BoundedArbitrary argument types by @tautschnig in https://github.com/model-checking/kani/pull/4693
+* Autoharness: do not synthesize Arbitrary for structs with reference fields by @tautschnig in https://github.com/model-checking/kani/pull/4694
+* Autoharness: support smart pointers of compiler-derivable pointees by @tautschnig in https://github.com/model-checking/kani/pull/4698
+* Add kani-maintainers team to CODEOWNERS by @feliperodri in https://github.com/model-checking/kani/pull/4740
+* Run the CBMC-latest perf suite serially to stop runner OOMs by @feliperodri in https://github.com/model-checking/kani/pull/4742
+* Check that fast math intrinsic results are finite by @feliperodri in https://github.com/model-checking/kani/pull/4730
+* Autoharness: verify Debug and Display implementations by @tautschnig in https://github.com/model-checking/kani/pull/4701
+* Autoharness: verify harnesses in parallel by default by @tautschnig in https://github.com/model-checking/kani/pull/4705
+* Autoharness: per-parameter and trait-impl-derived generic instantiation by @tautschnig in https://github.com/model-checking/kani/pull/4706
+* Autoharness: assume layout niches of generated scalar values by @tautschnig in https://github.com/model-checking/kani/pull/4716
+* Repository cleanup: citation metadata, unused files, and CI docs by @feliperodri in https://github.com/model-checking/kani/pull/4741
+* Autoharness: constructor-based value generation (--constructor-args) by @tautschnig in https://github.com/model-checking/kani/pull/4717
+* Autoharness: mine constructor assertions into value filters by @tautschnig in https://github.com/model-checking/kani/pull/4718
+* Autoharness: unbounded slice, mutable slice and Vec arguments by @tautschnig in https://github.com/model-checking/kani/pull/4721
+* Autoharness: mine type invariants from a type's own assertions by @tautschnig in https://github.com/model-checking/kani/pull/4722
+* Fix three constructor-discovery ICEs from the crates.io sweep by @tautschnig in https://github.com/model-checking/kani/pull/4725
+* Keep completed results when --fail-fast aborts a run by @ivmat in https://github.com/model-checking/kani/pull/4744
+* Link independent harness models in parallel by @M00NLIG7 in https://github.com/model-checking/kani/pull/4762
+* Warn when the CBMC on PATH does not match the pinned version by @ivmat in https://github.com/model-checking/kani/pull/4723
+* Autoharness: instantiate Fn-bounded type parameters with nondet closures by @tautschnig in https://github.com/model-checking/kani/pull/4726
+* Derive the cargo output directory from cargo's reported artifacts by @feliperodri in https://github.com/model-checking/kani/pull/4766
+* Fail verification when the solver backend drops quantifiers by @tautschnig in https://github.com/model-checking/kani/pull/4719
+* Detect `stub_verified`/`Arbitrary` recursion at compile time by @feliperodri in https://github.com/model-checking/kani/pull/4571
+* Fix compiler crash on slice-modifies verified stubs (#4748) by @feliperodri in https://github.com/model-checking/kani/pull/4749
+* Skip ZST targets in loop_modifies assigns clause by @feliperodri in https://github.com/model-checking/kani/pull/4792
+* Fix macOS CI: trust diffblue/cbmc tap for Homebrew 6.0+ by @Tianshu-Huang in https://github.com/model-checking/kani/pull/4785
+
+### New Contributors
+* @nmanthey made their first contribution in https://github.com/model-checking/kani/pull/4535
+* @mizuki0x made their first contribution in https://github.com/model-checking/kani/pull/4547
+* @Rexicon226 made their first contribution in https://github.com/model-checking/kani/pull/4573
+* @ivmat made their first contribution in https://github.com/model-checking/kani/pull/4672
+* @MavenRain made their first contribution in https://github.com/model-checking/kani/pull/4647
+* @hz2 made their first contribution in https://github.com/model-checking/kani/pull/4626
+* @yimingyinqwqq made their first contribution in https://github.com/model-checking/kani/pull/4472
+* @lovesegfault made their first contribution in https://github.com/model-checking/kani/pull/4601
+* @M00NLIG7 made their first contribution in https://github.com/model-checking/kani/pull/4762
+* @Tianshu-Huang made their first contribution in https://github.com/model-checking/kani/pull/4785
+
+**Full Changelog**: https://github.com/model-checking/kani/compare/kani-0.67.0...kani-0.68.0
+
 ## [0.67.0]
 
 ### What's Changed
