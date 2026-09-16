@@ -1,0 +1,1 @@
+| autoharness_ascii_escape_default | consume_escape_default | #[kani::proof] | Success |

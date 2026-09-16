@@ -71,6 +71,49 @@ impl Arbitrary for std::time::Duration {
     }
 }
 
+impl Arbitrary for std::ascii::EscapeDefault {
+    fn any() -> Self {
+        // Generate any state reachable by consuming a freshly constructed
+        // EscapeDefault iterator from either end.
+        let mut escape = std::ascii::escape_default(u8::any());
+        let len = escape.size_hint().0;
+
+        let front = usize::from(u8::any());
+        crate::assume(front <= len);
+
+        let back = usize::from(u8::any());
+        crate::assume(back <= len - front);
+
+        if front >= 1 {
+            let _ = escape.next();
+        }
+        if front >= 2 {
+            let _ = escape.next();
+        }
+        if front >= 3 {
+            let _ = escape.next();
+        }
+        if front >= 4 {
+            let _ = escape.next();
+        }
+
+        if back >= 1 {
+            let _ = escape.next_back();
+        }
+        if back >= 2 {
+            let _ = escape.next_back();
+        }
+        if back >= 3 {
+            let _ = escape.next_back();
+        }
+        if back >= 4 {
+            let _ = escape.next_back();
+        }
+
+        escape
+    }
+}
+
 /// Generate a slice of *unbounded* nondeterministic length: a fresh allocation of
 /// nondeterministic size whose contents are nondeterministic, with element validity
 /// established by `slice_validity_assume` (a compiler hook that emits a quantified
