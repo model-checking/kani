@@ -3,7 +3,7 @@
 
 [package]
 name = "kani-driver"
-version = "0.67.0"
+version = "0.68.0"
 edition = "2024"
 description = "Build a project with Kani and run all proof harnesses"
 license = "MIT OR Apache-2.0"
@@ -26,7 +26,7 @@ regex = "1.11.1"
 rustc-demangle = "0.1.21"
 pathdiff = "0.2.1"
 rayon = "1.5.3"
-comfy-table = "7.0.1"
+comfy-table = "8.0.0"
 strum = {version = "0.28"}
 strum_macros = {version = "0.28"}
 tempfile = "3"
