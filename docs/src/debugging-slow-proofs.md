@@ -122,7 +122,7 @@ fn test_division_both_bounded() {
 }
 ```
 
-In practice, bounding both operands to a small representative range typically brings verification for `i32` and larger integer types down to well under a second, compared to unconstrained runs that may take significantly longer or fail to converge within a reasonable timeout.
+In practice, bounding both operands to a small representative range can bring verification for `i32` and larger integer types down significantly — often to well under a second on a given machine — compared to unconstrained runs that may take much longer or fail to converge within a reasonable timeout. Actual timing will vary with the solver, machine, and timeout settings used.
 
 ### Use Stubs
 
