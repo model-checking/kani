@@ -12,5 +12,8 @@ list_output=$(cargo kani autoharness -Z autoharness --list --bounded-arguments -
 echo "$list_output" | grep -m1 'not below the unwinding bound'
 
 echo "[configured bounds]"
+# `string_bound` reasons about UTF-8 validity over a nondeterministic string, which is expensive;
+# on slower CI runners it exceeds the autoharness default 60s harness timeout, so raise it here.
 cargo kani autoharness -Z autoharness -Z unstable-options --output-format=regular \
-    --bounded-arguments --slice-bound 2 --string-bound 2 --bounded-arbitrary-bound 2
+    --bounded-arguments --slice-bound 2 --string-bound 2 --bounded-arbitrary-bound 2 \
+    --harness-timeout 5m

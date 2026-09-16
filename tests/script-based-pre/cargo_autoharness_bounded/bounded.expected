@@ -11,5 +11,5 @@ Description: "max-length vec with specific contents"
 | cargo_autoharness_bounded | vec_first         | #[kani::proof]            | Failure             |
 | cargo_autoharness_bounded | vec_sum           | #[kani::proof]            | Failure             |
 Note: harnesses marked "(bounded)" use bounded nondeterministic values for some arguments (--bounded-arguments):
-slices up to 16 elements, strings up to 4 bytes, and BoundedArbitrary values up to 4 elements.
+slices up to 16 elements, strings up to 4 bytes, and BoundedArbitrary values at bound 4, which each implementation defines for itself.
 Complete - 3 successfully verified functions, 3 failures, 6 total.

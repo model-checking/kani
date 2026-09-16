@@ -4,6 +4,7 @@
 use std::str::FromStr;
 
 use crate::args::Timeout;
+use crate::args::VerificationArgs;
 use crate::args::autoharness_args::{
     AutoharnessBounds, CargoAutoharnessArgs, CommonAutoharnessArgs, StandaloneAutoharnessArgs,
 };
@@ -61,8 +62,7 @@ fn setup_session(session: &mut KaniSession, common_autoharness_args: &CommonAuto
     session.add_default_bounds();
     let bounds = common_autoharness_args.bounds();
     if common_autoharness_args.bounded_arguments {
-        // `add_default_bounds` has already run, so the unwinding bound is resolved here.
-        warn_if_bounds_exceed_unwind(bounds, session.args.default_unwind);
+        warn_if_bounds_reach_unwind(bounds, &session.args);
     }
     session.add_auto_harness_args(
         &common_autoharness_args.include_pattern,
@@ -74,10 +74,14 @@ fn setup_session(session: &mut KaniSession, common_autoharness_args: &CommonAuto
     );
 }
 
-/// Warn about a bound that is not below the effective unwinding bound: loops iterating over such
-/// an argument are then not fully unwound, so results do not hold up to the bound after all.
-fn warn_if_bounds_exceed_unwind(bounds: AutoharnessBounds, unwind: Option<u32>) {
-    let Some(unwind) = unwind else { return };
+/// Warn about a bound that reaches the effective unwinding bound. A loop iterating over such an
+/// argument is not fully unwound, so the result does not hold up to the bound after all.
+///
+/// Called after `add_default_bounds`, so the unwinding bound is resolved by this point.
+fn warn_if_bounds_reach_unwind(bounds: AutoharnessBounds, args: &VerificationArgs) {
+    // `--unwind` takes precedence over `--default-unwind`, c.f. `resolve_unwind_value`. Automatic
+    // harnesses carry no `#[kani::unwind]` attribute, so those two are the whole precedence here.
+    let Some(unwind) = args.unwind.or(args.default_unwind) else { return };
     for (option, value) in [
         ("--slice-bound", bounds.slice),
         ("--string-bound", bounds.string),
@@ -309,7 +313,8 @@ impl KaniSession {
             let bounds = self.autoharness_bounds;
             println!(
                 "Note: harnesses marked \"(bounded)\" use bounded nondeterministic values for some arguments (--bounded-arguments):\n\
-                 slices up to {} elements, strings up to {} bytes, and BoundedArbitrary values up to {} elements.\n\
+                 slices up to {} elements, strings up to {} bytes, and BoundedArbitrary \
+                 values at bound {}, which each implementation defines for itself.\n\
                  Their verification results only hold up to those bounds, i.e., bugs that require larger input values may be missed.",
                 bounds.slice, bounds.string, bounds.bounded_arbitrary
             );
