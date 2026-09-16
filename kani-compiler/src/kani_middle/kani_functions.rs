@@ -239,6 +239,27 @@ impl KaniModel {
     }
 }
 
+impl KaniHook {
+    /// Whether this hook may legitimately be absent. `SliceValidityAssume` is only defined in the
+    /// `kani` library, not in `core::kani` (the `no_core` flow used by `kani verify-std`), and it
+    /// is not monomorphized into every crate that is compiled.
+    pub fn is_optional(&self) -> bool {
+        matches!(self, KaniHook::SliceValidityAssume)
+    }
+}
+
+impl KaniFunction {
+    /// Whether this function may legitimately be absent from the crate being compiled,
+    /// c.f. [KaniModel::is_optional] and [KaniHook::is_optional].
+    pub fn is_optional(&self) -> bool {
+        match self {
+            KaniFunction::Model(model) => model.is_optional(),
+            KaniFunction::Hook(hook) => hook.is_optional(),
+            KaniFunction::Intrinsic(_) => false,
+        }
+    }
+}
+
 impl From<KaniIntrinsic> for KaniFunction {
     fn from(value: KaniIntrinsic) -> Self {
         KaniFunction::Intrinsic(value)
@@ -348,7 +369,7 @@ pub fn validate_kani_functions(kani_funcs: &HashMap<KaniFunction, FnDef>) {
     {
         if let Some(fn_def) = kani_funcs.get(&func) {
             assert_eq!(KaniFunction::try_from(*fn_def), Ok(func), "Unexpected function marker");
-        } else if !matches!(func, KaniFunction::Model(model) if model.is_optional()) {
+        } else if !func.is_optional() {
             tracing::error!(?func, "Missing kani function");
             missing += 1;
         }
