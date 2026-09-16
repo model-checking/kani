@@ -1,5 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+use super::ty_stable::pointee_type_stable;
 use super::typ::FN_RETURN_VOID_VAR_NAME;
 use super::typ::TypeExt;
 use super::{PropertyClass, bb_label};
@@ -70,6 +71,16 @@ impl GotocCtx<'_, '_> {
                 for (operand, expr) in operands.iter().zip(assign_exprs.iter()) {
                     let operand_ty = self.operand_ty_stable(operand);
                     debug!("Ty {:?}", operand_ty);
+                    // Do not emit an assigns target for a pointer to a ZST. Havocking a
+                    // zero-sized location is a no-op (a ZST has a single inhabitant and
+                    // occupies zero bytes), so dropping it preserves soundness, while
+                    // keeping it makes CBMC abort with `l2_rename_rvalues case 'struct'
+                    // not handled` when the target is a zero-sized struct (e.g. a
+                    // capture-free closure). This mirrors the function-contract handling
+                    // in `codegen_modifies_target`.
+                    if pointee_type_stable(operand_ty).is_some_and(|ty| self.is_zst_stable(ty)) {
+                        continue;
+                    }
                     let ptr_expr = self.ty_to_assign_target(operand_ty, expr);
                     ptr_exprs.push(ptr_expr)
                 }
