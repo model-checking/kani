@@ -85,7 +85,12 @@ impl GotocCtx<'_, '_> {
         // supported to access the raw pointer. If either rustc or Kani changes how boxed types are
         // represented, this will need to be updated.
         self.assert_is_rust_box_like(box_expr.typ());
-        RAW_PTR_FROM_BOX.iter().fold(box_expr, |expr, name| expr.member(name, &self.symbol_table))
+        let expr = RAW_PTR_FROM_BOX
+            .iter()
+            .fold(box_expr, |expr, name| expr.member(name, &self.symbol_table));
+        // `NonNull`'s `pointer` field holds a `pattern_type!(*const T is !null)`, which is itself
+        // codegenned as a struct, so the chain above stops one level above the raw pointer.
+        self.peel_ptr_wrappers(expr)
     }
 
     /// `Box<T>` initializer
@@ -105,6 +110,10 @@ impl GotocCtx<'_, '_> {
                 (*name, outer_type)
             })
             .collect::<Vec<_>>();
+
+        // `inner_type` is now the innermost field's type, which wraps the raw pointer in a
+        // pattern-type struct. Rebuild that wrapping so the value matches the field.
+        let boxed_value = self.codegen_ptr_in_wrappers(inner_type, boxed_value);
 
         type_members.iter().rfold(boxed_value, |value, (name, typ)| {
             Expr::struct_expr_with_nondet_fields(
@@ -160,7 +169,15 @@ impl GotocCtx<'_, '_> {
     /// This is the inverse of [`Self::codegen_ptr_in_wrappers`]: peel off the single-field struct
     /// wrappers until the raw pointer is reached.
     pub fn codegen_ptr_out_of_wrappers(&self, metadata_expr: Expr, vtable_typ: Type) -> Expr {
-        let mut expr = metadata_expr.member("_vtable_ptr", &self.symbol_table);
+        let expr = self.peel_ptr_wrappers(metadata_expr.member("_vtable_ptr", &self.symbol_table));
+        expr.cast_to(vtable_typ)
+    }
+
+    /// Peel off the single-field struct wrappers around `expr` until the pointer is reached.
+    ///
+    /// Returns `expr` unchanged when it is already a pointer, so this is a no-op for layouts
+    /// that do not wrap.
+    pub fn peel_ptr_wrappers(&self, mut expr: Expr) -> Expr {
         while expr.typ().is_struct_like() {
             let components = expr.typ().lookup_components(&self.symbol_table).unwrap();
             let fields: Vec<_> = components.iter().filter(|c| !c.is_padding()).collect();
@@ -172,7 +189,7 @@ impl GotocCtx<'_, '_> {
             );
             expr = expr.member(fields[0].name(), &self.symbol_table);
         }
-        expr.cast_to(vtable_typ)
+        expr
     }
 
     /// Best effort check if the struct represents a Rust `Box`. May return false positives.
