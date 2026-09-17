@@ -11,7 +11,7 @@ or large bounded collections, like a vector with a large size.
 ### Large Value Operations
 Mathematical operations on large values can be expensive, e.g., multiplication/division/modulo, especially with larger types (e.g., `u64`).
 The cost can grow sharply with bit-width rather than linearly.
-For example, on one local machine, an unconstrained proof harness for exact integer division took under 0.2 seconds to verify for `i8`, about 25 seconds for the full `i16` range, and about 55 seconds for the full `u16` range — despite each step only doubling the bit-width.
+For example, on one local machine, an unconstrained proof harness for exact integer division took under 0.2 seconds to verify for `i8`, about 25 seconds for the full `i16` range, and about 55 seconds for the full `u16` range — even though moving from 8-bit to 16-bit operands only doubles the bit-width.
 This can reflect the SAT solver's worst-case exponential behavior on bit-blasted arithmetic circuits rather than a tooling inefficiency, and it means proofs that work fine on `i16` or smaller types may become impractical on `i32` and larger types without further bounding.
 
 ### Unbounded Loops
