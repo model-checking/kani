@@ -217,21 +217,46 @@ impl GotocCtx<'_, '_> {
         }
     }
 
+    /// Whether `t` is a pointer, or a chain of single-field struct wrappers around one.
+    ///
+    /// Recursing keeps this independent of how many wrappers the standard library uses, and
+    /// mirrors the chain that [`Self::codegen_ptr_in_wrappers`] rebuilds.
+    fn is_wrapped_pointer(&self, t: &Type) -> bool {
+        if t.is_pointer() || t.is_rust_fat_ptr(&self.symbol_table) {
+            return true;
+        }
+        if !t.is_struct_like() {
+            return false;
+        }
+        let Some(components) = t.lookup_components(&self.symbol_table) else {
+            return false;
+        };
+        let fields: Vec<_> = components.iter().filter(|c| !c.is_padding()).collect();
+        fields.len() == 1 && self.is_wrapped_pointer(&fields[0].typ())
+    }
+
     /// Best effort check if the struct represents a `std::ptr::NonNull<T>`.
     ///
     /// This assumes the following structure. Any changes to this will break this code.
     /// ```
     /// pub struct NonNull<T: ?Sized> {
-    ///    pointer: *const T,
+    ///    pointer: pattern_type!(*const T is !null),
     /// }
     /// ```
+    /// The `pointer` field is not a bare pointer: the pattern type is itself codegenned as a
+    /// single-field struct, so the pointer sits one level further down, c.f.
+    /// [`Self::codegen_ptr_in_wrappers`].
     fn assert_is_non_null_like(&self, t: &Type) {
         assert!(t.is_struct_like());
         let components = t.lookup_components(&self.symbol_table).unwrap();
         assert_eq!(components.len(), 1);
         let component = components.first().unwrap();
         assert_eq!(component.name().to_string().as_str(), "pointer");
-        assert!(component.typ().is_pointer() || component.typ().is_rust_fat_ptr(&self.symbol_table))
+        assert!(
+            self.is_wrapped_pointer(&component.typ()),
+            "Expected the `pointer` field of {t:?} to hold a pointer, but found {:?}",
+            component.typ()
+        )
     }
 }
 
