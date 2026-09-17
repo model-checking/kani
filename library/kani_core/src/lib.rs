@@ -17,12 +17,11 @@
 
 #![feature(no_core)]
 #![no_core]
-#![feature(f16)]
-#![feature(f128)]
 
 mod arbitrary;
 mod bounded_arbitrary;
 mod float;
+mod invariant;
 mod iter;
 mod mem;
 mod mem_init;
@@ -49,6 +48,7 @@ macro_rules! kani_lib {
             kani_core::kani_intrinsics!();
             kani_core::generate_arbitrary!();
             kani_core::generate_bounded_arbitrary!();
+            kani_core::generate_invariant!();
             kani_core::generate_models!();
             kani_core::generate_iter!();
 
@@ -73,6 +73,7 @@ macro_rules! kani_lib {
         kani_core::kani_intrinsics!();
         kani_core::generate_arbitrary!();
         kani_core::generate_bounded_arbitrary!();
+        kani_core::generate_invariant!();
         kani_core::generate_models!();
         kani_core::generate_iter!();
 
@@ -199,6 +200,17 @@ macro_rules! kani_intrinsics {
 
         #[macro_export]
         macro_rules! forall {
+            // Typed variable: |d: u64 in (lo, hi)| predicate
+            // Uses $t:tt instead of $t:ty because Rust macro rules do not allow
+            // `ty` fragments to be followed by `in`. This means the type must be
+            // a single token (e.g., u64, usize, i32) — path types like
+            // std::num::NonZeroU64 are not supported in this position.
+            (|$i:ident : $t:tt in ($lower_bound:expr, $upper_bound:expr)| $predicate:expr) => {{
+                let lower_bound: $t = $lower_bound;
+                let upper_bound: $t = $upper_bound;
+                let predicate = |$i: $t| $predicate;
+                kani::internal::kani_forall(lower_bound, upper_bound, predicate)
+            }};
             (|$i:ident in ($lower_bound:expr, $upper_bound:expr)| $predicate:expr) => {{
                 let lower_bound: usize = $lower_bound;
                 let upper_bound: usize = $upper_bound;
@@ -213,6 +225,12 @@ macro_rules! kani_intrinsics {
 
         #[macro_export]
         macro_rules! exists {
+            (|$i:ident : $t:tt in ($lower_bound:expr, $upper_bound:expr)| $predicate:expr) => {{
+                let lower_bound: $t = $lower_bound;
+                let upper_bound: $t = $upper_bound;
+                let predicate = |$i: $t| $predicate;
+                kani::internal::kani_exists(lower_bound, upper_bound, predicate)
+            }};
             (|$i:ident in ($lower_bound:expr, $upper_bound:expr)| $predicate:expr) => {{
                 let lower_bound: usize = $lower_bound;
                 let upper_bound: usize = $upper_bound;
@@ -278,10 +296,47 @@ macro_rules! kani_intrinsics {
             T::any()
         }
 
+        /// A [`core::fmt::Write`] sink that discards everything written to it, used by the
+        /// `check_debug_fmt`/`check_display_fmt` models below. Writing never fails, so `fmt`
+        /// implementations are not verified against the write-error path.
+        struct DiscardingSink;
+
+        impl core_path::fmt::Write for DiscardingSink {
+            fn write_str(&mut self, _s: &str) -> core_path::fmt::Result {
+                Ok(())
+            }
+        }
+
+        /// Exercise a type's `Debug` implementation by formatting a value into a sink that
+        /// discards the output. The `Formatter` is constructed by the core formatting
+        /// machinery, so it is always valid; panics or undefined behavior inside the `fmt`
+        /// implementation are detected as usual. Note that the `Formatter` carries the default
+        /// formatting parameters, i.e. paths that `fmt` takes only for a non-default width,
+        /// precision, fill, alignment, sign, or the alternate (`{:#?}`) flag are not covered.
+        ///
+        /// This model is used by the compiler to generate automatic harnesses for `Debug::fmt`
+        /// implementations (`kani autoharness`), whose `&mut Formatter` argument cannot be
+        /// generated nondeterministically.
+        #[kanitool::fn_marker = "CheckDebugFmtModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn check_debug_fmt<T: core_path::fmt::Debug>(value: &T) {
+            let _ = core_path::fmt::write(&mut DiscardingSink, format_args!("{value:?}"));
+        }
+
+        /// Like [check_debug_fmt], but for `Display` implementations.
+        #[kanitool::fn_marker = "CheckDisplayFmtModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn check_display_fmt<T: core_path::fmt::Display>(value: &T) {
+            let _ = core_path::fmt::write(&mut DiscardingSink, format_args!("{value}"));
+        }
+
         /// Creates a symbolic value *bounded* by `N`. Bounded means `|T| <= N`. The type
         /// implementing BoundedArbitrary decides exactly what size means for them.
         ///
         /// *Note*: Any proof using a bounded symbolic value is only valid up to that bound.
+        #[kanitool::fn_marker = "BoundedAnyModel"]
         #[inline(always)]
         pub fn bounded_any<T: BoundedArbitrary, const N: usize>() -> T {
             T::bounded_any::<N>()
@@ -600,6 +655,119 @@ macro_rules! kani_intrinsics {
 
             /// Insert the contract into the body of the function as assertion(s).
             pub const ASSERT: Mode = 4;
+
+            /// Tracks whether execution is currently evaluating a contract
+            /// clause (requires / ensures / modifies expression). Nesting is
+            /// possible when a clause calls a function whose own contract
+            /// clauses are evaluated, hence a depth counter rather than a
+            /// flag. Verification is single-threaded, so a static is sound.
+            ///
+            /// The `__CPROVER_` linker-symbol prefix marks the storage as a
+            /// verifier-internal object. This mirrors the naming applied to
+            /// `enter_contract_clause` / `exit_contract_clause` below and is
+            /// the reason `in_contract_clause` can be queried at every call
+            /// dispatch (including OUTSIDE any enter/exit bracket) without
+            /// risking a spuriously-nonzero havocked value causing a call to
+            /// be mis-dispatched to the original body.
+            #[unsafe(export_name = "__CPROVER_kani_contract_clause_depth")]
+            static mut CONTRACT_CLAUSE_DEPTH: usize = 0;
+
+            /// Resets the clause-depth counter at harness entry. Static
+            /// variables are not reliably zero-initialized in every
+            /// verification configuration, so harnesses reset the counter
+            /// explicitly before the first contract dispatch.
+            #[doc(hidden)]
+            #[inline(never)]
+            #[kanitool::fn_marker = "ResetContractClauseDepthModel"]
+            pub fn reset_contract_clause_depth() {
+                unsafe {
+                    CONTRACT_CLAUSE_DEPTH = 0;
+                }
+            }
+
+            /// Marks the beginning of the evaluation of a contract clause.
+            /// Inserted by the contract macros around every clause expression.
+            ///
+            /// The `__VERIFIER` symbol prefix makes CBMC's function-contract
+            /// instrumentation (DFCC) treat this function as
+            /// verification-internal (see `dfcc_is_cprover_function_symbol`),
+            /// so the counter update is not flagged as an illegal side effect
+            /// (assigns-clause violation) of a function under contract
+            /// checking.
+            #[doc(hidden)]
+            #[inline(never)]
+            #[kanitool::fn_marker = "EnterContractClauseModel"]
+            #[unsafe(export_name = "__VERIFIER_kani_enter_contract_clause")]
+            pub fn enter_contract_clause() {
+                // Saturating arithmetic is used defensively so that even if
+                // the underlying static were to be havocked (which the
+                // `__CPROVER_` symbol prefix on `CONTRACT_CLAUSE_DEPTH`
+                // aims to prevent), enter/exit calls remain well-defined
+                // and cannot silently wrap. Within an enter/exit bracket
+                // the depth is guaranteed >= 1 regardless of the initial
+                // value.
+                unsafe {
+                    CONTRACT_CLAUSE_DEPTH = CONTRACT_CLAUSE_DEPTH.saturating_add(1);
+                }
+            }
+
+            /// Marks the end of the evaluation of a contract clause.
+            ///
+            /// See [enter_contract_clause] regarding the symbol name.
+            #[doc(hidden)]
+            #[inline(never)]
+            #[kanitool::fn_marker = "ExitContractClauseModel"]
+            #[unsafe(export_name = "__VERIFIER_kani_exit_contract_clause")]
+            pub fn exit_contract_clause() {
+                unsafe {
+                    CONTRACT_CLAUSE_DEPTH = CONTRACT_CLAUSE_DEPTH.saturating_sub(1);
+                }
+            }
+
+            /// RAII guard returned by [enter_contract_clause_guard]. Its
+            /// `Drop` impl calls [exit_contract_clause] so the counter is
+            /// balanced even when the bracketed expression exits its
+            /// enclosing function early (via `?` / `return`) or panics-
+            /// unwinds. This prevents the depth from leaking to a nonzero
+            /// value outside a clause and mis-dispatching later calls.
+            #[doc(hidden)]
+            pub struct ContractClauseGuard;
+
+            impl Drop for ContractClauseGuard {
+                #[inline(never)]
+                fn drop(&mut self) {
+                    exit_contract_clause();
+                }
+            }
+
+            /// Increments the clause-depth counter and returns a guard whose
+            /// `Drop` decrements it. Used by the contract macros to bracket
+            /// clause expressions; see `bracket_clause_expr` in
+            /// `library/kani_macros/src/sysroot/contracts/helpers.rs`.
+            #[doc(hidden)]
+            #[inline(never)]
+            pub fn enter_contract_clause_guard() -> ContractClauseGuard {
+                enter_contract_clause();
+                ContractClauseGuard
+            }
+
+            /// Whether execution is currently evaluating a contract clause.
+            ///
+            /// The contract transformation pass dispatches calls to the
+            /// function under contract verification to its *original body*
+            /// rather than its contract *check* when they occur during clause
+            /// evaluation: clauses of other functions in the harness's call
+            /// graph may legitimately call the function under verification
+            /// (e.g. a postcondition mentioning `NonNull::as_ptr` while
+            /// `as_ptr` itself is being verified), and such calls must
+            /// neither consume the single top-level contract check nor be
+            /// checked inside the clause's write-set context.
+            #[doc(hidden)]
+            #[inline(never)]
+            #[kanitool::fn_marker = "InContractClauseModel"]
+            pub fn in_contract_clause() -> bool {
+                unsafe { CONTRACT_CLAUSE_DEPTH > 0 }
+            }
 
             /// Creates a non-fatal property with the specified condition and message.
             ///

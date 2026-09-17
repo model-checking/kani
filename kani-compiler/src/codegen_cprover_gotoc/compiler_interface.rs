@@ -6,10 +6,11 @@
 use crate::args::ReachabilityType;
 use crate::codegen_cprover_gotoc::context::MinimalGotocCtx;
 use crate::codegen_cprover_gotoc::utils::file_writing_pool::{FileDataToWrite, ThreadPool};
-use crate::codegen_cprover_gotoc::{GotocCtx, context};
+use crate::codegen_cprover_gotoc::{GotocCtx, clear_codegen_cache, context};
 use crate::kani_middle::analysis;
 use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::check_reachable_items;
+use crate::kani_middle::codegen_order::{MostReachableItems, order_harnesses};
 use crate::kani_middle::codegen_units::{CodegenUnit, CodegenUnits};
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
@@ -27,9 +28,9 @@ use rustc_codegen_ssa::back::archive::{
 };
 use rustc_codegen_ssa::back::link::link_binary;
 use rustc_codegen_ssa::traits::CodegenBackend;
-use rustc_codegen_ssa::{CodegenResults, CrateInfo, TargetConfig};
-use rustc_data_structures::fx::{FxHashMap, FxIndexMap};
-use rustc_errors::DEFAULT_LOCALE_RESOURCE;
+use rustc_codegen_ssa::{CompiledModules, CrateInfo, TargetConfig};
+use rustc_data_structures::fx::FxHashMap;
+use rustc_data_structures::unord::{UnordMap, UnordSet};
 use rustc_hir::def_id::{DefId as InternalDefId, LOCAL_CRATE};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
@@ -39,9 +40,9 @@ use rustc_public::CrateDef;
 use rustc_public::mir::mono::{Instance, MonoItem};
 use rustc_public::rustc_internal;
 use rustc_public::ty::FnDef;
-use rustc_session::Session;
 use rustc_session::config::{CrateType, OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
+use rustc_session::{IncrCompSession, Session};
 use rustc_span::{Symbol, sym};
 use rustc_target::spec::{Arch, Os, PanicStrategy};
 use std::any::Any;
@@ -206,6 +207,11 @@ impl GotocCodegenBackend {
             None
         };
 
+        // Post-pass: inline remaining function calls in quantifier bodies.
+        // build_quantifier_predicate handles checked arithmetic (StatementExpression
+        // flattening, overflow simplification), but user-defined function calls
+        // (e.g., comp(x, y)) require this post-pass because the called functions
+        // may not be in the symbol table when the quantifier hook runs.
         gcx.handle_quantifiers();
 
         // Split ownership of the context so that the majority of fields can be saved to our results,
@@ -287,11 +293,6 @@ impl CodegenBackend for GotocCodegenBackend {
         "kani-cprover"
     }
 
-    fn locale_resource(&self) -> &'static str {
-        // We don't currently support multiple languages.
-        DEFAULT_LOCALE_RESOURCE
-    }
-
     fn target_config(&self, sess: &Session) -> TargetConfig {
         // This code is adapted from the cranelift backend:
         // https://github.com/rust-lang/rust/blob/a124fb3cb7291d75872934f411d81fe298379ace/compiler/rustc_codegen_cranelift/src/lib.rs#L184
@@ -310,15 +311,13 @@ impl CodegenBackend for GotocCodegenBackend {
         } else {
             vec![]
         };
-        // FIXME do `unstable_target_features` properly
-        let unstable_target_features = target_features.clone();
-
         let has_reliable_f128 = true;
         let has_reliable_f16 = true;
 
         TargetConfig {
-            target_features,
-            unstable_target_features,
+            // As of nightly-2026-08-21 the separate stable/unstable `Vec<Symbol>` feature lists
+            // are a single `UnordSet`, so there is no longer an unstable list to populate.
+            internal_target_features: UnordSet::from_iter(target_features),
             has_reliable_f16,
             has_reliable_f16_math: has_reliable_f16,
             has_reliable_f128,
@@ -326,7 +325,15 @@ impl CodegenBackend for GotocCodegenBackend {
         }
     }
 
-    fn codegen_crate(&self, tcx: TyCtxt) -> Box<dyn Any> {
+    fn target_cpu(&self, sess: &Session) -> String {
+        match sess.opts.cg.target_cpu {
+            Some(ref name) => name,
+            None => sess.target.cpu.as_ref(),
+        }
+        .to_owned()
+    }
+
+    fn codegen_crate<'tcx>(&self, tcx: TyCtxt<'tcx>) -> Box<dyn Any> {
         let ret_val = rustc_internal::run(tcx, || {
             super::utils::init();
 
@@ -373,7 +380,7 @@ impl CodegenBackend for GotocCodegenBackend {
 
             // If reachability is None, just return early as we'll do no codegen.
             if reachability == ReachabilityType::None {
-                return codegen_results(tcx, &results.machine_model);
+                return codegen_results();
             }
 
             // Create an empty thread pool. We will set the size later once we
@@ -400,7 +407,29 @@ impl CodegenBackend for GotocCodegenBackend {
                         let mut shared_unit_transformer =
                             BodyTransformation::new(&queries, tcx, unit);
 
-                        for harness in &unit.harnesses {
+                        // Codegen the harnesses expected to generate the most code first, so their
+                        // (slow) goto-file export runs on a worker thread while the main thread
+                        // keeps codegening the rest, rather than stalling on them at the end of
+                        // compilation. Reachability run here to rate the harnesses also warms the
+                        // shared transformer's body cache reused during codegen. See
+                        // `kani_middle::codegen_order`.
+                        //
+                        // Only worth the extra reachability pass when there are export workers to
+                        // overlap with; without them exports happen synchronously on this thread,
+                        // so ordering cannot hide any latency and would only add compile time.
+                        let ordered_harnesses = if export_thread_pool.has_workers() {
+                            order_harnesses::<MostReachableItems>(
+                                &unit.harnesses,
+                                tcx,
+                                &mut shared_unit_transformer,
+                            )
+                        } else {
+                            unit.harnesses.iter().collect()
+                        };
+
+                        for harness in ordered_harnesses {
+                            clear_codegen_cache();
+
                             let model_path = units.harness_model_path(*harness).unwrap();
                             let is_automatic_harness = units.is_automatic_harness(harness);
                             let contract_metadata =
@@ -485,7 +514,7 @@ impl CodegenBackend for GotocCodegenBackend {
                     );
                 }
             }
-            codegen_results(tcx, &results.machine_model)
+            codegen_results()
         });
         ret_val.unwrap()
     }
@@ -494,9 +523,11 @@ impl CodegenBackend for GotocCodegenBackend {
         &self,
         ongoing_codegen: Box<dyn Any>,
         _sess: &Session,
+        _incr_comp_session: Option<&IncrCompSession>,
         _filenames: &OutputFilenames,
-    ) -> (CodegenResults, FxIndexMap<WorkProductId, WorkProduct>) {
-        match ongoing_codegen.downcast::<(CodegenResults, FxIndexMap<WorkProductId, WorkProduct>)>()
+        _crate_info: &CrateInfo,
+    ) -> (CompiledModules, UnordMap<WorkProductId, WorkProduct>) {
+        match ongoing_codegen.downcast::<(CompiledModules, UnordMap<WorkProductId, WorkProduct>)>()
         {
             Ok(val) => *val,
             Err(val) => panic!("unexpected error: {:?}", (*val).type_id()),
@@ -514,18 +545,20 @@ impl CodegenBackend for GotocCodegenBackend {
     fn link(
         &self,
         sess: &Session,
-        codegen_results: CodegenResults,
+        compiled_modules: CompiledModules,
+        crate_info: CrateInfo,
         rustc_metadata: EncodedMetadata,
         outputs: &OutputFilenames,
     ) {
-        let requested_crate_types = &codegen_results.crate_info.crate_types.clone();
-        let local_crate_name = codegen_results.crate_info.local_crate_name;
+        let requested_crate_types = crate_info.crate_types.clone();
+        let local_crate_name = crate_info.local_crate_name;
         // Create the rlib if one was requested.
         if requested_crate_types.contains(&CrateType::Rlib) {
             link_binary(
                 sess,
                 &ArArchiveBuilderBuilder,
-                codegen_results,
+                compiled_modules,
+                crate_info,
                 rustc_metadata,
                 outputs,
                 self.name(),
@@ -535,7 +568,7 @@ impl CodegenBackend for GotocCodegenBackend {
         // But override all the other outputs.
         // Note: Do this after `link_binary` call, since it may write to the object files
         // and override the json we are creating.
-        for crate_type in requested_crate_types {
+        for crate_type in &requested_crate_types {
             let out_fname = out_filename(sess, *crate_type, outputs, local_crate_name);
             let out_path = out_fname.as_path();
             debug!(?crate_type, ?out_path, "link");
@@ -582,7 +615,7 @@ fn check_target(session: &Session) {
             "Kani requires the target platform to be `x86_64-unknown-linux-gnu`, \
             `aarch64-unknown-linux-gnu`, `x86_64-apple-*` or `arm64-apple-*`, but \
             it is {}",
-            &session.target.llvm_target
+            session.target.llvm_target
         );
         session.dcx().err(err_msg);
     }
@@ -625,16 +658,13 @@ fn check_options(session: &Session) {
 }
 
 /// Return a struct that contains information about the codegen results as expected by `rustc`.
-fn codegen_results(tcx: TyCtxt, machine: &MachineModel) -> Box<dyn Any> {
-    let work_products = FxIndexMap::<WorkProductId, WorkProduct>::default();
-    Box::new((
-        CodegenResults {
-            modules: vec![],
-            allocator_module: None,
-            crate_info: CrateInfo::new(tcx, machine.architecture.clone()),
-        },
-        work_products,
-    ))
+///
+/// Kani produces no object files, so the module lists are empty. `rustc` now builds the `CrateInfo`
+/// itself and passes it to `codegen_crate` and `link`, so there is nothing crate-specific to report
+/// here.
+fn codegen_results() -> Box<dyn Any> {
+    let work_products = UnordMap::<WorkProductId, WorkProduct>::default();
+    Box::new((CompiledModules { modules: vec![], allocator_module: None }, work_products))
 }
 
 pub fn write_file<T>(base_path: &Path, file_type: ArtifactType, source: &T, pretty: bool)

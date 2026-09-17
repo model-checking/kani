@@ -35,15 +35,14 @@ use crate::{
 use rustc_middle::{
     mir::{
         BasicBlock, BinOp, Body, CallReturnPlaces, Location, NonDivergingIntrinsic, Operand, Place,
-        ProjectionElem, Rvalue, Statement, StatementKind, Terminator, TerminatorEdges,
-        TerminatorKind,
+        ProjectionElem, Rvalue, Statement, StatementKind, Terminator, TerminatorKind,
     },
     ty::{Instance, InstanceKind, List, TyCtxt, TyKind, TypingEnv},
 };
 use rustc_mir_dataflow::{Analysis, Forward, JoinSemiLattice};
 use rustc_public::mir::{Body as StableBody, mono::Instance as StableInstance};
 use rustc_public::rustc_internal;
-use rustc_span::{DUMMY_SP, source_map::Spanned};
+use rustc_span::{DUMMY_SP, Spanned};
 use std::collections::HashSet;
 
 /// Main points-to analysis object.
@@ -173,7 +172,6 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
             | StatementKind::SetDiscriminant { .. }
             | StatementKind::StorageLive(..)
             | StatementKind::StorageDead(..)
-            | StatementKind::Retag(..)
             | StatementKind::PlaceMention(..)
             | StatementKind::AscribeUserType(..)
             | StatementKind::Coverage(..)
@@ -183,12 +181,12 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
         }
     }
 
-    fn apply_primary_terminator_effect<'mir>(
+    fn apply_primary_terminator_effect(
         &self,
         state: &mut Self::Domain,
-        terminator: &'mir Terminator<'tcx>,
+        terminator: &Terminator<'tcx>,
         location: Location,
-    ) -> TerminatorEdges<'mir, 'tcx> {
+    ) {
         if let TerminatorKind::Call { func, args, destination, .. } = &terminator.kind {
             // Attempt to resolve callee. For now, we panic if the callee cannot be resolved (e.g.,
             // if a function pointer call is used), but we could leverage the call graph to resolve
@@ -290,7 +288,7 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
                             state.extend(&lvalue_set, &state.successors(&rvalue_set));
                         }
                         // Semantically equivalent *a = b.
-                        Intrinsic::VolatileStore => {
+                        Intrinsic::VolatileStore | Intrinsic::UnalignedVolatileStore => {
                             let lvalue_set = self.successors_for_deref(state, args[0].node.clone());
                             let rvalue_set =
                                 self.successors_for_operand(state, args[1].node.clone());
@@ -332,7 +330,6 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
                 }
             }
         };
-        terminator.edges()
     }
 
     /// We don't care about this and just need to implement this to implement the trait.
@@ -360,7 +357,7 @@ fn try_resolve_instance<'tcx>(
                 tcx,
                 TypingEnv::fully_monomorphized(),
                 *def,
-                args,
+                args.skip_binder(),
                 DUMMY_SP,
             ))
         }
@@ -402,6 +399,8 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
                     HashSet::new()
                 }
             }
+            // Runtime-check operands (rust-lang/rust#148766) reference no place or static.
+            Operand::RuntimeChecks(..) => HashSet::new(),
         }
     }
 
@@ -424,6 +423,8 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
                     HashSet::new()
                 }
             }
+            // Runtime-check operands (rust-lang/rust#148766) reference no place or static.
+            Operand::RuntimeChecks(..) => HashSet::new(),
         }
     }
 
@@ -452,6 +453,7 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
                         .join(&state.transitive_closure(state.resolve_place(place, self.instance)));
                 }
                 Operand::Constant(_) => {}
+                Operand::RuntimeChecks(_) => {}
             }
         }
 
@@ -521,12 +523,14 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
         match rvalue {
             // Using the operand unchanged requires determining where it could point, which
             // `successors_for_operand` does.
-            Rvalue::Use(operand)
-            | Rvalue::ShallowInitBox(operand, _)
+            Rvalue::Use(operand, _)
             | Rvalue::Cast(_, operand, _)
             | Rvalue::Repeat(operand, ..)
             | Rvalue::WrapUnsafeBinder(operand, _) => self.successors_for_operand(state, operand),
-            Rvalue::Ref(_, _, ref_place) | Rvalue::RawPtr(_, ref_place) => {
+            // A `Reborrow` bitwise-copies the place, so it can point wherever that place does.
+            Rvalue::Reborrow(_, _, ref_place)
+            | Rvalue::Ref(_, _, ref_place)
+            | Rvalue::RawPtr(_, ref_place) => {
                 // Here, a reference to a place is created, which leaves the place
                 // unchanged.
                 state.resolve_place(ref_place, self.instance)
@@ -581,7 +585,7 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
                 // The same story from BinOp applies here, too. Need to track those things.
                 self.successors_for_operand(state, operand)
             }
-            Rvalue::NullaryOp(..) | Rvalue::Discriminant(..) => {
+            Rvalue::Discriminant(..) => {
                 // All of those should yield a constant.
                 HashSet::new()
             }
@@ -638,6 +642,8 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::Exp2F64
         | Intrinsic::ExpF32
         | Intrinsic::ExpF64
+        | Intrinsic::FabsF128
+        | Intrinsic::FabsF16
         | Intrinsic::FabsF32
         | Intrinsic::FabsF64
         | Intrinsic::FaddFast
@@ -691,6 +697,9 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::UncheckedDiv
         | Intrinsic::UncheckedRem
         | Intrinsic::Unlikely
+        // Same argument shape/semantics as `WriteBytes` below (volatility is not
+        // an aliasing concern), so it is likewise identity-aliasing.
+        | Intrinsic::VolatileSetMemory
         | Intrinsic::VtableSize
         | Intrinsic::VtableAlign
         | Intrinsic::WrappingAdd
@@ -704,6 +713,7 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::SimdAnd
         | Intrinsic::SimdDiv
         | Intrinsic::SimdRem
+        | Intrinsic::SimdReduceAll
         | Intrinsic::SimdEq
         | Intrinsic::SimdExtract
         | Intrinsic::SimdGe
@@ -717,6 +727,7 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::SimdShl
         | Intrinsic::SimdShr
         | Intrinsic::SimdShuffle(_)
+        | Intrinsic::SimdSplat
         | Intrinsic::SimdSub
         | Intrinsic::SimdXor => {
             /* SIMD operations */

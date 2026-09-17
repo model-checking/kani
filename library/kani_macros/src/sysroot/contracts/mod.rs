@@ -570,6 +570,11 @@ pub fn proof_for_contract(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = proc_macro2::TokenStream::from(attr);
     let mut fn_item = parse_macro_input!(item as ItemFn);
     fn_item.block.stmts.insert(0, parse_quote!(kani::internal::init_contracts();));
+    // Reset the contract-clause depth counter before anything else: statics
+    // are not reliably zero-initialized, and the counter steers the dispatch
+    // of calls to the function under verification (see `set_mode` in the
+    // Kani compiler).
+    fn_item.block.stmts.insert(0, parse_quote!(kani::internal::reset_contract_clause_depth();));
     quote!(
         #[allow(dead_code)]
         #[kanitool::proof_for_contract = stringify!(#args)]

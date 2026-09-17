@@ -28,8 +28,15 @@ use tracing::{debug, trace};
 
 /// The outputs of kani-compiler being invoked via cargo on a project.
 pub struct CargoOutputs {
-    /// The directory where compiler outputs should be directed.
-    /// Usually 'target/BUILD_TRIPLE/debug/deps/'
+    /// A directory holding compiler outputs for this build.
+    ///
+    /// Derived from the paths cargo reports for the artifacts it produced rather than assumed: the
+    /// layout under `target/` is cargo's to choose and has changed before. Up to cargo 1.98 every
+    /// artifact sat together in `target/kani/BUILD_TRIPLE/debug/deps/`; cargo 1.99 gives each
+    /// package its own `target/kani/BUILD_TRIPLE/debug/build/PKG/HASH/out/`.
+    ///
+    /// A multi-package build therefore no longer has a single output directory, so this names one
+    /// of them. To reach the artifacts themselves, use [`CargoOutputs::metadata`].
     pub outdir: PathBuf,
     /// The kani-metadata.json files written by kani-compiler.
     pub metadata: Vec<Artifact>,
@@ -142,7 +149,9 @@ crate-type = ["lib"]
             .unwrap_or(&metadata.target_directory.clone().into())
             .clone()
             .join("kani");
-        let outdir = target_dir.join(build_target).join("debug/deps");
+        // The directory to fall back on if the build turns out to produce no artifacts (see
+        // `CargoOutputs::outdir`). Computed here because `target_dir` is consumed below.
+        let profile_dir = target_dir.join(build_target).join("debug");
 
         if self.args.force_build && target_dir.exists() {
             fs::remove_dir_all(&target_dir)?;
@@ -163,10 +172,10 @@ crate-type = ["lib"]
         if self.args.cargo.no_default_features {
             cargo_args.push("--no-default-features".into());
         }
-        let features = self.args.cargo.features();
-        if !features.is_empty() {
-            cargo_args.push(format!("--features={}", features.join(",")).into());
-        }
+        // Note: We do NOT add --features here globally. Features are filtered
+        // per-package below to handle workspaces where packages don't all
+        // declare the same features. This matches cargo's behavior.
+        let requested_features = self.args.cargo.features();
 
         cargo_args.append(&mut cargo_config_args());
 
@@ -210,12 +219,22 @@ crate-type = ["lib"]
         let mut artifacts = vec![];
         let mut failed_targets = vec![];
         for package in packages {
+            // Filter requested features to only include those that this package defines.
+            // This matches cargo's behavior for `cargo test --workspace --features <feature>`
+            // where features are applied only to packages that declare them.
+            let pkg_features = filter_features_for_package(&requested_features, package);
+
             for verification_target in package_targets(&self.args, package) {
                 let mut cmd =
                     setup_cargo_command_inner(Some(verification_target.target().name.clone()))?;
-                cmd.pass_cargo_args(&cargo_args)
-                    .args(vec!["-p", &package.id.to_string()])
-                    .args(verification_target.to_args())
+                cmd.pass_cargo_args(&cargo_args).args(vec!["-p", &package.id.to_string()]);
+
+                // Add filtered features for this specific package
+                if !pkg_features.is_empty() {
+                    cmd.arg(format!("--features={}", pkg_features.join(",")));
+                }
+
+                cmd.args(verification_target.to_args())
                     .arg("--") // Add this delimiter so we start passing args to rustc and not Cargo
                     .env("RUSTC", &self.kani_compiler)
                     .pass_rustc_args(&rustc_args, PassTo::AllCrates)
@@ -244,6 +263,14 @@ crate-type = ["lib"]
         if !found_target {
             bail!("No supported targets were found.");
         }
+
+        // Report where cargo actually placed the artifacts rather than assuming a layout under
+        // `target/` (see `CargoOutputs::outdir`). With no artifacts there is no such directory to
+        // name, and the profile directory is the closest honest answer.
+        let outdir = artifacts
+            .first()
+            .and_then(|artifact| artifact.parent().map(Path::to_path_buf))
+            .unwrap_or(profile_dir);
 
         Ok(CargoOutputs { outdir, metadata: artifacts, cargo_metadata: metadata })
     }
@@ -655,4 +682,21 @@ fn package_targets(args: &VerificationArgs, package: &Package) -> Vec<Verificati
         }
     }
     verification_targets
+}
+
+/// Filter a list of requested features to only include those that a package defines.
+///
+/// This is necessary to support `cargo kani --workspace --features <feature>` where not all
+/// workspace members declare the same features. Without filtering, cargo would fail with
+/// "none of the selected packages contains these features" error.
+///
+/// This matches cargo's behavior for `cargo test --workspace --features <feature>` where
+/// features are applied only to packages that declare them, and silently skipped for
+/// packages that don't.
+fn filter_features_for_package(requested_features: &[String], package: &Package) -> Vec<String> {
+    requested_features
+        .iter()
+        .filter(|feature| package.features.contains_key(*feature))
+        .cloned()
+        .collect()
 }

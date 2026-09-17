@@ -1,5 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+use super::ty_stable::pointee_type_stable;
 use super::typ::FN_RETURN_VOID_VAR_NAME;
 use super::typ::TypeExt;
 use super::{PropertyClass, bb_label};
@@ -17,7 +18,8 @@ use rustc_public::abi::{ArgAbi, FnAbi, PassMode};
 use rustc_public::mir::mono::{Instance, InstanceKind};
 use rustc_public::mir::{
     AssertMessage, BasicBlockIdx, CopyNonOverlapping, NonDivergingIntrinsic, Operand, Place,
-    RETURN_LOCAL, Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
+    ProjectionElem, RETURN_LOCAL, Rvalue, Statement, StatementKind, SwitchTargets, Terminator,
+    TerminatorKind,
 };
 use rustc_public::rustc_internal;
 use rustc_public::ty::{Abi, RigidTy, Span, Ty, TyKind, VariantIdx};
@@ -69,6 +71,16 @@ impl GotocCtx<'_, '_> {
                 for (operand, expr) in operands.iter().zip(assign_exprs.iter()) {
                     let operand_ty = self.operand_ty_stable(operand);
                     debug!("Ty {:?}", operand_ty);
+                    // Do not emit an assigns target for a pointer to a ZST. Havocking a
+                    // zero-sized location is a no-op (a ZST has a single inhabitant and
+                    // occupies zero bytes), so dropping it preserves soundness, while
+                    // keeping it makes CBMC abort with `l2_rename_rvalues case 'struct'
+                    // not handled` when the target is a zero-sized struct (e.g. a
+                    // capture-free closure). This mirrors the function-contract handling
+                    // in `codegen_modifies_target`.
+                    if pointee_type_stable(operand_ty).is_some_and(|ty| self.is_zst_stable(ty)) {
+                        continue;
+                    }
                     let ptr_expr = self.ty_to_assign_target(operand_ty, expr);
                     ptr_exprs.push(ptr_expr)
                 }
@@ -76,6 +88,41 @@ impl GotocCtx<'_, '_> {
             }
             _ => vec![assigns.dereference()],
         }
+    }
+
+    /// Whether `stmt` contains at least one dereference and every dereference
+    /// in it is a load of a by-reference closure capture in a contract-clause
+    /// closure (see [crate::codegen_cprover_gotoc::context::CurrentFnCtx::is_capture_ref_local]).
+    /// For such statements pointer-validity checks are vacuous by construction.
+    ///
+    /// This is deliberately conservative: any dereference that is not
+    /// *directly* a capture load — including further dereferences of the
+    /// captured value performed by the user-written clause expression — makes
+    /// this function return `false`, keeping full checking in place.
+    fn stmt_derefs_only_capture_refs(&self, stmt: &Statement) -> bool {
+        if !self.current_fn().has_capture_ref_locals() {
+            return false;
+        }
+        let StatementKind::Assign(lhs, rhs) = &stmt.kind else {
+            return false;
+        };
+        let mut places: Vec<&Place> = vec![lhs];
+        collect_rvalue_places(rhs, &mut places);
+        let mut has_deref = false;
+        for place in places {
+            for (idx, elem) in place.projection.iter().enumerate() {
+                if matches!(elem, ProjectionElem::Deref) {
+                    // After the `Derefer` MIR pass, `Deref` only appears as the
+                    // first projection element; treat anything else as unknown.
+                    if idx == 0 && self.current_fn().is_capture_ref_local(place.local) {
+                        has_deref = true;
+                    } else {
+                        return false;
+                    }
+                }
+            }
+        }
+        has_deref
     }
 
     /// Generate Goto-C for MIR [Statement]s.
@@ -86,7 +133,15 @@ impl GotocCtx<'_, '_> {
     pub fn codegen_statement(&mut self, stmt: &Statement) -> Stmt {
         let _trace_span = debug_span!("CodegenStatement", statement = ?stmt).entered();
         debug!(?stmt, kind=?stmt.kind, "handling_statement");
-        let location = self.codegen_span_stable(stmt.span);
+        let location = if self.stmt_derefs_only_capture_refs(stmt) {
+            // Every dereference in this statement only loads a by-reference
+            // closure capture of a contract-clause closure, which is valid by
+            // construction (see `CurrentFnCtx::is_capture_ref_local`), so tell
+            // CBMC not to generate pointer-validity checks for it.
+            self.codegen_span_stable_with_pragmas(stmt.source_info.span, &["disable:pointer-check"])
+        } else {
+            self.codegen_span_stable(stmt.source_info.span)
+        };
         match &stmt.kind {
             StatementKind::Assign(lhs, rhs) => {
                 let lty = self.place_ty_stable(lhs);
@@ -95,6 +150,25 @@ impl GotocCtx<'_, '_> {
                 if localname.contains("kani_loop_modifies") {
                     let assigns = self.rvalue_to_assign_targets(rhs, location);
                     self.current_loop_modifies = assigns.clone();
+                    return Stmt::skip(location);
+                }
+                if localname.contains("kani_loop_decreases") {
+                    if !self
+                        .queries
+                        .args()
+                        .unstable_features
+                        .contains(&"loop-contracts".to_string())
+                    {
+                        let msg = "found `#[kani::loop_decreases]` without \
+                                   `-Z loop-contracts`. The decreases clause \
+                                   will be ignored.";
+                        let internal_span =
+                            rustc_internal::internal(self.tcx, stmt.source_info.span);
+                        self.tcx.dcx().span_warn(internal_span, msg);
+                        return Stmt::skip(location);
+                    }
+                    let decreases_expr = self.codegen_rvalue_stable(rhs, location);
+                    self.current_loop_decreases = Some(decreases_expr);
                     return Stmt::skip(location);
                 }
                 // we ignore assignment for all zero size types
@@ -231,8 +305,12 @@ impl GotocCtx<'_, '_> {
                 let maybe_source_region =
                     region_from_coverage_opaque(self.tcx, coverage_opaque, instance);
                 if let Some((source_region, file_name)) = maybe_source_region {
-                    let coverage_stmt =
-                        self.codegen_coverage(&counter_data, stmt.span, source_region, &file_name);
+                    let coverage_stmt = self.codegen_coverage(
+                        &counter_data,
+                        stmt.source_info.span,
+                        source_region,
+                        &file_name,
+                    );
                     // TODO: Avoid single-statement blocks when conversion of
                     // standalone statements to the irep format is fixed.
                     // More details in <https://github.com/model-checking/kani/issues/3012>
@@ -243,7 +321,6 @@ impl GotocCtx<'_, '_> {
             }
             StatementKind::PlaceMention(_) => todo!(),
             StatementKind::FakeRead(..)
-            | StatementKind::Retag(_, _)
             | StatementKind::AscribeUserType { .. }
             | StatementKind::Nop
             | StatementKind::ConstEvalCounter => Stmt::skip(location),
@@ -257,7 +334,7 @@ impl GotocCtx<'_, '_> {
     ///
     /// See also [`GotocCtx::codegen_statement`] for ordinary [Statement]s.
     pub fn codegen_terminator(&mut self, term: &Terminator) -> Stmt {
-        let loc = self.codegen_span_stable(term.span);
+        let loc = self.codegen_span_stable(term.source_info.span);
         let _trace_span = debug_span!("CodegenTerminator", statement = ?term.kind).entered();
         debug!("handling terminator {:?}", term);
         //TODO: Instead of doing location::none(), and updating, just putit in when we make the stmt.
@@ -308,7 +385,7 @@ impl GotocCtx<'_, '_> {
                 self.codegen_drop(place, target, loc)
             }
             TerminatorKind::Call { func, args, destination, target, .. } => {
-                self.codegen_funcall(func, args, destination, target, term.span)
+                self.codegen_funcall(func, args, destination, target, term.source_info.span)
             }
             TerminatorKind::Assert { cond, expected, msg, target, .. } => {
                 let cond = {
@@ -334,7 +411,8 @@ impl GotocCtx<'_, '_> {
                         PropertyClass::SafetyCheck,
                     ),
                     // For all other assert kind we can get the static message.
-                    AssertMessage::NullPointerDereference => {
+                    AssertMessage::NullPointerDereference
+                    | AssertMessage::NullReferenceConstructed => {
                         (msg.description().unwrap(), PropertyClass::SafetyCheck)
                     }
                     AssertMessage::Overflow { .. }
@@ -349,7 +427,7 @@ impl GotocCtx<'_, '_> {
                 };
 
                 let (msg_str, reach_stmt) =
-                    self.codegen_reachability_check(msg.to_owned(), term.span);
+                    self.codegen_reachability_check(msg.to_owned(), term.source_info.span);
 
                 Stmt::block(
                     vec![
@@ -423,7 +501,7 @@ impl GotocCtx<'_, '_> {
                         let discr_ty = self.codegen_enum_discr_typ(dest_ty_internal);
                         let discr_ty = self.codegen_ty(discr_ty);
                         let niche_value =
-                            variant_index_internal.as_u32() - niche_variants.start().as_u32();
+                            variant_index_internal.as_u32() - niche_variants.start.as_u32();
                         let niche_value = (niche_value as u128).wrapping_add(*niche_start);
                         trace!(val=?niche_value, typ=?discr_ty, "codegen_set_discriminant niche");
                         let value = if niche_value == 0
@@ -678,6 +756,22 @@ impl GotocCtx<'_, '_> {
         debug!(?func, ?args, ?destination, ?span, "codegen_funcall");
         let instance_opt = self.get_instance(func);
         if let Some(instance) = instance_opt
+            && matches!(instance.kind, InstanceKind::LlvmIntrinsic)
+        {
+            // An LLVM intrinsic -- an `extern "unadjusted"` declaration whose symbol starts with
+            // `llvm.` -- has no Rust body, and rustc refuses to compute a `FnAbi` for one, so we
+            // cannot codegen the call or even its arguments. Kani has no model for these either,
+            // so report the call as unsupported. As of nightly-2026-08-21 these resolve to their
+            // own `InstanceKind`; before that they were foreign items, and this reports the same
+            // unsupported-construct check that the FFI shim did, so reaching one still fails
+            // verification rather than silently succeeding.
+            return self.codegen_unimplemented_stmt(
+                &format!("call to LLVM intrinsic `{}`", instance.mangled_name()),
+                self.codegen_span_stable(span),
+                "https://github.com/model-checking/kani/issues/4770",
+            );
+        }
+        if let Some(instance) = instance_opt
             && matches!(instance.kind, InstanceKind::Intrinsic)
         {
             let TyKind::RigidTy(RigidTy::FnDef(def, _)) = instance.ty().kind() else {
@@ -738,6 +832,11 @@ impl GotocCtx<'_, '_> {
                         self.codegen_virtual_funcall(self_ty, idx, destination, &mut fargs, loc)
                     }
                     // Normal, non-virtual function calls
+                    InstanceKind::LlvmIntrinsic => {
+                        unreachable!(
+                            "Kani reports LLVM intrinsic calls as unsupported before codegen"
+                        )
+                    }
                     InstanceKind::Item | InstanceKind::Intrinsic | InstanceKind::Shim => {
                         // We need to handle FnDef items in a special way because `codegen_operand` compiles them to dummy structs.
                         // (cf. the function documentation)
@@ -773,7 +872,7 @@ impl GotocCtx<'_, '_> {
                 Stmt::block(
                     vec![
                         self.codegen_expr_to_place_stable(destination, func_expr.call(fargs), loc),
-                        Stmt::goto(bb_label(target.unwrap()), loc),
+                        self.codegen_end_call(*target, loc),
                     ],
                     loc,
                 )
@@ -900,5 +999,36 @@ impl GotocCtx<'_, '_> {
             .goto_expr
             .assign(expr, loc)
         }
+    }
+}
+
+/// Collect all places appearing in `rvalue` (directly or inside operands).
+fn collect_rvalue_places<'a>(rvalue: &'a Rvalue, places: &mut Vec<&'a Place>) {
+    let push_operand = |op: &'a Operand, places: &mut Vec<&'a Place>| {
+        if let Operand::Copy(place) | Operand::Move(place) = op {
+            places.push(place);
+        }
+    };
+    match rvalue {
+        Rvalue::Use(op, _)
+        | Rvalue::Repeat(op, _)
+        | Rvalue::Cast(_, op, _)
+        | Rvalue::UnaryOp(_, op) => push_operand(op, places),
+        Rvalue::BinaryOp(_, op1, op2) | Rvalue::CheckedBinaryOp(_, op1, op2) => {
+            push_operand(op1, places);
+            push_operand(op2, places);
+        }
+        Rvalue::Ref(_, _, place)
+        | Rvalue::AddressOf(_, place)
+        | Rvalue::Len(place)
+        | Rvalue::CopyForDeref(place)
+        | Rvalue::Discriminant(place)
+        | Rvalue::Reborrow(_, _, place) => places.push(place),
+        Rvalue::Aggregate(_, operands) => {
+            for op in operands {
+                push_operand(op, places);
+            }
+        }
+        Rvalue::ThreadLocalRef(..) => {}
     }
 }

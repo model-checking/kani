@@ -55,9 +55,11 @@ pub struct AutoHarnessMetadata {
 /// Reasons that Kani does not generate an automatic harness for a function.
 #[derive(Debug, Clone, Serialize, Deserialize, Display, EnumString)]
 pub enum AutoHarnessSkipReason {
-    /// The function is generic.
+    /// The function is generic and autoharness could not find a monomorphic instantiation to
+    /// verify. The payload gives the specific reason (e.g. const generic parameters, or trait
+    /// bounds that no candidate type satisfies).
     #[strum(serialize = "Generic Function")]
-    GenericFn,
+    GenericFn(String),
     /// A Kani-internal function: already a harness, implementation of a Kani associated item or Kani contract instrumentation functions).
     #[strum(serialize = "Kani implementation")]
     KaniImpl,
@@ -68,6 +70,11 @@ pub enum AutoHarnessSkipReason {
     /// The function does not have a body.
     #[strum(serialize = "The function does not have a body")]
     NoBody,
+    /// The function's arguments are only supported with bounded nondeterministic values, and
+    /// the user did not pass --bounded-arguments.
+    /// (The Vec<(String, String)> contains the list of (name, type) tuples for each such argument.)
+    #[strum(serialize = "Requires --bounded-arguments for argument(s)")]
+    RequiresBoundedArguments(Vec<(String, String)>),
     /// The function doesn't match the user's provided filters.
     #[strum(serialize = "Did not match provided filters")]
     UserFilter,

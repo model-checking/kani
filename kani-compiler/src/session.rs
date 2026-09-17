@@ -4,10 +4,8 @@
 //! Module used to configure a compiler session.
 
 use crate::args::Arguments;
-use rustc_driver::default_translator;
 use rustc_errors::{
     ColorConfig, DiagInner, emitter::Emitter, emitter::HumanReadableErrorType, json::JsonEmitter,
-    registry::Registry as ErrorRegistry,
 };
 use rustc_session::EarlyDiagCtxt;
 use rustc_session::config::ErrorOutputType;
@@ -57,14 +55,12 @@ static JSON_PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicHookInfo<'_>) + Sync + 
                 Box::new(io::BufWriter::new(io::stderr())),
                 #[allow(clippy::arc_with_non_send_sync)]
                 Some(Arc::new(SourceMap::new(FilePathMapping::empty()))),
-                default_translator(),
                 false,
-                HumanReadableErrorType::Default { short: false },
+                HumanReadableErrorType { short: false, unicode: false },
                 ColorConfig::Never,
             );
-            let registry = ErrorRegistry::new(&[]);
             let diagnostic = DiagInner::new(rustc_errors::Level::Bug, msg);
-            emitter.emit_diagnostic(diagnostic, &registry);
+            emitter.emit_diagnostic(diagnostic);
             (*JSON_PANIC_HOOK)(info);
         }));
         hook

@@ -21,13 +21,14 @@ use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::{Const, TyCtxt};
 use rustc_public::CrateDef;
+use rustc_public::CrateDefType;
 use rustc_public::abi::{FieldsShape, Scalar, TagEncoding, ValueAbi, VariantsShape, WrappingRange};
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::visit::{Location, PlaceContext, PlaceRef};
 use rustc_public::mir::{
     AggregateKind, BasicBlockIdx, BinOp, Body, CastKind, FieldIdx, Local, LocalDecl, MirVisitor,
     Mutability, NonDivergingIntrinsic, Operand, Place, ProjectionElem, RawPtrKind, Rvalue,
-    Statement, StatementKind, Terminator, TerminatorKind,
+    Statement, StatementKind, Terminator, TerminatorKind, WithRetag,
 };
 use rustc_public::rustc_internal;
 use rustc_public::target::{MachineInfo, MachineSize};
@@ -190,8 +191,11 @@ impl ValidValueReq {
     ///
     /// It's not possible to define a `rustc_layout_scalar_valid_range_*` to any other structure.
     /// Note that this annotation only applies to the first scalar in the layout.
-    pub fn try_from_ty(machine_info: &MachineInfo, ty: Ty) -> Option<ValidValueReq> {
-        if ty.kind().is_char() {
+    pub fn try_from_ty(tcx: TyCtxt, machine_info: &MachineInfo, ty: Ty) -> Option<ValidValueReq> {
+        // The `char` special case below is skipped for pattern types (whose
+        // stable `Ty::kind()` may panic); `ty_validity_per_offset` rejects
+        // pattern types over `char`, so it cannot be needed here.
+        if !is_pattern_type(tcx, ty) && ty.kind().is_char() {
             Some(ValidValueReq {
                 offset: 0,
                 size: MachineSize::from_bits(size_of::<char>() * 8),
@@ -204,7 +208,7 @@ impl ValidValueReq {
             let shape = ty.layout().unwrap().shape();
             match shape.abi {
                 ValueAbi::Scalar(Scalar::Initialized { value, valid_range })
-                | ValueAbi::ScalarPair(Scalar::Initialized { value, valid_range }, _) => {
+                | ValueAbi::ScalarPair { a: Scalar::Initialized { value, valid_range }, .. } => {
                     Some(ValidValueReq {
                         offset: 0,
                         size: value.size(machine_info),
@@ -212,8 +216,9 @@ impl ValidValueReq {
                     })
                 }
                 ValueAbi::Scalar(_)
-                | ValueAbi::ScalarPair(_, _)
+                | ValueAbi::ScalarPair { .. }
                 | ValueAbi::Vector { .. }
+                | ValueAbi::ScalableVector { .. }
                 | ValueAbi::Aggregate { .. } => None,
             }
         }
@@ -396,6 +401,7 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                     self.super_statement(stmt, location);
                     // Then check the destination place.
                     let ranges = assignment_check_points(
+                        self.tcx,
                         &self.machine,
                         self.locals,
                         place,
@@ -413,7 +419,6 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                 | StatementKind::SetDiscriminant { .. }
                 | StatementKind::StorageLive(_)
                 | StatementKind::StorageDead(_)
-                | StatementKind::Retag(_, _)
                 | StatementKind::PlaceMention(_)
                 | StatementKind::AscribeUserType { .. }
                 | StatementKind::Coverage(_)
@@ -452,7 +457,8 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                             else {
                                 unreachable!()
                             };
-                            let validity = ty_validity_per_offset(&self.machine, target_ty, 0);
+                            let validity =
+                                ty_validity_per_offset(self.tcx, &self.machine, target_ty, 0);
                             match validity {
                                 Ok(ranges) if ranges.is_empty() => {}
                                 Ok(ranges) => {
@@ -499,7 +505,8 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                     let ptr_ty = place_ref.ty(self.locals).unwrap();
                     if ptr_ty.kind().is_raw_ptr() {
                         let target_ty = elem.ty(ptr_ty).unwrap();
-                        let validity = ty_validity_per_offset(&self.machine, target_ty, 0);
+                        let validity =
+                            ty_validity_per_offset(self.tcx, &self.machine, target_ty, 0);
                         match validity {
                             Ok(ranges) if !ranges.is_empty() => {
                                 self.push_target(SourceOp::DerefValidity {
@@ -510,6 +517,7 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                                             projection: place_ref.projection.to_vec(),
                                         })
                                         .clone(),
+                                        WithRetag::No,
                                     ),
                                     ranges,
                                 })
@@ -526,15 +534,19 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                     if target_ty.kind().is_union()
                         && (!ptx.is_mutating() || place.projection.len() > idx + 1)
                     {
-                        let validity = ty_validity_per_offset(&self.machine, *target_ty, 0);
+                        let validity =
+                            ty_validity_per_offset(self.tcx, &self.machine, *target_ty, 0);
                         match validity {
                             Ok(ranges) if !ranges.is_empty() => {
                                 self.push_target(SourceOp::BytesValidity {
                                     target_ty: *target_ty,
-                                    rvalue: Rvalue::Use(Operand::Copy(Place {
-                                        local: place_ref.local,
-                                        projection: place_ref.projection.to_vec(),
-                                    })),
+                                    rvalue: Rvalue::Use(
+                                        Operand::Copy(Place {
+                                            local: place_ref.local,
+                                            projection: place_ref.projection.to_vec(),
+                                        }),
+                                        WithRetag::No,
+                                    ),
                                     ranges,
                                 })
                             }
@@ -591,11 +603,11 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                     }
 
                     if let Ok(src_validity) =
-                        ty_validity_per_offset(&self.machine, src_pointee_ty, 0)
+                        ty_validity_per_offset(self.tcx, &self.machine, src_pointee_ty, 0)
                     {
                         if !src_validity.is_empty() {
                             if let Ok(dest_validity) =
-                                ty_validity_per_offset(&self.machine, dest_pointee_ty, 0)
+                                ty_validity_per_offset(self.tcx, &self.machine, dest_pointee_ty, 0)
                             {
                                 if dest_validity != src_validity {
                                     self.push_target(SourceOp::UnsupportedCheck {
@@ -617,12 +629,14 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                         })
                     }
                 }
-                CastKind::Transmute | CastKind::Subtype => {
+                CastKind::Transmute | CastKind::BoxDerefTransmute | CastKind::Subtype => {
                     debug!(?dest_ty, "transmute");
                     // For transmute, we care about the destination type only.
                     // This could be optimized to only add a check if the requirements of the
                     // destination type are stricter than the source.
-                    if let Ok(dest_validity) = ty_validity_per_offset(&self.machine, *dest_ty, 0) {
+                    if let Ok(dest_validity) =
+                        ty_validity_per_offset(self.tcx, &self.machine, *dest_ty, 0)
+                    {
                         trace!(?dest_validity, "transmute");
                         if !dest_validity.is_empty() {
                             self.push_target(SourceOp::BytesValidity {
@@ -647,10 +661,6 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                 | CastKind::IntToFloat
                 | CastKind::FnPtrToPtr => {}
             },
-            Rvalue::ShallowInitBox(_, _) => {
-                // The contents of the box is considered uninitialized.
-                // This should already be covered by the Assign detection.
-            }
             Rvalue::Aggregate(kind, operands) => match kind {
                 // If the aggregated structure has invalid value, this could generate invalid value.
                 // But only if the operands don't have the exact same restrictions.
@@ -662,7 +672,8 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                 AggregateKind::Adt(def, _variant, args, _, _) => {
                     if def.kind() == AdtKind::Struct {
                         let dest_ty = Ty::from_rigid_kind(RigidTy::Adt(*def, args.clone()));
-                        if let Some(req) = ValidValueReq::try_from_ty(&self.machine, dest_ty)
+                        if let Some(req) =
+                            ValidValueReq::try_from_ty(self.tcx, &self.machine, dest_ty)
                             && !req.is_full()
                         {
                             let dest_layout = dest_ty.layout().unwrap().shape();
@@ -671,11 +682,12 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                             let first_ty = first_op.ty(self.locals).unwrap();
                             // Rvalue must have same Abi layout except for range.
                             if !req.contains(
-                                &ValidValueReq::try_from_ty(&self.machine, first_ty).unwrap(),
+                                &ValidValueReq::try_from_ty(self.tcx, &self.machine, first_ty)
+                                    .unwrap(),
                             ) {
                                 self.push_target(SourceOp::BytesValidity {
                                     target_ty: dest_ty,
-                                    rvalue: Rvalue::Use(first_op),
+                                    rvalue: Rvalue::Use(first_op, WithRetag::No),
                                     ranges: vec![req],
                                 })
                             }
@@ -696,12 +708,12 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
             | Rvalue::CopyForDeref(_)
             | Rvalue::Discriminant(_)
             | Rvalue::Len(_)
+            | Rvalue::Reborrow(..)
             | Rvalue::Ref(_, _, _)
             | Rvalue::Repeat(_, _)
             | Rvalue::ThreadLocalRef(_)
-            | Rvalue::NullaryOp(_)
             | Rvalue::UnaryOp(_, _)
-            | Rvalue::Use(_) => {}
+            | Rvalue::Use(..) => {}
         }
         self.super_rvalue(rvalue, location);
     }
@@ -740,13 +752,14 @@ fn first_sized_field_idx(ty: Ty, shape: &FieldsShape) -> Option<FieldIdx> {
 /// This can only happen to the first in memory sized field of a struct, and only if the field
 /// type invalid range is a valid value for the rvalue type.
 fn assignment_check_points(
+    tcx: TyCtxt,
     machine_info: &MachineInfo,
     locals: &[LocalDecl],
     place: &Place,
     rvalue_ty: Ty,
 ) -> Vec<ValidValueReq> {
     let mut ty = locals[place.local].ty;
-    let Some(rvalue_range) = ValidValueReq::try_from_ty(machine_info, rvalue_ty) else {
+    let Some(rvalue_range) = ValidValueReq::try_from_ty(tcx, machine_info, rvalue_ty) else {
         // Rvalue Abi must be Scalar / ScalarPair since destination must be Scalar / ScalarPair.
         return vec![];
     };
@@ -756,7 +769,7 @@ fn assignment_check_points(
             ProjectionElem::Field(field_idx, field_ty) => {
                 let shape = ty.layout().unwrap().shape();
                 if first_sized_field_idx(ty, &shape.fields) == Some(*field_idx)
-                    && let Some(dest_valid) = ValidValueReq::try_from_ty(machine_info, ty)
+                    && let Some(dest_valid) = ValidValueReq::try_from_ty(tcx, machine_info, ty)
                     && !dest_valid.is_full()
                     && dest_valid.size == rvalue_range.size
                 {
@@ -820,7 +833,7 @@ pub fn build_limits(
         ));
         let offset_const = body.new_uint_operand(req.offset as _, UintTy::Usize, span);
         let offset = move_local(body.insert_assignment(
-            Rvalue::Use(offset_const),
+            Rvalue::Use(offset_const, WithRetag::No),
             source,
             InsertPosition::Before,
         ));
@@ -903,15 +916,24 @@ fn build_single_limit(
 
 /// Traverse the type and find all invalid values and their location in memory.
 ///
+/// A pattern type (e.g. `NonNull`) may use a `PatternKind` (such as `NotNull`)
+/// that `rustc_public` cannot convert to its stable representation yet, so
+/// calling the stable `Ty::kind()` on it panics. Detect such types via the
+/// internal representation instead, where inspecting the kind is always safe.
+fn is_pattern_type(tcx: TyCtxt, ty: Ty) -> bool {
+    matches!(rustc_internal::internal(tcx, ty).kind(), rustc_middle::ty::TyKind::Pat(..))
+}
+
 /// Not all values are currently supported. For those not supported, we return Error.
 pub fn ty_validity_per_offset(
+    tcx: TyCtxt,
     machine_info: &MachineInfo,
     ty: Ty,
     current_offset: usize,
 ) -> Result<Vec<ValidValueReq>, String> {
     let layout = ty.layout().unwrap().shape();
     let ty_req = || {
-        if let Some(mut req) = ValidValueReq::try_from_ty(machine_info, ty)
+        if let Some(mut req) = ValidValueReq::try_from_ty(tcx, machine_info, ty)
             && !req.is_full()
         {
             req.offset = current_offset;
@@ -920,11 +942,31 @@ pub fn ty_validity_per_offset(
             vec![]
         }
     };
+    // A pattern type is a scalar whose validity is fully captured by the
+    // scalar valid_range in its layout ABI (see `try_from_ty`): its base type
+    // is always a scalar, integer bases add no requirements of their own, and
+    // the `NotNull` constraint is part of the range. Handle it here without
+    // inspecting the stable kind, which would panic for kinds `rustc_public`
+    // cannot yet convert (e.g. `PatternKind::NotNull` for `NonNull`).
+    if let rustc_middle::ty::TyKind::Pat(base_ty, _) = rustc_internal::internal(tcx, ty).kind() {
+        // `char`'s validity (two intervals around the surrogate gap) exceeds
+        // what a single scalar range can express, and the `char` special case
+        // in `try_from_ty` is not applied to pattern types; reject instead of
+        // under-checking.
+        if base_ty.is_char() {
+            return Err("Unsupported pattern type over `char`".to_string());
+        }
+        assert!(
+            matches!(layout.abi, ValueAbi::Scalar(..)),
+            "expected pattern type to have a scalar ABI: {ty:?}"
+        );
+        return Ok(ty_req());
+    }
     match layout.fields {
         FieldsShape::Primitive => Ok(ty_req()),
         FieldsShape::Array { stride, count } if count > 0 => {
             let TyKind::RigidTy(RigidTy::Array(elem_ty, _)) = ty.kind() else { unreachable!() };
-            let elem_validity = ty_validity_per_offset(machine_info, elem_ty, current_offset)?;
+            let elem_validity = ty_validity_per_offset(tcx, machine_info, elem_ty, current_offset)?;
             let mut result = vec![];
             if !elem_validity.is_empty() {
                 for idx in 0..count {
@@ -960,6 +1002,7 @@ pub fn ty_validity_per_offset(
                                         let field_offset = offsets[idx].bytes();
                                         let field_ty = fields[idx].ty_with_args(args);
                                         fields_validity.append(&mut ty_validity_per_offset(
+                                            tcx,
                                             machine_info,
                                             field_ty,
                                             field_offset + current_offset,
@@ -978,10 +1021,11 @@ pub fn ty_validity_per_offset(
                                     let mut fields_validity = vec![];
                                     for (index, variant) in variants.iter().enumerate() {
                                         let fields = ty_variants[index].fields();
-                                        for field_idx in variant.fields.fields_by_offset_order() {
-                                            let field_offset = offsets[field_idx].bytes();
+                                        for field_idx in variant.fields_by_offset_order() {
+                                            let field_offset = variant.offsets[field_idx].bytes();
                                             let field_ty = fields[field_idx].ty_with_args(args);
                                             fields_validity.append(&mut ty_validity_per_offset(
+                                                tcx,
                                                 machine_info,
                                                 field_ty,
                                                 field_offset + current_offset,
@@ -1008,6 +1052,7 @@ pub fn ty_validity_per_offset(
                                 let field_offset = offsets[idx].bytes();
                                 let field_ty = fields[idx].ty_with_args(args);
                                 struct_validity.append(&mut ty_validity_per_offset(
+                                    tcx,
                                     machine_info,
                                     field_ty,
                                     field_offset + current_offset,
@@ -1017,11 +1062,11 @@ pub fn ty_validity_per_offset(
                         }
                     }
                 }
-                RigidTy::Pat(base_ty, ..) => {
-                    // This is similar to a structure with one field and with niche defined.
-                    let mut pat_validity = ty_req();
-                    pat_validity.append(&mut ty_validity_per_offset(machine_info, *base_ty, 0)?);
-                    Ok(pat_validity)
+                // Pattern types have a scalar ABI and are fully handled before
+                // the match on the layout's field shape, so this arm can never
+                // be reached.
+                RigidTy::Pat(..) => {
+                    unreachable!("pattern types are handled before the field-shape match")
                 }
                 RigidTy::Tuple(tys) => {
                     let mut tuple_validity = vec![];
@@ -1029,6 +1074,7 @@ pub fn ty_validity_per_offset(
                         let field_offset = offsets[idx].bytes();
                         let field_ty = tys[idx];
                         tuple_validity.append(&mut ty_validity_per_offset(
+                            tcx,
                             machine_info,
                             field_ty,
                             field_offset + current_offset,

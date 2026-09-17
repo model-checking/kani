@@ -1,5 +1,5 @@
-Failed Checks: Offset result and original pointer must point to the same allocation
-Failed Checks: Offset result and original pointer must point to the same allocation
+Failed Checks: Offset result address must equal original pointer address plus offset
+Failed Checks: Offset result address must equal original pointer address plus offset
 
 Verification failed for - test_offset_overflow
 Verification failed for - check_ptr_oob

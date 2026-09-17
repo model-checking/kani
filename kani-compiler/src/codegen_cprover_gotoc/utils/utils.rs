@@ -133,6 +133,48 @@ impl GotocCtx<'_, '_> {
         assert_eq!(components.len(), 0);
     }
 
+    /// Rebuild the chain of single-field struct wrappers described by `typ` around `ptr_expr`,
+    /// casting the pointer to the type found at the innermost level.
+    ///
+    /// A `NonNull<T>` holds a `pattern_type!(*const T is !null)`, and Kani codegens both the
+    /// `NonNull` and the pattern type as single-field structs, so the raw pointer sits two levels
+    /// deep. Recursing keeps this independent of how many wrappers the standard library uses.
+    pub fn codegen_ptr_in_wrappers(&self, typ: Type, ptr_expr: Expr) -> Expr {
+        if !typ.is_struct_like() {
+            return ptr_expr.cast_to(typ);
+        }
+        let components = typ.lookup_components(&self.symbol_table).unwrap();
+        let fields: Vec<_> = components.iter().filter(|c| !c.is_padding()).collect();
+        assert_eq!(
+            fields.len(),
+            1,
+            "Expected a single-field struct wrapping a pointer, but found {typ:?}"
+        );
+        let inner = self.codegen_ptr_in_wrappers(fields[0].typ(), ptr_expr);
+        Expr::struct_expr_from_values(typ, vec![inner], &self.symbol_table)
+    }
+
+    /// Extract the vtable pointer that `metadata_expr`, a `DynMetadata`, holds in its
+    /// `_vtable_ptr` field, and cast it to `vtable_typ`.
+    ///
+    /// This is the inverse of [`Self::codegen_ptr_in_wrappers`]: peel off the single-field struct
+    /// wrappers until the raw pointer is reached.
+    pub fn codegen_ptr_out_of_wrappers(&self, metadata_expr: Expr, vtable_typ: Type) -> Expr {
+        let mut expr = metadata_expr.member("_vtable_ptr", &self.symbol_table);
+        while expr.typ().is_struct_like() {
+            let components = expr.typ().lookup_components(&self.symbol_table).unwrap();
+            let fields: Vec<_> = components.iter().filter(|c| !c.is_padding()).collect();
+            assert_eq!(
+                fields.len(),
+                1,
+                "Expected a single-field struct wrapping a pointer, but found {:?}",
+                expr.typ()
+            );
+            expr = expr.member(fields[0].name(), &self.symbol_table);
+        }
+        expr.cast_to(vtable_typ)
+    }
+
     /// Best effort check if the struct represents a Rust `Box`. May return false positives.
     fn assert_is_rust_box_like(&self, t: &Type) {
         // struct std::boxed::Box<[u8; 8]>::15334369982748499855

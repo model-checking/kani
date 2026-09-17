@@ -1,8 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use proc_macro_error2::abort;
 use proc_macro2::{Span, TokenStream};
+use proc_macro2_diagnostics::{Diagnostic, Level};
 use quote::quote;
 
 use crate::derive::kani_path;
@@ -43,13 +43,21 @@ pub(crate) fn expand_derive_bounded_arbitrary(
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     let parsed = syn::parse_macro_input!(item as syn::DeriveInput);
+    match expand_derive_bounded_arbitrary_impl(&parsed) {
+        Ok(tokens) => tokens.into(),
+        Err(diagnostic) => diagnostic.emit_as_item_tokens().into(),
+    }
+}
 
+fn expand_derive_bounded_arbitrary_impl(
+    parsed: &syn::DeriveInput,
+) -> Result<TokenStream, Diagnostic> {
     let constructor = match &parsed.data {
         syn::Data::Struct(data_struct) => {
             generate_type_constructor(quote!(Self), &data_struct.fields)
         }
         syn::Data::Enum(data_enum) => enum_constructor(&parsed.ident, data_enum),
-        syn::Data::Union(data_union) => union_constructor(&parsed.ident, data_union),
+        syn::Data::Union(data_union) => union_constructor(&parsed.ident, data_union)?,
     };
 
     // add `T: Arbitrary` bounds for generics
@@ -59,7 +67,7 @@ pub(crate) fn expand_derive_bounded_arbitrary(
 
     // generate the implementation
     let kani_path = kani_path();
-    quote! {
+    Ok(quote! {
         impl #impl_generics #kani_path::BoundedArbitrary for #name #ty_generics
             #clauses
         {
@@ -67,8 +75,7 @@ pub(crate) fn expand_derive_bounded_arbitrary(
                 #constructor
             }
         }
-    }
-    .into()
+    })
 }
 
 /// Generates the call to construct the given type like so:
@@ -130,11 +137,19 @@ fn enum_constructor(ident: &syn::Ident, data_enum: &syn::DataEnum) -> TokenStrea
     }
 }
 
-fn union_constructor(ident: &syn::Ident, _data_union: &syn::DataUnion) -> TokenStream {
-    abort!(Span::call_site(), "Cannot derive `BoundedArbitrary` for `{}` union", ident;
-           note = ident.span() =>
-           "`#[derive(BoundedArbitrary)]` cannot be used for unions such as `{}`", ident
+fn union_constructor(
+    ident: &syn::Ident,
+    _data_union: &syn::DataUnion,
+) -> Result<TokenStream, Diagnostic> {
+    Err(Diagnostic::spanned(
+        Span::call_site(),
+        Level::Error,
+        format!("Cannot derive `BoundedArbitrary` for `{ident}` union"),
     )
+    .span_note(
+        ident.span(),
+        format!("`#[derive(BoundedArbitrary)]` cannot be used for unions such as `{ident}`"),
+    ))
 }
 
 /// Generate the necessary generic parameter declarations and generic bounds for a

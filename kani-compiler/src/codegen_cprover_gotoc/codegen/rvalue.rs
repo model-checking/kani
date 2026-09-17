@@ -23,12 +23,12 @@ use rustc_middle::ty::{TyCtxt, VtblEntry};
 use rustc_public::abi::{Primitive, Scalar, ValueAbi};
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::{
-    AggregateKind, BinOp, CastKind, NullOp, Operand, Place, PointerCoercion, Rvalue, UnOp,
+    AggregateKind, BinOp, CastKind, Operand, Place, PointerCoercion, Rvalue, UnOp,
 };
 use rustc_public::rustc_internal;
 use rustc_public::ty::{
-    Binder, ClosureKind, ExistentialPredicate, IntTy, RigidTy, Size, Ty, TyConst, TyKind, UintTy,
-    VariantIdx,
+    Binder, ClosureKind, ExistentialPredicate, FloatTy, IntTy, RigidTy, Size, Ty, TyConst, TyKind,
+    UintTy, VariantIdx,
 };
 use std::collections::BTreeMap;
 use tracing::{debug, trace, warn};
@@ -556,6 +556,11 @@ impl GotocCtx<'_, '_> {
             let variant_proj = self.codegen_variant_lvalue(initial_projection, variant_index, loc);
             let variant_expr = variant_proj.goto_expr.clone();
             let layout = self.layout_of_stable(res_ty);
+            // `Variants::Multiple` stores a `VariantLayout`, which has no `FieldsShape` and so no
+            // field order, so ask rustc for the variant's own layout. `variant_layout` is what the
+            // type side (`codegen_enum_cases`) uses too, so the operands below are ordered exactly
+            // like the goto struct's components.
+            let variant_layout;
             let fields = match &layout.variants {
                 Variants::Empty => {
                     unreachable!("Aggregate expression for uninhabited enum with no variants")
@@ -570,8 +575,12 @@ impl GotocCtx<'_, '_> {
                     }
                     &layout.fields
                 }
-                Variants::Multiple { variants, .. } => {
-                    &variants[rustc_internal::internal(self.tcx, variant_index)].fields
+                Variants::Multiple { .. } => {
+                    variant_layout = self.variant_layout(
+                        rustc_internal::internal(self.tcx, res_ty),
+                        rustc_internal::internal(self.tcx, variant_index),
+                    );
+                    &variant_layout.fields
                 }
             };
 
@@ -702,13 +711,11 @@ impl GotocCtx<'_, '_> {
                                     slice_fat_ptr(typ, data_cast, meta, &self.symbol_table)
                                 }
                                 RigidTy::Dynamic(..) => {
-                                    let vtable_expr = meta
-                                        .member("_vtable_ptr", &self.symbol_table)
-                                        .member("pointer", &self.symbol_table)
-                                        .cast_to(
-                                            typ.lookup_field_type("vtable", &self.symbol_table)
-                                                .unwrap(),
-                                        );
+                                    let vtable_expr = self.codegen_ptr_out_of_wrappers(
+                                        meta,
+                                        typ.lookup_field_type("vtable", &self.symbol_table)
+                                            .unwrap(),
+                                    );
                                     dynamic_fat_ptr(typ, data_cast, vtable_expr, &self.symbol_table)
                                 }
                                 _ => {
@@ -722,10 +729,10 @@ impl GotocCtx<'_, '_> {
                         let data_cast =
                             data.cast_to(Type::Pointer { typ: Box::new(pointee_goto_typ) });
                         let meta = self.codegen_operand_stable(&operands[1]);
-                        let vtable_expr = meta
-                            .member("_vtable_ptr", &self.symbol_table)
-                            .member("pointer", &self.symbol_table)
-                            .cast_to(typ.lookup_field_type("vtable", &self.symbol_table).unwrap());
+                        let vtable_expr = self.codegen_ptr_out_of_wrappers(
+                            meta,
+                            typ.lookup_field_type("vtable", &self.symbol_table).unwrap(),
+                        );
                         dynamic_fat_ptr(typ, data_cast, vtable_expr, &self.symbol_table)
                     }
                     _ => {
@@ -751,7 +758,19 @@ impl GotocCtx<'_, '_> {
         let res_ty = self.rvalue_ty_stable(rv);
         debug!(?rv, ?res_ty, "codegen_rvalue");
         match rv {
-            Rvalue::Use(p) => self.codegen_operand_stable(p),
+            Rvalue::Use(p, _) => self.codegen_operand_stable(p),
+            // `Reborrow` is the new user-definable reborrowing of ADTs (`CoerceShared`). It is
+            // documented as a bitwise copy today, but the same docs anticipate it changing memory
+            // layout, so report it as unsupported rather than silently modelling it as a copy.
+            Rvalue::Reborrow(..) => {
+                let typ = self.codegen_ty_stable(res_ty);
+                self.codegen_unimplemented_expr(
+                    "Rvalue::Reborrow",
+                    typ,
+                    loc,
+                    "https://github.com/model-checking/kani/issues/4189",
+                )
+            }
             Rvalue::Repeat(op, sz) => self.codegen_rvalue_repeat(op, sz, loc),
             Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => {
                 let place_ref = self.codegen_place_ref_stable(p, loc);
@@ -794,7 +813,15 @@ impl GotocCtx<'_, '_> {
             Rvalue::Cast(CastKind::PointerCoercion(k), e, t) => {
                 self.codegen_pointer_cast(k, e, *t, loc)
             }
-            Rvalue::Cast(CastKind::Transmute | CastKind::Subtype, operand, ty) => {
+            // `BoxDerefTransmute` is an elaborated `Box` deref turning the inner pointer into a
+            // raw one. Its docs describe it as a regular transmute that is additionally UB if the
+            // input is not valid as a `Box<T>`, and say backends may treat it as a plain
+            // transmute; Kani checks pointer validity separately at the deref itself.
+            Rvalue::Cast(
+                CastKind::Transmute | CastKind::BoxDerefTransmute | CastKind::Subtype,
+                operand,
+                ty,
+            ) => {
                 let src_ty = operand.ty(self.current_fn().locals()).unwrap();
                 // Transmute requires sized types.
                 let src_sz = LayoutOf::new(src_ty).size_of().unwrap();
@@ -824,17 +851,6 @@ impl GotocCtx<'_, '_> {
             Rvalue::CheckedBinaryOp(op, e1, e2) => {
                 self.codegen_rvalue_checked_binary_op(op, e1, e2, res_ty)
             }
-            Rvalue::NullaryOp(NullOp::RuntimeChecks(_)) => Expr::c_false(),
-            Rvalue::ShallowInitBox(operand, content_ty) => {
-                // The behaviour of ShallowInitBox is simply transmuting *mut u8 to Box<T>.
-                // See https://github.com/rust-lang/compiler-team/issues/460 for more details.
-                let operand = self.codegen_operand_stable(operand);
-                let box_ty = Ty::new_box(*content_ty);
-                let box_ty = self.codegen_ty_stable(box_ty);
-                let cbmc_t = self.codegen_ty_stable(*content_ty);
-                let box_contents = operand.cast_to(cbmc_t.to_pointer());
-                self.box_value(box_contents, box_ty)
-            }
             Rvalue::UnaryOp(op, e) => match op {
                 UnOp::Not => {
                     if self.operand_ty_stable(e).kind().is_bool() {
@@ -862,24 +878,17 @@ impl GotocCtx<'_, '_> {
                         assert!(dst_components[0].typ().is_struct_like());
                         assert_eq!(dst_components[1].name(), "_phantom");
                         self.assert_is_rust_phantom_data_like(&dst_components[1].typ());
-                        // accessing pointer type of _vtable_ptr, which is wrapped in NonNull
-                        let vtable_ptr_typ = dst_goto_typ
-                            .lookup_field_type("_vtable_ptr", &self.symbol_table)
-                            .unwrap()
-                            .lookup_components(&self.symbol_table)
-                            .unwrap()[0]
-                            .typ();
+                        // `_vtable_ptr` is a `NonNull`, which wraps the raw pointer in one or
+                        // more single-field structs, so rebuild those layers around the vtable
+                        // pointer rather than assuming a fixed nesting depth.
                         Expr::struct_expr(
                             dst_goto_typ.clone(),
                             btree_string_map![
                                 (
                                     "_vtable_ptr",
-                                    Expr::struct_expr_from_values(
-                                        dst_goto_typ
-                                            .lookup_field_type("_vtable_ptr", &self.symbol_table)
-                                            .unwrap(),
-                                        vec![vtable_expr.clone().cast_to(vtable_ptr_typ)],
-                                        &self.symbol_table
+                                    self.codegen_ptr_in_wrappers(
+                                        dst_components[0].typ(),
+                                        vtable_expr.clone()
                                     )
                                 ),
                                 (
@@ -956,7 +965,11 @@ impl GotocCtx<'_, '_> {
     pub fn codegen_get_discriminant(&mut self, e: Expr, ty: Ty, res_ty: Ty) -> Expr {
         let layout = self.layout_of_stable(ty);
         match &layout.variants {
-            Variants::Empty => unreachable!("Discriminant for uninhabited enum with no variants"),
+            // An uninhabited enum with no variants has no inhabitant, so reading its
+            // discriminant is unreachable at runtime. The rustc SSA backend returns a
+            // poison value for uninhabited layouts here; we mirror that with a nondet
+            // value of the target type (the surrounding code path is dead anyway).
+            Variants::Empty => Expr::nondet(self.codegen_ty_stable(res_ty)),
             Variants::Single { index } => {
                 let discr_val = layout
                     .ty
@@ -994,8 +1007,7 @@ impl GotocCtx<'_, '_> {
                     let niche_val = self.codegen_get_niche(e, offset.bytes() as usize, discr_type);
                     let relative_discr =
                         wrapping_sub(&niche_val, u64::try_from(*niche_start).unwrap());
-                    let relative_max =
-                        niche_variants.end().as_u32() - niche_variants.start().as_u32();
+                    let relative_max = niche_variants.last.as_u32() - niche_variants.start.as_u32();
                     let is_niche = if relative_max == 0 {
                         relative_discr.clone().is_zero()
                     } else {
@@ -1010,7 +1022,7 @@ impl GotocCtx<'_, '_> {
                             relative_discr.cast_to(result_type.clone())
                         };
                         relative_discr.plus(Expr::int_constant(
-                            niche_variants.start().as_u32(),
+                            niche_variants.start.as_u32(),
                             result_type.clone(),
                         ))
                     };
@@ -1085,6 +1097,15 @@ impl GotocCtx<'_, '_> {
         );
         let src_ty_kind = src_ty.kind();
         let dst_ty_kind = dst_ty.kind();
+
+        // Float to integer casting requires special handling for saturating semantics.
+        // Since Rust 1.45, the `as` keyword performs a saturating cast when casting
+        // from float to int. See https://doc.rust-lang.org/reference/expressions/operator-expr.html#numeric-cast
+        if let TyKind::RigidTy(RigidTy::Float(_)) = src_ty_kind
+            && dst_ty_kind.is_integral()
+        {
+            return self.codegen_float_to_int_saturating_cast(src, dst_ty);
+        }
 
         // number casting
         if src_ty_kind.is_numeric() && dst_ty_kind.is_numeric() {
@@ -1162,6 +1183,143 @@ impl GotocCtx<'_, '_> {
         }
     }
 
+    /// Codegen a float-to-int cast with Rust's saturating semantics.
+    ///
+    /// Since Rust 1.45, the `as` keyword performs a *saturating cast* when casting from float to int:
+    /// - If the value is NaN, the result is 0
+    /// - If the value exceeds the upper bound, the result is MAX
+    /// - If the value is below the lower bound, the result is MIN (or 0 for unsigned types)
+    /// - If the value is positive infinity, the result is MAX
+    /// - If the value is negative infinity, the result is MIN (or 0 for unsigned types)
+    /// - Otherwise, the value is truncated toward zero
+    ///
+    /// See: https://doc.rust-lang.org/reference/expressions/operator-expr.html#numeric-cast
+    fn codegen_float_to_int_saturating_cast(&mut self, src: &Operand, dst_ty: Ty) -> Expr {
+        let src_expr = self.codegen_operand_stable(src);
+        let dst_goto_ty = self.codegen_ty_stable(dst_ty);
+        let mm = self.symbol_table.machine_model();
+
+        // Get the integer type bounds
+        let int_min = dst_goto_ty.min_int_expr(mm);
+        let int_max = dst_goto_ty.max_int_expr(mm);
+
+        // Get the source float type for creating bound constants
+        let src_ty = self.operand_ty_stable(src);
+
+        // Get the integer bounds as float constants for comparison.
+        // Note: We convert the integer bounds to float for comparison.
+        // For very large integer types (i128, u128), the float conversion may lose precision,
+        // but this is acceptable because:
+        // 1. Any float value that's truly larger than MAX_INT will still compare as >= MAX_INT
+        // 2. Any float value that's truly smaller than MIN_INT will still compare as < MIN_INT
+        let int_min_as_float = self.int_bounds_as_float(dst_ty, false, src_ty);
+        let int_max_as_float = self.int_bounds_as_float(dst_ty, true, src_ty);
+
+        // Determine if the destination type is signed
+        let dst_is_signed = matches!(dst_ty.kind(), TyKind::RigidTy(RigidTy::Int(_)));
+
+        // Check for special cases:
+        // 1. isnan(src) -> result is 0
+        // 2. src >= int_max -> result is MAX
+        // 3. src < int_min -> result is MIN (or 0 for unsigned)
+        // 4. Otherwise -> truncate toward zero
+        let is_nan = src_expr.clone().is_nan();
+        let above_max = src_expr.clone().ge(int_max_as_float.clone());
+        let below_min = src_expr.clone().lt(int_min_as_float);
+
+        // The truncated value (normal cast behavior for values in range)
+        let truncated = src_expr.cast_to(dst_goto_ty.clone());
+
+        // Build the nested ternary expression:
+        // below_min ? MIN : (above_max ? MAX : (isnan ? 0 : truncated))
+        let int_zero = dst_goto_ty.zero();
+        let min_value = if dst_is_signed { int_min } else { int_zero.clone() };
+
+        // Note: For positive infinity, above_max will be true.
+        // For negative infinity, below_min will be true.
+        // So infinity cases are handled by the bounds checks.
+        below_min
+            .ternary(min_value, above_max.ternary(int_max, is_nan.ternary(int_zero, truncated)))
+    }
+
+    /// Convert an integer bound (min or max) to a float constant for the given float type.
+    fn int_bounds_as_float(&self, int_ty: Ty, is_max: bool, float_ty: Ty) -> Expr {
+        let mm = self.symbol_table.machine_model();
+
+        // Get the integer bound value
+        let bound_value: f64 = match int_ty.kind() {
+            TyKind::RigidTy(RigidTy::Int(int_kind)) => {
+                if is_max {
+                    match int_kind {
+                        IntTy::I8 => i8::MAX as f64,
+                        IntTy::I16 => i16::MAX as f64,
+                        IntTy::I32 => i32::MAX as f64,
+                        IntTy::I64 => i64::MAX as f64,
+                        IntTy::I128 => i128::MAX as f64,
+                        IntTy::Isize => {
+                            if mm.pointer_width == 32 {
+                                i32::MAX as f64
+                            } else {
+                                i64::MAX as f64
+                            }
+                        }
+                    }
+                } else {
+                    match int_kind {
+                        IntTy::I8 => i8::MIN as f64,
+                        IntTy::I16 => i16::MIN as f64,
+                        IntTy::I32 => i32::MIN as f64,
+                        IntTy::I64 => i64::MIN as f64,
+                        IntTy::I128 => i128::MIN as f64,
+                        IntTy::Isize => {
+                            if mm.pointer_width == 32 {
+                                i32::MIN as f64
+                            } else {
+                                i64::MIN as f64
+                            }
+                        }
+                    }
+                }
+            }
+            TyKind::RigidTy(RigidTy::Uint(uint_kind)) => {
+                if is_max {
+                    match uint_kind {
+                        UintTy::U8 => u8::MAX as f64,
+                        UintTy::U16 => u16::MAX as f64,
+                        UintTy::U32 => u32::MAX as f64,
+                        UintTy::U64 => u64::MAX as f64,
+                        UintTy::U128 => u128::MAX as f64,
+                        UintTy::Usize => {
+                            if mm.pointer_width == 32 {
+                                u32::MAX as f64
+                            } else {
+                                u64::MAX as f64
+                            }
+                        }
+                    }
+                } else {
+                    0.0 // MIN for unsigned is always 0
+                }
+            }
+            _ => unreachable!("Expected integer type"),
+        };
+
+        // Create the float constant in the appropriate float type
+        match float_ty.kind() {
+            TyKind::RigidTy(RigidTy::Float(FloatTy::F16)) => {
+                Expr::float16_constant(bound_value as f16)
+            }
+            TyKind::RigidTy(RigidTy::Float(FloatTy::F32)) => {
+                Expr::float_constant(bound_value as f32)
+            }
+            TyKind::RigidTy(RigidTy::Float(FloatTy::F64)) => Expr::double_constant(bound_value),
+            TyKind::RigidTy(RigidTy::Float(FloatTy::F128)) => {
+                Expr::float128_constant(bound_value as f128)
+            }
+            _ => unreachable!("Expected float type"),
+        }
+    }
+
     /// "Pointer casts" are particular kinds of pointer-to-pointer casts.
     /// See the [`PointerCoercion`] type for specifics.
     /// Note that this does not include all casts involving pointers,
@@ -1175,7 +1333,7 @@ impl GotocCtx<'_, '_> {
     ) -> Expr {
         debug!(cast=?coercion, op=?operand, ?loc, "codegen_pointer_cast");
         match coercion {
-            PointerCoercion::ReifyFnPointer => match self.operand_ty_stable(operand).kind() {
+            PointerCoercion::ReifyFnPointer(_) => match self.operand_ty_stable(operand).kind() {
                 TyKind::RigidTy(RigidTy::FnDef(def, args)) => {
                     let instance = Instance::resolve(def, &args).unwrap();
                     // We need to handle this case in a special way because `codegen_operand_stable` compiles FnDefs to dummy structs.
@@ -1295,14 +1453,18 @@ impl GotocCtx<'_, '_> {
     /// source expression, except for the field being coerced.
     /// Coercion ignores phantom data structures, so do we.
     /// See <https://github.com/rust-lang/rust/issues/26905> for more details.
+    ///
+    /// Pattern types are accepted here as well: they are not ADTs, but they are codegen'd as a
+    /// struct with a single tuple-like field holding the type they constrain, so the field by
+    /// field assignment below applies unchanged.
     fn codegen_struct_unsized_coercion(
         &mut self,
         src_expr: Expr,
         info: CoerceUnsizedInfo,
         member_coercion: Expr,
     ) -> Expr {
-        assert!(info.src_ty.kind().is_adt(), "Expected struct. Found {:?}", info.src_ty);
-        assert!(info.dst_ty.kind().is_adt(), "Expected struct. Found {:?}", info.dst_ty);
+        assert!(is_struct_like(info.src_ty), "Expected struct. Found {:?}", info.src_ty);
+        assert!(is_struct_like(info.dst_ty), "Expected struct. Found {:?}", info.dst_ty);
         let dst_goto_type = self.codegen_ty_stable(info.dst_ty);
         let src_field_exprs = src_expr.struct_field_exprs(&self.symbol_table);
         let dst_field_exprs = src_field_exprs
@@ -1498,7 +1660,19 @@ impl GotocCtx<'_, '_> {
                         }
                         VtblEntry::MetadataSize => Some(vt_size.clone()),
                         VtblEntry::MetadataAlign => Some(vt_align.clone()),
-                        VtblEntry::Vacant => None,
+                        VtblEntry::Vacant => {
+                            // vtable_entries with the CONCRETE self type may mark a slot
+                            // vacant where the vtable struct type (built with dyn self in
+                            // trait_vtable_field_types) declares a method pointer: e.g. a
+                            // method with an HRTB predicate a fixed-region function item
+                            // does not satisfy. rustc pads such slots with null; mirror
+                            // that, typed as the declared field. If the type side skipped
+                            // the slot too, keep skipping it.
+                            let field_name = ctx.vtable_field_name(idx);
+                            Type::struct_tag(vtable_name)
+                                .lookup_field_type(field_name, &ctx.symbol_table)
+                                .map(|field_ty| Expr::pointer_constant(0, field_ty))
+                        }
                         VtblEntry::TraitVPtr(trait_ref) => {
                             let projections = match dst_mir_type.kind() {
                                 TyKind::RigidTy(RigidTy::Dynamic(predicates, ..)) => predicates
@@ -1712,6 +1886,15 @@ fn wrapping_sub(expr: &Expr, constant: u64) -> Expr {
         let constant = Expr::int_constant(constant, unsigned_expr.typ().clone());
         unsigned_expr.sub(constant)
     }
+}
+
+/// Whether `ty` is codegen'd as a struct whose fields can be assigned one by one.
+///
+/// Besides ADTs, this covers pattern types (e.g. the `pattern_type!(*const T is !null)` inside
+/// `NonNull<T>`), which are codegen'd as a struct with a single tuple-like field holding the type
+/// they constrain.
+fn is_struct_like(ty: Ty) -> bool {
+    matches!(ty.kind(), TyKind::RigidTy(RigidTy::Adt(..)) | TyKind::RigidTy(RigidTy::Pat(..)))
 }
 
 /// Remove the equality from an operator. Translates `<=` to `<` and `>=` to `>`

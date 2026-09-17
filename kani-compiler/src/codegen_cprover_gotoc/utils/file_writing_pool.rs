@@ -55,6 +55,12 @@ impl ThreadPool {
         self.join_handles.extend((0..count).map(|_| Self::new_worker(&self.work_queue_recv)));
     }
 
+    /// Whether the pool has any worker threads. When it doesn't, `send_work` exports
+    /// synchronously on the main thread, so there is no export latency to hide.
+    pub fn has_workers(&self) -> bool {
+        !self.join_handles.is_empty()
+    }
+
     /// Try to send work to the work queue, or do it yourself if there's no worker threads.
     /// Will only fail if all recievers have disconnected.
     pub fn send_work(&self, work: WorkToSend) -> Result<(), &str> {

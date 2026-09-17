@@ -24,8 +24,9 @@ impl<'a> ContractConditionsHandler<'a> {
         let Self { attr_copy, .. } = self;
         match &self.condition_type {
             ContractConditionsData::Requires { attr } => {
+                let assume_bracketed = bracket_clause_stmt(quote!(kani::assume(#attr);));
                 quote!({
-                    kani::assume(#attr);
+                    #assume_bracketed
                     #(#body_stmts)*
                 })
             }
@@ -34,8 +35,9 @@ impl<'a> ContractConditionsHandler<'a> {
 
                 // The code that enforces the postconditions and cleans up the shallow
                 // argument copies (with `mem::forget`).
+                let ensures_bracketed = bracket_clause_expr(quote!(#ensures_clause));
                 let exec_postconditions = quote!(
-                    kani::assert(#ensures_clause, stringify!(#attr_copy));
+                    kani::assert(#ensures_bracketed, stringify!(#attr_copy));
                 );
 
                 let return_expr = body_stmts.pop();
@@ -67,8 +69,8 @@ impl<'a> ContractConditionsHandler<'a> {
                 });
                 if let Some(Expr::Tuple(values)) = wrapper_tuple {
                     values.elems.extend(attr.iter().map(|attr| {
-                        let expr: Expr = parse_quote!(#attr
-                        as *const _);
+                        let bracketed = bracket_clause_expr(quote!(#attr as *const _));
+                        let expr: Expr = parse_quote!(#bracketed);
                         expr
                     }));
                 } else {

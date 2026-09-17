@@ -63,10 +63,52 @@ pub enum KaniIntrinsic {
 pub enum KaniModel {
     #[strum(serialize = "AlignOfDynObjectModel")]
     AlignOfDynObject,
+    #[strum(serialize = "NondetFn0Model")]
+    NondetFn0,
+    #[strum(serialize = "NondetFn1Model")]
+    NondetFn1,
+    #[strum(serialize = "NondetFn1RefModel")]
+    NondetFn1Ref,
+    #[strum(serialize = "NondetFn2Model")]
+    NondetFn2,
+    #[strum(serialize = "NondetFn2RefRefModel")]
+    NondetFn2RefRef,
+    #[strum(serialize = "NondetFn2RefValModel")]
+    NondetFn2RefVal,
+    #[strum(serialize = "NondetFn2ValRefModel")]
+    NondetFn2ValRef,
+    #[strum(serialize = "NondetFn3Model")]
+    NondetFn3,
     #[strum(serialize = "AlignOfValRawModel")]
     AlignOfVal,
+    #[strum(serialize = "AnySliceMutUnboundedModel")]
+    AnySliceMutUnbounded,
+    #[strum(serialize = "AnySliceRefUnboundedModel")]
+    AnySliceRefUnbounded,
+    #[strum(serialize = "AnyVecUnboundedModel")]
+    AnyVecUnbounded,
     #[strum(serialize = "AnyModel")]
     Any,
+    #[strum(serialize = "AnyArcModel")]
+    AnyArc,
+    #[strum(serialize = "AnyBoxModel")]
+    AnyBox,
+    #[strum(serialize = "AnyPtrModel")]
+    AnyPtr,
+    #[strum(serialize = "AnyRcModel")]
+    AnyRc,
+    #[strum(serialize = "AnySliceRefModel")]
+    AnySliceRef,
+    #[strum(serialize = "AnyStrRefModel")]
+    AnyStrRef,
+    #[strum(serialize = "AssumeSafeModel")]
+    AssumeSafe,
+    #[strum(serialize = "BoundedAnyModel")]
+    BoundedAny,
+    #[strum(serialize = "CheckDebugFmtModel")]
+    CheckDebugFmt,
+    #[strum(serialize = "CheckDisplayFmtModel")]
+    CheckDisplayFmt,
     #[strum(serialize = "CopyInitStateModel")]
     CopyInitState,
     #[strum(serialize = "CopyInitStateSingleModel")]
@@ -75,6 +117,12 @@ pub enum KaniModel {
     LoadArgument,
     #[strum(serialize = "InitializeMemoryInitializationStateModel")]
     InitializeMemoryInitializationState,
+    #[strum(serialize = "EnterContractClauseModel")]
+    EnterContractClause,
+    #[strum(serialize = "ExitContractClauseModel")]
+    ExitContractClause,
+    #[strum(serialize = "InContractClauseModel")]
+    InContractClause,
     #[strum(serialize = "IsPtrInitializedModel")]
     IsPtrInitialized,
     #[strum(serialize = "IsStrPtrInitializedModel")]
@@ -89,6 +137,8 @@ pub enum KaniModel {
     PtrOffsetFrom,
     #[strum(serialize = "PtrOffsetFromUnsignedModel")]
     PtrOffsetFromUnsigned,
+    #[strum(serialize = "ResetContractClauseDepthModel")]
+    ResetContractClauseDepth,
     #[strum(serialize = "RunContractModel")]
     RunContract,
     #[strum(serialize = "RunLoopContractModel")]
@@ -129,6 +179,8 @@ pub enum KaniHook {
     AnyRaw,
     #[strum(serialize = "AssertHook")]
     Assert,
+    #[strum(serialize = "SliceValidityAssumeHook")]
+    SliceValidityAssume,
     #[strum(serialize = "AssumeHook")]
     Assume,
     #[strum(serialize = "CheckHook")]
@@ -160,6 +212,31 @@ pub enum KaniHook {
     UnsupportedCheck,
     #[strum(serialize = "UntrackedDerefHook")]
     UntrackedDeref,
+}
+
+impl KaniModel {
+    /// Whether this model may legitimately be absent. These models require `alloc` and are
+    /// only defined in the `kani` library, not in `core::kani` (the `no_core` flow used by
+    /// `kani verify-std`). Code retrieving optional models must handle their absence.
+    pub fn is_optional(&self) -> bool {
+        matches!(
+            self,
+            KaniModel::AnyArc
+                | KaniModel::AnyBox
+                | KaniModel::AnyRc
+                | KaniModel::AnySliceMutUnbounded
+                | KaniModel::AnySliceRefUnbounded
+                | KaniModel::AnyVecUnbounded
+                | KaniModel::NondetFn0
+                | KaniModel::NondetFn1
+                | KaniModel::NondetFn1Ref
+                | KaniModel::NondetFn2
+                | KaniModel::NondetFn2RefRef
+                | KaniModel::NondetFn2RefVal
+                | KaniModel::NondetFn2ValRef
+                | KaniModel::NondetFn3
+        )
+    }
 }
 
 impl From<KaniIntrinsic> for KaniFunction {
@@ -271,7 +348,7 @@ pub fn validate_kani_functions(kani_funcs: &HashMap<KaniFunction, FnDef>) {
     {
         if let Some(fn_def) = kani_funcs.get(&func) {
             assert_eq!(KaniFunction::try_from(*fn_def), Ok(func), "Unexpected function marker");
-        } else {
+        } else if !matches!(func, KaniFunction::Model(model) if model.is_optional()) {
             tracing::error!(?func, "Missing kani function");
             missing += 1;
         }

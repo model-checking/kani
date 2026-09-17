@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use std::path::Path;
 
 use kani_metadata::{
@@ -114,21 +114,28 @@ impl KaniSession {
                 compiler_filtered_harnesses.iter().map(|&h| &h.pretty_name).collect();
 
             // Check which harnesses are missing from the difference of targets and all_harnesses
-            let harnesses_missing: Vec<&String> =
-                harness_filters.difference(&harness_found_names).cloned().collect();
-            let joined_string = harnesses_missing
-                .iter()
-                .map(|&s| (*s).clone())
-                .collect::<Vec<String>>()
-                .join("`, `");
+            let harnesses_missing: Vec<String> =
+                harness_filters.difference(&harness_found_names).map(|&s| s.clone()).collect();
 
-            bail!(
-                "Failed to match the following harness(es):\n{joined_string}\nPlease specify the fully-qualified name of a harness.",
-            );
+            return Err(no_harness_match_error(&harnesses_missing));
+        }
+
+        // A `--harness` filter that matches nothing must fail here, before codegen and export.
+        if !harness_filters.is_empty() && compiler_filtered_harnesses.is_empty() {
+            return Err(no_harness_match_error(&self.args.harnesses));
         }
 
         Ok(compiler_filtered_harnesses)
     }
+}
+
+/// The error for a harness filter that failed to match. Every zero-match site reports
+/// through this one function, so the wordings cannot drift.
+pub(crate) fn no_harness_match_error(missing: &[String]) -> anyhow::Error {
+    anyhow::anyhow!(
+        "Failed to match the following harness(es):\n{}\nPlease specify the fully-qualified name of a harness.",
+        missing.join("`, `")
+    )
 }
 
 /// Sort harnesses such that for two harnesses in the same file, it is guaranteed that later
@@ -172,6 +179,8 @@ pub mod tests {
             contract: Default::default(),
             has_loop_contracts: false,
             is_automatically_generated: false,
+            is_bounded: false,
+            is_ctor_based: false,
         }
     }
 

@@ -1,1 +1,3 @@
-error: no harnesses matched the harness filters: `non_existing`, `invalid`
+error: Failed to match the following harness(es):
+non_existing`, `invalid
+Please specify the fully-qualified name of a harness.

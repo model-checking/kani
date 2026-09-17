@@ -9,7 +9,9 @@ use crate::kani_middle::KaniAttributes;
 use crate::kani_middle::codegen_units::CodegenUnit;
 use crate::kani_middle::kani_functions::KaniModel;
 use crate::kani_middle::transform::TransformationType;
-use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
+use crate::kani_middle::transform::body::{
+    InsertPosition, MutableBody, SourceInstruction, synthetic_source_info,
+};
 use crate::kani_queries::QueryDb;
 use crate::rustc_public::CrateDef;
 use itertools::Itertools;
@@ -18,6 +20,7 @@ use rustc_public::mir::mono::Instance;
 use rustc_public::mir::{
     AggregateKind, BasicBlock, BasicBlockIdx, Body, ConstOperand, Operand, Place, Rvalue,
     Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, VarDebugInfoContents,
+    WithRetag,
 };
 use rustc_public::ty::{FnDef, GenericArgKind, MirConst, RigidTy, TyKind, UintTy};
 use rustc_span::Symbol;
@@ -273,9 +276,12 @@ impl LoopContractPass {
                 &SourceInstruction::Terminator { bb: first_blockid },
                 new_terminator,
             );
-            let span = body.blocks()[first_blockid].statements.first().unwrap().span;
+            let span = body.blocks()[first_blockid].statements.first().unwrap().source_info.span;
             // Add the StorageLive(nthpat) statement at the begining of the same block
-            let storagelive_stmt = Statement { kind: StatementKind::StorageLive(nthvar), span };
+            let storagelive_stmt = Statement {
+                kind: StatementKind::StorageLive(nthvar),
+                source_info: synthetic_source_info(span),
+            };
             body.insert_stmt(
                 storagelive_stmt,
                 &mut SourceInstruction::Statement { idx: 0, bb: first_blockid },
@@ -301,15 +307,25 @@ impl LoopContractPass {
             let mut firstprj_nthprj: HashMap<usize, usize> = HashMap::new();
             firstprj_nthprj.insert(firstvar, nthvar);
 
+            // Only user variables (pattern bindings) are paired up with their nthpat
+            // counterparts. Compiler-generated temporaries (e.g. the deref temporaries
+            // that destructuring patterns like `&x` introduce) must not be paired:
+            // their assignments are kept in place (with the rvalue redirected to
+            // nthvar) so that later statements reading them remain well-defined.
+            // Note: before rust-lang/rust#145513 such temporaries were assigned via
+            // `Rvalue::CopyForDeref` and thus never matched the `Rvalue::Use` pattern
+            // below; nowadays they are plain `Rvalue::Use(Operand::Copy)` assignments.
+            let user_vars = self.get_user_defined_variables(body);
             for fstmt in firstprj_stmts_copy.iter() {
                 if let StatementKind::Assign(fprjplace, frval) = &fstmt.kind
-                    && let Rvalue::Use(Operand::Copy(firstpatplace)) = frval
+                    && let Rvalue::Use(Operand::Copy(firstpatplace), _) = frval
                     && firstpatplace.local == firstvar
+                    && user_vars.contains(&fprjplace.local)
                 {
                     let firstprj = fprjplace.local;
                     for istmt in nthprj_stmts_copy.iter() {
                         if let StatementKind::Assign(iprjplace, irval) = &istmt.kind
-                            && let Rvalue::Use(Operand::Copy(nthpatplace)) = irval
+                            && let Rvalue::Use(Operand::Copy(nthpatplace), _) = irval
                             && nthpatplace.local == nthvar
                             && nthpatplace.projection == firstpatplace.projection
                         {
@@ -340,19 +356,32 @@ impl LoopContractPass {
                     // The assign statements of the projections
                     StatementKind::Assign(fprjplace, frval) => {
                         match frval {
-                            Rvalue::Use(Operand::Copy(firstpatplace)) => {
+                            Rvalue::Use(Operand::Copy(firstpatplace), _) => {
                                 if firstpatplace.local == firstvar {
-                                    let nthprj = firstprj_nthprj.get(&fprjplace.local).unwrap();
                                     let mut nthpatplace = firstpatplace.clone();
                                     nthpatplace.local = nthvar;
-                                    let newrval = Rvalue::Use(Operand::Copy(nthpatplace));
-                                    new_stmt.kind = StatementKind::Assign(
-                                        Place {
-                                            local: *nthprj,
-                                            projection: fprjplace.projection.clone(),
-                                        },
-                                        newrval,
-                                    );
+                                    let newrval =
+                                        Rvalue::Use(Operand::Copy(nthpatplace), WithRetag::No);
+                                    if let Some(nthprj) = firstprj_nthprj.get(&fprjplace.local) {
+                                        // A user pattern binding: redirect the assignment to
+                                        // the corresponding nthpat projection variable.
+                                        new_stmt.kind = StatementKind::Assign(
+                                            Place {
+                                                local: *nthprj,
+                                                projection: fprjplace.projection.clone(),
+                                            },
+                                            newrval,
+                                        );
+                                    } else {
+                                        // A compiler-generated temporary (e.g. a deref
+                                        // temporary, `Rvalue::CopyForDeref` before
+                                        // rust-lang/rust#145513): keep the assigned place and
+                                        // only redirect the rvalue to read from nthvar, so
+                                        // that following statements dereferencing the
+                                        // temporary keep working.
+                                        new_stmt.kind =
+                                            StatementKind::Assign(fprjplace.clone(), newrval);
+                                    }
                                 }
                             }
                             Rvalue::CopyForDeref(firstpatplace) => {
@@ -428,7 +457,7 @@ impl LoopContractPass {
                         let new_rval = Rvalue::Aggregate(aggrkind.clone(), new_operands);
                         new_loophead_stmts.push(Statement {
                             kind: StatementKind::Assign(lhs.clone(), new_rval),
-                            span: stmt.span,
+                            source_info: synthetic_source_info(stmt.source_info.span),
                         });
                     } else if let StatementKind::Assign(
                         lhs,
@@ -444,7 +473,7 @@ impl LoopContractPass {
                         );
                         new_loophead_stmts.push(Statement {
                             kind: StatementKind::Assign(lhs.clone(), new_rval),
-                            span: stmt.span,
+                            source_info: synthetic_source_info(stmt.source_info.span),
                         });
                     } else {
                         new_loophead_stmts.push(stmt.clone());
@@ -823,10 +852,13 @@ impl LoopContractPass {
         // For the performance benefits remove the re-assign statements of kaniiter variables
         // after adding the same one at loop head
         for block_idx in kaniiter_blocks {
-            let span = body.blocks()[block_idx].terminator.span;
+            let span = body.blocks()[block_idx].terminator.source_info.span;
             body.replace_terminator(
                 &SourceInstruction::Terminator { bb: block_idx },
-                Terminator { kind: TerminatorKind::Goto { target: block_idx + 1 }, span },
+                Terminator {
+                    kind: TerminatorKind::Goto { target: block_idx + 1 },
+                    source_info: synthetic_source_info(span),
+                },
             );
         }
     }
@@ -993,7 +1025,7 @@ impl LoopContractPass {
                 &SourceInstruction::Terminator { bb: bb_idx },
                 Terminator {
                     kind: TerminatorKind::Goto { target: self.new_loop_latches[terminator_target] },
-                    span: terminator.span,
+                    source_info: synthetic_source_info(terminator.source_info.span),
                 },
             );
         }
@@ -1021,7 +1053,7 @@ impl LoopContractPass {
                 &SourceInstruction::Terminator { bb: bb_idx },
                 Terminator {
                     kind: TerminatorKind::SwitchInt { discr: discr.clone(), targets: new_targets },
-                    span: terminator.span,
+                    source_info: synthetic_source_info(terminator.source_info.span),
                 },
             );
         }
@@ -1116,7 +1148,7 @@ impl LoopContractPass {
                 for stmt in &new_body.blocks()[bb_idx].statements {
                     if let StatementKind::Assign(place, rvalue) = &stmt.kind {
                         match rvalue {
-                            Rvalue::Ref(_,_,rplace) | Rvalue::CopyForDeref(rplace) | Rvalue::Use(Operand::Copy(rplace)) => {
+                            Rvalue::Ref(_,_,rplace) | Rvalue::CopyForDeref(rplace) | Rvalue::Use(Operand::Copy(rplace), _) => {
                                 if supported_vars.contains(&rplace.local) {
                                     supported_vars.push(place.local);
                                 } }
@@ -1154,11 +1186,14 @@ impl LoopContractPass {
                 // ```
                 new_body.assign_to(
                     terminator_destination.clone(),
-                    Rvalue::Use(Operand::Constant(ConstOperand {
-                        span: terminator.span,
-                        user_ty: None,
-                        const_: MirConst::from_bool(true),
-                    })),
+                    Rvalue::Use(
+                        Operand::Constant(ConstOperand {
+                            span: terminator.source_info.span,
+                            user_ty: None,
+                            const_: MirConst::from_bool(true),
+                        }),
+                        WithRetag::No,
+                    ),
                     &mut SourceInstruction::Terminator { bb: bb_idx },
                     InsertPosition::Before,
                 );
@@ -1179,7 +1214,7 @@ impl LoopContractPass {
                 let new_args = vec![
                     terminator_args[0].clone(),
                     Operand::Constant(ConstOperand {
-                        span: terminator.span,
+                        span: terminator.source_info.span,
                         user_ty: None,
                         const_: MirConst::try_from_uint(1, UintTy::Usize).unwrap(),
                     }),
@@ -1194,14 +1229,14 @@ impl LoopContractPass {
                             target: *terminator_target,
                             unwind: *terminator_unwind,
                         },
-                        span: terminator.span,
+                        source_info: synthetic_source_info(terminator.source_info.span),
                     },
                 );
                 new_body.replace_terminator(
                     &SourceInstruction::Terminator { bb: bb_idx },
                     Terminator {
                         kind: TerminatorKind::Goto { target: terminator_target.unwrap() },
-                        span: terminator.span,
+                        source_info: synthetic_source_info(terminator.source_info.span),
                     },
                 );
                 // Cache the new loop latch.

@@ -10,7 +10,6 @@
 #![recursion_limit = "256"]
 #![feature(box_patterns)]
 #![feature(rustc_private)]
-#![feature(more_qualified_paths)]
 #![feature(iter_intersperse)]
 #![feature(f128)]
 #![feature(f16)]
@@ -30,15 +29,18 @@ extern crate rustc_errors;
 extern crate rustc_hir;
 extern crate rustc_hir_pretty;
 extern crate rustc_index;
+extern crate rustc_infer;
 extern crate rustc_interface;
 extern crate rustc_metadata;
 extern crate rustc_middle;
 extern crate rustc_mir_dataflow;
+extern crate rustc_parse;
 extern crate rustc_public;
 extern crate rustc_public_bridge;
 extern crate rustc_session;
 extern crate rustc_span;
 extern crate rustc_target;
+extern crate rustc_trait_selection;
 // We can't add this directly as a dependency because we need the version to match rustc
 extern crate tempfile;
 
@@ -58,6 +60,12 @@ use std::env;
 
 /// Main function. Configure arguments and run the compiler.
 fn main() {
+    // Set GLIBC_TUNABLES for THP support in this process and child processes
+    if env::var("GLIBC_TUNABLES").is_err() {
+        // SAFETY: Called at start of main before any threads are spawned
+        unsafe { env::set_var("GLIBC_TUNABLES", "glibc.malloc.hugetlb=1") };
+    }
+
     session::init_panic_hook();
     let (kani_compiler, rustc_args) = is_kani_compiler(env::args().collect());
 

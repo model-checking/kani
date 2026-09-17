@@ -34,7 +34,7 @@ resolution_errors.rs
 | #[kani::stub(<Bar as Foo>::bar, stub_foo)]
 | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-error: invalid stub: function does not have a body, but is not an extern function\
+error: invalid stub: function does not have a body. This typically means a trait method without a default implementation was specified.\
 resolution_errors.rs\
 |\
 | #[kani::stub(<X as A>::bar, B::bar)]\

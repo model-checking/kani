@@ -62,5 +62,13 @@ fn check_foo() {
 ```
 By leveraging the stubbing feature, we can replace the (expensive) `gcd` call with a *verified abstraction* of its behavior, greatly reducing verification time for `foo`.
 
+> **Note:** A verified stub havocs its return value with `kani::any()`. If the
+> `kani::Arbitrary` implementation for that return type calls the stubbed
+> function, the stub re-enters itself and the recursion never terminates. Kani
+> reports this as a compile-time error naming the call path. To fix it, derive
+> `Arbitrary` (which generates field-by-field values without calling user
+> functions), or avoid calling the stubbed function from the `Arbitrary`
+> implementation.
+
 There is far more to learn about contracts.
 We highly recommend reading our [blog post about contracts](https://model-checking.github.io/kani-verifier-blog/2024/01/29/function-contracts.html) (from which this `gcd` example is taken). We also recommend looking at the `contracts` module in our [documentation](../../crates/index.md).

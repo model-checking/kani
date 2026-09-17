@@ -9,8 +9,8 @@
 //! struct S;
 //!
 //! ```
-use proc_macro_error2::abort;
 use proc_macro2::{Ident, Span, TokenStream};
+use proc_macro2_diagnostics::{Diagnostic, Level};
 use quote::{quote, quote_spanned};
 use syn::spanned::Spanned;
 use syn::{
@@ -45,17 +45,24 @@ pub(crate) fn kani_path_spanned(span: Span) -> TokenStream {
 ///
 /// In order to support core, we check the `no_core` feature.
 pub fn expand_derive_arbitrary(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let trait_name = "Arbitrary";
     let derive_item = parse_macro_input!(item as DeriveInput);
+    match expand_derive_arbitrary_impl(&derive_item) {
+        Ok(tokens) => tokens.into(),
+        Err(diagnostic) => diagnostic.emit_as_item_tokens().into(),
+    }
+}
+
+fn expand_derive_arbitrary_impl(derive_item: &DeriveInput) -> Result<TokenStream, Diagnostic> {
+    let trait_name = "Arbitrary";
     let item_name = &derive_item.ident;
     let kani_path = kani_path();
 
-    let body = fn_any_body(item_name, &derive_item.data);
+    let body = fn_any_body(item_name, &derive_item.data)?;
     // Get the safety constraints (if any) to produce type-safe values
-    let safety_conds_opt = safety_conds_opt(item_name, &derive_item, trait_name);
+    let safety_conds_opt = safety_conds_opt(item_name, derive_item, trait_name)?;
 
     // Add a bound `T: Arbitrary` to every type parameter T.
-    let generics = add_trait_bound_arbitrary(derive_item.generics);
+    let generics = add_trait_bound_arbitrary(derive_item.generics.clone());
     // Generate an expression to sum up the heap size of each field.
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
@@ -82,7 +89,7 @@ pub fn expand_derive_arbitrary(item: proc_macro::TokenStream) -> proc_macro::Tok
             }
         }
     };
-    proc_macro::TokenStream::from(expanded)
+    Ok(expanded)
 }
 
 /// Add a bound `T: Arbitrary` to every type parameter T.
@@ -109,16 +116,19 @@ fn add_trait_bound_arbitrary(mut generics: Generics) -> Generics {
 ///    Self { x: kani::any(), y: kani::any() }
 /// }
 /// ```
-fn fn_any_body(ident: &Ident, data: &Data) -> TokenStream {
+fn fn_any_body(ident: &Ident, data: &Data) -> Result<TokenStream, Diagnostic> {
     match data {
-        Data::Struct(struct_data) => init_symbolic_item(ident, &struct_data.fields),
-        Data::Enum(enum_data) => fn_any_enum(ident, enum_data),
-        Data::Union(_) => {
-            abort!(Span::call_site(), "Cannot derive `Arbitrary` for `{}` union", ident;
-                note = ident.span() =>
-                "`#[derive(Arbitrary)]` cannot be used for unions such as `{}`", ident
-            )
-        }
+        Data::Struct(struct_data) => Ok(init_symbolic_item(ident, &struct_data.fields)),
+        Data::Enum(enum_data) => Ok(fn_any_enum(ident, enum_data)),
+        Data::Union(_) => Err(Diagnostic::spanned(
+            Span::call_site(),
+            Level::Error,
+            format!("Cannot derive `Arbitrary` for `{ident}` union"),
+        )
+        .span_note(
+            ident.span(),
+            format!("`#[derive(Arbitrary)]` cannot be used for unions such as `{ident}`"),
+        )),
     }
 }
 
@@ -271,7 +281,7 @@ fn init_symbolic_item(ident: &Ident, fields: &Fields) -> TokenStream {
 /// Extract, parse and return the expression `cond` (i.e., `Some(cond)`) in the
 /// `#[safety_constraint(<cond>)]` attribute helper associated with a given field.
 /// Return `None` if the attribute isn't specified.
-fn parse_safety_expr(ident: &Ident, field: &syn::Field) -> Option<TokenStream> {
+fn parse_safety_expr(ident: &Ident, field: &syn::Field) -> Result<Option<TokenStream>, Diagnostic> {
     let name = &field.ident;
     let mut safety_helper_attr = None;
 
@@ -287,24 +297,35 @@ fn parse_safety_expr(ident: &Ident, field: &syn::Field) -> Option<TokenStream> {
         let expr_args: Result<syn::Expr, syn::Error> = attr.parse_args();
 
         // Check if there was an error parsing the arguments
-        if let Err(err) = expr_args {
-            abort!(Span::call_site(), "Cannot derive impl for `{}`", ident;
-            note = attr.span() =>
-            "safety constraint in field `{}` could not be parsed: {}", name.as_ref().unwrap().to_string(), err
+        let safety_expr = expr_args.map_err(|err| {
+            Diagnostic::spanned(
+                Span::call_site(),
+                Level::Error,
+                format!("Cannot derive impl for `{ident}`"),
             )
-        }
+            .span_note(
+                attr.span(),
+                format!(
+                    "safety constraint in field `{}` could not be parsed: {}",
+                    name.as_ref().unwrap(),
+                    err
+                ),
+            )
+        })?;
 
         // Return the expression associated to the safety constraint
-        let safety_expr = expr_args.unwrap();
-        Some(quote_spanned! {field.span()=>
+        Ok(Some(quote_spanned! {field.span()=>
             #safety_expr
-        })
+        }))
     } else {
-        None
+        Ok(None)
     }
 }
 
-fn parse_safety_expr_input(ident: &Ident, derive_input: &DeriveInput) -> Option<TokenStream> {
+fn parse_safety_expr_input(
+    ident: &Ident,
+    derive_input: &DeriveInput,
+) -> Result<Option<TokenStream>, Diagnostic> {
     let name = ident;
     let mut safety_attr = None;
 
@@ -320,20 +341,24 @@ fn parse_safety_expr_input(ident: &Ident, derive_input: &DeriveInput) -> Option<
         let expr_args: Result<syn::Expr, syn::Error> = attr.parse_args();
 
         // Check if there was an error parsing the arguments
-        if let Err(err) = expr_args {
-            abort!(Span::call_site(), "Cannot derive impl for `{}`", ident;
-            note = attr.span() =>
-            "safety constraint in `{}` could not be parsed: {}", name.to_string(), err
+        let safety_expr = expr_args.map_err(|err| {
+            Diagnostic::spanned(
+                Span::call_site(),
+                Level::Error,
+                format!("Cannot derive impl for `{ident}`"),
             )
-        }
+            .span_note(
+                attr.span(),
+                format!("safety constraint in `{name}` could not be parsed: {err}"),
+            )
+        })?;
 
         // Return the expression associated to the safety constraint
-        let safety_expr = expr_args.unwrap();
-        Some(quote_spanned! {derive_input.span()=>
+        Ok(Some(quote_spanned! {derive_input.span()=>
             #safety_expr
-        })
+        }))
     } else {
-        None
+        Ok(None)
     }
 }
 /// Generate the body of the function `any()` for enums. The cases are:
@@ -398,28 +423,35 @@ fn safe_body_with_calls(
     item_name: &Ident,
     derive_input: &DeriveInput,
     trait_name: &str,
-) -> TokenStream {
-    let safety_conds_opt = safety_conds_opt(item_name, derive_input, trait_name);
+) -> Result<TokenStream, Diagnostic> {
+    let safety_conds_opt = safety_conds_opt(item_name, derive_input, trait_name)?;
     let safe_body_default = safe_body_default(item_name, &derive_input.data);
 
     if let Some(safety_conds) = safety_conds_opt {
-        quote! { #safe_body_default && #safety_conds }
+        Ok(quote! { #safe_body_default && #safety_conds })
     } else {
-        safe_body_default
+        Ok(safe_body_default)
     }
 }
 
 pub fn expand_derive_invariant(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let trait_name = "Invariant";
     let derive_item = parse_macro_input!(item as DeriveInput);
+    match expand_derive_invariant_impl(&derive_item) {
+        Ok(tokens) => tokens.into(),
+        Err(diagnostic) => diagnostic.emit_as_item_tokens().into(),
+    }
+}
+
+fn expand_derive_invariant_impl(derive_item: &DeriveInput) -> Result<TokenStream, Diagnostic> {
+    let trait_name = "Invariant";
     let item_name = &derive_item.ident;
     let kani_path = kani_path();
 
-    let safe_body = safe_body_with_calls(item_name, &derive_item, trait_name);
+    let safe_body = safe_body_with_calls(item_name, derive_item, trait_name)?;
     let field_refs = field_refs(item_name, &derive_item.data);
 
     // Add a bound `T: Invariant` to every type parameter T.
-    let generics = add_trait_bound_invariant(derive_item.generics);
+    let generics = add_trait_bound_invariant(derive_item.generics.clone());
     // Generate an expression to sum up the heap size of each field.
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
@@ -433,7 +465,7 @@ pub fn expand_derive_invariant(item: proc_macro::TokenStream) -> proc_macro::Tok
             }
         }
     };
-    proc_macro::TokenStream::from(expanded)
+    Ok(expanded)
 }
 
 /// Looks for `#[safety_constraint(...)]` attributes used in the struct or its
@@ -444,38 +476,53 @@ fn safety_conds_opt(
     item_name: &Ident,
     derive_input: &DeriveInput,
     trait_name: &str,
-) -> Option<TokenStream> {
+) -> Result<Option<TokenStream>, Diagnostic> {
     let has_item_safety_constraint =
-        has_item_safety_constraint(item_name, derive_input, trait_name);
+        has_item_safety_constraint(item_name, derive_input, trait_name)?;
 
     let has_field_safety_constraints = has_field_safety_constraints(item_name, &derive_input.data);
 
     if has_item_safety_constraint && has_field_safety_constraints {
-        abort!(Span::call_site(), "Cannot derive `{}` for `{}`", trait_name, item_name;
-        note = item_name.span() =>
-        "`#[safety_constraint(...)]` cannot be used in struct and its fields simultaneously"
+        return Err(Diagnostic::spanned(
+            Span::call_site(),
+            Level::Error,
+            format!("Cannot derive `{trait_name}` for `{item_name}`"),
         )
+        .span_note(
+            item_name.span(),
+            "`#[safety_constraint(...)]` cannot be used in struct and its fields simultaneously"
+                .to_string(),
+        ));
     }
 
     if has_item_safety_constraint {
-        Some(safe_body_from_struct_attr(item_name, derive_input, trait_name))
+        Ok(Some(safe_body_from_struct_attr(item_name, derive_input, trait_name)?))
     } else if has_field_safety_constraints {
-        Some(safe_body_from_fields_attr(item_name, &derive_input.data, trait_name))
+        Ok(Some(safe_body_from_fields_attr(item_name, &derive_input.data, trait_name)?))
     } else {
-        None
+        Ok(None)
     }
 }
 
-fn has_item_safety_constraint(ident: &Ident, derive_input: &DeriveInput, trait_name: &str) -> bool {
+fn has_item_safety_constraint(
+    ident: &Ident,
+    derive_input: &DeriveInput,
+    trait_name: &str,
+) -> Result<bool, Diagnostic> {
     let safety_constraints_in_item =
         derive_input.attrs.iter().filter(|attr| attr.path().is_ident("safety_constraint")).count();
     if safety_constraints_in_item > 1 {
-        abort!(Span::call_site(), "Cannot derive `{}` for `{}`", trait_name, ident;
-        note = ident.span() =>
-        "`#[safety_constraint(...)]` cannot be used more than once."
+        return Err(Diagnostic::spanned(
+            Span::call_site(),
+            Level::Error,
+            format!("Cannot derive `{trait_name}` for `{ident}`"),
         )
+        .span_note(
+            ident.span(),
+            "`#[safety_constraint(...)]` cannot be used more than once.".to_string(),
+        ));
     }
-    safety_constraints_in_item == 1
+    Ok(safety_constraints_in_item == 1)
 }
 
 fn has_field_safety_constraints(ident: &Ident, data: &Data) -> bool {
@@ -514,14 +561,19 @@ fn safe_body_from_struct_attr(
     ident: &Ident,
     derive_input: &DeriveInput,
     trait_name: &str,
-) -> TokenStream {
+) -> Result<TokenStream, Diagnostic> {
     if !matches!(derive_input.data, Data::Struct(_)) {
-        abort!(Span::call_site(), "Cannot derive `{}` for `{}`", trait_name, ident;
-            note = ident.span() =>
-            "`#[safety_constraint(...)]` can only be used in structs"
+        return Err(Diagnostic::spanned(
+            Span::call_site(),
+            Level::Error,
+            format!("Cannot derive `{trait_name}` for `{ident}`"),
         )
+        .span_note(
+            ident.span(),
+            "`#[safety_constraint(...)]` can only be used in structs".to_string(),
+        ));
     };
-    parse_safety_expr_input(ident, derive_input).unwrap()
+    Ok(parse_safety_expr_input(ident, derive_input)?.unwrap())
 }
 
 /// Parse the condition expressions in `#[safety_constraint(<cond>)]` attached to struct
@@ -544,48 +596,60 @@ fn safe_body_from_struct_attr(
 /// ```
 /// which can be used by the `Arbitrary` and `Invariant` to generate and check
 /// type-safe values for the struct, respectively.
-fn safe_body_from_fields_attr(ident: &Ident, data: &Data, trait_name: &str) -> TokenStream {
+fn safe_body_from_fields_attr(
+    ident: &Ident,
+    data: &Data,
+    trait_name: &str,
+) -> Result<TokenStream, Diagnostic> {
     match data {
         Data::Struct(struct_data) => safe_body_from_fields_attr_inner(ident, &struct_data.fields),
-        Data::Enum(_) => {
-            abort!(Span::call_site(), "Cannot derive `{}` for `{}` enum", trait_name, ident;
-                note = ident.span() =>
-                "`#[derive(Invariant)]` cannot be used for enums such as `{}`", ident
-            )
-        }
-        Data::Union(_) => {
-            abort!(Span::call_site(), "Cannot derive `{}` for `{}` union", trait_name, ident;
-                note = ident.span() =>
-                "`#[derive(Invariant)]` cannot be used for unions such as `{}`", ident
-            )
-        }
+        Data::Enum(_) => Err(Diagnostic::spanned(
+            Span::call_site(),
+            Level::Error,
+            format!("Cannot derive `{trait_name}` for `{ident}` enum"),
+        )
+        .span_note(
+            ident.span(),
+            format!("`#[derive(Invariant)]` cannot be used for enums such as `{ident}`"),
+        )),
+        Data::Union(_) => Err(Diagnostic::spanned(
+            Span::call_site(),
+            Level::Error,
+            format!("Cannot derive `{trait_name}` for `{ident}` union"),
+        )
+        .span_note(
+            ident.span(),
+            format!("`#[derive(Invariant)]` cannot be used for unions such as `{ident}`"),
+        )),
     }
 }
 
 /// Generates an expression resulting from the conjunction of conditions
 /// specified as safety constraints for each field.
 /// See `safe_body_from_fields_attr` for more details.
-fn safe_body_from_fields_attr_inner(ident: &Ident, fields: &Fields) -> TokenStream {
+fn safe_body_from_fields_attr_inner(
+    ident: &Ident,
+    fields: &Fields,
+) -> Result<TokenStream, Diagnostic> {
     match fields {
         // Expands to the expression
         // `<safety_cond1> && <safety_cond2> && ..`
         // where `<safety_condN>` is the safety condition specified for the N-th field.
         Fields::Named(fields) => {
-            let safety_conds: Vec<TokenStream> =
-                fields.named.iter().filter_map(|field| parse_safety_expr(ident, field)).collect();
-            quote! { #(#safety_conds)&&* }
+            let safety_conds: Vec<TokenStream> = fields
+                .named
+                .iter()
+                .filter_map(|field| parse_safety_expr(ident, field).transpose())
+                .collect::<Result<_, _>>()?;
+            Ok(quote! { #(#safety_conds)&&* })
         }
-        Fields::Unnamed(_) => {
-            quote! {
-                true
-            }
-        }
+        Fields::Unnamed(_) => Ok(quote! {
+            true
+        }),
         // Expands to the expression
         // `true`
-        Fields::Unit => {
-            quote! {
-                true
-            }
-        }
+        Fields::Unit => Ok(quote! {
+            true
+        }),
     }
 }

@@ -54,7 +54,7 @@ jobs:
 
       - name: Add debugging hints
         if: ${{ steps.create_pr.outputs.pull-request-number }}
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             github.rest.issues.createComment({

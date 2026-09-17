@@ -12,11 +12,16 @@ use args_toml::join_args;
 
 use crate::args::StandaloneSubcommand;
 use crate::concrete_playback::playback::{playback_cargo, playback_standalone};
+use crate::frontend::{
+    JsonHandler, create_harness_metadata_json, create_metadata_json, create_project_metadata_json,
+    create_tool_versions_json, process_cbmc_results, process_harness_results,
+};
 use crate::list::collect_metadata::{list_cargo, list_standalone};
 use crate::project::Project;
 use crate::session::KaniSession;
 use crate::version::print_kani_version;
 use clap::Parser;
+use serde_json::json;
 use tracing::debug;
 
 mod args;
@@ -34,8 +39,13 @@ mod concrete_playback;
 mod coverage;
 mod harness_runner;
 mod list;
+mod log_file;
 mod metadata;
+mod progress_indicator;
 mod project;
+
+mod frontend;
+mod sarif;
 mod session;
 mod util;
 mod version;
@@ -44,6 +54,13 @@ mod version;
 /// The driver can be invoked via `cargo kani` and `kani` commands, which determines what kind of
 /// project should be verified.
 fn main() -> ExitCode {
+    // Set GLIBC_TUNABLES for child processes (CBMC, etc.) if not already set
+    // This enables THP for subprocesses even if the parent didn't have it set at startup
+    if std::env::var("GLIBC_TUNABLES").is_err() {
+        // SAFETY: Called at start of main before any threads are spawned
+        unsafe { std::env::set_var("GLIBC_TUNABLES", "glibc.malloc.hugetlb=1") };
+    }
+
     let invocation_type = determine_invocation_type(Vec::from_iter(std::env::args_os()));
 
     let result = match invocation_type {
@@ -65,8 +82,23 @@ fn main() -> ExitCode {
 /// The main function for the `cargo kani` command.
 fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     let input_args = join_args(input_args)?;
-    let args = args::CargoKaniArgs::parse_from(&input_args);
+    let mut args = args::CargoKaniArgs::parse_from(&input_args);
+    // Apply the autoharness defaults before validating, so that validation sees the options the
+    // run will actually use (e.g. `--jobs=N` must not be rejected for lacking
+    // `--output-format=terse` when autoharness supplies exactly that default).
+    if let Some(CargoKaniSubcommand::Autoharness(autoharness_args)) = &mut args.command {
+        autoharness_args.verify_opts.apply_autoharness_parallel_defaults();
+    }
     check_is_valid(&args);
+
+    // Handle version flag
+    if args.version {
+        print_kani_version(
+            InvocationType::CargoKani(input_args),
+            args.verify_opts.common_args.verbose,
+        );
+        return Ok(());
+    }
 
     let mut session = match args.command {
         Some(CargoKaniSubcommand::Autoharness(autoharness_args)) => {
@@ -82,7 +114,7 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     };
 
     if !session.args.common_args.quiet {
-        print_kani_version(InvocationType::CargoKani(input_args));
+        print_kani_version(InvocationType::CargoKani(input_args), session.args.common_args.verbose);
     }
 
     let project = project::cargo_project(&mut session, false)?;
@@ -91,8 +123,18 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
 
 /// The main function for the `kani` command.
 fn standalone_main() -> Result<()> {
-    let args = args::StandaloneArgs::parse();
+    let mut args = args::StandaloneArgs::parse();
+    // See the comment in `cargokani_main`.
+    if let Some(StandaloneSubcommand::Autoharness(autoharness_args)) = &mut args.command {
+        autoharness_args.verify_opts.apply_autoharness_parallel_defaults();
+    }
     check_is_valid(&args);
+
+    // Handle version flag
+    if args.version {
+        print_kani_version(InvocationType::Standalone, args.verify_opts.common_args.verbose);
+        return Ok(());
+    }
 
     let (session, project) = match args.command {
         Some(StandaloneSubcommand::Autoharness(args)) => {
@@ -105,7 +147,7 @@ fn standalone_main() -> Result<()> {
         Some(StandaloneSubcommand::VerifyStd(args)) => {
             let session = KaniSession::new(args.verify_opts)?;
             if !session.args.common_args.quiet {
-                print_kani_version(InvocationType::Standalone);
+                print_kani_version(InvocationType::Standalone, session.args.common_args.verbose);
             }
 
             let project = project::std_project(&args.std_path, &session)?;
@@ -114,7 +156,7 @@ fn standalone_main() -> Result<()> {
         None => {
             let session = KaniSession::new(args.verify_opts)?;
             if !session.args.common_args.quiet {
-                print_kani_version(InvocationType::Standalone);
+                print_kani_version(InvocationType::Standalone, session.args.common_args.verbose);
             }
 
             let project =
@@ -128,12 +170,41 @@ fn standalone_main() -> Result<()> {
 /// Run verification on the given project.
 fn verify_project(project: Project, session: KaniSession) -> Result<()> {
     debug!(?project, "verify_project");
+    // Only build the JSON document when `--export-json` asks for one. Everything below it is
+    // overhead for every other run, including a `cbmc --version` probe in `process_cbmc_results`.
+    let mut handler =
+        session.args.export_json.as_ref().map(|path| JsonHandler::new(Some(path.clone())));
     let harnesses = session.determine_targets(project.get_all_harnesses())?;
     debug!(n = harnesses.len(), ?harnesses, "verify_project");
 
+    if let Some(handler) = handler.as_mut() {
+        // Add project and export run metadata using frontend utility
+        handler.add_item("metadata", create_metadata_json());
+        handler.add_item("project", create_project_metadata_json(&project));
+        handler.add_item("tools", create_tool_versions_json(&session, &harnesses));
+
+        // The per-harness arrays are filled in lazily below and by the harness runner, so declare
+        // them up front: a run that selects no harnesses (a crate with none) would otherwise
+        // write a document missing four of its documented keys.
+        for key in ["harness_metadata", "error_details", "property_details", "cbmc"] {
+            handler.add_item(key, json!([]));
+        }
+
+        // Add harness metadata using frontend utility
+        for h in &harnesses {
+            handler.add_harness_detail("harness_metadata", create_harness_metadata_json(h));
+        }
+    }
+
     // Verification
     let runner = harness_runner::HarnessRunner { sess: &session, project: &project };
-    let results = runner.check_all_harnesses(&harnesses)?;
+    let results = runner.check_all_harnesses(&harnesses, handler.as_mut())?;
+
+    if let Some(handler) = handler.as_mut() {
+        // Process harness results and add additional metadata using frontend utility function
+        process_harness_results(handler, &harnesses, &results)?;
+        process_cbmc_results(handler, &harnesses, &results, &session)?;
+    }
 
     if session.args.coverage {
         // We generate a timestamp to save the coverage data in a folder named
@@ -145,13 +216,21 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
         // users in a proof debugging session, who are usually interested in the
         // most recent results.
         let time_now = OffsetDateTime::now_utc();
-        let format = format_description::parse("[year]-[month]-[day]_[hour]-[minute]").unwrap();
+        let format =
+            format_description::parse_borrowed::<3>("[year]-[month]-[day]_[hour]-[minute]")
+                .unwrap();
         let timestamp = time_now.format(&format).unwrap();
 
         session.save_coverage_metadata(&project, &timestamp)?;
         session.save_coverage_results(&project, &results, &timestamp)?;
     }
 
+    if let Some(handler) = handler.as_mut() {
+        handler.add_item("coverage", json!({"enabled": session.args.coverage}));
+        handler.export()?;
+    }
+
+    session.write_sarif(&results)?;
     session.print_final_summary(&results)
 }
 

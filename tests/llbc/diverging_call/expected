@@ -1,0 +1,4 @@
+pub fn test::diverge() -> !\
+{\
+    let @0: !; // return
+pub fn test::main()

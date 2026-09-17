@@ -5,7 +5,7 @@
 //!
 
 use proc_macro::TokenStream;
-use proc_macro_error2::abort_call_site;
+use proc_macro2_diagnostics::{Diagnostic, Level};
 use quote::{format_ident, quote, quote_spanned};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
@@ -566,14 +566,26 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
                 el.body.stmts = new_stmts.clone();
             }
             _ => {
-                abort_call_site!("`#[kani::loop_invariant]` is now only supported for while-loops.";
-                    note = "for now, loop contracts is only supported for while-loops.";
+                return Diagnostic::spanned(
+                    proc_macro2::Span::call_site(),
+                    Level::Error,
+                    "`#[kani::loop_invariant]` is now only supported for while-loops.".to_string(),
                 )
+                .note("for now, loop contracts is only supported for while-loops.".to_string())
+                .emit_as_item_tokens()
+                .into();
             }
         },
-        _ => abort_call_site!("`#[kani::loop_invariant]` is now only supported for while-loops.";
-            note = "for now, loop contracts is only supported for while-loops.";
-        ),
+        _ => {
+            return Diagnostic::spanned(
+                proc_macro2::Span::call_site(),
+                Level::Error,
+                "`#[kani::loop_invariant]` is now only supported for while-loops.".to_string(),
+            )
+            .note("for now, loop contracts is only supported for while-loops.".to_string())
+            .emit_as_item_tokens()
+            .into();
+        }
     }
     let ret: TokenStream = if let Some(ForLoopExtraStmts {
         init_iter_stmt,
@@ -717,6 +729,57 @@ pub fn loop_modifies(attr: TokenStream, item: TokenStream) -> TokenStream {
     let ret: TokenStream = quote!(
     {
         #loop_assign_stmt
+        #loop_stmt
+    })
+    .into();
+    ret
+}
+
+/// Implements the `#[kani::loop_decreases(expr1, expr2, ...)]` attribute.
+///
+/// A decreases clause specifies a measure that must strictly decrease at every
+/// iteration of a loop, proving termination. The macro creates a local binding
+/// `let kani_loop_decreases = (expr1, expr2, ...);` which the compiler detects
+/// during codegen and attaches to the loop's goto statement as a CBMC
+/// `#spec_decreases` annotation. CBMC's `goto-instrument` then instruments the
+/// termination check (record old value → execute body → assert new < old).
+///
+/// For multi-dimensional decreases, CBMC uses lexicographic ordering.
+pub fn loop_decreases(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let decreases = parse_macro_input!(attr with Punctuated::<Expr, Token![,]>::parse_terminated)
+        .into_iter()
+        .collect::<Vec<Expr>>();
+    if decreases.len() > 1 {
+        return syn::Error::new(
+            proc_macro2::Span::call_site(),
+            "multi-dimensional `#[kani::loop_decreases]` (multiple comma-separated expressions) \
+             is not yet supported and may produce unsound results. \
+             Use a single expression instead.",
+        )
+        .to_compile_error()
+        .into();
+    }
+    let loop_decreases_name: String = "kani_loop_decreases".to_owned();
+    let loop_decreases_ident = format_ident!("{}", loop_decreases_name);
+    let loop_decreases_stmt: Stmt = parse_quote! {
+        let #loop_decreases_ident = (#(#decreases),*);
+    };
+    let loop_stmt: Stmt = syn::parse(item.clone()).unwrap();
+    // Validate that the attribute is applied to a loop statement.
+    match &loop_stmt {
+        Stmt::Expr(Expr::While(_) | Expr::Loop(_) | Expr::ForLoop(_), _) => {}
+        _ => {
+            return syn::Error::new_spanned(
+                proc_macro2::TokenStream::from(item),
+                "`#[kani::loop_decreases]` must be applied to a loop statement",
+            )
+            .to_compile_error()
+            .into();
+        }
+    }
+    let ret: TokenStream = quote!(
+    {
+        #loop_decreases_stmt
         #loop_stmt
     })
     .into();

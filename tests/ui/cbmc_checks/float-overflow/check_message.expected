@@ -6,4 +6,3 @@ Failed Checks: NaN on multiplication
 Failed Checks: arithmetic overflow on floating-point multiplication
 Failed Checks: NaN on division
 Failed Checks: arithmetic overflow on floating-point division
-Failed Checks: division by zero

@@ -64,16 +64,19 @@ impl<'a> ContractConditionsHandler<'a> {
         let Self { attr_copy, .. } = self;
         match &self.condition_type {
             ContractConditionsData::Requires { attr } => {
+                let assert_bracketed =
+                    bracket_clause_stmt(quote!(kani::assert(#attr, stringify!(#attr_copy));));
                 quote!({
-                    kani::assert(#attr, stringify!(#attr_copy));
+                    #assert_bracketed
                     #(#body_stmts)*
                 })
             }
             ContractConditionsData::Ensures { attr } => {
                 let (remembers, ensures_clause) = build_ensures(attr);
+                let ensures_bracketed = bracket_clause_expr(quote!(#ensures_clause));
 
                 let exec_postconditions = quote!(
-                    kani::assert(#ensures_clause, stringify!(#attr_copy));
+                    kani::assert(#ensures_bracketed, stringify!(#attr_copy));
                 );
 
                 let return_expr = body_stmts.pop();

@@ -61,6 +61,8 @@ pub enum Intrinsic {
     Exp2F64,
     ExpF32,
     ExpF64,
+    FabsF128,
+    FabsF16,
     FabsF32,
     FabsF64,
     FaddFast,
@@ -108,6 +110,7 @@ pub enum Intrinsic {
     SimdAdd,
     SimdAnd,
     SimdDiv,
+    SimdReduceAll,
     SimdRem,
     SimdEq,
     SimdExtract,
@@ -122,6 +125,7 @@ pub enum Intrinsic {
     SimdShl,
     SimdShr,
     SimdShuffle(String),
+    SimdSplat,
     SimdSub,
     SimdXor,
     SizeOf,
@@ -134,12 +138,14 @@ pub enum Intrinsic {
     TruncF64,
     TypedSwap,
     UnalignedVolatileLoad,
+    UnalignedVolatileStore,
     UncheckedDiv,
     UncheckedRem,
     Unlikely,
     VolatileCopyMemory,
     VolatileCopyNonOverlappingMemory,
     VolatileLoad,
+    VolatileSetMemory,
     VolatileStore,
     VtableSize,
     VtableAlign,
@@ -386,6 +392,10 @@ impl Intrinsic {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => _);
                 Self::UnalignedVolatileLoad
             }
+            "unaligned_volatile_store" => {
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => RigidTy::Tuple(_));
+                Self::UnalignedVolatileStore
+            }
             "unchecked_add" | "unchecked_mul" | "unchecked_shl" | "unchecked_shr"
             | "unchecked_sub" => {
                 unreachable!("Expected intrinsic `{intrinsic_str}` to be lowered before codegen")
@@ -420,6 +430,10 @@ impl Intrinsic {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => _);
                 Self::VolatileLoad
             }
+            "volatile_set_memory" => {
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), RigidTy::Uint(UintTy::U8), RigidTy::Uint(UintTy::Usize) => RigidTy::Tuple(_));
+                Self::VolatileSetMemory
+            }
             "volatile_store" => {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => RigidTy::Tuple(_));
                 Self::VolatileStore
@@ -448,6 +462,16 @@ impl Intrinsic {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), RigidTy::Uint(UintTy::U8), RigidTy::Uint(UintTy::Usize) => RigidTy::Tuple(_));
                 Self::WriteBytes
             }
+            // `fabs` is generic over the float type as of nightly-2026-03-21, where it used to be
+            // one intrinsic per width (`fabsf32` and friends). Recover the width from the signature
+            // so that codegen can keep using the width-specific CBMC builtins.
+            "fabs" => match sig.inputs()[0].kind() {
+                TyKind::RigidTy(RigidTy::Float(FloatTy::F16)) => Self::FabsF16,
+                TyKind::RigidTy(RigidTy::Float(FloatTy::F32)) => Self::FabsF32,
+                TyKind::RigidTy(RigidTy::Float(FloatTy::F64)) => Self::FabsF64,
+                TyKind::RigidTy(RigidTy::Float(FloatTy::F128)) => Self::FabsF128,
+                other => unreachable!("Unexpected `fabs` argument type: {other:?}"),
+            },
             _ => try_match_atomic(intrinsic_instance)
                 .or_else(|| try_match_simd(intrinsic_instance))
                 .or_else(|| try_match_f32(intrinsic_instance))
@@ -556,6 +580,10 @@ fn try_match_simd(intrinsic_instance: &Instance) -> Option<Intrinsic> {
             assert_sig_matches!(sig, _, _ => _);
             Some(Intrinsic::SimdDiv)
         }
+        "simd_reduce_all" => {
+            assert_sig_matches!(sig, _ => RigidTy::Bool);
+            Some(Intrinsic::SimdReduceAll)
+        }
         "simd_rem" => {
             assert_sig_matches!(sig, _, _ => _);
             Some(Intrinsic::SimdRem)
@@ -608,6 +636,10 @@ fn try_match_simd(intrinsic_instance: &Instance) -> Option<Intrinsic> {
             assert_sig_matches!(sig, _, _ => _);
             Some(Intrinsic::SimdShr)
         }
+        "simd_splat" => {
+            assert_sig_matches!(sig, _ => _);
+            Some(Intrinsic::SimdSplat)
+        }
         "simd_sub" => {
             assert_sig_matches!(sig, _, _ => _);
             Some(Intrinsic::SimdSub)
@@ -653,10 +685,6 @@ fn try_match_f32(intrinsic_instance: &Instance) -> Option<Intrinsic> {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
             Some(Intrinsic::ExpF32)
         }
-        "fabsf32" => {
-            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
-            Some(Intrinsic::FabsF32)
-        }
         "floorf32" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
             Some(Intrinsic::FloorF32)
@@ -677,11 +705,11 @@ fn try_match_f32(intrinsic_instance: &Instance) -> Option<Intrinsic> {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
             Some(Intrinsic::LogF32)
         }
-        "maxnumf32" => {
+        "maximum_number_nsz_f32" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
             Some(Intrinsic::MaxNumF32)
         }
-        "minnumf32" => {
+        "minimum_number_nsz_f32" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
             Some(Intrinsic::MinNumF32)
         }
@@ -743,10 +771,6 @@ fn try_match_f64(intrinsic_instance: &Instance) -> Option<Intrinsic> {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
             Some(Intrinsic::ExpF64)
         }
-        "fabsf64" => {
-            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
-            Some(Intrinsic::FabsF64)
-        }
         "floorf64" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
             Some(Intrinsic::FloorF64)
@@ -767,11 +791,11 @@ fn try_match_f64(intrinsic_instance: &Instance) -> Option<Intrinsic> {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
             Some(Intrinsic::LogF64)
         }
-        "maxnumf64" => {
+        "maximum_number_nsz_f64" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
             Some(Intrinsic::MaxNumF64)
         }
-        "minnumf64" => {
+        "minimum_number_nsz_f64" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
             Some(Intrinsic::MinNumF64)
         }
