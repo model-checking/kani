@@ -36,6 +36,7 @@ use rustc_public::ty::{
 };
 use rustc_public::{CrateDef, CrateDefType};
 use rustc_public_bridge::IndexedVal;
+use strum::IntoEnumIterator;
 use tracing::debug;
 
 /// The Kani model functions used to construct nondeterministic values.
@@ -1901,10 +1902,8 @@ impl AutomaticArbitraryPass {
 pub struct AutomaticHarnessPass {
     /// The Kani model functions used to construct nondeterministic values.
     models: AnyModels,
-    /// The FnDef of KaniModel::CheckDebugFmt
-    kani_check_debug_fmt: FnDef,
-    /// The FnDef of KaniModel::CheckDisplayFmt
-    kani_check_display_fmt: FnDef,
+    /// The `check_*_fmt` model for each formatting trait, c.f. `FmtTrait::model`.
+    check_fmt_models: FxHashMap<FmtTrait, FnDef>,
     init_contracts_hook: Instance,
     reset_clause_depth: Instance,
     kani_autoharness_intrinsic: FnDef,
@@ -1918,8 +1917,9 @@ impl AutomaticHarnessPass {
         let kani_fns = query_db.kani_functions();
         let kani_autoharness_intrinsic =
             *kani_fns.get(&KaniIntrinsic::AutomaticHarness.into()).unwrap();
-        let kani_check_debug_fmt = *kani_fns.get(&KaniModel::CheckDebugFmt.into()).unwrap();
-        let kani_check_display_fmt = *kani_fns.get(&KaniModel::CheckDisplayFmt.into()).unwrap();
+        let check_fmt_models = FmtTrait::iter()
+            .map(|fmt_trait| (fmt_trait, *kani_fns.get(&fmt_trait.model().into()).unwrap()))
+            .collect();
         let init_contracts_hook = *kani_fns.get(&KaniHook::InitContracts.into()).unwrap();
         let init_contracts_hook =
             Instance::resolve(init_contracts_hook, &GenericArgs(vec![])).unwrap();
@@ -1930,8 +1930,7 @@ impl AutomaticHarnessPass {
         let check_invariants = query_db.args().autoharness_check_invariants;
         Self {
             models: AnyModels::new(query_db),
-            kani_check_debug_fmt,
-            kani_check_display_fmt,
+            check_fmt_models,
             init_contracts_hook,
             reset_clause_depth,
             kani_autoharness_intrinsic,
@@ -1974,7 +1973,7 @@ impl TransformPass for AutomaticHarnessPass {
         harness_body.clear_body(TerminatorKind::Return);
         let mut source = SourceInstruction::Terminator { bb: 0 };
 
-        // Debug/Display fmt implementations are exercised through the corresponding check
+        // Formatting trait implementations are exercised through the corresponding check
         // model, which formats a nondeterministic value of the self type into a discarding
         // sink: their `&mut Formatter` argument cannot be generated nondeterministically,
         // and the model reaches `fn_to_verify` through the core formatting machinery with a
@@ -1996,10 +1995,7 @@ impl TransformPass for AutomaticHarnessPass {
                 &mut invariant_cache,
                 &mut mined_cache,
             );
-            let model = match fmt_trait {
-                FmtTrait::Debug => self.kani_check_debug_fmt,
-                FmtTrait::Display => self.kani_check_display_fmt,
-            };
+            let model = self.check_fmt_models[&fmt_trait];
             let model_inst =
                 Instance::resolve(model, &GenericArgs(vec![GenericArgKind::Type(self_ty)]))
                     .unwrap();
