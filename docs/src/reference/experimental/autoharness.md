@@ -252,17 +252,25 @@ table repeats the caveat.
 With `--bounded-arguments`, for a function with `&[T]`/`&mut [T]` arguments (where `T`
 implements or can derive `Arbitrary`) or `&str` arguments, the generated harness produces a
 slice of nondeterministic length, backed by nondeterministic storage that lives for the entire
-harness: **up to 16 elements** for slices and **up to 4 bytes** for strings. Strings cover all
+harness: by default **up to 16 elements** for slices and **up to 4 bytes** for strings. Strings cover all
 valid UTF-8 contents up to the bound (the generated string is the longest valid-UTF-8 prefix of
 nondeterministic bytes, the same approach as `String`'s `BoundedArbitrary` implementation); the
 smaller bound reflects the cost of reasoning about UTF-8 for symbolic execution. The bounds are
 chosen to stay below the default loop-unwinding bound of 20, so that loops over the slice can
 be fully unwound by default.
 
+The bounds are configurable with `--slice-bound` and `--string-bound` (and
+`--bounded-arbitrary-bound`, see below). A larger bound covers more inputs at a higher solver
+cost. A bound that is not below the effective loop-unwinding bound (`--default-unwind`, 20 by
+default) leaves loops over such an argument only partially unwound, and Kani warns when a
+configured bound reaches it. The note printed after the summary table reports the bounds a run
+actually used.
+
 Additionally (also requiring `--bounded-arguments`), for arguments whose type implements
 [`BoundedArbitrary`](../bounded_arbitrary.md)
 (e.g. `Vec<T>`, `String`, or user types deriving it), the harness generates a bounded
-nondeterministic value with **bound 4** (via `kani::bounded_any`). The same caveat applies:
+nondeterministic value with a **default bound of 4** (via `kani::bounded_any`), overridable
+with `--bounded-arbitrary-bound`. The same caveat applies:
 verification results only hold up to the bound. The smaller bound reflects that these values are
 heap allocated and, for `String`, involve UTF-8 reasoning, both of which are costly for symbolic
 execution.
