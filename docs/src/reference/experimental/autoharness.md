@@ -207,7 +207,7 @@ pointee type implements `Arbitrary` (or can derive it). Each generated pointer i
 - out of bounds of its allocation (and thus invalid for reads or writes), or
 - valid: pointing to a nondeterministic value of the pointee type, which stays allocated for the entire harness.
 
-As a consequence, a function that dereferences a raw pointer argument without being able to rule out
+Therefore, a function that dereferences a raw pointer argument without being able to rule out
 the null and out-of-bounds states will fail verification. For safe functions, such a failure points at a
 real robustness issue, since safe code can pass any pointer value. For functions whose safety relies on
 caller obligations (e.g., `unsafe fn`s with documented preconditions), add
@@ -235,19 +235,19 @@ This matches the [Unsafe Code Guidelines' definition of a safety invariant](http
 safe code is allowed to assume that the values it receives uphold their types' safety invariants,
 so verifying a function against invariant-violating inputs would produce spurious counterexamples.
 
-Note that automatic harnesses do not *assert* type invariants, e.g., they do not check that a function's return value satisfies `is_safe()`.
+Automatic harnesses do not *assert* type invariants, e.g., they do not check that a function's return value satisfies `is_safe()`.
 To verify that a function preserves an invariant, add a [function contract](contracts.md) such as `#[kani::ensures(|result| result.is_safe())]`;
 autoharness verifies a function against its contract if it has one.
 
 ## Bounded Arguments (opt-in: `--bounded-arguments`)
 By default, autoharness only generates harnesses whose nondeterministic inputs cover *all*
 possible values, so that a successful result carries Kani's usual guarantee. Some argument
-types (e.g. slices) can only be generated in a *bounded* fashion; because a bug that requires
+types (e.g. slices) can only be generated with *bounds*; because a bug that requires
 a larger input would then be missed, these are **disabled by default** and require the
 `--bounded-arguments` option. Functions that would become eligible with the option are
 reported in the skipped-functions table with reason "Requires --bounded-arguments". Harnesses
 that use bounded values are marked **"(bounded)"** in the summary table, and a note after the
-table repeats the caveat.
+table repeats this limitation.
 
 With `--bounded-arguments`, for a function with `&[T]`/`&mut [T]` arguments (where `T`
 implements or can derive `Arbitrary`) or `&str` arguments, the generated harness produces a
@@ -259,10 +259,10 @@ smaller bound reflects the cost of reasoning about UTF-8 for symbolic execution.
 chosen to stay below the default loop-unwinding bound of 20, so that loops over the slice can
 be fully unwound by default.
 
-Additionally (also requiring `--bounded-arguments`), for arguments whose type implements
+With `--bounded-arguments`, for arguments whose type implements
 [`BoundedArbitrary`](../bounded_arbitrary.md)
 (e.g. `Vec<T>`, `String`, or user types deriving it), the harness generates a bounded
-nondeterministic value with **bound 4** (via `kani::bounded_any`). The same caveat applies:
+nondeterministic value with **bound 4** (via `kani::bounded_any`). The same limitation applies:
 verification results only hold up to the bound. The smaller bound reflects that these values are
 heap allocated and, for `String`, involve UTF-8 reasoning, both of which are costly for symbolic
 execution.
@@ -343,7 +343,7 @@ instantiated name, e.g.:
 | Crate    | Selected Function | Kind of Automatic Harness | Verification Result |
 | my_crate | foo::<i32>        | #[kani::proof]            | Failure             |
 ```
-Note that verifying a single instantiation is an underapproximation of all of the function's possible behaviors:
+Verifying a single instantiation is an underapproximation of all of the function's possible behaviors:
 a successful result for `foo::<i32>` does not imply that other instantiations of `foo` are also safe.
 Kani makes this explicit by displaying the instantiated name of the verified function.
 
