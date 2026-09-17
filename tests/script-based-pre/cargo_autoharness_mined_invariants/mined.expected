@@ -1,0 +1,10 @@
+	 - Description: "mined invariant of `Day` violated by return value (asserted in cargo_autoharness_mined_invariants::Day::ordinal0, cargo_autoharness_mined_invariants::Day::ordinal)"
+Failed Checks: mined invariant of `Day` violated by return value (asserted in cargo_autoharness_mined_invariants::Day::ordinal0, cargo_autoharness_mined_invariants::Day::ordinal)
+| cargo_autoharness_mined_invariants | day_user           | #[kani::proof] (ctor)     | Success             |
+| cargo_autoharness_mined_invariants | good_make_day      | #[kani::proof]            | Success             |
+| cargo_autoharness_mined_invariants | good_try_make_day  | #[kani::proof]            | Success             |
+| cargo_autoharness_mined_invariants | length_user        | #[kani::proof] (ctor)     | Success             |
+| cargo_autoharness_mined_invariants | tank_user          | #[kani::proof] (ctor)     | Success             |
+| cargo_autoharness_mined_invariants | buggy_make_day     | #[kani::proof]            | Failure             |
+| cargo_autoharness_mined_invariants | buggy_try_make_day | #[kani::proof]            | Failure             |
+| cargo_autoharness_mined_invariants | prec_user          | #[kani::proof]            | Failure             |

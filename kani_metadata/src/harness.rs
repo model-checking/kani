@@ -47,6 +47,11 @@ pub struct HarnessMetadata {
     /// holds up to the bounds, c.f. the autoharness --bounded-arguments option.
     #[serde(default)]
     pub is_bounded: bool,
+    /// Whether the (automatically generated) harness generates some values through a type's
+    /// public constructor (c.f. the autoharness --constructor-args option), in which case its
+    /// verification result only covers constructor-reachable values.
+    #[serde(default)]
+    pub is_ctor_based: bool,
 }
 
 /// The attributes added by the user to control how a harness is executed.

@@ -9,6 +9,10 @@
 //! is a separate operation on a different MIR local and remains fully checked.
 //! The expected file requires `pointer_dereference` checks to be present and
 //! passing inside the clause closure.
+//!
+//! The total is plumbing-sensitive: nightly-2026-06-01 makes two checks in `read_answer`'s own body
+//! unreachable, so the count drops by two. The pinned closure check -- the actual subject here --
+//! is unaffected.
 
 #[kani::requires(unsafe { *ptr } == 42)]
 unsafe fn read_answer(ptr: *const i32) -> i32 {

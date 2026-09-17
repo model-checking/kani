@@ -9,13 +9,16 @@
 
 use crate::args::{Arguments, ReachabilityType};
 use crate::kani_middle::attributes::{KaniAttributes, is_proof_harness};
-use crate::kani_middle::kani_functions::{KaniIntrinsic, KaniModel};
+use crate::kani_middle::kani_functions::{KaniHook, KaniIntrinsic, KaniModel};
 use crate::kani_middle::metadata::{
     gen_automatic_proof_metadata, gen_contracts_metadata, gen_proof_metadata,
 };
 use crate::kani_middle::reachability::filter_crate_items;
 use crate::kani_middle::stubbing::{check_compatibility, harness_stub_map};
-use crate::kani_middle::{ArgSupport, SmartPointerModels, autoharness_supported_arg_ty};
+use crate::kani_middle::{
+    ArgSupport, SmartPointerModels, autoharness_supported_arg_ty, can_derive_arbitrary,
+    fmt_impl_self_ty, implements_arbitrary,
+};
 use crate::kani_queries::QueryDb;
 use kani_metadata::{
     ArtifactType, AssignsContract, AutoHarnessMetadata, AutoHarnessSkipReason, HarnessMetadata,
@@ -29,8 +32,8 @@ use rustc_middle::ty::{self, TyCtxt, TypingMode};
 use rustc_public::mir::mono::Instance;
 use rustc_public::rustc_internal;
 use rustc_public::ty::{
-    FnDef, GenericArgKind, GenericArgs, IntTy, Region, RegionKind, RigidTy, Ty, TyConst, TyKind,
-    UintTy,
+    FloatTy, FnDef, GenericArgKind, GenericArgs, IntTy, Region, RegionKind, RigidTy, Ty, TyConst,
+    TyKind, UintTy,
 };
 use rustc_public::{CrateDef, CrateItem};
 use rustc_public_bridge::IndexedVal;
@@ -110,6 +113,30 @@ impl CodegenUnits {
                     *kani_fns.get(&KaniModel::Any.into()).unwrap(),
                     *kani_fns.get(&KaniModel::BoundedAny.into()).unwrap(),
                     SmartPointerModels::from_kani_functions(kani_fns),
+                    *kani_fns.get(&KaniHook::Assert.into()).unwrap(),
+                    // Require *all three* unbounded models: eligibility admits `&[T]`, `&mut [T]`
+                    // and `Vec<T>`, but generation resolves each model independently, so gating on
+                    // only one could report a `&mut [T]`/`Vec<T>` arg as unbounded-verified while
+                    // generation silently fell back to a bounded (or unsupported) path. They are
+                    // defined together (all present with `alloc`, all absent in `no_core`), so this
+                    // is all-or-nothing in practice; the conjunction just makes that explicit.
+                    [
+                        KaniModel::AnySliceRefUnbounded,
+                        KaniModel::AnySliceMutUnbounded,
+                        KaniModel::AnyVecUnbounded,
+                    ]
+                    .iter()
+                    .all(|m| kani_fns.contains_key(&(*m).into())),
+                    &NondetFnModels {
+                        fn0: kani_fns.get(&KaniModel::NondetFn0.into()).copied(),
+                        fn1: kani_fns.get(&KaniModel::NondetFn1.into()).copied(),
+                        fn1_ref: kani_fns.get(&KaniModel::NondetFn1Ref.into()).copied(),
+                        fn2: kani_fns.get(&KaniModel::NondetFn2.into()).copied(),
+                        fn2_ref_ref: kani_fns.get(&KaniModel::NondetFn2RefRef.into()).copied(),
+                        fn2_ref_val: kani_fns.get(&KaniModel::NondetFn2RefVal.into()).copied(),
+                        fn2_val_ref: kani_fns.get(&KaniModel::NondetFn2ValRef.into()).copied(),
+                        fn3: kani_fns.get(&KaniModel::NondetFn3.into()).copied(),
+                    },
                 );
                 AUTOHARNESS_MD
                     .set(AutoHarnessMetadata {
@@ -203,7 +230,7 @@ impl CodegenUnits {
 }
 
 fn stub_def(tcx: TyCtxt, def_id: DefId) -> FnDef {
-    let ty_internal = tcx.type_of(def_id).instantiate_identity();
+    let ty_internal = tcx.type_of(def_id).instantiate_identity().skip_normalization();
     let ty = rustc_internal::stable(ty_internal);
     if let TyKind::RigidTy(RigidTy::FnDef(def, _)) = ty.kind() {
         def
@@ -370,13 +397,13 @@ fn determine_targets(
 /// the AutomaticHarnessPass will later transform the bodies of these instances to actually verify the function.
 fn get_all_automatic_harnesses(
     tcx: TyCtxt,
-    verifiable_fns: Vec<(Instance, bool)>,
+    verifiable_fns: Vec<(Instance, AutoHarnessCaveats)>,
     kani_harness_intrinsic: FnDef,
     base_filename: &Path,
 ) -> HashMap<Harness, HarnessMetadata> {
     verifiable_fns
         .into_iter()
-        .map(|(fn_to_verify, is_bounded)| {
+        .map(|(fn_to_verify, caveats)| {
             // Set the generic arguments of the harness to be the function it is verifying
             // so that later, in AutomaticHarnessPass, we can retrieve the function to verify
             // and generate the harness body accordingly.
@@ -390,7 +417,8 @@ fn get_all_automatic_harnesses(
                 base_filename,
                 &fn_to_verify,
                 harness.mangled_name(),
-                is_bounded,
+                caveats.is_bounded,
+                caveats.is_ctor_based,
             );
             (harness, metadata)
         })
@@ -435,9 +463,68 @@ fn generic_instantiation_candidates() -> Vec<Ty> {
         Ty::from_rigid_kind(RigidTy::Int(IntTy::I32)),
         Ty::from_rigid_kind(RigidTy::Uint(UintTy::U32)),
         Ty::from_rigid_kind(RigidTy::Uint(UintTy::Usize)),
+        Ty::from_rigid_kind(RigidTy::Uint(UintTy::U8)),
+        Ty::from_rigid_kind(RigidTy::Int(IntTy::I64)),
+        Ty::from_rigid_kind(RigidTy::Uint(UintTy::U64)),
+        Ty::from_rigid_kind(RigidTy::Float(FloatTy::F64)),
+        Ty::from_rigid_kind(RigidTy::Float(FloatTy::F32)),
         Ty::from_rigid_kind(RigidTy::Bool),
         Ty::from_rigid_kind(RigidTy::Char),
     ]
+}
+
+/// Cap on trait-solver queries per function when searching for a satisfying instantiation,
+/// so that functions with many type parameters do not blow up partitioning time.
+const GENERIC_INSTANTIATION_ATTEMPT_LIMIT: usize = 256;
+
+/// Cap on the number of trait-impl-derived candidate types collected per type parameter.
+const IMPL_DERIVED_CANDIDATE_LIMIT: usize = 16;
+
+/// For each type parameter of `def` (keyed by its index in the generic parameter list),
+/// collect concrete types that implement the parameter's trait bounds, by enumerating the
+/// non-blanket implementations of each trait the parameter is bound by. This finds candidates
+/// for parameters bound by crate-local or third-party traits (e.g. num-traits' `Float`),
+/// which no primitive candidate may satisfy.
+/// Candidates are deduplicated, restricted to fully concrete types, and sorted for
+/// determinism; each parameter's list is capped at [IMPL_DERIVED_CANDIDATE_LIMIT].
+fn impl_derived_candidates(tcx: TyCtxt, def: FnDef) -> FxHashMap<usize, Vec<Ty>> {
+    let mut candidates: FxHashMap<usize, Vec<Ty>> = FxHashMap::default();
+    // Walk the parent chain: `GenericPredicates::predicates` holds only the item's *own*
+    // predicates, so for an associated function the bounds on the impl's type parameters (e.g.
+    // `T` in `impl<T: Frob> Holder<T> { fn combine<U: Nizzle>(..) }`) live on the parent. They
+    // constrain the same argument list, and `args_satisfy_predicates` checks them (via
+    // `GenericPredicates::instantiate`, which does recurse into the parent), so missing them
+    // here would leave such a parameter with primitive candidates only.
+    let mut next = Some(rustc_internal::internal(tcx, def.def_id()));
+    while let Some(def_id) = next {
+        let generic_clauses = tcx.clauses_of(def_id);
+        next = generic_clauses.parent;
+        for (predicate, _span) in generic_clauses.clauses {
+            let Some(trait_pred) = predicate.as_trait_clause() else { continue };
+            let trait_pred = trait_pred.skip_binder();
+            let ty::Param(param_ty) = trait_pred.self_ty().kind() else { continue };
+            let slot = candidates.entry(param_ty.index as usize).or_default();
+            for impls in tcx.trait_impls_of(trait_pred.def_id()).non_blanket_impls().values() {
+                for &impl_def_id in impls {
+                    let self_ty =
+                        tcx.type_of(impl_def_id).instantiate_identity().skip_normalization();
+                    // Only fully concrete self types can be substituted directly.
+                    if rustc_middle::ty::TypeVisitableExt::has_param(&self_ty) {
+                        continue;
+                    }
+                    let stable_ty = rustc_internal::stable(self_ty);
+                    if !slot.contains(&stable_ty) {
+                        slot.push(stable_ty);
+                    }
+                }
+            }
+        }
+    }
+    for slot in candidates.values_mut() {
+        slot.sort_by_key(|ty| ty.to_string());
+        slot.truncate(IMPL_DERIVED_CANDIDATE_LIMIT);
+    }
+    candidates
 }
 
 /// Check whether instantiating the generic parameters of `def` with `args` satisfies all of
@@ -451,11 +538,238 @@ fn args_satisfy_predicates(tcx: TyCtxt, def: FnDef, args: &GenericArgs) -> bool 
 
     let def_id = rustc_internal::internal(tcx, def.def_id());
     let args_internal = rustc_internal::internal(tcx, args);
-    let predicates = tcx.predicates_of(def_id).instantiate(tcx, args_internal);
+    let predicates = tcx.clauses_of(def_id).instantiate(tcx, args_internal);
     for (predicate, _span) in predicates {
-        ocx.register_obligation(Obligation::new(tcx, cause.clone(), param_env, predicate));
+        ocx.register_obligation(Obligation::new(
+            tcx,
+            cause.clone(),
+            param_env,
+            predicate.skip_normalization(),
+        ));
     }
-    ocx.evaluate_obligations_error_on_ambiguity().is_empty()
+    // As of nightly-2026-08-21 this returns a `TraitErrors` enum rather than a vector of errors.
+    ocx.evaluate_obligations_error_on_ambiguity().no_errors()
+}
+
+/// The nondet closure-model FnDefs, keyed by input shape. By-value models fix their
+/// input regions early-bound; the ref-taking variants carry late-bound regions so their
+/// fn items satisfy HRTB bounds like `for<'a> Fn(&'a T)`.
+#[derive(Clone, Copy, Default)]
+pub struct NondetFnModels {
+    pub fn0: Option<FnDef>,
+    pub fn1: Option<FnDef>,
+    pub fn1_ref: Option<FnDef>,
+    pub fn2: Option<FnDef>,
+    pub fn2_ref_ref: Option<FnDef>,
+    pub fn2_ref_val: Option<FnDef>,
+    pub fn2_val_ref: Option<FnDef>,
+    pub fn3: Option<FnDef>,
+}
+
+/// Select the nondet model matching the (erased-region) input types' by-ref/by-value
+/// shape, returning the model and its type arguments (references peeled: the model's own
+/// signature reintroduces them with late-bound regions). Arity-3 ref shapes and deeper
+/// are not modeled (1.5% corpus tail).
+fn select_nondet_model<'tcx>(
+    models: &NondetFnModels,
+    input_tys: &[rustc_middle::ty::Ty<'tcx>],
+) -> Option<(FnDef, Vec<rustc_middle::ty::Ty<'tcx>>)> {
+    let peel = |t: rustc_middle::ty::Ty<'tcx>| match t.kind() {
+        rustc_middle::ty::TyKind::Ref(_, inner, rustc_middle::ty::Mutability::Not) => Some(*inner),
+        _ => None,
+    };
+    let shape: Vec<Option<rustc_middle::ty::Ty>> = input_tys.iter().map(|t| peel(*t)).collect();
+    match shape.as_slice() {
+        [] => models.fn0.map(|m| (m, vec![])),
+        [None] => models.fn1.map(|m| (m, vec![input_tys[0]])),
+        [Some(t)] => models.fn1_ref.map(|m| (m, vec![*t])),
+        [None, None] => models.fn2.map(|m| (m, input_tys.to_vec())),
+        [Some(a), Some(b)] => models.fn2_ref_ref.map(|m| (m, vec![*a, *b])),
+        [Some(a), None] => models.fn2_ref_val.map(|m| (m, vec![*a, input_tys[1]])),
+        [None, Some(b)] => models.fn2_val_ref.map(|m| (m, vec![input_tys[0], *b])),
+        [None, None, None] => models.fn3.map(|m| (m, input_tys.to_vec())),
+        _ => None,
+    }
+}
+
+/// An Fn-bound signature that references other generic parameters (e.g. `F: Fn(T) -> T`):
+/// its concrete form depends on the instantiation chosen for those parameters, so the
+/// candidate fn-item type is constructed per candidate choice
+/// (c.f. [resolve_deferred_fn_slots]).
+struct DeferredFnSpec<'tcx> {
+    inputs: rustc_middle::ty::Ty<'tcx>,
+    output: rustc_middle::ty::Ty<'tcx>,
+}
+
+/// For type parameters bound by `Fn`/`FnMut`/`FnOnce`, derive a candidate instantiation:
+/// the *function item type* of the matching-arity `kani::arbitrary::nondet_fn<N>` model,
+/// instantiated with the bound's argument and return types. Function items implement all
+/// three `Fn` traits and are zero-sized; the models return a fresh nondeterministic value
+/// per call, over-approximating every real closure's behavior.
+///
+/// Returns a map from parameter index (among the identity args) to candidate types.
+/// Signature types that themselves mention generic parameters are only usable if those
+/// parameters appear EARLIER in the parameter list (they are substituted with the current
+/// choice by the caller); v1 keeps it simple and only admits fully concrete signatures.
+fn fn_bound_candidates<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    def: FnDef,
+    nondet_fns: &NondetFnModels,
+) -> (FxHashMap<usize, Vec<Ty>>, FxHashMap<usize, DeferredFnSpec<'tcx>>) {
+    let def_id = rustc_internal::internal(tcx, def.def_id());
+    let mut out: FxHashMap<usize, Vec<Ty>> = FxHashMap::default();
+    let mut deferred: FxHashMap<usize, DeferredFnSpec<'tcx>> = FxHashMap::default();
+    let fn_once = tcx.lang_items().fn_once_trait();
+    let fn_mut = tcx.lang_items().fn_mut_trait();
+    let fn_tr = tcx.lang_items().fn_trait();
+    // Collect Fn-ish trait predicates keyed by the self param index, with tupled inputs.
+    let mut sig_inputs: FxHashMap<usize, rustc_middle::ty::Ty> = FxHashMap::default();
+    for (predicate, _span) in tcx.clauses_of(def_id).clauses {
+        let Some(tp) = predicate.as_trait_clause() else { continue };
+        // HRTB bounds (e.g. for<'a> FnOnce(&'a Self)) carry late-bound regions; erase them
+        // rather than skipping the binder, which would leak escaping bound vars into the
+        // trait solver (ICE: !self_ty.has_escaping_bound_vars()).
+        let tp = tcx.instantiate_bound_regions_with_erased(tp);
+        let tid = Some(tp.def_id());
+        if tid != fn_once && tid != fn_mut && tid != fn_tr {
+            continue;
+        }
+        let rustc_middle::ty::TyKind::Param(param_ty) = tp.self_ty().kind() else { continue };
+        // Second generic arg of the Fn traits is the tupled inputs.
+        let Some(inputs) = tp.trait_ref.args.get(1).and_then(|a| a.as_type()) else {
+            continue;
+        };
+        sig_inputs.insert(param_ty.index as usize, inputs);
+    }
+    if sig_inputs.is_empty() {
+        return (out, deferred);
+    }
+    // The return type comes from the FnOnce::Output projection bound.
+    let mut sig_output: FxHashMap<usize, rustc_middle::ty::Ty> = FxHashMap::default();
+    for (predicate, _span) in tcx.clauses_of(def_id).clauses {
+        let Some(proj) = predicate.as_projection_clause() else { continue };
+        let proj = tcx.instantiate_bound_regions_with_erased(proj);
+        let rustc_middle::ty::TyKind::Param(param_ty) = proj.projection_term.self_ty().kind()
+        else {
+            continue;
+        };
+        if let Some(term_ty) = proj.term.as_type() {
+            sig_output.insert(param_ty.index as usize, term_ty);
+        }
+    }
+    for (idx, inputs) in sig_inputs {
+        let rustc_middle::ty::TyKind::Tuple(input_tys) = inputs.kind() else { continue };
+        let output = sig_output.get(&idx).copied().unwrap_or(tcx.types.unit);
+        use rustc_middle::ty::TypeVisitableExt;
+        if inputs.has_param() || output.has_param() {
+            // Signature references other generic parameters: defer construction until a
+            // candidate choice for those parameters is made.
+            // SAFETY of the transmute-free 'static: clauses_of types live for the whole
+            // compilation session ('tcx); we only use them within this query's lifetime.
+            deferred.insert(idx, DeferredFnSpec { inputs, output });
+            continue;
+        }
+        // nondet_fnN<A.., R>: generic args are the inputs followed by the return type.
+        let input_vec: Vec<rustc_middle::ty::Ty> = input_tys.iter().collect();
+        let Some((model, model_tys)) = select_nondet_model(nondet_fns, &input_vec) else {
+            continue;
+        };
+        let mut args: Vec<GenericArgKind> =
+            model_tys.iter().map(|t| GenericArgKind::Type(rustc_internal::stable(t))).collect();
+        args.push(GenericArgKind::Type(rustc_internal::stable(output)));
+        let args = GenericArgs(args);
+        // Instance::resolve does not check trait bounds; the model requires R: Arbitrary
+        // (its body calls kani::any::<R>()), so verify the model's own predicates or the
+        // assert in harness generation fires (e.g. FnOnce() -> error::Error in syn).
+        if !args_satisfy_predicates(tcx, model, &args) {
+            continue;
+        }
+        let Ok(inst) = Instance::resolve(model, &args) else { continue };
+        // The function item TYPE of the resolved instance.
+        out.entry(idx).or_default().push(inst.ty());
+    }
+    (out, deferred)
+}
+
+/// Resolve deferred Fn-bound slots for a concrete candidate `choice`: substitute the
+/// chosen types into the deferred signature, construct the matching-arity nondet_fn item
+/// type, and overwrite the placeholder in `choice`. Returns false if any deferred slot
+/// cannot be resolved for this choice (skip it).
+#[allow(clippy::too_many_arguments)]
+fn resolve_deferred_fn_slots<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    identity_args: &GenericArgs,
+    type_slots: &[usize],
+    choice: &mut [Ty],
+    deferred: &FxHashMap<usize, DeferredFnSpec<'tcx>>,
+    nondet_fns: &NondetFnModels,
+) -> bool {
+    if deferred.is_empty() {
+        return true;
+    }
+    // Build a full internal substitution from the current choice (placeholders included:
+    // deferred slots hold unit, which is fine as long as no deferred signature references
+    // another Fn-bound parameter).
+    let mut next_type = 0usize;
+    let stable_args = GenericArgs(
+        identity_args
+            .0
+            .iter()
+            .map(|arg| match arg {
+                GenericArgKind::Type(_) => {
+                    let t = choice[next_type];
+                    next_type += 1;
+                    GenericArgKind::Type(t)
+                }
+                GenericArgKind::Lifetime(_) => {
+                    GenericArgKind::Lifetime(Region { kind: RegionKind::ReErased })
+                }
+                GenericArgKind::Const(_) => GenericArgKind::Const(
+                    TyConst::try_from_target_usize(AUTOHARNESS_CONST_GENERIC_VALUE).unwrap(),
+                ),
+            })
+            .collect(),
+    );
+    let args_internal = rustc_internal::internal(tcx, &stable_args);
+    for (&idx, spec) in deferred {
+        use rustc_middle::ty::TypeVisitableExt;
+        // `instantiate` yields an `Unnormalized` value on this toolchain; normalize before
+        // inspecting. The substitution may produce unnormalizable projections (e.g.
+        // <i32 as Tap>::Val for a choice that does not satisfy the bound); normalize here and
+        // skip the choice on failure, rather than letting Instance::resolve ICE on it.
+        let inputs =
+            rustc_middle::ty::EarlyBinder::bind(tcx, spec.inputs).instantiate(tcx, args_internal);
+        let output =
+            rustc_middle::ty::EarlyBinder::bind(tcx, spec.output).instantiate(tcx, args_internal);
+        let typing_env = rustc_middle::ty::TypingEnv::fully_monomorphized();
+        let Ok(inputs) = tcx.try_normalize_erasing_regions(typing_env, inputs) else {
+            return false;
+        };
+        let Ok(output) = tcx.try_normalize_erasing_regions(typing_env, output) else {
+            return false;
+        };
+        // Bail if the substitution left any generic parameter unresolved.
+        if inputs.has_param() || output.has_param() {
+            return false;
+        }
+        let rustc_middle::ty::TyKind::Tuple(input_tys) = inputs.kind() else { return false };
+        let input_vec: Vec<rustc_middle::ty::Ty> = input_tys.iter().collect();
+        let Some((model, model_tys)) = select_nondet_model(nondet_fns, &input_vec) else {
+            return false;
+        };
+        let mut margs: Vec<GenericArgKind> =
+            model_tys.iter().map(|t| GenericArgKind::Type(rustc_internal::stable(t))).collect();
+        margs.push(GenericArgKind::Type(rustc_internal::stable(output)));
+        let margs = GenericArgs(margs);
+        // As in fn_bound_candidates: enforce the model's own R: Arbitrary bound.
+        if !args_satisfy_predicates(tcx, model, &margs) {
+            return false;
+        }
+        let Ok(inst) = Instance::resolve(model, &margs) else { return false };
+        let Some(pos) = type_slots.iter().position(|&s| s == idx) else { return false };
+        choice[pos] = inst.ty();
+    }
+    true
 }
 
 /// Try to find a monomorphic instantiation of the generic function `fn_item` for which we can
@@ -465,7 +779,11 @@ fn args_satisfy_predicates(tcx: TyCtxt, def: FnDef, args: &GenericArgs) -> bool 
 /// Return the reason (to be attached to [AutoHarnessSkipReason::GenericFn]) if no candidate
 /// satisfies the bounds, or if the function has const generic parameters, which we do not
 /// support instantiating yet.
-fn choose_generic_instantiation(tcx: TyCtxt, fn_item: CrateItem) -> Result<Instance, String> {
+fn choose_generic_instantiation(
+    tcx: TyCtxt,
+    fn_item: CrateItem,
+    nondet_fns: &NondetFnModels,
+) -> Result<Instance, String> {
     let TyKind::RigidTy(RigidTy::FnDef(def, identity_args)) = fn_item.ty().kind() else {
         return Err("not a function definition".to_string());
     };
@@ -482,13 +800,55 @@ fn choose_generic_instantiation(tcx: TyCtxt, fn_item: CrateItem) -> Result<Insta
         return Err("non-usize const generic parameters are not supported yet".to_string());
     }
 
-    for candidate in generic_instantiation_candidates() {
-        let args = GenericArgs(
+    // Positions of the type parameters among the identity arguments, and the candidate list
+    // for each: the shared primitive candidates, plus types derived from the parameter's own
+    // trait bounds (concrete implementors of the traits it must satisfy).
+    let impl_derived = impl_derived_candidates(tcx, def);
+    let (fn_bound, deferred_fn) = fn_bound_candidates(tcx, def, nondet_fns);
+    let type_slots: Vec<usize> = identity_args
+        .0
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, arg)| matches!(arg, GenericArgKind::Type(_)).then_some(idx))
+        .collect();
+    let slot_candidates: Vec<Vec<Ty>> = type_slots
+        .iter()
+        .map(|&idx| {
+            let mut cands = generic_instantiation_candidates();
+            for ty in impl_derived.get(&idx).into_iter().flatten() {
+                if !cands.contains(ty) {
+                    cands.push(*ty);
+                }
+            }
+            // Fn-bound parameters: try the nondeterministic function items FIRST — no
+            // primitive can satisfy an Fn bound, so they would only waste solver queries.
+            if let Some(fnc) = fn_bound.get(&idx) {
+                let mut new = fnc.clone();
+                new.extend(cands);
+                cands = new;
+            } // Deferred Fn-bound slots get a single placeholder (resolved per choice by
+            // resolve_deferred_fn_slots); other candidates would be wasted solver queries.
+            if deferred_fn.contains_key(&idx) {
+                cands = vec![Ty::new_tuple(&[])];
+            }
+            cands
+        })
+        .collect();
+    let n_impl_derived: usize = impl_derived.values().map(|v| v.len()).sum();
+
+    // Build the argument list substituting `choice[i]` for the i-th type parameter.
+    let build_args = |choice: &[Ty]| {
+        let mut next_type = 0;
+        GenericArgs(
             identity_args
                 .0
                 .iter()
                 .map(|arg| match arg {
-                    GenericArgKind::Type(_) => GenericArgKind::Type(candidate),
+                    GenericArgKind::Type(_) => {
+                        let ty = choice[next_type];
+                        next_type += 1;
+                        GenericArgKind::Type(ty)
+                    }
                     GenericArgKind::Lifetime(_) => {
                         GenericArgKind::Lifetime(Region { kind: RegionKind::ReErased })
                     }
@@ -497,30 +857,98 @@ fn choose_generic_instantiation(tcx: TyCtxt, fn_item: CrateItem) -> Result<Insta
                     ),
                 })
                 .collect(),
-        );
+        )
+    };
+
+    let attempts = std::cell::Cell::new(0usize);
+    let try_choice = |choice: &[Ty]| -> Option<Instance> {
+        attempts.set(attempts.get() + 1);
+        let args = build_args(choice);
         if !args_satisfy_predicates(tcx, def, &args) {
-            continue;
+            return None;
         }
         // Return the resolved instance regardless of whether it has a body: a body-less
         // instance (e.g. a generic trait method without a default) is then reported accurately
         // as `NoBody` by `skip_reason`, rather than falling through to a generic-function skip
         // reason here.
-        if let Ok(instance) = Instance::resolve(def, &args) {
+        Instance::resolve(def, &args).ok()
+    };
+
+    // First pass: the same primitive candidate for every type parameter (the common case,
+    // and cheap). Second pass: the cartesian product of the per-parameter candidate lists,
+    // capped at GENERIC_INSTANTIATION_ATTEMPT_LIMIT trait-solver queries, which finds
+    // instantiations for functions whose parameters need *different* types (e.g.
+    // `fn cast<T: Float, U: PrimInt>`) or types implementing non-primitive-friendly bounds.
+    for candidate in generic_instantiation_candidates() {
+        if let Some(instance) = try_choice(&vec![candidate; type_slots.len()]) {
             return Ok(instance);
         }
     }
+    if !type_slots.is_empty() {
+        let mut odometer = vec![0usize; type_slots.len()];
+        'product: loop {
+            let mut choice: Vec<Ty> =
+                odometer.iter().enumerate().map(|(i, &c)| slot_candidates[i][c]).collect();
+            let deferred_ok = resolve_deferred_fn_slots(
+                tcx,
+                &identity_args,
+                &type_slots,
+                &mut choice,
+                &deferred_fn,
+                nondet_fns,
+            );
+            // Skip choices already tried in the uniform pass.
+            let uniform = choice.iter().all(|ty| *ty == choice[0])
+                && generic_instantiation_candidates().contains(&choice[0]);
+            if !uniform && deferred_ok {
+                if let Some(instance) = try_choice(&choice) {
+                    return Ok(instance);
+                }
+                if attempts.get() >= GENERIC_INSTANTIATION_ATTEMPT_LIMIT {
+                    break;
+                }
+            }
+            // Advance the odometer.
+            for i in (0..odometer.len()).rev() {
+                odometer[i] += 1;
+                if odometer[i] < slot_candidates[i].len() {
+                    continue 'product;
+                }
+                odometer[i] = 0;
+                if i == 0 {
+                    break 'product;
+                }
+            }
+        }
+    }
     Err(format!(
-        "no candidate type ({}) satisfies the function's trait bounds",
+        "no candidate type ({}{}) satisfies the function's trait bounds",
         generic_instantiation_candidates()
             .iter()
             .map(|ty| ty.to_string())
             .collect::<Vec<_>>()
-            .join(", ")
+            .join(", "),
+        if n_impl_derived > 0 {
+            format!(" and {n_impl_derived} types implementing the required traits")
+        } else {
+            String::new()
+        }
     ))
+}
+
+/// The caveats that apply to a generated harness, reported in the summary table and stored in
+/// its metadata. They are independent: a harness can be both bounded and constructor-based.
+#[derive(Clone, Copy, Debug, Default)]
+struct AutoHarnessCaveats {
+    /// Some argument uses *bounded* nondeterministic values, c.f. `--bounded-arguments`.
+    is_bounded: bool,
+    /// Some value is generated through a type's public constructor, c.f. `--constructor-args`.
+    is_ctor_based: bool,
 }
 
 /// Partition every function in the crate into (chosen, skipped), where `chosen` is a vector of the Instances for which we'll generate automatic harnesses,
 /// and `skipped` is a map of function names to the reason why we skipped them.
+#[allow(clippy::too_many_arguments)]
 fn automatic_harness_partition(
     tcx: TyCtxt,
     args: &Arguments,
@@ -528,7 +956,10 @@ fn automatic_harness_partition(
     kani_any_def: FnDef,
     kani_bounded_any_def: FnDef,
     smart_pointer_models: SmartPointerModels,
-) -> (Vec<(Instance, bool)>, BTreeMap<String, AutoHarnessSkipReason>) {
+    kani_assert_def: FnDef,
+    unbounded_slice_available: bool,
+    nondet_fns: &NondetFnModels,
+) -> (Vec<(Instance, AutoHarnessCaveats)>, BTreeMap<String, AutoHarnessSkipReason>) {
     let crate_fn_defs = rustc_public::local_crate().fn_defs().into_iter().collect::<FxHashSet<_>>();
     // Filter out CrateItems that are functions, but not functions defined in the crate itself, i.e., rustc-inserted functions
     // (c.f. https://github.com/model-checking/kani/issues/4189)
@@ -545,6 +976,9 @@ fn automatic_harness_partition(
 
     // Cache whether a type implements or can derive Arbitrary
     let mut ty_arbitrary_cache: FxHashMap<Ty, bool> = FxHashMap::default();
+    // The constructor search needs the same predicate, but `skip_reason` borrows the cache above
+    // for the whole loop, so give the `--constructor-args` check its own.
+    let mut ty_arbitrary_cache_ctor: FxHashMap<Ty, bool> = FxHashMap::default();
 
     // If `instance` is not eligible for an automatic harness, return the reason why (`Err`); if it
     // is eligible, return whether its harness requires *bounded* nondeterministic arguments
@@ -577,6 +1011,25 @@ fn automatic_harness_partition(
             return Err(AutoHarnessSkipReason::UserFilter);
         }
 
+        // Debug/Display fmt implementations are handled specially: their `&mut Formatter`
+        // argument cannot be generated, but the generated harness formats a nondeterministic
+        // value of the self type into a discarding sink instead, c.f. `fmt_impl_self_ty`.
+        // The self type is generated with `kani::any`, so it must implement (or be able to
+        // derive) Arbitrary; argument-position-only support (raw/smart pointers, bounded types)
+        // does not apply here, and these harnesses are therefore never bounded.
+        if let Some((_, self_ty)) = fmt_impl_self_ty(tcx, instance) {
+            return if implements_arbitrary(self_ty, kani_any_def, &mut ty_arbitrary_cache)
+                || can_derive_arbitrary(self_ty, kani_any_def, &mut ty_arbitrary_cache)
+            {
+                Ok(false)
+            } else {
+                Err(AutoHarnessSkipReason::MissingArbitraryImpl(vec![(
+                    "self".to_string(),
+                    format!("{self_ty}"),
+                )]))
+            };
+        }
+
         // Each argument of `instance` must be supported by automatic harness generation, i.e.,
         // implement Arbitrary (or be capable of deriving it), be a raw pointer, be a supported
         // smart pointer (`Box`/`Rc`/`Arc` of a derivable pointee), or -- if the user opted in via
@@ -587,6 +1040,31 @@ fn automatic_harness_partition(
         let mut problematic_args = vec![];
         let mut bounded_args = vec![];
         for (idx, arg) in body.arg_locals().iter().enumerate() {
+            // Unbounded generation: slices (&[T], &mut [T]) and Vec<T> of primitive
+            // integer/float elements are generated as fresh allocations of nondeterministic
+            // size (results hold for *all* lengths -- unbounded, so no bound caveat), when the
+            // optional alloc-requiring models are present. This takes precedence over the
+            // bounded slice/string support classified by `autoharness_supported_arg_ty`.
+            if unbounded_slice_available {
+                let slice_ok = match arg.ty.kind() {
+                    TyKind::RigidTy(RigidTy::Ref(_, inner, _)) => match inner.kind() {
+                        TyKind::RigidTy(RigidTy::Slice(elem)) => {
+                            crate::kani_middle::slice_elem_unbounded_ok(tcx, elem)
+                        }
+                        _ => false,
+                    },
+                    _ => crate::kani_middle::vec_elem_ty(arg.ty)
+                        .is_some_and(|elem| crate::kani_middle::slice_elem_unbounded_ok(tcx, elem)),
+                };
+                if slice_ok {
+                    continue;
+                }
+            }
+            // Function items (Fn-bound instantiations, c.f. fn_bound_candidates) are
+            // zero-sized values materialized as constants; no Arbitrary impl is involved.
+            if matches!(arg.ty.kind(), TyKind::RigidTy(RigidTy::FnDef(..))) {
+                continue;
+            }
             // Note: we deliberately do not insert the verdict into `ty_arbitrary_cache` here.
             // The cache stores whether a type implements (or can derive) Arbitrary, which is the
             // wrong semantics for types that are supported in argument position only (raw
@@ -649,7 +1127,7 @@ fn automatic_harness_partition(
         // and its name (e.g. `foo::<i32>`) reflects that.
         let instance = match Instance::try_from(func) {
             Ok(instance) => instance,
-            Err(_) => match choose_generic_instantiation(tcx, func) {
+            Err(_) => match choose_generic_instantiation(tcx, func, nondet_fns) {
                 Ok(instance) => instance,
                 Err(detail) => {
                     skipped.insert(
@@ -666,7 +1144,24 @@ fn automatic_harness_partition(
                 skipped
                     .insert(crate::kani_middle::strip_local_crate_prefix(instance.name()), reason);
             }
-            Ok(is_bounded) => chosen.push((instance, is_bounded)),
+            Ok(is_bounded) => {
+                // Whether any generated value will come from a type's public constructor
+                // rather than raw field synthesis, which the summary reports as "(ctor)".
+                let is_ctor_based = args.autoharness_constructor_args
+                    && instance.body().is_some_and(|body| {
+                        body.arg_locals().iter().any(|arg| {
+                            crate::kani_middle::uses_ctor_generation(
+                                tcx,
+                                arg.ty,
+                                kani_any_def,
+                                kani_assert_def,
+                                &mut ty_arbitrary_cache_ctor,
+                                &mut vec![],
+                            )
+                        })
+                    });
+                chosen.push((instance, AutoHarnessCaveats { is_bounded, is_ctor_based }));
+            }
         }
     }
 

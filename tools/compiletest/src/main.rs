@@ -263,6 +263,10 @@ pub fn run_tests(config: Config) {
         return;
     }
 
+    // `run_tests_console` now takes a tagged list. compiletest collects tests by walking
+    // directories, so the order is not by name and must be reported as `Unsorted`: the
+    // harness binary-searches a list tagged `Sorted`.
+    let tests = test::TestList::new(tests, test::TestListOrder::Unsorted);
     let res = test::run_tests_console(&opts, tests);
     match res {
         Ok(true) => {}

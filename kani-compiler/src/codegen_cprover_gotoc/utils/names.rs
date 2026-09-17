@@ -6,7 +6,7 @@
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::InternedString;
 use rustc_hir::def_id::LOCAL_CRATE;
-use rustc_middle::mir::mono::CodegenUnitNameBuilder;
+use rustc_middle::mono::CodegenUnitNameBuilder;
 use rustc_middle::ty::TyCtxt;
 use rustc_public::mir::Local;
 

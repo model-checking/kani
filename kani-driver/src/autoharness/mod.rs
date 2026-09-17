@@ -52,12 +52,18 @@ pub fn autoharness_standalone(args: StandaloneAutoharnessArgs) -> Result<()> {
 
 /// Execute autoharness-specific KaniSession configuration.
 fn setup_session(session: &mut KaniSession, common_autoharness_args: &CommonAutoharnessArgs) {
+    // `main` already applies these before validating the arguments (so that validation sees the
+    // options the run will actually use); repeat it here -- the call is idempotent -- so that the
+    // session is configured correctly regardless of how it was constructed.
+    session.args.apply_autoharness_parallel_defaults();
     session.enable_autoharness();
     session.add_default_bounds();
     session.add_auto_harness_args(
         &common_autoharness_args.include_pattern,
         &common_autoharness_args.exclude_pattern,
         common_autoharness_args.bounded_arguments,
+        common_autoharness_args.constructor_args,
+        common_autoharness_args.check_invariants,
     );
 }
 
@@ -169,6 +175,8 @@ impl KaniSession {
         included: &[String],
         excluded: &[String],
         bounded_arguments: bool,
+        constructor_args: bool,
+        check_invariants: bool,
     ) {
         let mut args = vec![];
         for pattern in included {
@@ -179,6 +187,12 @@ impl KaniSession {
         }
         if bounded_arguments {
             args.push("--autoharness-bounded-arguments".to_string());
+        }
+        if constructor_args {
+            args.push("--autoharness-constructor-args".to_string());
+        }
+        if check_invariants {
+            args.push("--autoharness-check-invariants".to_string());
         }
         self.autoharness_compiler_flags = Some(args);
     }
@@ -219,16 +233,21 @@ impl KaniSession {
         ]);
 
         let harness_kind = |harness: &HarnessMetadata| {
+            let mut kind = harness.attributes.kind.to_string();
             if harness.is_bounded {
-                format!("{} (bounded)", harness.attributes.kind)
-            } else {
-                harness.attributes.kind.to_string()
+                kind.push_str(" (bounded)");
             }
+            if harness.is_ctor_based {
+                kind.push_str(" (ctor)");
+            }
+            kind
         };
         let mut any_bounded = false;
+        let mut any_ctor = false;
 
         for success in successes {
             any_bounded |= success.harness.is_bounded;
+            any_ctor |= success.harness.is_ctor_based;
             verified_fns.add_row(vec![
                 success.harness.crate_name.clone(),
                 success.harness.pretty_name.clone(),
@@ -239,6 +258,7 @@ impl KaniSession {
 
         for failure in failures {
             any_bounded |= failure.harness.is_bounded;
+            any_ctor |= failure.harness.is_ctor_based;
             verified_fns.add_row(vec![
                 failure.harness.crate_name.clone(),
                 failure.harness.pretty_name.clone(),
@@ -255,6 +275,12 @@ impl KaniSession {
             println!(
                 "Note: harnesses marked \"(bounded)\" use bounded nondeterministic values for some arguments (--bounded-arguments);\n\
                  their verification results only hold up to the bounds, i.e., bugs that require larger input values may be missed."
+            );
+        }
+        if any_ctor {
+            println!(
+                "Note: harnesses marked \"(ctor)\" generate some values through one of a type's own constructors (--constructor-args);\n\
+                 their verification results only cover values reachable through that constructor."
             );
         }
 

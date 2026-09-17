@@ -39,7 +39,7 @@ use rustc_public::mir::Body;
 use rustc_public::mir::mono::Instance;
 use rustc_public::ty::Allocation;
 use rustc_span::Span;
-use rustc_span::source_map::respan;
+use rustc_span::respan;
 use rustc_target::callconv::FnAbi;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Debug;

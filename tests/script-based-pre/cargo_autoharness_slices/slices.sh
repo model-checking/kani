@@ -15,4 +15,4 @@ echo "[with --bounded-arguments]"
 # reason about; on slower CI runners it can exceed the autoharness default 60s harness timeout,
 # so raise it here to keep this (genuinely passing) harness from spuriously timing out.
 # This run reports failures (`first`/`first_byte`), so it exits non-zero (see config.yml).
-cargo kani autoharness -Z autoharness -Z unstable-options --bounded-arguments --harness-timeout 5m
+cargo kani autoharness -Z autoharness -Z unstable-options --output-format=regular --bounded-arguments --harness-timeout 5m

@@ -13,11 +13,12 @@
 //! definition of custom coercions for smart pointers can be found in the
 //! [RFC 982 DST Coercion](https://rust-lang.github.io/rfcs/0982-dst-coercion.html).
 
-use rustc_hir::lang_items::LangItem;
+use rustc_hir::attrs::lang_items::LangItem;
 use rustc_middle::traits::{ImplSource, ImplSourceUserDefinedData};
 use rustc_middle::ty::TraitRef;
 use rustc_middle::ty::adjustment::CustomCoerceUnsized;
 use rustc_middle::ty::{PseudoCanonicalInput, Ty, TyCtxt, TypingEnv};
+use rustc_public::CrateDefType;
 use rustc_public::Symbol;
 use rustc_public::rustc_internal;
 use rustc_public::ty::{RigidTy, Ty as TyStable, TyKind};
@@ -224,6 +225,19 @@ impl Iterator for CoerceUnsizedIterator<'_> {
                 self.src_ty = Some(src_fields[coerce_index].ty_with_args(src_args));
                 self.dst_ty = Some(dst_fields[coerce_index].ty_with_args(dst_args));
                 Some(src_fields[coerce_index].name.clone())
+            }
+            (
+                TyKind::RigidTy(RigidTy::Pat(src_base_ty, _)),
+                TyKind::RigidTy(RigidTy::Pat(dst_base_ty, _)),
+            ) => {
+                // A pattern type has the same layout as the type it constrains, and it is
+                // codegen'd as a struct with a single tuple-like field holding that base type.
+                // `NonNull<T>` wraps a `pattern_type!(*const T is !null)`, so the pointer that
+                // carries the metadata sits one field deeper. Traverse into it so that the base
+                // case below sees the underlying pointer.
+                self.src_ty = Some(src_base_ty);
+                self.dst_ty = Some(dst_base_ty);
+                Some("0".to_string())
             }
             _ => {
                 // Base case is always a pointer (Box, raw_pointer or reference).

@@ -1,7 +1,13 @@
-Kani generated automatic harnesses for 47 function(s):
+Kani generated automatic harnesses for 50 function(s):
 +--------------------------+----------------------------------------------+
 | Crate                    | Selected Function                            |
 +=========================================================================+
+| cargo_autoharness_filter | no_harness::unsupported_no_arg_name          |
+|--------------------------+----------------------------------------------|
+| cargo_autoharness_filter | no_harness::unsupported_slice                |
+|--------------------------+----------------------------------------------|
+| cargo_autoharness_filter | no_harness::unsupported_vec                  |
+|--------------------------+----------------------------------------------|
 | cargo_autoharness_filter | yes_harness::empty_body                      |
 |--------------------------+----------------------------------------------|
 | cargo_autoharness_filter | yes_harness::f_array                         |
@@ -97,22 +103,19 @@ Kani generated automatic harnesses for 47 function(s):
 | cargo_autoharness_filter | yes_harness::f_usize                         |
 +--------------------------+----------------------------------------------+
 
-Kani did not generate automatic harnesses for 4 function(s).
+Kani did not generate automatic harnesses for 1 function(s).
 If you believe that the provided reason is incorrect and Kani should have generated an automatic harness, please comment on this issue: https://github.com/model-checking/kani/issues/3832
 +--------------------------+----------------------------------------+----------------------------------------------------------------------------------+
 | Crate                    | Skipped Function                       | Reason for Skipping                                                              |
 +======================================================================================================================================================+
 | cargo_autoharness_filter | no_harness::doesnt_implement_arbitrary | Missing Arbitrary implementation for argument(s) x: DoesntImplementArbitrary<'_> |
-|--------------------------+----------------------------------------+----------------------------------------------------------------------------------|
-| cargo_autoharness_filter | no_harness::unsupported_no_arg_name    | Requires --bounded-arguments for argument(s) _: std::vec::Vec<u8>                |
-|--------------------------+----------------------------------------+----------------------------------------------------------------------------------|
-| cargo_autoharness_filter | no_harness::unsupported_slice          | Requires --bounded-arguments for argument(s) _y: &[u8]                           |
-|--------------------------+----------------------------------------+----------------------------------------------------------------------------------|
-| cargo_autoharness_filter | no_harness::unsupported_vec            | Requires --bounded-arguments for argument(s) _y: std::vec::Vec<u8>               |
 +--------------------------+----------------------------------------+----------------------------------------------------------------------------------+
+Autoharness: Checking function no_harness::unsupported_no_arg_name against all possible inputs...
+Autoharness: Checking function no_harness::unsupported_slice against all possible inputs...
+Autoharness: Checking function no_harness::unsupported_vec against all possible inputs...
+Autoharness: Checking function yes_harness::f_generic::<i32> against all possible inputs...
 Autoharness: Checking function yes_harness::f_mut_pointer against all possible inputs...
 Autoharness: Checking function yes_harness::f_const_pointer against all possible inputs...
-Autoharness: Checking function yes_harness::f_generic::<i32> against all possible inputs...
 Autoharness: Checking function yes_harness::f_ref against all possible inputs...
 Autoharness: Checking function yes_harness::empty_body against all possible inputs...
 Autoharness: Checking function yes_harness::f_phantom_pinned against all possible inputs...
@@ -165,6 +168,12 @@ Autoharness Summary:
 +--------------------------+----------------------------------------------+---------------------------+---------------------+
 | Crate                    | Selected Function                            | Kind of Automatic Harness | Verification Result |
 +===========================================================================================================================+
+| cargo_autoharness_filter | no_harness::unsupported_no_arg_name          | #[kani::proof]            | Success             |
+|--------------------------+----------------------------------------------+---------------------------+---------------------|
+| cargo_autoharness_filter | no_harness::unsupported_slice                | #[kani::proof]            | Success             |
+|--------------------------+----------------------------------------------+---------------------------+---------------------|
+| cargo_autoharness_filter | no_harness::unsupported_vec                  | #[kani::proof]            | Success             |
+|--------------------------+----------------------------------------------+---------------------------+---------------------|
 | cargo_autoharness_filter | yes_harness::empty_body                      | #[kani::proof]            | Success             |
 |--------------------------+----------------------------------------------+---------------------------+---------------------|
 | cargo_autoharness_filter | yes_harness::f_array                         | #[kani::proof]            | Success             |
@@ -259,4 +268,4 @@ Autoharness Summary:
 |--------------------------+----------------------------------------------+---------------------------+---------------------|
 | cargo_autoharness_filter | yes_harness::f_usize                         | #[kani::proof]            | Success             |
 +--------------------------+----------------------------------------------+---------------------------+---------------------+
-Complete - 47 successfully verified functions, 0 failures, 47 total.
+Complete - 50 successfully verified functions, 0 failures, 50 total.

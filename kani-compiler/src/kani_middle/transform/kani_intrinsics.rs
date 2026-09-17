@@ -12,7 +12,7 @@ use crate::kani_middle::abi::LayoutOf;
 use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::kani_functions::{KaniFunction, KaniIntrinsic, KaniModel};
 use crate::kani_middle::transform::body::{
-    CheckType, InsertPosition, MutableBody, SourceInstruction,
+    CheckType, InsertPosition, MutableBody, SourceInstruction, synthetic_source_info,
 };
 use crate::kani_middle::transform::check_uninit::PointeeInfo;
 use crate::kani_middle::transform::check_uninit::{
@@ -22,10 +22,12 @@ use crate::kani_middle::transform::check_values::{build_limits, ty_validity_per_
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
+use rustc_public::CrateDefType;
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::{
     AggregateKind, BasicBlock, BinOp, Body, ConstOperand, Local, Mutability, Operand, Place,
     RETURN_LOCAL, Rvalue, Statement, StatementKind, Terminator, TerminatorKind, UnOp, UnwindAction,
+    WithRetag,
 };
 use rustc_public::rustc_internal;
 use rustc_public::target::MachineInfo;
@@ -140,13 +142,16 @@ impl IntrinsicGeneratorPass {
         let span = new_body.locals()[ret_var].span;
         let assign = StatementKind::Assign(
             Place::from(ret_var),
-            Rvalue::Use(Operand::Constant(ConstOperand {
-                span,
-                user_ty: None,
-                const_: MirConst::from_bool(true),
-            })),
+            Rvalue::Use(
+                Operand::Constant(ConstOperand {
+                    span,
+                    user_ty: None,
+                    const_: MirConst::from_bool(true),
+                }),
+                WithRetag::No,
+            ),
         );
-        let stmt = Statement { kind: assign, span };
+        let stmt = Statement { kind: assign, source_info: synthetic_source_info(span) };
         new_body.insert_stmt(stmt, &mut terminator, InsertPosition::Before);
         let machine_info = MachineInfo::target();
 
@@ -160,7 +165,7 @@ impl IntrinsicGeneratorPass {
             }
             Ok(ranges) => {
                 // Given the pointer argument, check for possible invalid ranges.
-                let rvalue = Rvalue::Use(Operand::Move(Place::from(1)));
+                let rvalue = Rvalue::Use(Operand::Move(Place::from(1)), WithRetag::No);
                 for range in ranges {
                     let result =
                         build_limits(&mut new_body, &range, rvalue.clone(), &mut terminator);
@@ -170,7 +175,7 @@ impl IntrinsicGeneratorPass {
                         Operand::Move(Place::from(result)),
                     );
                     let assign = StatementKind::Assign(Place::from(ret_var), rvalue);
-                    let stmt = Statement { kind: assign, span };
+                    let stmt = Statement { kind: assign, source_info: synthetic_source_info(span) };
                     new_body.insert_stmt(stmt, &mut terminator, InsertPosition::Before);
                 }
             }
@@ -211,14 +216,17 @@ impl IntrinsicGeneratorPass {
             let span = new_body.locals()[ret_var].span;
             let assign = StatementKind::Assign(
                 Place::from(ret_var),
-                Rvalue::Use(Operand::Constant(ConstOperand {
-                    span,
-                    user_ty: None,
-                    const_: MirConst::from_bool(true),
-                })),
+                Rvalue::Use(
+                    Operand::Constant(ConstOperand {
+                        span,
+                        user_ty: None,
+                        const_: MirConst::from_bool(true),
+                    }),
+                    WithRetag::No,
+                ),
             );
             new_body.insert_stmt(
-                Statement { kind: assign, span },
+                Statement { kind: assign, source_info: synthetic_source_info(span) },
                 &mut source,
                 InsertPosition::Before,
             );
@@ -246,14 +254,20 @@ impl IntrinsicGeneratorPass {
                             let span = new_body.locals()[ret_var].span;
                             let assign = StatementKind::Assign(
                                 Place::from(ret_var),
-                                Rvalue::Use(Operand::Constant(ConstOperand {
-                                    span,
-                                    user_ty: None,
-                                    const_: MirConst::from_bool(true),
-                                })),
+                                Rvalue::Use(
+                                    Operand::Constant(ConstOperand {
+                                        span,
+                                        user_ty: None,
+                                        const_: MirConst::from_bool(true),
+                                    }),
+                                    WithRetag::No,
+                                ),
                             );
                             new_body.insert_stmt(
-                                Statement { kind: assign, span },
+                                Statement {
+                                    kind: assign,
+                                    source_info: synthetic_source_info(span),
+                                },
                                 &mut source,
                                 InsertPosition::Before,
                             );
@@ -279,7 +293,7 @@ impl IntrinsicGeneratorPass {
                                 target: Some(0), // The current value does not matter, since it will be overwritten in add_bb.
                                 unwind: UnwindAction::Terminate,
                             },
-                            span: source.span(new_body.blocks()),
+                            source_info: synthetic_source_info(source.span(new_body.blocks())),
                         };
                         // Construct the basic block and insert it into the body.
                         new_body.insert_bb(
@@ -322,7 +336,7 @@ impl IntrinsicGeneratorPass {
                                 target: Some(0), // The current value does not matter, since it will be overwritten in add_bb.
                                 unwind: UnwindAction::Terminate,
                             },
-                            span: source.span(new_body.blocks()),
+                            source_info: synthetic_source_info(source.span(new_body.blocks())),
                         };
                         // Construct the basic block and insert it into the body.
                         new_body.insert_bb(

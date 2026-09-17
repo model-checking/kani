@@ -18,10 +18,12 @@ fn local_atomic_uninit() {
     unsafe {
         match kani::any() {
             0 => {
-                atomic_store::<_, { AtomicOrdering::Relaxed }>(ptr, 1);
+                atomic_store::<_, { AtomicOrdering::Relaxed }, /* VOLATILE */ false>(ptr, 1);
             }
             1 => {
-                atomic_load::<_, { AtomicOrdering::Relaxed }>(ptr as *const u8);
+                atomic_load::<_, { AtomicOrdering::Relaxed }, /* VOLATILE */ false>(
+                    ptr as *const u8,
+                );
             }
             _ => {
                 atomic_cxchg::<_, { AtomicOrdering::Relaxed }, { AtomicOrdering::Relaxed }>(

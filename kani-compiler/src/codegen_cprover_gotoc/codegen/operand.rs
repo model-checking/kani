@@ -6,6 +6,7 @@ use crate::kani_middle::is_anon_static;
 use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{DatatypeComponent, Expr, ExprValue, Location, Symbol, Type};
 use rustc_middle::ty::Const as ConstInternal;
+use rustc_public::CrateDefType;
 use rustc_public::mir::alloc::{AllocId, GlobalAlloc};
 use rustc_public::mir::mono::{Instance, StaticDef};
 use rustc_public::mir::{Mutability, Operand};

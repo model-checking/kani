@@ -21,13 +21,14 @@ use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::{Const, TyCtxt};
 use rustc_public::CrateDef;
+use rustc_public::CrateDefType;
 use rustc_public::abi::{FieldsShape, Scalar, TagEncoding, ValueAbi, VariantsShape, WrappingRange};
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::visit::{Location, PlaceContext, PlaceRef};
 use rustc_public::mir::{
     AggregateKind, BasicBlockIdx, BinOp, Body, CastKind, FieldIdx, Local, LocalDecl, MirVisitor,
     Mutability, NonDivergingIntrinsic, Operand, Place, ProjectionElem, RawPtrKind, Rvalue,
-    Statement, StatementKind, Terminator, TerminatorKind,
+    Statement, StatementKind, Terminator, TerminatorKind, WithRetag,
 };
 use rustc_public::rustc_internal;
 use rustc_public::target::{MachineInfo, MachineSize};
@@ -207,7 +208,7 @@ impl ValidValueReq {
             let shape = ty.layout().unwrap().shape();
             match shape.abi {
                 ValueAbi::Scalar(Scalar::Initialized { value, valid_range })
-                | ValueAbi::ScalarPair(Scalar::Initialized { value, valid_range }, _) => {
+                | ValueAbi::ScalarPair { a: Scalar::Initialized { value, valid_range }, .. } => {
                     Some(ValidValueReq {
                         offset: 0,
                         size: value.size(machine_info),
@@ -215,7 +216,7 @@ impl ValidValueReq {
                     })
                 }
                 ValueAbi::Scalar(_)
-                | ValueAbi::ScalarPair(_, _)
+                | ValueAbi::ScalarPair { .. }
                 | ValueAbi::Vector { .. }
                 | ValueAbi::ScalableVector { .. }
                 | ValueAbi::Aggregate { .. } => None,
@@ -418,7 +419,6 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                 | StatementKind::SetDiscriminant { .. }
                 | StatementKind::StorageLive(_)
                 | StatementKind::StorageDead(_)
-                | StatementKind::Retag(_, _)
                 | StatementKind::PlaceMention(_)
                 | StatementKind::AscribeUserType { .. }
                 | StatementKind::Coverage(_)
@@ -517,6 +517,7 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                                             projection: place_ref.projection.to_vec(),
                                         })
                                         .clone(),
+                                        WithRetag::No,
                                     ),
                                     ranges,
                                 })
@@ -539,10 +540,13 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                             Ok(ranges) if !ranges.is_empty() => {
                                 self.push_target(SourceOp::BytesValidity {
                                     target_ty: *target_ty,
-                                    rvalue: Rvalue::Use(Operand::Copy(Place {
-                                        local: place_ref.local,
-                                        projection: place_ref.projection.to_vec(),
-                                    })),
+                                    rvalue: Rvalue::Use(
+                                        Operand::Copy(Place {
+                                            local: place_ref.local,
+                                            projection: place_ref.projection.to_vec(),
+                                        }),
+                                        WithRetag::No,
+                                    ),
                                     ranges,
                                 })
                             }
@@ -625,7 +629,7 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                         })
                     }
                 }
-                CastKind::Transmute | CastKind::Subtype => {
+                CastKind::Transmute | CastKind::BoxDerefTransmute | CastKind::Subtype => {
                     debug!(?dest_ty, "transmute");
                     // For transmute, we care about the destination type only.
                     // This could be optimized to only add a check if the requirements of the
@@ -683,7 +687,7 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                             ) {
                                 self.push_target(SourceOp::BytesValidity {
                                     target_ty: dest_ty,
-                                    rvalue: Rvalue::Use(first_op),
+                                    rvalue: Rvalue::Use(first_op, WithRetag::No),
                                     ranges: vec![req],
                                 })
                             }
@@ -704,11 +708,12 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
             | Rvalue::CopyForDeref(_)
             | Rvalue::Discriminant(_)
             | Rvalue::Len(_)
+            | Rvalue::Reborrow(..)
             | Rvalue::Ref(_, _, _)
             | Rvalue::Repeat(_, _)
             | Rvalue::ThreadLocalRef(_)
             | Rvalue::UnaryOp(_, _)
-            | Rvalue::Use(_) => {}
+            | Rvalue::Use(..) => {}
         }
         self.super_rvalue(rvalue, location);
     }
@@ -828,7 +833,7 @@ pub fn build_limits(
         ));
         let offset_const = body.new_uint_operand(req.offset as _, UintTy::Usize, span);
         let offset = move_local(body.insert_assignment(
-            Rvalue::Use(offset_const),
+            Rvalue::Use(offset_const, WithRetag::No),
             source,
             InsertPosition::Before,
         ));

@@ -102,7 +102,7 @@ impl TestCx<'_> {
         command.env(dylib_env_var(), newpath);
 
         let mut child = disable_error_reporting(|| command.spawn())
-            .unwrap_or_else(|_| panic!("failed to exec `{:?}`", &command));
+            .unwrap_or_else(|_| panic!("failed to exec `{:?}`", command));
 
         // Drain stdout and stderr on dedicated threads so the child can never
         // block writing to a full pipe buffer while we wait for it to exit.

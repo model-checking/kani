@@ -1,0 +1,4 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+script: keeps_completed.sh
+expected: keeps_completed.expected

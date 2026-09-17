@@ -5,7 +5,9 @@ use crate::args::ReachabilityType;
 use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::codegen_units::CodegenUnit;
 use crate::kani_middle::kani_functions::{KaniIntrinsic, KaniModel};
-use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
+use crate::kani_middle::transform::body::{
+    InsertPosition, MutableBody, SourceInstruction, synthetic_source_info,
+};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use cbmc::{InternString, InternedString};
@@ -14,11 +16,12 @@ use rustc_public::CrateDef;
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::{
     BinOp, Body, CastKind, ConstOperand, Mutability, Operand, Place, Rvalue, Terminator,
-    TerminatorKind, VarDebugInfoContents,
+    TerminatorKind, VarDebugInfoContents, WithRetag,
 };
 use rustc_public::rustc_internal;
 use rustc_public::ty::{
-    ClosureDef, FnDef, GenericArgs, MirConst, RigidTy, Ty, TyKind, TypeAndMut, UintTy,
+    ClosureDef, FnDef, GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyKind, TypeAndMut,
+    UintTy,
 };
 use rustc_span::Symbol;
 use std::collections::HashSet;
@@ -119,7 +122,7 @@ impl AnyModifiesPass {
             {
                 let instance = Instance::resolve(self.kani_any.unwrap(), &instance_args).unwrap();
                 let literal = MirConst::try_new_zero_sized(instance.ty()).unwrap();
-                let span = bb.terminator.span;
+                let span = bb.terminator.source_info.span;
                 let new_func = ConstOperand { span, user_ty: None, const_: literal };
                 *func = Operand::Constant(new_func);
                 changed = true;
@@ -135,13 +138,17 @@ impl AnyModifiesPass {
                     fn_sig.skip_binder().inputs()[0].kind().builtin_deref(true)
             {
                 // case on the type of the input
-                if let TyKind::RigidTy(RigidTy::Slice(_)) = internal_type.kind() {
-                    //if the input is a slice, use write_any_slice
+                if let TyKind::RigidTy(RigidTy::Slice(elem_ty)) = internal_type.kind() {
+                    //if the input is a slice `[T]`, use write_any_slice. Note that
+                    //`write_any_slice<T>(slice: *mut [T])` is generic over the *element* type
+                    //`T`, whereas `instance_args` holds the pointee type `[T]`. Resolving with
+                    //`instance_args` here would incorrectly produce `write_any_slice<[T]>`
+                    //(i.e. a `*mut [[T]]`), so we resolve with the element type instead.
+                    let elem_args = GenericArgs(vec![GenericArgKind::Type(elem_ty)]);
                     let instance =
-                        Instance::resolve(self.kani_write_any_slice.unwrap(), &instance_args)
-                            .unwrap();
+                        Instance::resolve(self.kani_write_any_slice.unwrap(), &elem_args).unwrap();
                     let literal = MirConst::try_new_zero_sized(instance.ty()).unwrap();
-                    let span = bb.terminator.span;
+                    let span = bb.terminator.source_info.span;
                     let new_func = ConstOperand { span, user_ty: None, const_: literal };
                     *func = Operand::Constant(new_func);
                 } else if let TyKind::RigidTy(RigidTy::Str) = internal_type.kind() {
@@ -150,7 +157,7 @@ impl AnyModifiesPass {
                         Instance::resolve(self.kani_write_any_str.unwrap(), &instance_args)
                             .unwrap();
                     let literal = MirConst::try_new_zero_sized(instance.ty()).unwrap();
-                    let span = bb.terminator.span;
+                    let span = bb.terminator.source_info.span;
                     let new_func = ConstOperand { span, user_ty: None, const_: literal };
                     *func = Operand::Constant(new_func);
                 } else {
@@ -159,7 +166,7 @@ impl AnyModifiesPass {
                         Instance::resolve(self.kani_write_any_slim.unwrap(), &instance_args)
                             .unwrap();
                     let literal = MirConst::try_new_zero_sized(instance.ty()).unwrap();
-                    let span = bb.terminator.span;
+                    let span = bb.terminator.source_info.span;
                     let new_func = ConstOperand { span, user_ty: None, const_: literal };
                     *func = Operand::Constant(new_func);
                 }
@@ -196,7 +203,10 @@ impl AnyModifiesPass {
                             format!("`{receiver_ty}` doesn't implement `kani::Arbitrary`.")
                         };
                         tcx.dcx()
-                            .struct_span_err(rustc_internal::internal(tcx, bb.terminator.span), msg)
+                            .struct_span_err(
+                                rustc_internal::internal(tcx, bb.terminator.source_info.span),
+                                msg,
+                            )
                             .with_help(
                                 "All objects in the modifies clause must implement the Arbitrary. \
                                  The return type must also implement the Arbitrary trait if you \
@@ -286,6 +296,12 @@ pub struct FunctionWithContractPass {
     /// the function under contract verification to its contract replacement
     /// when they occur during evaluation of another contract's clauses.
     in_clause_fn: Option<FnDef>,
+    /// Cache `kani::any` used to detect `Arbitrary` cycles in verified stubs.
+    kani_any: Option<FnDef>,
+    /// Instances we already ran the `Arbitrary` cycle check on, so we only report
+    /// once each. Keyed by monomorphized instance so that distinct
+    /// instantiations of a generic target are each checked.
+    arbitrary_cycle_checked: HashSet<Instance>,
 }
 
 impl TransformPass for FunctionWithContractPass {
@@ -311,6 +327,15 @@ impl TransformPass for FunctionWithContractPass {
                 if let Some(mode) = self.contract_mode(tcx, *def) {
                     if mode == ContractMode::RecursiveCheck {
                         check_mutual_recursion(tcx, *def, &body);
+                    }
+                    // Key the dedup on the monomorphized instance, not the
+                    // `FnDef`: a generic `stub_verified` target can be
+                    // instantiated at several types, and each instantiation has
+                    // its own return type and so its own potential cycle.
+                    if mode == ContractMode::Replace
+                        && self.arbitrary_cycle_checked.insert(instance)
+                    {
+                        self.check_arbitrary_cycle(tcx, *def, args);
                     }
                     self.mark_unused(tcx, *def, &body, mode);
                     let new_body = self.set_mode(tcx, body, mode);
@@ -382,6 +407,8 @@ impl FunctionWithContractPass {
                 unused_closures: Default::default(),
                 run_contract_fn,
                 in_clause_fn,
+                kani_any: queries.kani_functions().get(&KaniModel::Any.into()).copied(),
+                arbitrary_cycle_checked: Default::default(),
             }
         } else {
             // If reachability mode is PubFns or Tests, we just remove any contract logic.
@@ -519,14 +546,17 @@ impl FunctionWithContractPass {
         } else {
             new_body.assign_to(
                 ret.clone(),
-                Rvalue::Use(mode_const),
+                Rvalue::Use(mode_const, WithRetag::No),
                 &mut mode_call,
                 InsertPosition::Before,
             );
         }
         new_body.replace_terminator(
             &mode_call,
-            Terminator { kind: TerminatorKind::Goto { target }, span },
+            Terminator {
+                kind: TerminatorKind::Goto { target },
+                source_info: synthetic_source_info(span),
+            },
         );
 
         new_body.into()
@@ -553,6 +583,77 @@ impl FunctionWithContractPass {
                 ContractMode::Original
             }
         })
+    }
+
+    /// Detect the `stub_verified` / `Arbitrary` cycle described in
+    /// <https://github.com/model-checking/kani/pull/4571>.
+    ///
+    /// A contract replacement havocs its own return value with
+    /// `kani::any::<Ret>()` (see `initial_replace_stmts` in `kani_macros`, where
+    /// `any_modifies` is emitted and later rewritten to `kani::any` by
+    /// [`AnyModifiesPass`]). So if `Ret`'s `Arbitrary` implementation reaches the
+    /// stubbed function again, the replacement calls itself through
+    /// `Arbitrary::any`:
+    ///
+    /// ```text
+    /// normalize -> replace closure -> kani::any::<Wrapper> ->
+    ///     <Wrapper as Arbitrary>::any -> Wrapper::new -> normalize -> ...
+    /// ```
+    ///
+    /// This recursion is unbounded and has no fixpoint, so CBMC unwinds until it
+    /// exhausts memory. Report it at compile time instead, since the alternative
+    /// is a silent multi-minute hang followed by an out-of-memory message that
+    /// does not name the cause.
+    fn check_arbitrary_cycle(&self, tcx: TyCtxt, fn_def: FnDef, args: &GenericArgs) {
+        let Some(kani_any) = self.kani_any else { return };
+        let Ok(instance) = Instance::resolve(fn_def, args) else { return };
+        // Bail rather than ICE if the ABI is not computable; this check is
+        // diagnostic-only, so failing to run it just leaves prior behavior.
+        let Ok(fn_abi) = instance.fn_abi() else { return };
+        let ret_ty = fn_abi.ret.ty;
+
+        // Resolve `kani::any::<Ret>`. This fails when `Ret` does not implement
+        // `Arbitrary`, which `AnyModifiesPass::any_body` already diagnoses.
+        let any_args = GenericArgs(vec![GenericArgKind::Type(ret_ty)]);
+        let Ok(any_instance) = Instance::resolve(kani_any, &any_args) else { return };
+
+        let Some(path) = find_call_path(&any_instance, &instance, &mut HashSet::new()) else {
+            return;
+        };
+
+        let fn_name = tcx.def_path_str(rustc_internal::internal(tcx, fn_def.def_id()));
+        let span = rustc_internal::internal(tcx, fn_def.span());
+        // Render one uniform `-> callee` entry per line, ending at the stubbed
+        // function itself. The leading `kani::any::<Ret>` frame is dropped: the
+        // note above already names it, and starting at the `Arbitrary::any` call
+        // is where the recursion actually begins. Instance names are used
+        // throughout so the trace is consistently crate-qualified.
+        let trace = path
+            .iter()
+            .skip(1)
+            .chain(std::iter::once(&instance.name()))
+            .map(|frame| format!("    -> {frame}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        tcx.dcx()
+            .struct_span_err(
+                span,
+                format!(
+                    "`{fn_name}` is used as a verified stub, but generating an \
+                     arbitrary value of its return type `{ret_ty}` calls \
+                     `{fn_name}` again"
+                ),
+            )
+            .with_note(format!(
+                "the contract replacement havocs its return value with \
+                 `kani::any::<{ret_ty}>()`, so this forms an unbounded recursion:\n\
+                 {trace}"
+            ))
+            .with_help(format!(
+                "derive `Arbitrary` for `{ret_ty}` instead of implementing it manually, \
+                 or avoid calling `{fn_name}` from the `Arbitrary` implementation"
+            ))
+            .emit();
     }
 
     /// Select any unused closure for body deletion.
@@ -632,6 +733,54 @@ fn find_closure(tcx: TyCtxt, fn_def: FnDef, body: &Body, name: &str) -> ClosureD
         })
 }
 
+/// Search the call graph rooted at `from` for a path reaching `target`.
+///
+/// Returns the chain of function names leading to `target` (excluding `target`
+/// itself) so the diagnostic can show the user the cycle. `visited` guards
+/// against non-terminating traversal of recursive call graphs.
+///
+/// `target` is a monomorphized instance, and callees are compared against it
+/// instance-precisely rather than by `DefId`. A generic function's `Arbitrary`
+/// implementation may call a *different* monomorphization of that same generic
+/// function; that does not re-enter the replacement instance under check, and
+/// the chain may well terminate. Comparing by `DefId` alone would reject such
+/// working proofs.
+///
+/// This is a syntactic walk over monomorphized MIR, so it only follows statically
+/// resolvable calls. Calls through function pointers or trait objects are not
+/// followed, meaning a cycle routed through them is not detected. That is
+/// acceptable here: missing a detection reproduces today's behavior (the hang),
+/// while a false positive would reject a working proof.
+fn find_call_path(
+    from: &Instance,
+    target: &Instance,
+    visited: &mut HashSet<Instance>,
+) -> Option<Vec<String>> {
+    if !visited.insert(*from) {
+        return None;
+    }
+    let body = from.body()?;
+
+    for bb in body.blocks.iter() {
+        let TerminatorKind::Call { func, .. } = &bb.terminator.kind else { continue };
+        let Ok(func_ty) = func.ty(body.locals()) else { continue };
+        let TyKind::RigidTy(RigidTy::FnDef(callee_def, callee_args)) = func_ty.kind() else {
+            continue;
+        };
+        let Ok(callee) = Instance::resolve(callee_def, &callee_args) else { continue };
+
+        if callee == *target {
+            return Some(vec![from.name()]);
+        }
+
+        if let Some(mut path) = find_call_path(&callee, target, visited) {
+            path.insert(0, from.name());
+            return Some(path);
+        }
+    }
+    None
+}
+
 /// Check if a function with `#[kani::recursion]` is involved in mutual recursion.
 ///
 /// Scans the function's MIR body for calls to other functions that also have
@@ -686,7 +835,7 @@ fn check_mutual_recursion(tcx: TyCtxt, fn_def: FnDef, body: &Body) {
             if transitive_def.def_id() == fn_def.def_id() {
                 let callee_name =
                     tcx.def_path_str(rustc_internal::internal(tcx, callee_def.def_id()));
-                let span = rustc_internal::internal(tcx, bb.terminator.span);
+                let span = rustc_internal::internal(tcx, bb.terminator.source_info.span);
                 tcx.dcx().span_err(
                     span,
                     format!(

@@ -99,10 +99,10 @@ fn analyze_crate(tcx: TyCtxt, analyses: &[Analysis]) -> ControlFlow<()> {
                 crate_stats.safe_fns(out_path);
             }
             Analysis::InputTys => crate_stats.supported_inputs(out_path),
-            Analysis::UnsafeOps => crate_stats.unsafe_operations(out_path),
+            Analysis::UnsafeOps => crate_stats.unsafe_operations(out_path, &tcx),
             Analysis::FnLoops => crate_stats.loops(out_path),
             Analysis::Recursion => crate_stats.recursion(out_path),
-            Analysis::UnsafeDistance => crate_stats.unsafe_distance(out_path),
+            Analysis::UnsafeDistance => crate_stats.unsafe_distance(out_path, &tcx),
             Analysis::PublicFns => crate_stats.public_fns(&tcx),
         }
     }

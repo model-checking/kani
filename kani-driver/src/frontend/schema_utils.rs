@@ -203,8 +203,9 @@ pub fn create_project_metadata_json(project: &Project) -> Value {
     .map(|m| m.crate_name.clone())
     .collect::<Vec<String>>(),
     // The real workspace root, which only exists for Cargo projects; null for a standalone run.
-    // `Project::outdir` is the compiler output directory -- for Cargo it sits under
-    // `target/<triple>/debug/deps` -- so reporting it as the workspace root was simply wrong.
+    // `Project::outdir` is the compiler output directory -- for Cargo it sits somewhere under
+    // `target/`, at a path of cargo's choosing -- so reporting it as the workspace root was
+    // simply wrong.
     "workspace_root": project.cargo_metadata.as_ref()
     .map(|metadata| metadata.workspace_root.clone()),
     "output_dir": project.outdir.clone(),
@@ -236,6 +237,7 @@ pub fn create_harness_metadata_json(h: &HarnessMetadata) -> Value {
         "has_loop_contracts": h.has_loop_contracts,
         "is_automatically_generated": h.is_automatically_generated,
         "is_bounded": h.is_bounded,
+        "is_ctor_based": h.is_ctor_based,
     })
 }
 
@@ -361,8 +363,8 @@ pub fn process_harness_results(
 
             // Add property details for this harness. `harness_id` is what makes an entry
             // attributable: this array is built in harness-metadata order while
-            // `verification_results.results` is in completion order, so the two cannot be
-            // correlated by position.
+            // `verification_results.results` is sorted into `sort_harnesses_by_loc` order, so the
+            // two need not agree and cannot be correlated by position.
             handler.add_harness_detail(
                 "property_details",
                 json!({

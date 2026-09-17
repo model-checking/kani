@@ -63,8 +63,30 @@ pub enum KaniIntrinsic {
 pub enum KaniModel {
     #[strum(serialize = "AlignOfDynObjectModel")]
     AlignOfDynObject,
+    #[strum(serialize = "NondetFn0Model")]
+    NondetFn0,
+    #[strum(serialize = "NondetFn1Model")]
+    NondetFn1,
+    #[strum(serialize = "NondetFn1RefModel")]
+    NondetFn1Ref,
+    #[strum(serialize = "NondetFn2Model")]
+    NondetFn2,
+    #[strum(serialize = "NondetFn2RefRefModel")]
+    NondetFn2RefRef,
+    #[strum(serialize = "NondetFn2RefValModel")]
+    NondetFn2RefVal,
+    #[strum(serialize = "NondetFn2ValRefModel")]
+    NondetFn2ValRef,
+    #[strum(serialize = "NondetFn3Model")]
+    NondetFn3,
     #[strum(serialize = "AlignOfValRawModel")]
     AlignOfVal,
+    #[strum(serialize = "AnySliceMutUnboundedModel")]
+    AnySliceMutUnbounded,
+    #[strum(serialize = "AnySliceRefUnboundedModel")]
+    AnySliceRefUnbounded,
+    #[strum(serialize = "AnyVecUnboundedModel")]
+    AnyVecUnbounded,
     #[strum(serialize = "AnyModel")]
     Any,
     #[strum(serialize = "AnyArcModel")]
@@ -83,6 +105,10 @@ pub enum KaniModel {
     AssumeSafe,
     #[strum(serialize = "BoundedAnyModel")]
     BoundedAny,
+    #[strum(serialize = "CheckDebugFmtModel")]
+    CheckDebugFmt,
+    #[strum(serialize = "CheckDisplayFmtModel")]
+    CheckDisplayFmt,
     #[strum(serialize = "CopyInitStateModel")]
     CopyInitState,
     #[strum(serialize = "CopyInitStateSingleModel")]
@@ -153,6 +179,8 @@ pub enum KaniHook {
     AnyRaw,
     #[strum(serialize = "AssertHook")]
     Assert,
+    #[strum(serialize = "SliceValidityAssumeHook")]
+    SliceValidityAssume,
     #[strum(serialize = "AssumeHook")]
     Assume,
     #[strum(serialize = "CheckHook")]
@@ -187,11 +215,27 @@ pub enum KaniHook {
 }
 
 impl KaniModel {
-    /// Whether this model may legitimately be absent. The smart-pointer models require `alloc`
-    /// and are only defined in the `kani` library, not in `core::kani` (the `no_core` flow used
-    /// by `kani verify-std`). Code retrieving optional models must handle their absence.
+    /// Whether this model may legitimately be absent. These models require `alloc` and are
+    /// only defined in the `kani` library, not in `core::kani` (the `no_core` flow used by
+    /// `kani verify-std`). Code retrieving optional models must handle their absence.
     pub fn is_optional(&self) -> bool {
-        matches!(self, KaniModel::AnyArc | KaniModel::AnyBox | KaniModel::AnyRc)
+        matches!(
+            self,
+            KaniModel::AnyArc
+                | KaniModel::AnyBox
+                | KaniModel::AnyRc
+                | KaniModel::AnySliceMutUnbounded
+                | KaniModel::AnySliceRefUnbounded
+                | KaniModel::AnyVecUnbounded
+                | KaniModel::NondetFn0
+                | KaniModel::NondetFn1
+                | KaniModel::NondetFn1Ref
+                | KaniModel::NondetFn2
+                | KaniModel::NondetFn2RefRef
+                | KaniModel::NondetFn2RefVal
+                | KaniModel::NondetFn2ValRef
+                | KaniModel::NondetFn3
+        )
     }
 }
 
