@@ -1,0 +1,16 @@
+[without --bounded-arguments]
+| cargo_autoharness_c_str | c_str_cover      | Requires --bounded-arguments for argument(s) s: &std::ffi::CStr      |
+[with --bounded-arguments]
+| cargo_autoharness_c_str | nested           | Missing Arbitrary implementation for argument(s) s: &&std::ffi::CStr |
+Failed Checks: index out of bounds: the length is less than or equal to the given index
+Status: SATISFIED\
+Description: "empty C string"
+Status: SATISFIED\
+Description: "maximum-length C string"
+Status: SATISFIED\
+Description: "C string "ab""
+| cargo_autoharness_c_str | c_str_cover       | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_c_str | len               | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_c_str | no_interior_nul   | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_c_str | first             | #[kani::proof] (bounded)  | Failure             |
+Complete - 3 successfully verified functions, 1 failures, 4 total.
