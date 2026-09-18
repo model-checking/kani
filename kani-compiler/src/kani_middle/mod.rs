@@ -1030,30 +1030,30 @@ fn implements_bounded_arbitrary(tcx: TyCtxt, ty: Ty, kani_bounded_any_def: FnDef
 /// models, one per trait (c.f. `KaniModel::CheckDebugFmt` and [`FmtTrait::model`]).
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, EnumIter)]
 pub enum FmtTrait {
+    Binary,
     Debug,
     Display,
-    Binary,
-    Octal,
-    LowerHex,
-    UpperHex,
     LowerExp,
-    UpperExp,
+    LowerHex,
+    Octal,
     Pointer,
+    UpperExp,
+    UpperHex,
 }
 
 impl FmtTrait {
     /// The model that formats a nondeterministic value through this trait.
     pub fn model(self) -> KaniModel {
         match self {
+            FmtTrait::Binary => KaniModel::CheckBinaryFmt,
             FmtTrait::Debug => KaniModel::CheckDebugFmt,
             FmtTrait::Display => KaniModel::CheckDisplayFmt,
-            FmtTrait::Binary => KaniModel::CheckBinaryFmt,
-            FmtTrait::Octal => KaniModel::CheckOctalFmt,
-            FmtTrait::LowerHex => KaniModel::CheckLowerHexFmt,
-            FmtTrait::UpperHex => KaniModel::CheckUpperHexFmt,
             FmtTrait::LowerExp => KaniModel::CheckLowerExpFmt,
-            FmtTrait::UpperExp => KaniModel::CheckUpperExpFmt,
+            FmtTrait::LowerHex => KaniModel::CheckLowerHexFmt,
+            FmtTrait::Octal => KaniModel::CheckOctalFmt,
             FmtTrait::Pointer => KaniModel::CheckPointerFmt,
+            FmtTrait::UpperExp => KaniModel::CheckUpperExpFmt,
+            FmtTrait::UpperHex => KaniModel::CheckUpperHexFmt,
         }
     }
 

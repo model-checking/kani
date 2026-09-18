@@ -105,57 +105,68 @@ impl fmt::Debug for Contracted {
     }
 }
 
-// TEST NOTE: each remaining formatting trait on `Radix` should FAIL on its own assert. The
-// asserts are distinct so that a model dispatched to the wrong trait shows up as the wrong
-// failure message rather than as a pass: `Radix` implements all of them, so formatting it
-// through any one trait would otherwise succeed.
-pub struct Radix(u8);
+// TEST NOTE: each of the remaining formatting traits should FAIL on its type's own assert. Each
+// type implements exactly one formatting trait, so a model dispatched to the wrong trait cannot
+// resolve for that type; the harness would fail to generate rather than pass.
+pub struct Bin(u8);
 
-impl fmt::Binary for Radix {
+impl fmt::Binary for Bin {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         assert!(self.0 != 2, "binary");
         write!(f, "{:b}", self.0)
     }
 }
 
-impl fmt::Octal for Radix {
+pub struct Oct(u8);
+
+impl fmt::Octal for Oct {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         assert!(self.0 != 8, "octal");
         write!(f, "{:o}", self.0)
     }
 }
 
-impl fmt::LowerHex for Radix {
+pub struct LowHex(u8);
+
+impl fmt::LowerHex for LowHex {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         assert!(self.0 != 0xa, "lower hex");
         write!(f, "{:x}", self.0)
     }
 }
 
-impl fmt::UpperHex for Radix {
+pub struct UpHex(u8);
+
+impl fmt::UpperHex for UpHex {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         assert!(self.0 != 0xB, "upper hex");
         write!(f, "{:X}", self.0)
     }
 }
 
-impl fmt::LowerExp for Radix {
+pub struct LowExp(u8);
+
+impl fmt::LowerExp for LowExp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         assert!(self.0 != 1, "lower exp");
         write!(f, "{:e}", self.0)
     }
 }
 
-impl fmt::UpperExp for Radix {
+pub struct UpExp(u8);
+
+impl fmt::UpperExp for UpExp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         assert!(self.0 != 3, "upper exp");
         write!(f, "{:E}", self.0)
     }
 }
 
-impl fmt::Pointer for Radix {
+pub struct Ptr(u8);
+
+impl fmt::Pointer for Ptr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         assert!(self.0 != 7, "pointer");
-        fmt::Pointer::fmt(&(self as *const Radix), f)
+        fmt::Pointer::fmt(&(self as *const Ptr), f)
     }
 }

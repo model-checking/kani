@@ -293,7 +293,7 @@ Current limitations:
 - The `Formatter` carries the default formatting parameters, i.e. it is the one that `format!`
   with the trait's bare specifier (`{:?}`, `{}`, `{:x}`, ...) would produce. Code paths that a `fmt`
   implementation takes only for a non-default width, precision, fill, alignment, sign, or the
-  alternate (`{:#?}`) flag are therefore not covered.
+  alternate flag (`{:#?}`, `{:#x}`, and so on) are therefore not covered.
 - The sink never fails, so `fmt` implementations that propagate write errors with `?` are not
   verified against the error path.
 - Because the harness goes through `core::fmt`, the core formatting machinery is verified along
