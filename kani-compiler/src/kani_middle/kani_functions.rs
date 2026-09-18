@@ -105,6 +105,8 @@ pub enum KaniModel {
     AnySliceRef,
     #[strum(serialize = "AnyStrRefModel")]
     AnyStrRef,
+    #[strum(serialize = "AnyWtf8RefModel")]
+    AnyWtf8Ref,
     #[strum(serialize = "AssumeSafeModel")]
     AssumeSafe,
     #[strum(serialize = "BoundedAnyModel")]

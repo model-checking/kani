@@ -275,6 +275,22 @@ macro_rules! generate_arbitrary {
             core_path::bstr::ByteStr::new(any_slice_ref(storage))
         }
 
+        /// Generate a WTF-8 string referring to a prefix of `storage` of nondeterministic length
+        /// (at most `N`), through `any_str_ref`: WTF-8 is a superset of UTF-8, so every `&str`
+        /// converts with `Wtf8::from_str`. Strings holding surrogate code points, which only
+        /// WTF-8 admits, are not generated.
+        ///
+        /// This model is used by the compiler to generate nondeterministic `&Wtf8` arguments for
+        /// automatic harnesses (`kani autoharness`). Note that any verification result obtained
+        /// with a bounded value like this one is valid only up to the bound.
+        #[kanitool::fn_marker = "AnyWtf8RefModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        // `std` does not re-export `core::wtf8`, so the type is named through `core` in both arms.
+        pub fn any_wtf8_ref<const N: usize>(storage: &mut [u8; N]) -> &core::wtf8::Wtf8 {
+            core::wtf8::Wtf8::from_str(any_str_ref(storage))
+        }
+
         arbitrary_tuple!(A);
         arbitrary_tuple!(A, B);
         arbitrary_tuple!(A, B, C);
