@@ -250,11 +250,11 @@ that use bounded values are marked **"(bounded)"** in the summary table, and a n
 table repeats this limitation.
 
 With `--bounded-arguments`, for a function with `&[T]`/`&mut [T]` arguments (where `T`
-implements or can derive `Arbitrary`), `&str`, `&CStr` or `&ByteStr` arguments, the generated
-harness produces a slice of nondeterministic length, backed by nondeterministic storage that
-lives for the entire harness: by default **up to 16 elements** for slices and byte strings,
-**up to 4 bytes** for strings, and **up to 15 bytes** plus the terminating NUL for C strings
-(which follow the slice bound, less one for the NUL). Strings cover all
+implements or can derive `Arbitrary`), `&str`, `&CStr`, `&ByteStr` or `&Wtf8` arguments, the
+generated harness produces a slice of nondeterministic length, backed by nondeterministic storage
+that lives for the entire harness: by default **up to 16 elements** for slices and byte strings,
+**up to 4 bytes** for strings and WTF-8 strings, and **up to 15 bytes** plus the terminating NUL
+for C strings (which follow the slice bound, less one for the NUL). Strings cover all
 valid UTF-8 contents up to the bound (the generated string is the longest valid-UTF-8 prefix of
 nondeterministic bytes, the same approach as `String`'s `BoundedArbitrary` implementation); the
 smaller bound reflects the cost of reasoning about UTF-8 for symbolic execution. The bounds are
