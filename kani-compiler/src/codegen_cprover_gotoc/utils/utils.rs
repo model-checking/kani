@@ -149,7 +149,8 @@ impl GotocCtx<'_, '_> {
     /// `NonNull` and the pattern type as single-field structs, so the raw pointer sits two levels
     /// deep. Recursing keeps this independent of how many wrappers the standard library uses.
     pub fn codegen_ptr_in_wrappers(&self, typ: Type, ptr_expr: Expr) -> Expr {
-        if !typ.is_struct_like() {
+        // A fat pointer is itself a two-field struct; it is the pointer, not a wrapper around one.
+        if !typ.is_struct_like() || typ.is_rust_fat_ptr(&self.symbol_table) {
             return ptr_expr.cast_to(typ);
         }
         let components = typ.lookup_components(&self.symbol_table).unwrap();
@@ -178,7 +179,7 @@ impl GotocCtx<'_, '_> {
     /// Returns `expr` unchanged when it is already a pointer, so this is a no-op for layouts
     /// that do not wrap.
     pub fn peel_ptr_wrappers(&self, mut expr: Expr) -> Expr {
-        while expr.typ().is_struct_like() {
+        while expr.typ().is_struct_like() && !expr.typ().is_rust_fat_ptr(&self.symbol_table) {
             let components = expr.typ().lookup_components(&self.symbol_table).unwrap();
             let fields: Vec<_> = components.iter().filter(|c| !c.is_padding()).collect();
             assert_eq!(
