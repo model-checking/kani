@@ -259,6 +259,22 @@ macro_rules! generate_arbitrary {
             core_path::ffi::CStr::from_bytes_until_nul(storage).unwrap()
         }
 
+        /// Generate a byte string referring to a prefix of `storage` of nondeterministic length
+        /// (at most `N`), as `any_slice_ref` does for `&[u8]`: a `ByteStr` is a `[u8]` with no
+        /// further invariant.
+        ///
+        /// This model is used by the compiler to generate nondeterministic `&ByteStr` arguments
+        /// for automatic harnesses (`kani autoharness`). Note that any verification result
+        /// obtained with a bounded value like this one is valid only up to the bound.
+        #[kanitool::fn_marker = "AnyByteStrRefModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_byte_str_ref<const N: usize>(
+            storage: &mut [u8; N],
+        ) -> &core_path::bstr::ByteStr {
+            core_path::bstr::ByteStr::new(any_slice_ref(storage))
+        }
+
         arbitrary_tuple!(A);
         arbitrary_tuple!(A, B);
         arbitrary_tuple!(A, B, C);

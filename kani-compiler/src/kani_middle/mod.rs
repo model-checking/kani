@@ -1033,6 +1033,19 @@ pub fn is_c_str(tcx: TyCtxt, def: AdtDef) -> bool {
         == tcx.get_diagnostic_item(rustc_span::sym::cstr_type)
 }
 
+/// Whether `def` is `core::bstr::ByteStr`, which has no diagnostic item.
+///
+/// Shared by the eligibility check and the harness generation, as `is_c_str` is.
+pub fn is_byte_str(tcx: TyCtxt, def: AdtDef) -> bool {
+    let def_id = rustc_internal::internal(tcx, def.def_id());
+    tcx.crate_name(def_id.krate) == rustc_span::sym::core
+        && tcx
+            .opt_parent(def_id)
+            .and_then(|module| tcx.opt_item_name(module))
+            .is_some_and(|name| name.as_str() == "bstr")
+        && tcx.item_name(def_id).as_str() == "ByteStr"
+}
+
 /// The formatting traits whose implementations automatic harnesses can verify via dedicated
 /// models (c.f. `KaniModel::CheckDebugFmt`/`CheckDisplayFmt`).
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -1231,9 +1244,12 @@ fn autoharness_supported_arg_ty(
                     ArgSupport::Unsupported
                 }
             }
-            // A `&CStr` is the bytes of nondeterministic storage up to its first NUL, c.f.
-            // `any_c_str_ref`. Immutable only, as for `&str`.
-            TyKind::RigidTy(RigidTy::Adt(def, _)) if is_c_str(tcx, def) => {
+            // A `&CStr` is the bytes of nondeterministic storage up to its first NUL and a
+            // `&ByteStr` a prefix of it, c.f. `any_c_str_ref` and `any_byte_str_ref`. Immutable
+            // only, as for `&str`.
+            TyKind::RigidTy(RigidTy::Adt(def, _))
+                if is_c_str(tcx, def) || is_byte_str(tcx, def) =>
+            {
                 if inner_mutability == Mutability::Not {
                     ArgSupport::Bounded
                 } else {
