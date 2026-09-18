@@ -10,16 +10,16 @@ Failed Checks: "octal"
 Failed Checks: "pointer"
 Failed Checks: "upper exp"
 Failed Checks: "upper hex"
-| cargo_autoharness_fmt_impls | <Derived as std::fmt::Debug>::fmt  | #[kani::proof]            | Success             |
-| cargo_autoharness_fmt_impls | <Even as std::fmt::Display>::fmt   | #[kani::proof]            | Success             |
-| cargo_autoharness_fmt_impls | <Safe as std::fmt::Display>::fmt   | #[kani::proof]            | Success             |
-| cargo_autoharness_fmt_impls | <Level as std::fmt::Display>::fmt  | #[kani::proof]            | Failure             |
-| cargo_autoharness_fmt_impls | <Percent as std::fmt::Debug>::fmt  | #[kani::proof]            | Failure             |
-| cargo_autoharness_fmt_impls | <Radix as std::fmt::Binary>::fmt   | #[kani::proof]            | Failure             |
-| cargo_autoharness_fmt_impls | <Radix as std::fmt::LowerExp>::fmt | #[kani::proof]            | Failure             |
-| cargo_autoharness_fmt_impls | <Radix as std::fmt::LowerHex>::fmt | #[kani::proof]            | Failure             |
-| cargo_autoharness_fmt_impls | <Radix as std::fmt::Octal>::fmt    | #[kani::proof]            | Failure             |
-| cargo_autoharness_fmt_impls | <Radix as std::fmt::Pointer>::fmt  | #[kani::proof]            | Failure             |
-| cargo_autoharness_fmt_impls | <Radix as std::fmt::UpperExp>::fmt | #[kani::proof]            | Failure             |
-| cargo_autoharness_fmt_impls | <Radix as std::fmt::UpperHex>::fmt | #[kani::proof]            | Failure             |
+| cargo_autoharness_fmt_impls | <Derived as std::fmt::Debug>::fmt   | #[kani::proof]            | Success             |
+| cargo_autoharness_fmt_impls | <Even as std::fmt::Display>::fmt    | #[kani::proof]            | Success             |
+| cargo_autoharness_fmt_impls | <Safe as std::fmt::Display>::fmt    | #[kani::proof]            | Success             |
+| cargo_autoharness_fmt_impls | <Bin as std::fmt::Binary>::fmt      | #[kani::proof]            | Failure             |
+| cargo_autoharness_fmt_impls | <Level as std::fmt::Display>::fmt   | #[kani::proof]            | Failure             |
+| cargo_autoharness_fmt_impls | <LowExp as std::fmt::LowerExp>::fmt | #[kani::proof]            | Failure             |
+| cargo_autoharness_fmt_impls | <LowHex as std::fmt::LowerHex>::fmt | #[kani::proof]            | Failure             |
+| cargo_autoharness_fmt_impls | <Oct as std::fmt::Octal>::fmt       | #[kani::proof]            | Failure             |
+| cargo_autoharness_fmt_impls | <Percent as std::fmt::Debug>::fmt   | #[kani::proof]            | Failure             |
+| cargo_autoharness_fmt_impls | <Ptr as std::fmt::Pointer>::fmt     | #[kani::proof]            | Failure             |
+| cargo_autoharness_fmt_impls | <UpExp as std::fmt::UpperExp>::fmt  | #[kani::proof]            | Failure             |
+| cargo_autoharness_fmt_impls | <UpHex as std::fmt::UpperHex>::fmt  | #[kani::proof]            | Failure             |
 Complete - 3 successfully verified functions, 9 failures, 12 total.
