@@ -1379,9 +1379,11 @@ fn call_kani_any_for_ty(
             ptr_lcl
         }
     } else if let TyKind::RigidTy(RigidTy::Pat(base_ty, _)) = ty.kind() {
-        // A pattern type (e.g. `pattern_type!(*const T is !null)`) is layout-compatible with its
-        // base type. Generate an arbitrary value of the base type, transmute it to the pattern
-        // type, then constrain it to the pattern's validity range via `assume_scalar_niche`.
+        // A pattern type (e.g. `pattern_type!(u8 is 1..=12)`) is layout-compatible with its base
+        // type. Generate an arbitrary value of the base type, constrain it to the pattern's
+        // validity range via `assume_scalar_niche`, then transmute it to the pattern type. The
+        // assumption must come first: with `-Z valid-value-checks` the transmute itself is
+        // checked, so the value has to be valid before the pattern-typed local ever exists.
         let base_lcl = call_kani_any_for_ty(
             tcx,
             models,
@@ -1392,6 +1394,7 @@ fn call_kani_any_for_ty(
             invariant_cache,
             mined_cache,
         );
+        assume_scalar_niche(tcx, models.kani_assume, body, source, base_lcl, ty);
         let pat_lcl = body.new_local(ty, source.span(body.blocks()), mutability);
         body.assign_to(
             Place::from(pat_lcl),
@@ -1399,7 +1402,6 @@ fn call_kani_any_for_ty(
             source,
             InsertPosition::Before,
         );
-        assume_scalar_niche(tcx, models.kani_assume, body, source, pat_lcl, ty);
         pat_lcl
     } else {
         // Prefer an unbounded nondeterministic value via (implemented or compiler-derived)
