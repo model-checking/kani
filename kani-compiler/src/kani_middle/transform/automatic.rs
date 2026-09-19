@@ -18,7 +18,7 @@ use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_middle::{
     CtorReturn, FmtTrait, SmartPointerModels, adt_has_private_field_check, can_derive_arbitrary,
     find_arbitrary_constructor, fmt_impl_self_ty, implements_arbitrary, implements_invariant,
-    scalar_niche, smart_pointer_model_instance,
+    is_byte_str, is_c_str, scalar_niche, smart_pointer_model_instance,
 };
 use crate::kani_queries::QueryDb;
 use rustc_data_structures::fx::FxHashMap;
@@ -51,6 +51,10 @@ struct AnyModels {
     kani_any_slice_ref: FnDef,
     /// The FnDef of KaniModel::AnyStrRef
     kani_any_str_ref: FnDef,
+    /// The FnDef of KaniModel::AnyCStrRef
+    kani_any_c_str_ref: FnDef,
+    /// The FnDef of KaniModel::AnyByteStrRef
+    kani_any_byte_str_ref: FnDef,
     /// The FnDef of KaniHook::Assume (used for layout-niche assumptions and constructor
     /// success).
     kani_assume: FnDef,
@@ -84,6 +88,8 @@ impl AnyModels {
             kani_any_ptr: *kani_fns.get(&KaniModel::AnyPtr.into()).unwrap(),
             kani_any_slice_ref: *kani_fns.get(&KaniModel::AnySliceRef.into()).unwrap(),
             kani_any_str_ref: *kani_fns.get(&KaniModel::AnyStrRef.into()).unwrap(),
+            kani_any_c_str_ref: *kani_fns.get(&KaniModel::AnyCStrRef.into()).unwrap(),
+            kani_any_byte_str_ref: *kani_fns.get(&KaniModel::AnyByteStrRef.into()).unwrap(),
             kani_assume: *kani_fns.get(&KaniHook::Assume.into()).unwrap(),
             kani_assert: *kani_fns.get(&KaniHook::Assert.into()).unwrap(),
             kani_assume_safe: *kani_fns.get(&KaniModel::AssumeSafe.into()).unwrap(),
@@ -1173,10 +1179,11 @@ fn call_kani_any_for_ty(
         return lcl;
     }
     if let TyKind::RigidTy(RigidTy::Ref(region, inner_ty, inner_mutability)) = ty.kind()
-        && matches!(
-            inner_ty.kind(),
-            TyKind::RigidTy(RigidTy::Slice(..)) | TyKind::RigidTy(RigidTy::Str)
-        )
+        && match inner_ty.kind() {
+            TyKind::RigidTy(RigidTy::Slice(..)) | TyKind::RigidTy(RigidTy::Str) => true,
+            TyKind::RigidTy(RigidTy::Adt(def, _)) => is_c_str(tcx, def) || is_byte_str(tcx, def),
+            _ => false,
+        }
     {
         let is_str = matches!(inner_ty.kind(), TyKind::RigidTy(RigidTy::Str));
         let (elem_ty, model, model_args) = match inner_ty.kind() {
@@ -1195,6 +1202,22 @@ fn call_kani_any_for_ty(
                 models.kani_any_str_ref,
                 GenericArgs(vec![GenericArgKind::Const(
                     TyConst::try_from_target_usize(models.string_bound).unwrap(),
+                )]),
+            ),
+            // `&CStr` is the bytes of the storage up to the first NUL and `&ByteStr` a prefix of
+            // it; both are sized by the slice bound.
+            TyKind::RigidTy(RigidTy::Adt(def, _)) if is_c_str(tcx, def) => (
+                Ty::unsigned_ty(UintTy::U8),
+                models.kani_any_c_str_ref,
+                GenericArgs(vec![GenericArgKind::Const(
+                    TyConst::try_from_target_usize(models.slice_bound).unwrap(),
+                )]),
+            ),
+            TyKind::RigidTy(RigidTy::Adt(..)) => (
+                Ty::unsigned_ty(UintTy::U8),
+                models.kani_any_byte_str_ref,
+                GenericArgs(vec![GenericArgKind::Const(
+                    TyConst::try_from_target_usize(models.slice_bound).unwrap(),
                 )]),
             ),
             _ => unreachable!(),
@@ -1250,10 +1273,11 @@ fn call_kani_any_for_ty(
             InsertPosition::Before,
         );
         let model_inst = Instance::resolve(model, &model_args).unwrap();
-        // For `&str`, the model already returns the shared-reference type (there is no
-        // `&mut str` in practice); for slices it returns `&mut [T]`.
+        // The slice model returns `&mut [T]`, to serve both mutabilities; the string models
+        // return the shared reference, since a mutable one is not supported.
+        let is_slice = matches!(inner_ty.kind(), TyKind::RigidTy(RigidTy::Slice(..)));
         let model_ret_ty =
-            if is_str { ty } else { Ty::new_ref(region.clone(), inner_ty, Mutability::Mut) };
+            if is_slice { Ty::new_ref(region.clone(), inner_ty, Mutability::Mut) } else { ty };
         let slice_lcl = body.new_local(model_ret_ty, source.span(body.blocks()), mutability);
         body.insert_call(
             &model_inst,
@@ -1263,7 +1287,7 @@ fn call_kani_any_for_ty(
             Place::from(slice_lcl),
         );
 
-        if inner_mutability == Mutability::Not && !is_str {
+        if inner_mutability == Mutability::Not && is_slice {
             // Reborrow the `&mut [T]` the model returned as `&[T]`.
             let shared_lcl = body.new_local(ty, source.span(body.blocks()), mutability);
             body.assign_to(
