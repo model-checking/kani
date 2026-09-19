@@ -93,6 +93,10 @@ pub enum KaniModel {
     AnyArc,
     #[strum(serialize = "AnyBoxModel")]
     AnyBox,
+    #[strum(serialize = "AnyByteStrRefModel")]
+    AnyByteStrRef,
+    #[strum(serialize = "AnyCStrRefModel")]
+    AnyCStrRef,
     #[strum(serialize = "AnyPtrModel")]
     AnyPtr,
     #[strum(serialize = "AnyRcModel")]
@@ -101,6 +105,8 @@ pub enum KaniModel {
     AnySliceRef,
     #[strum(serialize = "AnyStrRefModel")]
     AnyStrRef,
+    #[strum(serialize = "AnyWtf8RefModel")]
+    AnyWtf8Ref,
     #[strum(serialize = "AssumeSafeModel")]
     AssumeSafe,
     #[strum(serialize = "BoundedAnyModel")]
