@@ -1262,10 +1262,11 @@ fn call_kani_any_for_ty(
             InsertPosition::Before,
         );
         let model_inst = Instance::resolve(model, &model_args).unwrap();
-        // For `&str`, the model already returns the shared-reference type (there is no
-        // `&mut str` in practice); for slices it returns `&mut [T]`.
+        // The slice model returns `&mut [T]`, to serve both mutabilities; the string models
+        // return the shared reference, since a mutable one is not supported.
+        let is_slice = matches!(inner_ty.kind(), TyKind::RigidTy(RigidTy::Slice(..)));
         let model_ret_ty =
-            if is_str { ty } else { Ty::new_ref(region.clone(), inner_ty, Mutability::Mut) };
+            if is_slice { Ty::new_ref(region.clone(), inner_ty, Mutability::Mut) } else { ty };
         let slice_lcl = body.new_local(model_ret_ty, source.span(body.blocks()), mutability);
         body.insert_call(
             &model_inst,
@@ -1275,7 +1276,7 @@ fn call_kani_any_for_ty(
             Place::from(slice_lcl),
         );
 
-        if inner_mutability == Mutability::Not && !is_str {
+        if inner_mutability == Mutability::Not && is_slice {
             // Reborrow the `&mut [T]` the model returned as `&[T]`.
             let shared_lcl = body.new_local(ty, source.span(body.blocks()), mutability);
             body.assign_to(
