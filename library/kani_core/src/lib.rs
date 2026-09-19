@@ -297,7 +297,7 @@ macro_rules! kani_intrinsics {
         }
 
         /// A [`core::fmt::Write`] sink that discards everything written to it, used by the
-        /// `check_debug_fmt`/`check_display_fmt` models below. Writing never fails, so `fmt`
+        /// `check_*_fmt` models below. Writing never fails, so `fmt`
         /// implementations are not verified against the write-error path.
         struct DiscardingSink;
 
@@ -330,6 +330,73 @@ macro_rules! kani_intrinsics {
         #[doc(hidden)]
         pub fn check_display_fmt<T: core_path::fmt::Display>(value: &T) {
             let _ = core_path::fmt::write(&mut DiscardingSink, format_args!("{value}"));
+        }
+
+        /// Like [check_debug_fmt], but for `Binary` implementations.
+        #[kanitool::fn_marker = "CheckBinaryFmtModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn check_binary_fmt<T: core_path::fmt::Binary>(value: &T) {
+            let _ = core_path::fmt::write(&mut DiscardingSink, format_args!("{value:b}"));
+        }
+
+        /// Like [check_debug_fmt], but for `Octal` implementations.
+        #[kanitool::fn_marker = "CheckOctalFmtModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn check_octal_fmt<T: core_path::fmt::Octal>(value: &T) {
+            let _ = core_path::fmt::write(&mut DiscardingSink, format_args!("{value:o}"));
+        }
+
+        /// Like [check_debug_fmt], but for `LowerHex` implementations.
+        #[kanitool::fn_marker = "CheckLowerHexFmtModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn check_lower_hex_fmt<T: core_path::fmt::LowerHex>(value: &T) {
+            let _ = core_path::fmt::write(&mut DiscardingSink, format_args!("{value:x}"));
+        }
+
+        /// Like [check_debug_fmt], but for `UpperHex` implementations.
+        #[kanitool::fn_marker = "CheckUpperHexFmtModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn check_upper_hex_fmt<T: core_path::fmt::UpperHex>(value: &T) {
+            let _ = core_path::fmt::write(&mut DiscardingSink, format_args!("{value:X}"));
+        }
+
+        /// Like [check_debug_fmt], but for `LowerExp` implementations.
+        #[kanitool::fn_marker = "CheckLowerExpFmtModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn check_lower_exp_fmt<T: core_path::fmt::LowerExp>(value: &T) {
+            let _ = core_path::fmt::write(&mut DiscardingSink, format_args!("{value:e}"));
+        }
+
+        /// Like [check_debug_fmt], but for `UpperExp` implementations.
+        #[kanitool::fn_marker = "CheckUpperExpFmtModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn check_upper_exp_fmt<T: core_path::fmt::UpperExp>(value: &T) {
+            let _ = core_path::fmt::write(&mut DiscardingSink, format_args!("{value:E}"));
+        }
+
+        /// Like [check_debug_fmt], but for `Pointer` implementations.
+        ///
+        /// Unlike the other formatting traits, `Pointer` for `&T` formats the address of the
+        /// reference rather than delegating to `T`, so `{value:p}` would never reach `T`'s
+        /// implementation. `ViaPointer` calls it directly.
+        #[kanitool::fn_marker = "CheckPointerFmtModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn check_pointer_fmt<T: core_path::fmt::Pointer>(value: &T) {
+            struct ViaPointer<'a, T: ?Sized>(&'a T);
+            impl<T: ?Sized + core_path::fmt::Pointer> core_path::fmt::Pointer for ViaPointer<'_, T> {
+                fn fmt(&self, f: &mut core_path::fmt::Formatter<'_>) -> core_path::fmt::Result {
+                    core_path::fmt::Pointer::fmt(self.0, f)
+                }
+            }
+            let via = ViaPointer(value);
+            let _ = core_path::fmt::write(&mut DiscardingSink, format_args!("{via:p}"));
         }
 
         /// Creates a symbolic value *bounded* by `N`. Bounded means `|T| <= N`. The type

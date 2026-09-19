@@ -277,8 +277,9 @@ execution.
 
 Nested slice references (e.g. `&&[u8]`) and slices inside user-defined types remain unsupported.
 
-## Debug and Display Implementations
-For the `fmt` methods of `Debug` and `Display` implementations, the `&mut Formatter` argument
+## Formatting Trait Implementations
+For the `fmt` methods of `Debug`, `Display`, `Binary`, `Octal`, `LowerHex`, `UpperHex`, `LowerExp`,
+`UpperExp` and `Pointer` implementations, the `&mut Formatter` argument
 cannot be generated nondeterministically. Instead, Kani generates a harness that formats a
 nondeterministic value of the implementing type into a sink that discards the output: the
 `Formatter` is constructed by the core formatting machinery (so it is always valid), and panics
@@ -289,10 +290,10 @@ implementing type implements [`Invariant`](#type-safety-invariants), the generat
 to satisfy it, as for any other automatic harness.
 
 Current limitations:
-- The `Formatter` carries the default formatting parameters, i.e. it is the one that
-  `format!("{:?}", value)`/`format!("{}", value)` would produce. Code paths that a `fmt`
+- The `Formatter` carries the default formatting parameters, i.e. it is the one that `format!`
+  with the trait's bare specifier (`{:?}`, `{}`, `{:x}`, ...) would produce. Code paths that a `fmt`
   implementation takes only for a non-default width, precision, fill, alignment, sign, or the
-  alternate (`{:#?}`) flag are therefore not covered.
+  alternate flag (`{:#?}`, `{:#x}`, and so on) are therefore not covered.
 - The sink never fails, so `fmt` implementations that propagate write errors with `?` are not
   verified against the error path.
 - Because the harness goes through `core::fmt`, the core formatting machinery is verified along

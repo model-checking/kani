@@ -1011,7 +1011,7 @@ fn automatic_harness_partition(
             return Err(AutoHarnessSkipReason::UserFilter);
         }
 
-        // Debug/Display fmt implementations are handled specially: their `&mut Formatter`
+        // Formatting trait implementations are handled specially: their `&mut Formatter`
         // argument cannot be generated, but the generated harness formats a nondeterministic
         // value of the self type into a discarding sink instead, c.f. `fmt_impl_self_ty`.
         // The self type is generated with `kani::any`, so it must implement (or be able to
