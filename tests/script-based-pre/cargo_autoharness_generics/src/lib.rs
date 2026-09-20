@@ -125,6 +125,22 @@ pub fn with_bool_const<const B: bool>(x: u8) -> u8 {
     if B { x } else { 0 }
 }
 
+// TEST NOTE: skipped (Generic Function). The `const {}` block constrains N, and the value
+// autoharness substitutes (2) violates it. Generating a harness anyway made rustc reject the
+// instantiation with an unrecoverable E0080 that aborted the whole run, c.f.
+// https://github.com/model-checking/kani/issues/4794.
+pub fn with_const_assert<const N: usize>(x: u8) -> u8 {
+    const { assert!(N >= 4) };
+    x
+}
+
+// TEST NOTE: skipped (Generic Function), as above. Here the precondition is violated by an
+// out-of-bounds index rather than an assertion, which fails const-eval for N = 2.
+pub fn with_const_index<const N: usize>(x: u8) -> u8 {
+    const { [10u8, 20u8][N] };
+    x
+}
+
 // TEST NOTE: verified as `Wrapper::<i32>::get`; generic parameters of the impl block are
 // instantiated too.
 pub struct Wrapper<T> {

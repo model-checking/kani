@@ -1,5 +1,7 @@
-| cargo_autoharness_generics | needs_exotic     | Generic Function: no candidate type (i32, u32, usize, u8, i64, u64, f64, f32, bool, char) satisfies the function's trait bounds |
-| cargo_autoharness_generics | with_bool_const  | Generic Function: non-usize const generic parameters are not supported yet                                                      |
+| cargo_autoharness_generics | needs_exotic      | Generic Function: no candidate type (i32, u32, usize, u8, i64, u64, f64, f32, bool, char) satisfies the function's trait bounds
+| cargo_autoharness_generics | with_bool_const   | Generic Function: non-usize const generic parameters are not supported yet
+| cargo_autoharness_generics | with_const_assert | Generic Function: the function has a `const {}` block that may constrain its const generic parameter(s), and the value autoharness substitutes (2) is not guaranteed to satisfy it
+| cargo_autoharness_generics | with_const_index  | Generic Function: the function has a `const {}` block that may constrain its const generic parameter(s), and the value autoharness substitutes (2) is not guaranteed to satisfy it
 | cargo_autoharness_generics | <Widget as Frobnicate>::frob    | #[kani::proof]              | Success             |
 | cargo_autoharness_generics | <f32 as FloatLike>::half        | #[kani::proof]              | Success             |
 | cargo_autoharness_generics | <f64 as FloatLike>::half        | #[kani::proof]              | Success             |

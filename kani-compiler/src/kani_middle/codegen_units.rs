@@ -551,6 +551,47 @@ fn args_satisfy_predicates(tcx: TyCtxt, def: FnDef, args: &GenericArgs) -> bool 
     ocx.evaluate_obligations_error_on_ambiguity().no_errors()
 }
 
+/// Whether `def`'s body contains an anonymous `const {}` block parameterized by a const generic
+/// parameter. Such a block can encode a precondition on that parameter, as `core::escape` does
+/// with `const { assert!(N >= 4) }`.
+///
+/// These blocks are listed in rustc's `required_consts`: rustc evaluates every entry when
+/// monomorphizing and rejects the instantiation if any fails. `args_satisfy_predicates` does not
+/// cover them, since they are not trait bounds, so autoharness would otherwise substitute
+/// [AUTOHARNESS_CONST_GENERIC_VALUE] regardless and the violation would surface as an
+/// unrecoverable `E0080` that aborts the whole run.
+///
+/// This deliberately does *not* evaluate the block to find out whether the chosen value actually
+/// violates it, because a failing evaluation reports `E0080` from inside the const-eval query
+/// itself: merely asking the question emits the error we are trying to avoid. The check is
+/// therefore conservative in two ways. It rejects a block the chosen value would satisfy, and,
+/// since an anonymous const inherits its parent's generics, it rejects a block that does not read
+/// the const parameter at all. It stays narrow in the way that matters, though: a block in a
+/// function with no const generic parameter is untouched, because only a const parameter can make
+/// the substituted value decide whether evaluation succeeds.
+///
+/// Nothing in `rustc_public` exposes `required_consts`, so query rustc directly.
+/// See <https://github.com/model-checking/kani/issues/4794>.
+fn has_const_generic_precondition(tcx: TyCtxt, def: FnDef) -> bool {
+    use rustc_middle::ty::TypeVisitableExt;
+    let def_id = rustc_internal::internal(tcx, def.def_id());
+    // Without MIR there is nothing to inspect; `skip_reason` reports body-less functions.
+    if !tcx.is_mir_available(def_id) {
+        return false;
+    }
+    tcx.optimized_mir(def_id).required_consts().iter().any(|const_op| {
+        // Only anonymous `const {}` blocks appear as `Unevaluated`; array lengths and other
+        // already-resolved constants come through as `Const::Ty`/`Const::Val` and cannot fail.
+        let rustc_middle::mir::Const::Unevaluated(uneval, _) = const_op.const_ else {
+            return false;
+        };
+        uneval.args.iter().any(|arg| match arg.kind() {
+            ty::GenericArgKind::Const(ct) => ct.has_param(),
+            _ => false,
+        })
+    })
+}
+
 /// The nondet closure-model FnDefs, keyed by input shape. By-value models fix their
 /// input regions early-bound; the ref-taking variants carry late-bound regions so their
 /// fn items satisfy HRTB bounds like `for<'a> Fn(&'a T)`.
@@ -798,6 +839,17 @@ fn choose_generic_instantiation(
             && tcx.type_of(param.def_id).skip_binder() != tcx.types.usize
     }) {
         return Err("non-usize const generic parameters are not supported yet".to_string());
+    }
+
+    // A `const {}` block parameterized by a const generic can encode a precondition that the
+    // fixed AUTOHARNESS_CONST_GENERIC_VALUE violates, which rustc reports as an unrecoverable
+    // E0080. We cannot check whether it actually does without emitting that error, so skip.
+    if has_const_generic_precondition(tcx, def) {
+        return Err(format!(
+            "the function has a `const {{}}` block that may constrain its const generic \
+             parameter(s), and the value autoharness substitutes \
+             ({AUTOHARNESS_CONST_GENERIC_VALUE}) is not guaranteed to satisfy it"
+        ));
     }
 
     // Positions of the type parameters among the identity arguments, and the candidate list
