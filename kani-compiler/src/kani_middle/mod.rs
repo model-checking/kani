@@ -165,6 +165,14 @@ pub fn check_crate_items(tcx: TyCtxt, ignore_asm: bool) {
     tcx.dcx().abort_if_errors();
 }
 
+/// Whether `def` is `core::fmt::Formatter`.
+///
+/// Shared by the eligibility check and the harness generation, so they cannot disagree.
+pub fn is_formatter(tcx: TyCtxt, def: AdtDef) -> bool {
+    tcx.get_diagnostic_item(rustc_span::Symbol::intern("Formatter"))
+        == Some(rustc_internal::internal(tcx, def.def_id()))
+}
+
 /// Traverse the type definition to see if the type contains interior mutability.
 ///
 /// See <https://doc.rust-lang.org/reference/interior-mutability.html> for more details.
@@ -1319,6 +1327,9 @@ fn autoharness_supported_arg_ty(
                     ArgSupport::Unsupported
                 }
             }
+            // A `Formatter` is built by `any_formatter` over a harness-local sink, with its width
+            // and precision bounded; `fmt` methods take it mutably, so both mutabilities.
+            TyKind::RigidTy(RigidTy::Adt(def, _)) if is_formatter(tcx, def) => ArgSupport::Bounded,
             _ => arbitrary_or_derive(ty, ty_arbitrary_cache),
         }
     } else {
