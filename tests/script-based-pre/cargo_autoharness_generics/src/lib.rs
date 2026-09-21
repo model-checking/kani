@@ -126,19 +126,43 @@ pub fn with_bool_const<const B: bool>(x: u8) -> u8 {
 }
 
 // TEST NOTE: skipped (Generic Function). The `const {}` block constrains N, and the value
-// autoharness substitutes (2) violates it. Generating a harness anyway made rustc reject the
-// instantiation with an unrecoverable E0080 that aborted the whole run, c.f.
-// https://github.com/model-checking/kani/issues/4794.
+// autoharness substitutes (2) violates it. This is the shape reported in
+// https://github.com/model-checking/kani/issues/4794 (`core::escape`'s `const { assert!(N >= 4) }`).
 pub fn with_const_assert<const N: usize>(x: u8) -> u8 {
     const { assert!(N >= 4) };
     x
 }
 
-// TEST NOTE: skipped (Generic Function), as above. Here the precondition is violated by an
-// out-of-bounds index rather than an assertion, which fails const-eval for N = 2.
+// TEST NOTE: skipped (Generic Function), as above, but here the block produces a value, so
+// codegen forces its evaluation: generating a harness anyway made rustc reject the instantiation
+// with an unrecoverable E0080 that aborted the whole run.
 pub fn with_const_index<const N: usize>(x: u8) -> u8 {
     const { [10u8, 20u8][N] };
     x
+}
+
+// TEST NOTE: skipped (Generic Function). The block is not in this function's body, but harnessing
+// it monomorphizes `with_const_index::<2>` all the same, so the search for const-block
+// preconditions follows calls that forward a const parameter.
+pub fn forwards_const_precondition<const N: usize>(x: u8) -> u8 {
+    with_const_index::<N>(x)
+}
+
+// TEST NOTE: skipped (Generic Function), as above: a closure body is a separate MIR body, but it
+// inherits its parent's const parameter, so it is searched too.
+pub fn const_precondition_in_closure<const N: usize>(x: u8) -> u8 {
+    let guarded = || {
+        const { [10u8, 20u8][N] };
+        x
+    };
+    guarded()
+}
+
+// TEST NOTE: verified as `forwards_concrete_const::<2>`. The callee's const argument is concrete,
+// so whether it evaluates does not depend on the value autoharness substitutes, and the candidate
+// is accepted.
+pub fn forwards_concrete_const<const N: usize>(x: u8) -> u8 {
+    with_const_index::<1>(x).wrapping_add(N as u8)
 }
 
 // TEST NOTE: verified as `Wrapper::<i32>::get`; generic parameters of the impl block are

@@ -551,15 +551,85 @@ fn args_satisfy_predicates(tcx: TyCtxt, def: FnDef, args: &GenericArgs) -> bool 
     ocx.evaluate_obligations_error_on_ambiguity().no_errors()
 }
 
-/// Whether `def`'s body contains an anonymous `const {}` block parameterized by a const generic
-/// parameter. Such a block can encode a precondition on that parameter, as `core::escape` does
-/// with `const { assert!(N >= 4) }`.
+/// Bound on the number of MIR bodies [has_const_generic_precondition] inspects. Reaching it means
+/// we could not finish ruling out a const-block violation, so the candidate is rejected.
+const CONST_PRECONDITION_SEARCH_LIMIT: usize = 1024;
+
+/// Whether any generic argument in `args` mentions a const generic parameter.
+fn args_mention_const_param(args: ty::GenericArgsRef<'_>) -> bool {
+    use rustc_middle::ty::TypeVisitableExt;
+    args.iter().any(|arg| match arg.kind() {
+        ty::GenericArgKind::Const(ct) => ct.has_param(),
+        _ => false,
+    })
+}
+
+/// Whether `body` contains an anonymous `const {}` block parameterized by a const generic
+/// parameter.
+fn body_has_const_param_block(body: &rustc_middle::mir::Body<'_>) -> bool {
+    body.required_consts().iter().any(|const_op| {
+        // Only anonymous `const {}` blocks appear as `Unevaluated`; array lengths and other
+        // already-resolved constants come through as `Const::Ty`/`Const::Val` and cannot fail.
+        let rustc_middle::mir::Const::Unevaluated(uneval, _) = const_op.const_ else {
+            return false;
+        };
+        args_mention_const_param(uneval.args)
+    })
+}
+
+/// Collects the bodies that `body` instantiates with a const argument derived from a const
+/// parameter: called functions, function items reified into pointers, and nested closures and
+/// coroutines (which inherit their parent's generics, so their arguments mention the parameter
+/// whenever the parent has one).
+struct ConstParamCalleeCollector<'a> {
+    callees: &'a mut Vec<DefId>,
+}
+
+impl<'tcx> rustc_middle::mir::visit::Visitor<'tcx> for ConstParamCalleeCollector<'_> {
+    fn visit_const_operand(
+        &mut self,
+        const_op: &rustc_middle::mir::ConstOperand<'tcx>,
+        _: rustc_middle::mir::Location,
+    ) {
+        if let ty::FnDef(def_id, args) = *const_op.const_.ty().kind()
+            && args_mention_const_param(args.skip_binder())
+        {
+            self.callees.push(def_id);
+        }
+    }
+
+    fn visit_ty(&mut self, ty: ty::Ty<'tcx>, _: rustc_middle::mir::visit::TyContext) {
+        let nested = match *ty.kind() {
+            ty::Closure(def_id, args)
+            | ty::Coroutine(def_id, args)
+            | ty::CoroutineClosure(def_id, args) => Some((def_id, args)),
+            _ => None,
+        };
+        if let Some((def_id, args)) = nested
+            && args_mention_const_param(args)
+        {
+            self.callees.push(def_id);
+        }
+    }
+}
+
+/// Whether generating a harness for `def` could reach an anonymous `const {}` block parameterized
+/// by a const generic parameter. Such a block can encode a precondition on that parameter, as
+/// `core::escape` does with `const { assert!(N >= 4) }`.
 ///
 /// These blocks are listed in rustc's `required_consts`: rustc evaluates every entry when
 /// monomorphizing and rejects the instantiation if any fails. `args_satisfy_predicates` does not
 /// cover them, since they are not trait bounds, so autoharness would otherwise substitute
 /// [AUTOHARNESS_CONST_GENERIC_VALUE] regardless and the violation would surface as an
 /// unrecoverable `E0080` that aborts the whole run.
+///
+/// The search is transitive, because the offending block need not be in `def`'s own body: a
+/// harness for `wrapper<const N: usize>() { guarded::<N>() }` monomorphizes `guarded::<2>` too,
+/// and that instantiation aborts the run just the same. So walk outwards from `def` through the
+/// bodies it instantiates with a const argument derived from a const parameter — the values that
+/// autoharness' substitution decides. Instantiations with a *concrete* const argument are not
+/// followed: whatever they evaluate to does not depend on our choice, so a failure there is a
+/// pre-existing bug in the crate under verification that any harness over `def` would hit.
 ///
 /// This deliberately does *not* evaluate the block to find out whether the chosen value actually
 /// violates it, because a failing evaluation reports `E0080` from inside the const-eval query
@@ -573,23 +643,32 @@ fn args_satisfy_predicates(tcx: TyCtxt, def: FnDef, args: &GenericArgs) -> bool 
 /// Nothing in `rustc_public` exposes `required_consts`, so query rustc directly.
 /// See <https://github.com/model-checking/kani/issues/4794>.
 fn has_const_generic_precondition(tcx: TyCtxt, def: FnDef) -> bool {
-    use rustc_middle::ty::TypeVisitableExt;
-    let def_id = rustc_internal::internal(tcx, def.def_id());
-    // Without MIR there is nothing to inspect; `skip_reason` reports body-less functions.
-    if !tcx.is_mir_available(def_id) {
-        return false;
-    }
-    tcx.optimized_mir(def_id).required_consts().iter().any(|const_op| {
-        // Only anonymous `const {}` blocks appear as `Unevaluated`; array lengths and other
-        // already-resolved constants come through as `Const::Ty`/`Const::Val` and cannot fail.
-        let rustc_middle::mir::Const::Unevaluated(uneval, _) = const_op.const_ else {
-            return false;
+    use rustc_middle::mir::visit::Visitor;
+    let mut worklist = vec![rustc_internal::internal(tcx, def.def_id())];
+    let mut visited = FxHashSet::default();
+    let mut budget = CONST_PRECONDITION_SEARCH_LIMIT;
+    while let Some(def_id) = worklist.pop() {
+        if !visited.insert(def_id) {
+            continue;
+        }
+        // Without MIR there is nothing to inspect. For `def` itself, `skip_reason` reports
+        // body-less functions; for a callee, we cannot see whether it is guarded, so assume it
+        // is not rather than skipping every candidate that calls into an opaque dependency.
+        if !tcx.is_mir_available(def_id) {
+            continue;
+        }
+        let Some(remaining) = budget.checked_sub(1) else {
+            // Budget exhausted: we can no longer rule a violation out.
+            return true;
         };
-        uneval.args.iter().any(|arg| match arg.kind() {
-            ty::GenericArgKind::Const(ct) => ct.has_param(),
-            _ => false,
-        })
-    })
+        budget = remaining;
+        let body = tcx.optimized_mir(def_id);
+        if body_has_const_param_block(body) {
+            return true;
+        }
+        ConstParamCalleeCollector { callees: &mut worklist }.visit_body(body);
+    }
+    false
 }
 
 /// The nondet closure-model FnDefs, keyed by input shape. By-value models fix their
