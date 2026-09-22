@@ -916,6 +916,10 @@ fn last_two_items_of_path_match(item_path: &str, generic_args: &str, name: &str)
     let mut angle_bracket_depth = 0;
     let mut parts = Vec::new();
     let mut part_start = 0;
+    // `i` is a byte offset, so the previous character is carried from the last
+    // iteration rather than re-counted with `chars().nth` (a char count, which
+    // desyncs on multibyte paths and made the slices below panic or mis-split).
+    let mut prev = None;
 
     for (i, c) in item_path.char_indices() {
         match c {
@@ -925,10 +929,7 @@ fn last_two_items_of_path_match(item_path: &str, generic_args: &str, name: &str)
             '>' => {
                 angle_bracket_depth -= 1;
             }
-            ':' if angle_bracket_depth == 0
-                && i > 0
-                && item_path.chars().nth(i - 1) == Some(':') =>
-            {
+            ':' if angle_bracket_depth == 0 && prev == Some(':') => {
                 if part_start < i {
                     parts.push(&item_path[part_start..i - 1]);
                 }
@@ -936,6 +937,7 @@ fn last_two_items_of_path_match(item_path: &str, generic_args: &str, name: &str)
             }
             _ => {}
         }
+        prev = Some(c);
     }
     parts.push(&item_path[part_start..]);
 
@@ -1246,6 +1248,25 @@ mod tests {
             let item_path = format!("m::S::<(u32,u64),A>::{name}");
             assert!(last_two_items_of_path_match(&item_path, "::<(u32,u64),A>", name));
             assert!(!last_two_items_of_path_match(&item_path, "::<u32,u64,A>", name));
+        }
+
+        #[test]
+        fn multibyte_path_char_boundary() {
+            // A multibyte char before the first `::` used to desync the splitter's
+            // byte/char indexing (char-boundary panic on the part slice).
+            let generic_args = "::<u32>";
+            let name = "unchecked_add";
+            let item_path = format!("café::núm::NonZero{generic_args}::{name}");
+            assert!(last_two_items_of_path_match(&item_path, generic_args, name))
+        }
+
+        #[test]
+        fn multibyte_path_component_kept() {
+            // Same desync could instead silently drop a path component.
+            let generic_args = "::<u32>";
+            let name = "unchecked_add";
+            let item_path = format!("éa::NonZero{generic_args}::{name}");
+            assert!(last_two_items_of_path_match(&item_path, generic_args, name))
         }
     }
 }
