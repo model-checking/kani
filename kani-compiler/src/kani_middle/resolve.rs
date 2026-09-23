@@ -758,14 +758,16 @@ fn resolve_in_type_def<'tcx>(
                     match refined_candidates.len() {
                         0 => Err(invalid_path_err(&generic_args, candidates)),
                         1 => Ok(refined_candidates[0]),
-                        // since is_item_name_with_generic_args looks at the entire item path after the base type, it shouldn't be possible to have more than one match
-                        _ => unreachable!(
-                            "Got multiple refined candidates {:?}",
-                            refined_candidates
-                                .iter()
-                                .map(|def_id| tcx.def_path_str(*def_id))
-                                .collect::<Vec<String>>()
-                        ),
+                        // Item paths differ past the base type, so more than one match
+                        // should not happen — but the comparison is normalization-based,
+                        // so report the ambiguity (with the still-colliding candidates)
+                        // rather than crashing the compiler.
+                        _ => Err(ResolveError::AmbiguousPartialPath {
+                            tcx,
+                            name: name.into(),
+                            base: type_id,
+                            candidates: refined_candidates,
+                        }),
                     }
                 }
                 PathArguments::Parenthesized(args) => {
