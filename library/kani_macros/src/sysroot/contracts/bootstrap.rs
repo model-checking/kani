@@ -71,7 +71,7 @@ impl<'a> ContractConditionsHandler<'a> {
                 }
                 // Dummy function that we replace to pick the contract mode.
                 // By default, return ORIGINAL
-                #[inline(never)]
+                #[inline]
                 #[kanitool::fn_marker = "kani_contract_mode"]
                 const fn kani_contract_mode() -> kani::internal::Mode {
                     kani::internal::ORIGINAL
