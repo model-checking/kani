@@ -80,6 +80,20 @@ impl GotocCtx<'_, '_> {
             assert!(old_sym.is_function());
             let body = self.transformer.body(self.tcx, instance);
             self.set_current_fn(instance, &body);
+            if self.is_unsupported_variadic(instance) {
+                let loc = self.codegen_span_stable(instance.def.span());
+                let unsupported = self.codegen_unimplemented_stmt(
+                    "Variadic function with a non-C calling convention",
+                    loc,
+                    "https://github.com/model-checking/kani/issues/4817",
+                );
+                self.symbol_table.update_fn_declaration_with_definition(
+                    &name,
+                    Stmt::block(vec![unsupported], loc),
+                );
+                self.reset_current_fn();
+                return;
+            }
             self.print_instance(instance, &body);
             self.codegen_function_prelude(&body);
             self.codegen_declare_variables(&body, name.clone().into());

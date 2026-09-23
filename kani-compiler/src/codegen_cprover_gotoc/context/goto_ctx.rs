@@ -30,7 +30,7 @@ use cbmc::{InternedString, MachineModel};
 use rustc_abi::{HasDataLayout, TargetDataLayout};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::ty::layout::{
-    FnAbiError, FnAbiOfHelpers, FnAbiRequest, HasTyCtxt, HasTypingEnv, LayoutError,
+    FnAbiError, FnAbiOf, FnAbiOfHelpers, FnAbiRequest, HasTyCtxt, HasTypingEnv, LayoutError,
     LayoutOfHelpers, TyAndLayout,
 };
 use rustc_middle::ty::{self, Ty, TyCtxt};
@@ -1229,6 +1229,24 @@ impl<'tcx> HasTyCtxt<'tcx> for GotocCtx<'tcx, '_> {
 impl HasDataLayout for GotocCtx<'_, '_> {
     fn data_layout(&self) -> &TargetDataLayout {
         self.tcx.data_layout()
+    }
+}
+
+impl GotocCtx<'_, '_> {
+    /// Whether `instance` is a C-variadic function whose calling convention is not the C one, e.g.
+    /// `unsafe extern "sysv64" fn(_: ...)`.
+    ///
+    /// `rustc_public` only models C-variadics under `CanonAbi::C`: asking such an instance for its
+    /// (stable) ABI trips an assertion inside the conversion and takes the whole compilation with
+    /// it, c.f. <https://github.com/model-checking/kani/issues/4817>. Callers use this to report an
+    /// unsupported construct instead. The check reads the *internal* ABI, which is exact about the
+    /// calling convention (the `extern` string alone is not: `extern "system"` and `extern "cdecl"`
+    /// canonicalize differently per target).
+    pub fn is_unsupported_variadic(&self, instance: Instance) -> bool {
+        use rustc_abi::CanonAbi;
+        let internal_instance = rustc_public::rustc_internal::internal(self.tcx, instance);
+        let fn_abi = self.fn_abi_of_instance(internal_instance, rustc_middle::ty::List::empty());
+        fn_abi.c_variadic && !matches!(fn_abi.conv, CanonAbi::C)
     }
 }
 

@@ -68,7 +68,10 @@ impl GotocCtx<'_, '_> {
                 Symbol::function(trimmed_fn_name, typ, None, instance.name(), loc)
                     .with_is_extern(true)
             })
-        } else if self.is_cffi_enabled() && instance.fn_abi().unwrap().conv == CallConvention::C {
+        } else if self.is_cffi_enabled()
+            && !self.is_unsupported_variadic(instance)
+            && instance.fn_abi().unwrap().conv == CallConvention::C
+        {
             // When C-FFI feature is enabled, we just trust the rust declaration.
             // TODO: Add proper casting and clashing definitions check.
             // https://github.com/model-checking/kani/issues/2426
@@ -159,6 +162,12 @@ impl GotocCtx<'_, '_> {
     /// Generate type for the given foreign instance.
     fn codegen_ffi_type(&mut self, instance: Instance) -> Type {
         let fn_name = instance.mangled_name();
+        if self.is_unsupported_variadic(instance) {
+            // See `is_unsupported_variadic`: the ABI is unavailable, so declare the shim from the
+            // signature. Its body is the unsupported-construct stub every FFI shim gets.
+            let sig = instance.ty().kind().fn_sig().unwrap().value;
+            return self.codegen_function_sig_stable(sig);
+        }
         let fn_abi = instance.fn_abi().unwrap();
         let loc = self.codegen_span_stable(instance.def.span());
         let params = fn_abi
