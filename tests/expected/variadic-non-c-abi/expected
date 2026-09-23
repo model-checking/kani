@@ -1,5 +1,0 @@
-Variadic function with a non-C calling convention is not currently supported by Kani
-VERIFICATION:- FAILED
-Variadic function with a non-C calling convention is not currently supported by Kani
-VERIFICATION:- FAILED
-Complete - 0 successfully verified harnesses, 2 failures, 2 total.

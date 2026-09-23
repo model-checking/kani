@@ -163,6 +163,30 @@ pub fn check_crate_items(tcx: TyCtxt, ignore_asm: bool) {
     tcx.dcx().abort_if_errors();
 }
 
+/// Whether `instance` is a C-variadic function whose calling convention is not the C one, e.g.
+/// `unsafe extern "sysv64" fn(_: ...)`.
+///
+/// `rustc_public` only models C-variadics under `CanonAbi::C`: asking such an instance for its
+/// stable ABI trips an assertion inside the conversion and aborts the compilation, c.f.
+/// <https://github.com/model-checking/kani/issues/4817>. Callers use this to report the function as
+/// unsupported instead.
+///
+/// The check reads the *internal* ABI because that is exact about the calling convention: the
+/// `extern` string is not, since `extern "system"` and `extern "cdecl"` canonicalize differently
+/// per target (`rustc_target::spec::abi_map`).
+pub fn is_unsupported_variadic(tcx: TyCtxt, instance: Instance) -> bool {
+    use rustc_abi::CanonAbi;
+    use rustc_middle::ty::TypingEnv;
+    let internal_instance = rustc_internal::internal(tcx, instance);
+    let Ok(fn_abi) = tcx.fn_abi_of_instance(
+        TypingEnv::fully_monomorphized()
+            .as_query_input((internal_instance, rustc_middle::ty::List::empty())),
+    ) else {
+        return false;
+    };
+    fn_abi.c_variadic && !matches!(fn_abi.conv, CanonAbi::C)
+}
+
 /// Traverse the type definition to see if the type contains interior mutability.
 ///
 /// See <https://doc.rust-lang.org/reference/interior-mutability.html> for more details.
