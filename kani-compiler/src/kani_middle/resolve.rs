@@ -880,6 +880,34 @@ fn is_item_name_with_generic_args(
     last_two_items_of_path_match(&item_path, generic_args, name)
 }
 
+/// True if `s` has a `,` at bracket depth 0 (a tuple/list separator, not one nested
+/// inside `<...>` or `(...)`). Whitespace-independent.
+fn has_top_level_comma(s: &str) -> bool {
+    let mut depth = 0i32;
+    for c in s.chars() {
+        match c {
+            '<' | '(' => depth += 1,
+            '>' | ')' => depth -= 1,
+            ',' if depth == 0 => return true,
+            _ => {}
+        }
+    }
+    false
+}
+
+/// Normalizes one side of a `::<args>::name` comparison string: redundant trait-object
+/// parens are stripped from each TOP-LEVEL generic argument and all whitespace is
+/// removed, so the parenthesized rendering `def_path_str` uses and the bare spelling a
+/// user writes compare equal in either impl location. A trait object nested inside
+/// another argument keeps its rendered parens (a residual the semantic rewrite removes).
+fn normalized_last_two(s: &str) -> String {
+    let s: String = s.chars().filter(|c| !c.is_whitespace()).collect();
+    let Some((head, name)) = s.rsplit_once("::") else { return s };
+    let Some((prefix, rest)) = head.split_once('<') else { return s };
+    let Some(args) = rest.strip_suffix('>') else { return s };
+    format!("{prefix}<{}>::{name}", strip_redundant_parens(args))
+}
+
 // This is just a helper function for is_item_name_with_generic_args.
 // It's in a separate function so we can unit-test it without a mock TyCtxt or DefIds.
 fn last_two_items_of_path_match(item_path: &str, generic_args: &str, name: &str) -> bool {
@@ -918,30 +946,23 @@ fn last_two_items_of_path_match(item_path: &str, generic_args: &str, name: &str)
 
     let last_two = format!("{}{}{}", generic_args, "::", name);
 
-    // The last two components of the item_path should be the same as ::{generic_args}::{name},
-    // compared whitespace-insensitively on both sides (the caller pre-strips generic_args,
-    // but the helper shouldn't rely on that).
-    if last_two
-        .chars()
-        .filter(|c| !c.is_whitespace())
-        .eq(actual_last_two.chars().filter(|c| !c.is_whitespace()))
-    {
+    // The last two components of the item_path should be the same as
+    // ::{generic_args}::{name}. Both sides are normalized identically (redundant
+    // trait-object parens stripped from top-level arguments, whitespace removed), so the
+    // parenthesized rendering def_path_str uses and the bare spelling a user writes match
+    // in either impl location.
+    let normalized_query = normalized_last_two(&last_two);
+    if normalized_query == normalized_last_two(&actual_last_two) {
         return true;
     }
 
     // A method whose impl block lives outside its self type's home module is rendered
     // by def_path_str as `<impl path::to::Type<Args>>` instead of `Type::<Args>`; unwrap
-    // that form and retry against Args. def_path_str also wraps trait-object bounds in
-    // redundant parens inside a generic-argument list (e.g. `(dyn Any + 'static)`);
-    // strip those from the candidate side; the user spells the bound bare.
+    // that form and retry against Args through the same normalization (so either paren
+    // spelling matches in either impl location).
     if let Some(self_type_args) = impl_self_type_generic_args(parts[parts.len() - 2]) {
-        let unwrapped_last_two =
-            format!("::<{}>::{}", strip_redundant_parens(self_type_args), parts[parts.len() - 1]);
-        let last_two = format!("{}::{}", generic_args, name);
-        return last_two
-            .chars()
-            .filter(|c| !c.is_whitespace())
-            .eq(unwrapped_last_two.chars().filter(|c| !c.is_whitespace()));
+        let unwrapped_last_two = format!("::<{}>::{}", self_type_args, parts[parts.len() - 1]);
+        return normalized_query == normalized_last_two(&unwrapped_last_two);
     }
 
     false
@@ -977,9 +998,10 @@ fn impl_self_type_generic_args(part: &str) -> Option<&str> {
 }
 
 /// Splits a `,`-separated generic-argument list on its top-level commas and strips one
-/// layer of parens from a top-level argument only when it wraps a trait-object bound
-/// (`(dyn …)`); tuple-type parens are semantic and preserved. Lists containing `->`
-/// are returned unchanged.
+/// layer of parens from any top-level argument whose interior has no top-level comma —
+/// the redundant grouping def_path_str adds around a trait-object bound (`(dyn …)`).
+/// Tuple-type parens (a top-level comma) are semantic and preserved. Lists containing
+/// `->` are returned unchanged.
 fn strip_redundant_parens(args: &str) -> String {
     // `->` (fn-pointer / `Fn`-sugar renderings) would corrupt the depth counting
     // below; skip normalization for such lists.
@@ -1010,7 +1032,12 @@ fn strip_redundant_parens(args: &str) -> String {
             // The top-level split leaves the ", " separator's space on every part
             // after the first; trim so the paren check sees the argument itself.
             let part = part.trim();
-            if fully_parenthesized(part) && part[1..].trim_start().starts_with("dyn ") {
+            // A fully-parenthesized argument whose interior has no top-level comma is
+            // redundant grouping def_path_str adds around a trait-object bound
+            // (`(dyn Any + 'static)`); the user writes it bare. A top-level comma means a
+            // tuple type, whose parens are semantic and must stay. Whitespace-independent,
+            // so it matches whether or not the caller pre-stripped spaces.
+            if fully_parenthesized(part) && !has_top_level_comma(&part[1..part.len() - 1]) {
                 &part[1..part.len() - 1]
             } else {
                 part
@@ -1178,6 +1205,45 @@ mod tests {
                 "::<u32, dyn core::any::Any + 'static>",
                 name
             ));
+        }
+
+        // A trait-object argument on an impl BESIDE its type (primary path): def_path_str
+        // renders `(dyn ...)`, and generic_args_to_string hands us a whitespace-free user
+        // side — so both must normalize equal. Inputs here are whitespace-free, matching
+        // what the pipeline actually produces (a spaced input would hide the bug).
+        #[test]
+        fn dyn_bound_parens_in_module() {
+            let name = "double_tag";
+            let item_path = format!("ty::D::<(dynstd::any::Any+'static)>::{name}");
+            assert!(last_two_items_of_path_match(&item_path, "::<dynstd::any::Any+'static>", name));
+            assert!(last_two_items_of_path_match(
+                &item_path,
+                "::<(dynstd::any::Any+'static)>",
+                name
+            ));
+        }
+
+        // Same, on the cross-module `<impl ...>` fallback path.
+        #[test]
+        fn dyn_bound_parens_cross_module() {
+            let name = "double_tag";
+            let item_path = format!("ops::<impl ty::D<(dynstd::any::Any+'static)>>::{name}");
+            assert!(last_two_items_of_path_match(&item_path, "::<dynstd::any::Any+'static>", name));
+            assert!(last_two_items_of_path_match(
+                &item_path,
+                "::<(dynstd::any::Any+'static)>",
+                name
+            ));
+        }
+
+        // A tuple argument's parens are semantic: they must NOT be stripped, so a tuple
+        // never matches the same types spelled as a flat argument list.
+        #[test]
+        fn tuple_parens_preserved() {
+            let name = "f";
+            let item_path = format!("m::S::<(u32,u64),A>::{name}");
+            assert!(last_two_items_of_path_match(&item_path, "::<(u32,u64),A>", name));
+            assert!(!last_two_items_of_path_match(&item_path, "::<u32,u64,A>", name));
         }
     }
 }
