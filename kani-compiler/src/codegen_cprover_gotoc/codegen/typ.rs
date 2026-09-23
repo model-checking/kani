@@ -1554,6 +1554,10 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             Float::F32 => self.tcx.types.f32,
             Float::F64 => self.tcx.types.f64,
             Float::F128 => self.tcx.types.f128,
+            // `f16b` (bfloat16) is a library type rather than a primitive, so there is no
+            // `tcx.types` entry for it, and CBMC has no bfloat16 type either. rustc itself
+            // declines to map this primitive back to a Rust type (`rustc_abi::layout::ty`).
+            Float::F16B => unimplemented!("bfloat16 (`f16b`) is not supported by Kani"),
         }
     }
 

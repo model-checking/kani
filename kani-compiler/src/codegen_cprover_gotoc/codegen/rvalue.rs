@@ -20,7 +20,7 @@ use cbmc::{InternString, InternedString, btree_string_map};
 use num::bigint::BigInt;
 use rustc_abi::{FieldsShape, TagEncoding, Variants};
 use rustc_middle::ty::{TyCtxt, VtblEntry};
-use rustc_public::abi::{Primitive, Scalar, ValueAbi};
+use rustc_public::abi::{Primitive, Scalar, ValueRepr};
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::{
     AggregateKind, BinOp, CastKind, Operand, Place, PointerCoercion, Rvalue, UnOp,
@@ -1848,8 +1848,8 @@ impl GotocCtx<'_, '_> {
                 // }
                 // ```
                 let res_typ = self.codegen_ty_stable(res_ty);
-                let ValueAbi::Scalar(Scalar::Initialized { value, valid_range }) =
-                    res_ty.layout().unwrap().shape().abi
+                let ValueRepr::Scalar(Scalar::Initialized { value, valid_range }) =
+                    res_ty.layout().unwrap().shape().value_repr
                 else {
                     unreachable!("Unexpected layout")
                 };

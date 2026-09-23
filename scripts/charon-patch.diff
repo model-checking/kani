@@ -150,6 +150,18 @@ index 3cb58353..0d5f88f9 100644
          self.vector.indices()
      }
  
+diff --git a/charon/src/lib.rs b/charon/src/lib.rs
+index 62b33782..8eb0728e 100644
+--- a/charon/src/lib.rs
++++ b/charon/src/lib.rs
+@@ -14,7 +14,6 @@
+ // For rustdoc: prevents overflows
+ #![recursion_limit = "256"]
+ #![feature(assert_matches)]
+-#![feature(box_patterns)]
+ #![feature(deref_pure_trait)]
+ #![feature(if_let_guard)]
+ #![feature(impl_trait_in_assoc_type)]
 diff --git a/charon/src/options.rs b/charon/src/options.rs
 index 5f2960d1..99008474 100644
 --- a/charon/src/options.rs
@@ -219,6 +231,62 @@ index 5f2960d1..99008474 100644
                  "`--dest` is deprecated, use `--dest-file` instead",
              )
          }
+diff --git a/charon/src/pretty/fmt_with_ctx.rs b/charon/src/pretty/fmt_with_ctx.rs
+index 6730e159..f01fbd07 100644
+--- a/charon/src/pretty/fmt_with_ctx.rs
++++ b/charon/src/pretty/fmt_with_ctx.rs
+@@ -1025,14 +1025,17 @@ impl<C: AstFormatter> FmtWithCtx<C> for ullbc::Statement {
+                 place.fmt_with_ctx(ctx),
+                 variant_id
+             ),
+-            RawStatement::CopyNonOverlapping(box CopyNonOverlapping { src, dst, count }) => write!(
+-                &mut out,
+-                "{}copy_nonoverlapping({}, {}, {})",
+-                tab,
+-                src.fmt_with_ctx(ctx),
+-                dst.fmt_with_ctx(ctx),
+-                count.fmt_with_ctx(ctx),
+-            ),
++            RawStatement::CopyNonOverlapping(copy) => {
++                let CopyNonOverlapping { src, dst, count } = &**copy;
++                write!(
++                    &mut out,
++                    "{}copy_nonoverlapping({}, {}, {})",
++                    tab,
++                    src.fmt_with_ctx(ctx),
++                    dst.fmt_with_ctx(ctx),
++                    count.fmt_with_ctx(ctx),
++                )
++            }
+             RawStatement::StorageLive(var_id) => {
+                 write!(
+                     &mut out,
+@@ -1088,14 +1091,17 @@ impl<C: AstFormatter> FmtWithCtx<C> for llbc::Statement {
+                 place.fmt_with_ctx(ctx),
+                 variant_id
+             ),
+-            RawStatement::CopyNonOverlapping(box CopyNonOverlapping { src, dst, count }) => write!(
+-                &mut out,
+-                "{}copy_nonoverlapping({}, {}, {})",
+-                tab,
+-                src.fmt_with_ctx(ctx),
+-                dst.fmt_with_ctx(ctx),
+-                count.fmt_with_ctx(ctx),
+-            ),
++            RawStatement::CopyNonOverlapping(copy) => {
++                let CopyNonOverlapping { src, dst, count } = &**copy;
++                write!(
++                    &mut out,
++                    "{}copy_nonoverlapping({}, {}, {})",
++                    tab,
++                    src.fmt_with_ctx(ctx),
++                    dst.fmt_with_ctx(ctx),
++                    count.fmt_with_ctx(ctx),
++                )
++            }
+             RawStatement::StorageLive(var_id) => {
+                 write!(
+                     &mut out,
 diff --git a/charon/src/transform/check_generics.rs b/charon/src/transform/check_generics.rs
 index cf4dad41..180adf08 100644
 --- a/charon/src/transform/check_generics.rs
@@ -254,6 +322,28 @@ index c6140aa0..781c109a 100644
          let _ = self.compute_extra_params_for_trait(pred.trait_id);
          self.trait_modifications[pred.trait_id]
              .as_processed()
+diff --git a/charon/src/transform/inline_local_panic_functions.rs b/charon/src/transform/inline_local_panic_functions.rs
+index a0327689..31cb929d 100644
+--- a/charon/src/transform/inline_local_panic_functions.rs
++++ b/charon/src/transform/inline_local_panic_functions.rs
+@@ -50,15 +50,12 @@ impl UllbcPass for Transform {
+                     if let RawTerminator::Call {
+                         call:
+                             Call {
+-                                func:
+-                                    FnOperand::Regular(FnPtr {
+-                                        func: box FunIdOrTraitMethodRef::Fun(FunId::Regular(fun_id)),
+-                                        ..
+-                                    }),
++                                func: FnOperand::Regular(FnPtr { func, .. }),
+                                 ..
+                             },
+                         ..
+                     } = &block.terminator.content
++                        && let FunIdOrTraitMethodRef::Fun(FunId::Regular(fun_id)) = &**func
+                         && panic_fns.contains(fun_id)
+                     {
+                         block.terminator.content = panic_terminator.clone();
 diff --git a/charon/src/transform/simplify_constants.rs b/charon/src/transform/simplify_constants.rs
 index 3664f51b..1c535677 100644
 --- a/charon/src/transform/simplify_constants.rs

@@ -8,7 +8,6 @@
 //! rustc_private feature and a specific version of rustc.
 #![feature(extern_types)]
 #![recursion_limit = "256"]
-#![feature(box_patterns)]
 #![feature(rustc_private)]
 #![feature(iter_intersperse)]
 #![feature(f128)]
@@ -39,6 +38,7 @@ extern crate rustc_public;
 extern crate rustc_public_bridge;
 extern crate rustc_session;
 extern crate rustc_span;
+extern crate rustc_structures;
 extern crate rustc_target;
 extern crate rustc_trait_selection;
 // We can't add this directly as a dependency because we need the version to match rustc

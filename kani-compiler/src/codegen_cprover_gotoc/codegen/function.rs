@@ -297,7 +297,7 @@ pub mod rustc_public_bridge {
         let filename = rustc_internal::stable(body.span).get_filename();
         // Some functions, like `std` ones, may not have coverage info attached
         // to them because they have been compiled without coverage flags.
-        if let Some(cov_info) = &body.function_coverage_info {
+        if let Some(cov_info) = &body.coverage_mir_info {
             // Iterate over the coverage mappings and match with the coverage term.
             let mut source_regions: Vec<SourceRegion> = Vec::new();
             for mapping in &cov_info.mappings {
