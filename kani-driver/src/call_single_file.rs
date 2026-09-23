@@ -273,6 +273,14 @@ pub fn base_rustc_flags(lib_config: LibConfig) -> Vec<RustcArg> {
         "crate-attr=feature(register_tool)",
         "-Z",
         "crate-attr=register_tool(kanitool)",
+        // nightly-2026-09-22 turns the next-generation trait solver on by default
+        // (rust-lang/rust#160619), and that solver cannot handle `generic_const_exprs`
+        // (rust-lang/rust#160895). rustc reverts to this setting automatically for a crate that
+        // enables the feature itself, but Kani's library exposes such a signature
+        // (`kani::pointer_generator`, whose return type computes its buffer length), so every
+        // crate Kani compiles needs the same setting to be able to call it. Tracked for removal in
+        // https://github.com/model-checking/kani/issues/4832.
+        "-Znext-solver=coherence",
         // Kani injects unstable features (`register_tool` above) into every crate it compiles,
         // so crates that `forbid(unstable_features)` (e.g. rustls) would fail to build through
         // no fault of their own. Downgrade that lint to a warning; `--force-warn` overrides

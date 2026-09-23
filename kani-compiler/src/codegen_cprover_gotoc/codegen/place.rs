@@ -681,8 +681,22 @@ impl GotocCtx<'_, '_> {
     ///   and we need to take it's address and build the fat pointer.
     pub fn codegen_place_ref_stable(&mut self, place: &Place, loc: Location) -> Expr {
         let place_ty = self.place_ty_stable(place);
-        let projection =
-            unwrap_or_return_codegen_unimplemented!(self, self.codegen_place_stable(place, loc));
+        let projection = match self.codegen_place_stable(place, loc) {
+            Ok(projection) => projection,
+            Err(err) => {
+                // This function yields a *reference* to the place, so the stub that replaces an
+                // unsupported projection has to have the reference's type (thin or fat), not the
+                // place's own. `unwrap_or_return_codegen_unimplemented!` would return the latter
+                // and the caller would then assign a value to a pointer-typed local.
+                let ref_ty = self.codegen_ty_ref_stable(place_ty);
+                return self.codegen_unimplemented_expr(
+                    err.operation.as_str(),
+                    ref_ty,
+                    err.loc,
+                    err.bug_url.as_str(),
+                );
+            }
+        };
         if self.use_thin_pointer_stable(place_ty) {
             // For ZST objects rustc does not necessarily generate any actual objects.
             let need_not_be_an_object = self.is_zst_object(&projection.goto_expr);
