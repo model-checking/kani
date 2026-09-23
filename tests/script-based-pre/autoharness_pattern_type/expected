@@ -1,0 +1,4 @@
+Status: SATISFIED
+| pattern_type_probe | nonzero_arg       | #[kani::proof]            | Success             |
+| pattern_type_probe | percent_in_range  | #[kani::proof]            | Success             |
+Complete - 2 successfully verified functions, 0 failures, 2 total.
