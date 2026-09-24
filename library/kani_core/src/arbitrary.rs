@@ -241,6 +241,99 @@ macro_rules! generate_arbitrary {
             unsafe { core_path::str::from_utf8_unchecked(&storage[..valid_len]) }
         }
 
+        /// Generate a C string referring to the bytes of `storage` up to its first NUL, where
+        /// `storage` is a nondeterministic byte array (at most `N` bytes; the driver rejects a
+        /// bound of 0, so `N` is at least 1) whose
+        /// last byte is set to NUL so that one always exists. As with `any_str_ref`, the result
+        /// is a deterministic function of the nondeterministic bytes: every C string of length
+        /// `k < N` arises from storage whose first NUL is at index `k`.
+        ///
+        /// This model is used by the compiler to generate nondeterministic `&CStr` arguments for
+        /// automatic harnesses (`kani autoharness`). Note that any verification result obtained
+        /// with a bounded value like this one is valid only up to the bound.
+        #[kanitool::fn_marker = "AnyCStrRefModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_c_str_ref<const N: usize>(storage: &mut [u8; N]) -> &core_path::ffi::CStr {
+            storage[N - 1] = 0;
+            // `storage` ends in NUL, so one is always found.
+            core_path::ffi::CStr::from_bytes_until_nul(storage).unwrap()
+        }
+
+        /// Generate a byte string referring to a prefix of `storage` of nondeterministic length
+        /// (at most `N`), as `any_slice_ref` does for `&[u8]`: a `ByteStr` is a `[u8]` with no
+        /// further invariant.
+        ///
+        /// This model is used by the compiler to generate nondeterministic `&ByteStr` arguments
+        /// for automatic harnesses (`kani autoharness`). Note that any verification result
+        /// obtained with a bounded value like this one is valid only up to the bound.
+        #[kanitool::fn_marker = "AnyByteStrRefModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_byte_str_ref<const N: usize>(
+            storage: &mut [u8; N],
+        ) -> &core_path::bstr::ByteStr {
+            core_path::bstr::ByteStr::new(any_slice_ref(storage))
+        }
+
+        /// Generate a WTF-8 string referring to the longest well-formed WTF-8 prefix of `storage`,
+        /// a nondeterministic byte array (at most `N` bytes), as `any_str_ref` does for UTF-8.
+        /// WTF-8 is UTF-8 that also admits the three-byte encodings of surrogate code points
+        /// (`ED A0..=BF 80..=BF`), except that a lead surrogate may not be directly followed by a
+        /// trail surrogate: that pair is written as the four-byte encoding of one supplementary
+        /// code point instead. All WTF-8 contents up to length `N` are covered, unpaired
+        /// surrogates included.
+        ///
+        /// This model is used by the compiler to generate nondeterministic `&Wtf8` arguments for
+        /// automatic harnesses (`kani autoharness`). Note that any verification result obtained
+        /// with a bounded value like this one is valid only up to the bound.
+        #[kanitool::fn_marker = "AnyWtf8RefModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        // `std` does not re-export `core::wtf8`, so the type is named through `core` in both arms.
+        pub fn any_wtf8_ref<const N: usize>(storage: &mut [u8; N]) -> &core::wtf8::Wtf8 {
+            let mut valid_len = 0;
+            // Whether the last code point of `storage[..valid_len]` is a lead surrogate.
+            let mut after_lead = false;
+            while valid_len < N {
+                let rest = &storage[valid_len..];
+                if rest[0] < 0x80 {
+                    after_lead = false;
+                    valid_len += 1;
+                    continue;
+                }
+                // The sequence width and the range of its second byte, as in UTF-8, except that
+                // `ED` also accepts `A0..=BF`, the surrogates.
+                let (width, second) = match rest[0] {
+                    0xC2..=0xDF => (2, 0x80..=0xBF),
+                    0xE0 => (3, 0xA0..=0xBF),
+                    0xE1..=0xEF => (3, 0x80..=0xBF),
+                    0xF0 => (4, 0x90..=0xBF),
+                    0xF1..=0xF3 => (4, 0x80..=0xBF),
+                    0xF4 => (4, 0x80..=0x8F),
+                    _ => break,
+                };
+                // Continuation bytes are `80..=BF`. They are checked by index, which leaves no
+                // loop over a slice of nondeterministic length for symbolic execution to unwind.
+                let is_cont = |b: u8| b & 0xC0 == 0x80;
+                if rest.len() < width
+                    || !second.contains(&rest[1])
+                    || (width > 2 && !is_cont(rest[2]))
+                    || (width > 3 && !is_cont(rest[3]))
+                {
+                    break;
+                }
+                let is_surrogate = rest[0] == 0xED && rest[1] >= 0xA0;
+                if after_lead && is_surrogate && rest[1] >= 0xB0 {
+                    break;
+                }
+                after_lead = is_surrogate && rest[1] < 0xB0;
+                valid_len += width;
+            }
+            // SAFETY: `storage[..valid_len]` is well-formed WTF-8, checked above.
+            unsafe { core::wtf8::Wtf8::from_bytes_unchecked(&storage[..valid_len]) }
+        }
+
         arbitrary_tuple!(A);
         arbitrary_tuple!(A, B);
         arbitrary_tuple!(A, B, C);

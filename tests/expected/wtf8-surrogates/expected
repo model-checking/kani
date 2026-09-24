@@ -1,0 +1,15 @@
+Status: SUCCESS\
+Description: "lead surrogate followed by a trail surrogate"
+
+Status: SATISFIED\
+Description: "ends in a lead surrogate"
+
+Status: SATISFIED\
+Description: "starts with a trail surrogate"
+
+Status: SATISFIED\
+Description: "trail surrogate followed by a lead surrogate"
+
+ ** 3 of 3 cover properties satisfied
+
+VERIFICATION:- SUCCESSFUL
