@@ -1650,8 +1650,9 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     pub fn fn_typ(&mut self, instance: InstanceStable, body: &Body) -> Type {
         if self.is_unsupported_variadic(instance) {
             // Asking for the ABI of such a function aborts compilation (c.f.
-            // `is_unsupported_variadic`), so derive the declaration from the signature. The body is
-            // replaced by an unsupported-construct stub in `codegen_function`.
+            // `is_unsupported_variadic`), so derive the declaration from the signature.
+            // `codegen_function` leaves it a declaration: Kani cannot model the body, and calls to
+            // it are replaced by an unsupported-construct stub.
             let sig = instance.ty().kind().fn_sig().unwrap().value;
             return self.codegen_function_sig_stable(sig);
         }

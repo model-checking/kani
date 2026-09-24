@@ -162,14 +162,30 @@ impl GotocCtx<'_, '_> {
     /// Generate type for the given foreign instance.
     fn codegen_ffi_type(&mut self, instance: Instance) -> Type {
         let fn_name = instance.mangled_name();
+        let loc = self.codegen_span_stable(instance.def.span());
         if self.is_unsupported_variadic(instance) {
-            // See `is_unsupported_variadic`: the ABI is unavailable, so declare the shim from the
-            // signature. Its body is the unsupported-construct stub every FFI shim gets.
+            // See `is_unsupported_variadic`: the ABI is unavailable, so take the parameter types
+            // from the signature. The shim still gets the unsupported-construct body every FFI
+            // shim gets, and CBMC requires a body's parameters to be named symbols.
             let sig = instance.ty().kind().fn_sig().unwrap().value;
-            return self.codegen_function_sig_stable(sig);
+            let params = sig
+                .inputs()
+                .iter()
+                .enumerate()
+                .map(|(idx, ty)| {
+                    let arg_name = format!("{fn_name}::param_{idx}");
+                    let base_name = format!("param_{idx}");
+                    let arg_type = self.codegen_ty_stable(*ty);
+                    let sym = Symbol::variable(&arg_name, &base_name, arg_type.clone(), loc)
+                        .with_is_parameter(true);
+                    self.symbol_table.insert(sym);
+                    arg_type.as_parameter(Some(arg_name.into()), Some(base_name.into()))
+                })
+                .collect();
+            let ret_type = self.codegen_ty_stable(sig.output());
+            return Type::variadic_code(params, ret_type);
         }
         let fn_abi = instance.fn_abi().unwrap();
-        let loc = self.codegen_span_stable(instance.def.span());
         let params = fn_abi
             .args
             .iter()
@@ -220,13 +236,23 @@ impl GotocCtx<'_, '_> {
         let entry = self.unsupported_constructs.entry("foreign function".into()).or_default();
         entry.push(loc);
 
-        let call_conv = instance.fn_abi().unwrap().conv;
-        let msg = format!("call to foreign \"{call_conv:?}\" function `{fn_name}`");
-        let url = if call_conv == CallConvention::C {
-            "https://github.com/model-checking/kani/issues/2423"
+        // Asking for the ABI of a non-C variadic aborts the compilation (c.f.
+        // `is_unsupported_variadic`), so name the convention from the declaration for those.
+        let (call_conv, url) = if self.is_unsupported_variadic(instance) {
+            (
+                format!("{:?}", instance.ty().kind().fn_sig().unwrap().value.abi),
+                "https://github.com/model-checking/kani/issues/4817",
+            )
         } else {
-            "https://github.com/model-checking/kani/issues/new/choose"
+            let conv = instance.fn_abi().unwrap().conv;
+            let url = if conv == CallConvention::C {
+                "https://github.com/model-checking/kani/issues/2423"
+            } else {
+                "https://github.com/model-checking/kani/issues/new/choose"
+            };
+            (format!("{conv:?}"), url)
         };
+        let msg = format!("call to foreign \"{call_conv}\" function `{fn_name}`");
         self.codegen_assert_assume(
             Expr::bool_false(),
             PropertyClass::UnsupportedConstruct,

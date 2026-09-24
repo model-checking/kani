@@ -13,8 +13,8 @@ use rustc_public::mir::mono::{Instance, MonoItem};
 use rustc_public::mir::{Mutability, TerminatorKind};
 use rustc_public::rustc_internal;
 use rustc_public::ty::{
-    AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, RigidTy, Span as SpanStable, Ty, TyConst,
-    TyKind,
+    AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, PolyFnSig, RigidTy, Span as SpanStable,
+    Ty, TyConst, TyKind,
 };
 use rustc_public::visitor::{Visitable, Visitor as TyVisitor};
 use rustc_public::{CrateDef, CrateDefType, DefId, local_crate};
@@ -175,7 +175,6 @@ pub fn check_crate_items(tcx: TyCtxt, ignore_asm: bool) {
 /// `extern` string is not, since `extern "system"` and `extern "cdecl"` canonicalize differently
 /// per target (`rustc_target::spec::abi_map`).
 pub fn is_unsupported_variadic(tcx: TyCtxt, instance: Instance) -> bool {
-    use rustc_abi::CanonAbi;
     use rustc_middle::ty::TypingEnv;
     let internal_instance = rustc_internal::internal(tcx, instance);
     let Ok(fn_abi) = tcx.fn_abi_of_instance(
@@ -184,7 +183,26 @@ pub fn is_unsupported_variadic(tcx: TyCtxt, instance: Instance) -> bool {
     ) else {
         return false;
     };
-    fn_abi.c_variadic && !matches!(fn_abi.conv, CanonAbi::C)
+    abi_is_unsupported_variadic(fn_abi)
+}
+
+/// The same check for a call through a function pointer, which has a signature but no instance.
+pub fn is_unsupported_variadic_fn_ptr(tcx: TyCtxt, fn_sig: PolyFnSig) -> bool {
+    use rustc_middle::ty::TypingEnv;
+    let internal_sig = rustc_internal::internal(tcx, fn_sig);
+    let Ok(fn_abi) = tcx.fn_abi_of_fn_ptr(
+        TypingEnv::fully_monomorphized()
+            .as_query_input((internal_sig, rustc_middle::ty::List::empty())),
+    ) else {
+        return false;
+    };
+    abi_is_unsupported_variadic(fn_abi)
+}
+
+fn abi_is_unsupported_variadic(
+    fn_abi: &rustc_target::callconv::FnAbi<'_, rustc_middle::ty::Ty<'_>>,
+) -> bool {
+    fn_abi.c_variadic && !matches!(fn_abi.conv, rustc_abi::CanonAbi::C)
 }
 
 /// Traverse the type definition to see if the type contains interior mutability.

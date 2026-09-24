@@ -81,16 +81,10 @@ impl GotocCtx<'_, '_> {
             let body = self.transformer.body(self.tcx, instance);
             self.set_current_fn(instance, &body);
             if self.is_unsupported_variadic(instance) {
-                let loc = self.codegen_span_stable(instance.def.span());
-                let unsupported = self.codegen_unimplemented_stmt(
-                    "Variadic function with a non-C calling convention",
-                    loc,
-                    "https://github.com/model-checking/kani/issues/4817",
-                );
-                self.symbol_table.update_fn_declaration_with_definition(
-                    &name,
-                    Stmt::block(vec![unsupported], loc),
-                );
+                // Kani cannot model such a function (c.f. `is_unsupported_variadic`), and CBMC
+                // cannot convert a body whose parameters it has no symbols for, so leave the
+                // symbol a declaration. Calls to it are replaced by an unsupported-construct
+                // stub, so the missing body is never reached.
                 self.reset_current_fn();
                 return;
             }
