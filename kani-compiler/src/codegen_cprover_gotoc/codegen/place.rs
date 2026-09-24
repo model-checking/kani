@@ -443,11 +443,10 @@ impl GotocCtx<'_, '_> {
         match proj {
             ProjectionElem::Deref => {
                 let base_type = before.mir_typ();
-                let inner_goto_expr = if base_type.kind().is_box() {
-                    self.deref_box(before.goto_expr)
-                } else {
-                    before.goto_expr
-                };
+                // rustc's `ElaborateBoxDerefs` pass replaces every deref of a `Box` with a deref
+                // of its raw pointer.
+                assert!(!base_type.kind().is_box(), "Unexpected deref of {base_type:?}");
+                let inner_goto_expr = before.goto_expr;
 
                 let inner_mir_typ_internal =
                     std_pointee_type(rustc_internal::internal(self.tcx, base_type)).unwrap();
