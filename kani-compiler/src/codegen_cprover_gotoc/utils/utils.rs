@@ -178,7 +178,7 @@ impl GotocCtx<'_, '_> {
     ///
     /// Returns `expr` unchanged when it is already a pointer, so this is a no-op for layouts
     /// that do not wrap.
-    pub fn peel_ptr_wrappers(&self, mut expr: Expr) -> Expr {
+    fn peel_ptr_wrappers(&self, mut expr: Expr) -> Expr {
         while expr.typ().is_struct_like() && !expr.typ().is_rust_fat_ptr(&self.symbol_table) {
             let components = expr.typ().lookup_components(&self.symbol_table).unwrap();
             let fields: Vec<_> = components.iter().filter(|c| !c.is_padding()).collect();
@@ -267,8 +267,9 @@ impl GotocCtx<'_, '_> {
     fn assert_is_non_null_like(&self, t: &Type) {
         assert!(t.is_struct_like());
         let components = t.lookup_components(&self.symbol_table).unwrap();
-        assert_eq!(components.len(), 1);
-        let component = components.first().unwrap();
+        let fields: Vec<_> = components.iter().filter(|c| !c.is_padding()).collect();
+        assert_eq!(fields.len(), 1);
+        let component = fields[0];
         assert_eq!(component.name().to_string().as_str(), "pointer");
         assert!(
             self.is_wrapped_pointer(&component.typ()),
