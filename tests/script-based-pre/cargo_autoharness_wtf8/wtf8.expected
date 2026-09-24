@@ -9,6 +9,8 @@ Status: SATISFIED\
 Description: "maximum-length string"
 Status: SATISFIED\
 Description: "string "ab""
+Status: SATISFIED\
+Description: "unpaired surrogate"
 | cargo_autoharness_wtf8 | len               | #[kani::proof] (bounded)  | Success             |
 | cargo_autoharness_wtf8 | first             | #[kani::proof] (bounded)  | Failure             |
 | cargo_autoharness_wtf8 | wtf8_cover        | #[kani::proof] (bounded)  | Success             |
