@@ -1,0 +1,4 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+script: autoharness_std_nonnull_field.sh
+expected: autoharness_std_nonnull_field.expected
