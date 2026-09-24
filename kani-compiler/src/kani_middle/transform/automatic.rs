@@ -1201,8 +1201,10 @@ fn call_kani_any_for_ty(
                     TyConst::try_from_target_usize(models.string_bound).unwrap(),
                 )]),
             ),
-            // `&CStr`: bytes up to the first NUL of the storage, sized by the slice bound.
-            TyKind::RigidTy(RigidTy::Adt(..)) => (
+            // `&CStr`: bytes up to the first NUL of the storage, sized by the slice bound. Each
+            // ADT arm repeats its predicate from the guard above, so a type added there cannot
+            // fall into another type's model.
+            TyKind::RigidTy(RigidTy::Adt(def, _)) if is_c_str(tcx, def) => (
                 Ty::unsigned_ty(UintTy::U8),
                 models.kani_any_c_str_ref,
                 GenericArgs(vec![GenericArgKind::Const(

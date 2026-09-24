@@ -242,7 +242,8 @@ macro_rules! generate_arbitrary {
         }
 
         /// Generate a C string referring to the bytes of `storage` up to its first NUL, where
-        /// `storage` is a nondeterministic byte array (at most `N` bytes, `N` at least 1) whose
+        /// `storage` is a nondeterministic byte array (at most `N` bytes; the driver rejects a
+        /// bound of 0, so `N` is at least 1) whose
         /// last byte is set to NUL so that one always exists. As with `any_str_ref`, the result
         /// is a deterministic function of the nondeterministic bytes: every C string of length
         /// `k < N` arises from storage whose first NUL is at index `k`.
