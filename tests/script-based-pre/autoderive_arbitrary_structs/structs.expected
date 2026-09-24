@@ -1,12 +1,10 @@
-Kani generated automatic harnesses for 17 function(s):
+Kani generated automatic harnesses for 16 function(s):
 +------------------------------+------------------------------------------------------------------------+
 | Crate                        | Selected Function                                                      |
 +=======================================================================================================+
 | autoderive_arbitrary_structs | <should_derive::AlignmentStruct as std::cmp::Eq>::assert_fields_are_eq |
 |------------------------------+------------------------------------------------------------------------|
 | autoderive_arbitrary_structs | <should_derive::AlignmentStruct as std::cmp::PartialEq>::eq            |
-|------------------------------+------------------------------------------------------------------------|
-| autoderive_arbitrary_structs | <should_derive::UnitStruct as std::cmp::Eq>::assert_fields_are_eq      |
 |------------------------------+------------------------------------------------------------------------|
 | autoderive_arbitrary_structs | <should_derive::UnitStruct as std::cmp::PartialEq>::eq                 |
 |------------------------------+------------------------------------------------------------------------|
@@ -119,8 +117,6 @@ Autoharness Summary:
 | autoderive_arbitrary_structs | <should_derive::AlignmentStruct as std::cmp::Eq>::assert_fields_are_eq | #[kani::proof]              | Success             |
 |------------------------------+------------------------------------------------------------------------+-----------------------------+---------------------|
 | autoderive_arbitrary_structs | <should_derive::AlignmentStruct as std::cmp::PartialEq>::eq            | #[kani::proof]              | Success             |
-|------------------------------+------------------------------------------------------------------------+-----------------------------+---------------------|
-| autoderive_arbitrary_structs | <should_derive::UnitStruct as std::cmp::Eq>::assert_fields_are_eq      | #[kani::proof]              | Success             |
 |------------------------------+------------------------------------------------------------------------+-----------------------------+---------------------|
 | autoderive_arbitrary_structs | <should_derive::UnitStruct as std::cmp::PartialEq>::eq                 | #[kani::proof]              | Success             |
 |------------------------------+------------------------------------------------------------------------+-----------------------------+---------------------|

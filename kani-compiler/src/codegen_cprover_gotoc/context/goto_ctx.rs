@@ -29,7 +29,6 @@ use cbmc::utils::aggr_tag;
 use cbmc::{InternedString, MachineModel};
 use rustc_abi::{HasDataLayout, TargetDataLayout};
 use rustc_data_structures::fx::FxHashMap;
-use rustc_middle::span_bug;
 use rustc_middle::ty::layout::{
     FnAbiError, FnAbiOfHelpers, FnAbiRequest, HasTyCtxt, HasTypingEnv, LayoutError,
     LayoutOfHelpers, TyAndLayout,
@@ -40,6 +39,7 @@ use rustc_public::mir::mono::Instance;
 use rustc_public::ty::Allocation;
 use rustc_span::Span;
 use rustc_span::respan;
+use rustc_span::span_bug;
 use rustc_target::callconv::FnAbi;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Debug;

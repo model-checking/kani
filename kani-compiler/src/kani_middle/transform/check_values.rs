@@ -22,7 +22,9 @@ use crate::kani_queries::QueryDb;
 use rustc_middle::ty::{Const, TyCtxt};
 use rustc_public::CrateDef;
 use rustc_public::CrateDefType;
-use rustc_public::abi::{FieldsShape, Scalar, TagEncoding, ValueAbi, VariantsShape, WrappingRange};
+use rustc_public::abi::{
+    FieldsShape, Scalar, TagEncoding, ValueRepr, VariantsShape, WrappingRange,
+};
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::visit::{Location, PlaceContext, PlaceRef};
 use rustc_public::mir::{
@@ -186,7 +188,7 @@ enum ValidityRange {
 // 3- Ranges intersection is a combination of two new ranges.
 // 4- Intersection is empty.
 impl ValidValueReq {
-    /// Only a type with `ValueAbi::Scalar` and `ValueAbi::ScalarPair` can be directly assigned an
+    /// Only a type with `ValueRepr::Scalar` and `ValueRepr::ScalarPair` can be directly assigned an
     /// invalid value directly.
     ///
     /// It's not possible to define a `rustc_layout_scalar_valid_range_*` to any other structure.
@@ -206,20 +208,20 @@ impl ValidValueReq {
             })
         } else {
             let shape = ty.layout().unwrap().shape();
-            match shape.abi {
-                ValueAbi::Scalar(Scalar::Initialized { value, valid_range })
-                | ValueAbi::ScalarPair { a: Scalar::Initialized { value, valid_range }, .. } => {
+            match shape.value_repr {
+                ValueRepr::Scalar(Scalar::Initialized { value, valid_range })
+                | ValueRepr::ScalarPair { a: Scalar::Initialized { value, valid_range }, .. } => {
                     Some(ValidValueReq {
                         offset: 0,
                         size: value.size(machine_info),
                         valid_range: ValidityRange::Single(valid_range),
                     })
                 }
-                ValueAbi::Scalar(_)
-                | ValueAbi::ScalarPair { .. }
-                | ValueAbi::Vector { .. }
-                | ValueAbi::ScalableVector { .. }
-                | ValueAbi::Aggregate { .. } => None,
+                ValueRepr::Scalar(_)
+                | ValueRepr::ScalarPair { .. }
+                | ValueRepr::Vector { .. }
+                | ValueRepr::ScalableVector { .. }
+                | ValueRepr::Aggregate { .. } => None,
             }
         }
     }
@@ -957,7 +959,7 @@ pub fn ty_validity_per_offset(
             return Err("Unsupported pattern type over `char`".to_string());
         }
         assert!(
-            matches!(layout.abi, ValueAbi::Scalar(..)),
+            matches!(layout.value_repr, ValueRepr::Scalar(..)),
             "expected pattern type to have a scalar ABI: {ty:?}"
         );
         return Ok(ty_req());

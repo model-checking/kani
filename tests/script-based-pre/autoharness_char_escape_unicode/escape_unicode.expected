@@ -1,0 +1,1 @@
+| autoharness_char_escape_unicode | consume_escape_unicode | #[kani::proof] | Success |

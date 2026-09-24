@@ -23,6 +23,31 @@ mod vtable;
 
 pub use unstable::{EnabledUnstableFeatures, UnstableFeature};
 
+/// The default maximum length for nondeterministic slices that automatic harnesses generate.
+/// Verification results for functions taking `&[T]`/`&mut [T]` arguments are only valid up to
+/// this bound. The default must stay below Kani's default unwinding bound (20), so that loops
+/// iterating over such a slice can be fully unwound by default.
+pub const AUTOHARNESS_SLICE_BOUND: u64 = 16;
+
+/// The default maximum length (in bytes) for nondeterministic strings that automatic harnesses
+/// generate. Strings use a much smaller bound than slices: the generated string is the longest
+/// valid-UTF-8 prefix of nondeterministic bytes, and reasoning about UTF-8 validity is
+/// expensive. On top of that, a harness that decodes every `char` (e.g. `s.chars().count()`)
+/// unwinds the decoding loop up to the default bound (20) over symbolic bytes, so the cost grows
+/// steeply with the number of bytes: on a typical machine 8 bytes already exceed Kani's default
+/// 60s harness timeout for such harnesses, while 4 stay comfortably within it (though a
+/// char-decoding harness can still approach the timeout on slow machines, so callers that must
+/// not time out should raise `--harness-timeout`).
+pub const AUTOHARNESS_STR_BOUND: u64 = 4;
+
+/// The default bound for nondeterministic values of types that implement `BoundedArbitrary`
+/// (rather than `Arbitrary`) that automatic harnesses generate, e.g. `Vec<T>` or `String`.
+/// Verification results for functions with such arguments are only valid up to this bound.
+/// This is smaller than the slice/str bounds since `BoundedArbitrary` values are heap
+/// allocated, and for `String` additionally involve UTF-8 reasoning; a bound of 8 already
+/// makes simple `String` harnesses exceed Kani's default 60s harness timeout.
+pub const AUTOHARNESS_BOUNDED_ARBITRARY_BOUND: u64 = 4;
+
 /// The structure of `.kani-metadata.json` files, which are emitted for each crate
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KaniMetadata {

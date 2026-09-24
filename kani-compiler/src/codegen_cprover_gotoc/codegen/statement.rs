@@ -938,7 +938,12 @@ impl GotocCtx<'_, '_> {
         fargs[0] = if self_ty.kind().is_adt() {
             // Generate a temp variable and assign its inner pointer to the fat_ptr.data.
             match fn_ptr.typ() {
-                Type::Pointer { typ: box Type::Code { parameters, .. } } => {
+                // `box` patterns were removed in nightly-2026-09-22, so match the pointer and
+                // then look through it.
+                Type::Pointer { typ } => {
+                    let Type::Code { parameters, .. } = typ.as_ref() else {
+                        unreachable!("Unexpected virtual function type: {:?}", fn_ptr.typ())
+                    };
                     let param_typ = parameters.first().unwrap().typ();
                     let (tmp, decl) = self.decl_temp_variable(param_typ.clone(), None, loc);
                     debug!(?tmp,
