@@ -19,6 +19,8 @@ use crate::kani_middle::transform::body::{
 };
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
+// `ConstExt` carries `Const`'s constructors as of nightly-2026-09-23, c.f. `kani_middle::intrinsics`.
+use rustc_middle::ty::consts::ConstExt;
 use rustc_middle::ty::{Const, TyCtxt};
 use rustc_public::CrateDef;
 use rustc_public::CrateDefType;
