@@ -145,7 +145,7 @@ Check 3: cover_unreachable_example.cover.1
          - Location: src/main.rs:90:13 in function cover_unreachable_example
 ```
 
-4. `UNDETERMINED`: This is the same as the `UNDETERMINED` result for normal checks (see [check_results]).
+4. `UNDETERMINED`: This is the same as the `UNDETERMINED` result for normal checks (see [check_results][#check-results]).
 
 ## Verification summary
 
