@@ -931,6 +931,8 @@ fn last_two_items_of_path_match(item_path: &str, generic_args: &str, name: &str)
             }
             ':' if angle_bracket_depth == 0 && prev == Some(':') => {
                 if part_start < i {
+                    // `i - 1` is the first colon of `::` (ASCII, one byte), so this
+                    // byte slice always ends on a char boundary.
                     parts.push(&item_path[part_start..i - 1]);
                 }
                 part_start = i + 1;
@@ -1266,6 +1268,17 @@ mod tests {
             let generic_args = "::<u32>";
             let name = "unchecked_add";
             let item_path = format!("éa::NonZero{generic_args}::{name}");
+            assert!(last_two_items_of_path_match(&item_path, generic_args, name))
+        }
+
+        #[test]
+        fn multibyte_path_char_const_generic() {
+            // The description's realistic trigger: a non-ASCII `char` const-generic
+            // puts a multibyte char inside the generic-args part (not a leading
+            // component), which desynced the old byte/char guard.
+            let generic_args = "::<'🦀'>";
+            let name = "f";
+            let item_path = format!("m::S{generic_args}::{name}");
             assert!(last_two_items_of_path_match(&item_path, generic_args, name))
         }
     }
