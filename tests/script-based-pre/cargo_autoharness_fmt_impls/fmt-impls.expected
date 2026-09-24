@@ -1,6 +1,6 @@
-| cargo_autoharness_fmt_impls | <Borrowed<'_> as std::fmt::Debug>::fmt | Missing Arbitrary implementation for argument(s) self: Borrowed<'_>              |
-| cargo_autoharness_fmt_impls | <Contracted as std::fmt::Debug>::fmt   | Missing Arbitrary implementation for argument(s) f: &mut std::fmt::Formatter<'_> |
-| cargo_autoharness_fmt_impls | <NotGen as std::fmt::Debug>::fmt       | Missing Arbitrary implementation for argument(s) self: NotGen                    |
+| cargo_autoharness_fmt_impls | <Borrowed<'_> as std::fmt::Debug>::fmt | Missing Arbitrary implementation for argument(s) self: Borrowed<'_>          |
+| cargo_autoharness_fmt_impls | <Contracted as std::fmt::Debug>::fmt   | Requires --bounded-arguments for argument(s) f: &mut std::fmt::Formatter<'_> |
+| cargo_autoharness_fmt_impls | <NotGen as std::fmt::Debug>::fmt       | Missing Arbitrary implementation for argument(s) self: NotGen                |
 Failed Checks: "binary"
 Failed Checks: "invalid level"
 Failed Checks: "invalid percent"
