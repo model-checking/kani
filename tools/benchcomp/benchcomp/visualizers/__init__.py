@@ -79,6 +79,21 @@ class error_on_regression:
         test: "lambda old, new: False if not old else not new"
     ```
 
+    A check may instead set `all_metrics: true`, in which case the test receives the two
+    variants' entire metric dicts rather than a single metric's values. `metric` is then only
+    used to label the warning that the check prints:
+
+    ```
+    visualize:
+    - type: error_on_regression
+      variant_pairs:
+      - [variant_1, variant_2]
+      checks:
+      - metric: runtime
+        all_metrics: true
+        test: "lambda old, new: new['runtime'] / old['runtime'] > 1.1 and old['steps'] != new['steps']"
+    ```
+
     This says to check whether any benchmark regressed when run under variant_2
     compared to variant_1. A benchmark is considered to have regressed if the
     value of the 'runtime' metric under variant_2 is 10% higher than the value

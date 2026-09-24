@@ -82,6 +82,13 @@ visualize:
           + "%.3f%%" % ((b["kani_new"] - b["kani_old"]) * 100 / b["kani_old"])
           + ("**" if abs((b["kani_new"]-b["kani_old"])/b["kani_old"]) > 0.5 else "")
 
+      solver_calls:
+      - column_name: diff old → new
+        text: >
+          lambda b: "" if b["kani_new"] == b["kani_old"]
+          else ("+" if b["kani_new"] > b["kani_old"] else "")
+          + str(b["kani_new"] - b["kani_old"])
+
       # For success metric, display some text if success has changed
       success:
       - column_name: change
@@ -97,7 +104,31 @@ visualize:
         # Compare the old and new variants of each benchmark. The
         # benchmark has regressed if the lambda returns true.
         test: "lambda old, new: False if not old else not new"
-      - metric: solver_runtime
-        test: "lambda old, new: False if new < 10 else new/old > 1.5"
+
+      # Solver time is only attributable to a change when the change altered the formula, so
+      # require that the VCC or step count moved before calling a slowdown a regression. On
+      # identical counts the two sides are solving the same problem, and measurements of the
+      # perf suite's heavy harnesses spread far too wide to read anything into the difference:
+      # over seven `main` runs, 910 (benchmark, run) pairs with identical VCC *and* step counts
+      # had a median old→new ratio of 0.99x but a range of 0.41x to 2.41x, and
+      # `inet::checksum::tests::differential` alone ranged 38.8s to 116.0s on the `main` side.
+      # That is what tripped this check on #4801, #4804 and #4820, none of which touched the
+      # harnesses involved (https://github.com/model-checking/kani/issues/4822).
+      #
+      # `solver_runtime` also sums over a number of solver calls that is not stable across runs
+      # of the same code (https://github.com/model-checking/kani/issues/4821), so compare the
+      # per-call time, which is the quantity the two sides share.
+      - metric: solver_runtime_per_call
+        all_metrics: true
+        test: >
+          lambda old, new: False if (
+            old["number_vccs"] == new["number_vccs"]
+            and old["number_program_steps"] == new["number_program_steps"]
+          ) else (
+            new["solver_runtime"] >= 10
+            and new["solver_runtime_per_call"] / old["solver_runtime_per_call"] > 1.5
+          )
+
+      # Symex time is deterministic given the formula, so it keeps the simple rule.
       - metric: symex_runtime
         test: "lambda old, new: False if new < 10 else new/old > 1.5"
