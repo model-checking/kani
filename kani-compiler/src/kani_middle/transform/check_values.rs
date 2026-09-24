@@ -958,10 +958,13 @@ pub fn ty_validity_per_offset(
         if base_ty.is_char() {
             return Err("Unsupported pattern type over `char`".to_string());
         }
-        assert!(
-            matches!(layout.value_repr, ValueRepr::Scalar(..)),
-            "expected pattern type to have a scalar ABI: {ty:?}"
-        );
+        // A pattern over a wide pointer (e.g. `NonNull<[u8]>`'s `*const [u8] is !null`, which
+        // the allocation shims take since nightly-2026-03-21) has a `ScalarPair` ABI; report it
+        // as unsupported rather than asserting, so `-Z valid-value-checks` degrades to a
+        // reported unsupported construct instead of an ICE on any allocating function.
+        if !matches!(layout.value_repr, ValueRepr::Scalar(..)) {
+            return Err(format!("Unsupported pattern type over a non-scalar type: {ty}"));
+        }
         return Ok(ty_req());
     }
     match layout.fields {
