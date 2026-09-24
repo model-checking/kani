@@ -257,7 +257,9 @@ that lives for the entire harness: by default **up to 16 elements** for slices a
 for C strings (which follow the slice bound, less one for the NUL). Strings cover all
 valid UTF-8 contents up to the bound (the generated string is the longest valid-UTF-8 prefix of
 nondeterministic bytes, the same approach as `String`'s `BoundedArbitrary` implementation); the
-smaller bound reflects the cost of reasoning about UTF-8 for symbolic execution. The bounds are
+smaller bound reflects the cost of reasoning about UTF-8 for symbolic execution. WTF-8 strings are
+generated the same way, so they cover only this UTF-8 subset: values holding unpaired surrogate
+code points are not generated, and a bug that requires one will not be found. The bounds are
 chosen to stay below the default loop-unwinding bound of 20, so that loops over the slice can
 be fully unwound by default.
 
