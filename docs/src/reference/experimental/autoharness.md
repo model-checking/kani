@@ -286,8 +286,8 @@ Nested slice references (e.g. `&&[u8]`) and slices inside user-defined types rem
 
 ## Formatting Trait Implementations
 For the `fmt` methods of `Debug`, `Display`, `Binary`, `Octal`, `LowerHex`, `UpperHex`, `LowerExp`,
-`UpperExp` and `Pointer` implementations, the `&mut Formatter` argument
-cannot be generated nondeterministically. Instead, Kani generates a harness that formats a
+`UpperExp` and `Pointer` implementations, the `&mut Formatter` argument is not taken from the
+bounded `Formatter` model above. Instead, Kani generates a harness that formats a
 nondeterministic value of the implementing type into a sink that discards the output: the
 `Formatter` is constructed by the core formatting machinery (so it is always valid), and panics
 or undefined behavior inside the `fmt` implementation are detected as usual.
@@ -306,8 +306,8 @@ Current limitations:
 - Because the harness goes through `core::fmt`, the core formatting machinery is verified along
   with the `fmt` implementation, so a reported failure may point at a location inside `core`.
 - A `fmt` method that carries a [function contract](contracts.md) is not handled this way: the
-  automatic contract harness calls the function directly, so it is skipped for its
-  `&mut Formatter` argument like any other function Kani cannot call.
+  automatic contract harness calls the function directly, so its `&mut Formatter` argument comes
+  from the bounded `Formatter` model and requires `--bounded-arguments`.
 
 ## Limitations
 ### Arguments Implementing Arbitrary
