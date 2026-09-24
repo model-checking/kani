@@ -401,7 +401,8 @@ macro_rules! kani_intrinsics {
         }
 
         /// Generate a `Formatter` over a sink that discards its output, with every formatting
-        /// option nondeterministic: width and precision (each unset or up to `N`), fill
+        /// option nondeterministic: width and precision (each unset or up to `N`, at most
+        /// `u16::MAX`), fill
         /// character, alignment, sign, the alternate and zero-padding flags, and debug hex mode.
         /// Every combination is a valid `Formatter`, so none is excluded. The sink never
         /// fails, so paths that handle a write error are not reached.
@@ -416,14 +417,22 @@ macro_rules! kani_intrinsics {
             sink: &mut DiscardingSink,
         ) -> core_path::fmt::Formatter<'_> {
             use core_path::fmt::{Alignment, DebugAsHex, FormattingOptions, Sign};
-            // Unset, or a count in `0..=N`, by reduction rather than by an assumption.
-            fn bounded<const N: usize>() -> Option<u16> {
-                <Option<u16> as Arbitrary>::any().map(|v| (v as usize % (N + 1)) as u16)
-            }
+            // Width and precision: unset, or a count in `0..=N` (capped at `u16::MAX`, their type in
+            // the API), by reduction rather than by an assumption. Written out rather than as a nested
+            // fn, which the standard-library flow would offer a harness of its own.
+            let max = N.min(u16::MAX as usize);
+            let width = match <Option<u16> as Arbitrary>::any() {
+                None => None,
+                Some(v) => Some((v as usize % (max + 1)) as u16),
+            };
+            let precision = match <Option<u16> as Arbitrary>::any() {
+                None => None,
+                Some(v) => Some((v as usize % (max + 1)) as u16),
+            };
             let mut options = FormattingOptions::new();
             options
-                .width(bounded::<N>())
-                .precision(bounded::<N>())
+                .width(width)
+                .precision(precision)
                 .fill(<char as Arbitrary>::any())
                 .alternate(<bool as Arbitrary>::any())
                 .sign_aware_zero_pad(<bool as Arbitrary>::any())
