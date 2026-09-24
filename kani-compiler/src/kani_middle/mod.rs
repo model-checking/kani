@@ -1040,6 +1040,10 @@ pub fn is_c_str(tcx: TyCtxt, def: AdtDef) -> bool {
 /// Whether `def` is `core::bstr::ByteStr`, which has no diagnostic item.
 ///
 /// Shared by the eligibility check and the harness generation, as `is_c_str` is.
+///
+/// Matching by name means a rename in `core` would silently return these functions to the
+/// skipped list; `cargo_autoharness_byte_str` pins a `&ByteStr` function as selected, so the test
+/// fails instead.
 pub fn is_byte_str(tcx: TyCtxt, def: AdtDef) -> bool {
     let def_id = rustc_internal::internal(tcx, def.def_id());
     tcx.crate_name(def_id.krate) == rustc_span::sym::core
