@@ -22,11 +22,12 @@ pub fn first(s: &Wtf8) -> u8 {
 }
 
 // TEST NOTE: should PASS, and the cover checks must be SATISFIED: the empty string, the longest
-// string, and a specific content are all generated.
+// string, a specific content, and an unpaired surrogate are all generated.
 pub fn wtf8_cover(s: &Wtf8) {
     kani::cover!(s.is_empty(), "empty string");
     kani::cover!(s.len() == 4, "maximum-length string");
     kani::cover!(s.as_bytes() == b"ab", "string \"ab\"");
+    kani::cover!(s.as_bytes() == b"\xED\xA0\x80", "unpaired surrogate");
 }
 
 // TEST NOTE: is skipped: a string behind a further reference is not supported, as for slices,
