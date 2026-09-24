@@ -1232,7 +1232,7 @@ fn call_kani_any_for_ty(
                     TyConst::try_from_target_usize(models.slice_bound).unwrap(),
                 )]),
             ),
-            TyKind::RigidTy(RigidTy::Adt(..)) => (
+            TyKind::RigidTy(RigidTy::Adt(def, _)) if is_wtf8(tcx, def) => (
                 Ty::unsigned_ty(UintTy::U8),
                 models.kani_any_wtf8_ref,
                 GenericArgs(vec![GenericArgKind::Const(
