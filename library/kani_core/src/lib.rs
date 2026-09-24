@@ -34,6 +34,8 @@ pub use kani_macros::*;
 /// Options are:
 /// - `kani`: Add definitions needed for Kani library.
 /// - `core`: Define a `kani` module inside `core` crate.
+/// - `alloc`: Define a `kani` module inside `alloc` crate with the definitions that need an
+///   allocator. `core` must also define its `kani` module.
 /// - `std`: TODO: Define a `kani` module inside `std` crate. Users must define kani inside core.
 #[macro_export]
 macro_rules! kani_lib {
@@ -66,13 +68,27 @@ macro_rules! kani_lib {
         }
     };
 
+    (alloc) => {
+        #[cfg(kani)]
+        #[unstable(feature = "kani", issue = "none")]
+        pub mod kani {
+            use crate as alloc_path;
+            use core as core_path;
+            use core::kani::{Arbitrary, BoundedArbitrary, any, any_where, assume};
+
+            kani_core::generate_alloc_arbitrary!();
+        }
+    };
+
     (kani) => {
         pub use kani_core::*;
         use std as core_path;
+        use std as alloc_path;
 
         kani_core::kani_intrinsics!();
         kani_core::generate_arbitrary!();
         kani_core::generate_bounded_arbitrary!();
+        kani_core::generate_alloc_arbitrary!();
         kani_core::generate_invariant!();
         kani_core::generate_models!();
         kani_core::generate_iter!();

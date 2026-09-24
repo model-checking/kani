@@ -1,0 +1,7 @@
+[TEST] Copy standard library from the current toolchain
+[TEST] Modify library
+[TEST] Run kani autoharness --std
+Complete - 1 successfully verified harnesses, 0 failures, 1 total.
+| alloc | verify_alloc::first | #[kani::proof]            | Success             |
+| alloc | verify_alloc::len   | #[kani::proof]            | Success             |
+Complete - 2 successfully verified functions, 0 failures, 2 total.

@@ -215,9 +215,11 @@ pub enum KaniHook {
 }
 
 impl KaniModel {
-    /// Whether this model may legitimately be absent. These models require `alloc` and are
-    /// only defined in the `kani` library, not in `core::kani` (the `no_core` flow used by
-    /// `kani verify-std`). Code retrieving optional models must handle their absence.
+    /// Whether this model may legitimately be absent. The `kani` library defines all of these,
+    /// but `core::kani` (the `no_core` flow used by `kani verify-std`) defines none. In that flow,
+    /// `kani_lib!(alloc)` defines the ones that need an allocator, so they are missing only while
+    /// `core` itself is compiled; the `nondet_fn*` models are missing throughout. Code retrieving
+    /// optional models must handle their absence.
     pub fn is_optional(&self) -> bool {
         matches!(
             self,
@@ -240,9 +242,9 @@ impl KaniModel {
 }
 
 impl KaniHook {
-    /// Whether this hook may legitimately be absent. `SliceValidityAssume` is only defined in the
-    /// `kani` library, not in `core::kani` (the `no_core` flow used by `kani verify-std`), and it
-    /// is not monomorphized into every crate that is compiled.
+    /// Whether this hook may legitimately be absent. `SliceValidityAssume` needs an allocator, so
+    /// `core::kani` does not define it (c.f. [KaniModel::is_optional]), and it is not
+    /// monomorphized into every crate that is compiled.
     pub fn is_optional(&self) -> bool {
         matches!(self, KaniHook::SliceValidityAssume)
     }
@@ -320,37 +322,44 @@ impl TryFrom<Instance> for KaniFunction {
 /// Find all Kani functions.
 ///
 /// First try to find `kani` crate. If that exists, look for the items there.
-/// If there's no Kani crate, look for the items in `core` since we could be using `kani_core`.
+/// If there's no Kani crate, we are using `kani_core`: look for the items in `core`, and in
+/// `alloc`, where `kani_lib!(alloc)` defines the ones that need an allocator.
 /// Note that users could have other `kani` crates, so we look in all the ones we find.
 pub fn find_kani_functions() -> HashMap<KaniFunction, FnDef> {
-    let mut kani = rustc_public::find_crates("kani");
-    if kani.is_empty() {
-        // In case we are using `kani_core`.
-        kani.extend(rustc_public::find_crates("core"));
-    }
+    let kani = rustc_public::find_crates("kani");
     debug!(?kani, "find_kani_functions");
-    let fns = kani
-        .into_iter()
-        .find_map(|krate| {
-            let kani_funcs: HashMap<_, _> = krate
-                .fn_defs()
-                .into_iter()
-                .filter_map(|fn_def| {
-                    KaniFunction::try_from(fn_def).ok().map(|kani_function| {
-                        debug!(?kani_function, ?fn_def, "Found kani function");
-                        (kani_function, fn_def)
-                    })
-                })
-                .collect();
-            // All definitions should live in the same crate, so we can return the first one.
-            // If there are no definitions, return `None` to indicate that.
-            (!kani_funcs.is_empty()).then_some(kani_funcs)
-        })
-        .unwrap_or_default();
+    let fns = if kani.is_empty() {
+        // `kani_lib!(core)` and `kani_lib!(alloc)` define disjoint sets, so the maps are merged.
+        ["core", "alloc"]
+            .into_iter()
+            .flat_map(rustc_public::find_crates)
+            .flat_map(|krate| kani_functions_in(&krate))
+            .collect()
+    } else {
+        // All definitions should live in the same crate, so we can return the first one.
+        kani.into_iter()
+            .map(|krate| kani_functions_in(&krate))
+            .find(|kani_funcs| !kani_funcs.is_empty())
+            .unwrap_or_default()
+    };
     if cfg!(debug_assertions) {
         validate_kani_functions(&fns);
     }
     fns
+}
+
+/// The Kani functions defined in `krate`.
+fn kani_functions_in(krate: &rustc_public::Crate) -> HashMap<KaniFunction, FnDef> {
+    krate
+        .fn_defs()
+        .into_iter()
+        .filter_map(|fn_def| {
+            KaniFunction::try_from(fn_def).ok().map(|kani_function| {
+                debug!(?kani_function, ?fn_def, "Found kani function");
+                (kani_function, fn_def)
+            })
+        })
+        .collect()
 }
 
 /// Ensure we have the valid definitions.

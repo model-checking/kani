@@ -8,6 +8,7 @@
 //!
 //! TODO: Use this inside kani library so that we dont have to maintain two copies of the same proc macro for arbitrary.
 
+mod alloc;
 mod pointer;
 mod slice;
 
