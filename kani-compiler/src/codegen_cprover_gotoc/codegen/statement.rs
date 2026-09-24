@@ -796,6 +796,13 @@ impl GotocCtx<'_, '_> {
         match fn_ty.kind() {
             fn_def @ TyKind::RigidTy(RigidTy::FnDef(..)) => {
                 let instance = instance_opt.unwrap();
+                if self.is_unsupported_variadic(instance) {
+                    return self.codegen_unimplemented_stmt(
+                        "Variadic function with a non-C calling convention",
+                        loc,
+                        "https://github.com/model-checking/kani/issues/4817",
+                    );
+                }
                 let fn_abi = instance.fn_abi().unwrap();
                 let mut fargs = if args.is_empty()
                     || fn_def.fn_sig().unwrap().value.abi != Abi::RustCall
@@ -857,6 +864,13 @@ impl GotocCtx<'_, '_> {
             }
             // Function call through a pointer
             TyKind::RigidTy(RigidTy::FnPtr(fn_sig)) => {
+                if self.is_unsupported_variadic_fn_ptr(fn_sig.clone()) {
+                    return self.codegen_unimplemented_stmt(
+                        "Variadic function with a non-C calling convention",
+                        loc,
+                        "https://github.com/model-checking/kani/issues/4817",
+                    );
+                }
                 let fn_sig_internal = rustc_internal::internal(self.tcx, fn_sig);
                 let fn_ptr_abi = rustc_internal::stable(
                     self.tcx

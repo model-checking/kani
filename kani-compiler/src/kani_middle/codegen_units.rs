@@ -1142,6 +1142,12 @@ fn automatic_harness_partition(
             return Err(AutoHarnessSkipReason::UserFilter);
         }
 
+        // Report the calling convention rather than the `VaList` argument: for these functions
+        // Kani cannot model the call at all, so an `Arbitrary` implementation would not help.
+        if crate::kani_middle::is_unsupported_variadic(tcx, instance) {
+            return Err(AutoHarnessSkipReason::UnsupportedVariadic);
+        }
+
         // Debug/Display fmt implementations are handled specially: their `&mut Formatter`
         // argument cannot be generated, but the generated harness formats a nondeterministic
         // value of the self type into a discarding sink instead, c.f. `fmt_impl_self_ty`.

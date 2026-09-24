@@ -100,6 +100,10 @@ pub enum AutoHarnessSkipReason {
     /// (The Vec<(String, String)> contains the list of (name, type) tuples for each such argument.)
     #[strum(serialize = "Requires --bounded-arguments for argument(s)")]
     RequiresBoundedArguments(Vec<(String, String)>),
+    /// The function is a C-variadic whose calling convention Kani cannot model, e.g.
+    /// `unsafe extern "sysv64" fn(_: ...)`.
+    #[strum(serialize = "Unsupported variadic calling convention")]
+    UnsupportedVariadic,
     /// The function doesn't match the user's provided filters.
     #[strum(serialize = "Did not match provided filters")]
     UserFilter,
