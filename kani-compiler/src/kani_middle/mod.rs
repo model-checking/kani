@@ -21,6 +21,8 @@ use rustc_public::{CrateDef, CrateDefType, DefId, local_crate};
 use std::ops::ControlFlow;
 
 use self::attributes::KaniAttributes;
+use self::kani_functions::KaniModel;
+use strum_macros::EnumIter;
 
 /// Return an item's name for user-facing output and CBMC symbol pretty-names.
 ///
@@ -1028,15 +1030,80 @@ fn implements_bounded_arbitrary(tcx: TyCtxt, ty: Ty, kani_bounded_any_def: FnDef
     false
 }
 
-/// The formatting traits whose implementations automatic harnesses can verify via dedicated
-/// models (c.f. `KaniModel::CheckDebugFmt`/`CheckDisplayFmt`).
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum FmtTrait {
-    Debug,
-    Display,
+/// Whether `def` is `core::ffi::CStr`.
+///
+/// Both the eligibility check (`autoharness_supported_arg_ty`) and the harness generation
+/// (`call_kani_any_for_ty`) use this, so that they cannot disagree on a `&CStr` argument.
+pub fn is_c_str(tcx: TyCtxt, def: AdtDef) -> bool {
+    Some(rustc_internal::internal(tcx, def.def_id()))
+        == tcx.get_diagnostic_item(rustc_span::sym::cstr_type)
 }
 
-/// If `instance` is the `fmt` method of a `Debug` or `Display` implementation, return the
+/// The formatting traits whose implementations automatic harnesses can verify via dedicated
+/// models, one per trait (c.f. `KaniModel::CheckDebugFmt` and [`FmtTrait::model`]).
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, EnumIter)]
+pub enum FmtTrait {
+    Binary,
+    Debug,
+    Display,
+    LowerExp,
+    LowerHex,
+    Octal,
+    Pointer,
+    UpperExp,
+    UpperHex,
+}
+
+impl FmtTrait {
+    /// The model that formats a nondeterministic value through this trait.
+    pub fn model(self) -> KaniModel {
+        match self {
+            FmtTrait::Binary => KaniModel::CheckBinaryFmt,
+            FmtTrait::Debug => KaniModel::CheckDebugFmt,
+            FmtTrait::Display => KaniModel::CheckDisplayFmt,
+            FmtTrait::LowerExp => KaniModel::CheckLowerExpFmt,
+            FmtTrait::LowerHex => KaniModel::CheckLowerHexFmt,
+            FmtTrait::Octal => KaniModel::CheckOctalFmt,
+            FmtTrait::Pointer => KaniModel::CheckPointerFmt,
+            FmtTrait::UpperExp => KaniModel::CheckUpperExpFmt,
+            FmtTrait::UpperHex => KaniModel::CheckUpperHexFmt,
+        }
+    }
+
+    /// The formatting trait `trait_def_id` is, if any.
+    ///
+    /// Only `Debug`, `Display` and `Pointer` carry a diagnostic item; the other traits are
+    /// matched by name inside `core::fmt`.
+    fn of_trait(tcx: TyCtxt, trait_def_id: InternalDefId) -> Option<FmtTrait> {
+        let diagnostic = |sym| Some(trait_def_id) == tcx.get_diagnostic_item(sym);
+        if diagnostic(rustc_span::sym::Debug) {
+            return Some(FmtTrait::Debug);
+        }
+        if diagnostic(rustc_span::sym::Display) {
+            return Some(FmtTrait::Display);
+        }
+        if diagnostic(rustc_span::sym::Pointer) {
+            return Some(FmtTrait::Pointer);
+        }
+        let in_core_fmt = tcx.crate_name(trait_def_id.krate) == rustc_span::sym::core
+            && tcx.opt_parent(trait_def_id).and_then(|module| tcx.opt_item_name(module))
+                == Some(rustc_span::sym::fmt);
+        if !in_core_fmt {
+            return None;
+        }
+        Some(match tcx.item_name(trait_def_id).as_str() {
+            "Binary" => FmtTrait::Binary,
+            "Octal" => FmtTrait::Octal,
+            "LowerHex" => FmtTrait::LowerHex,
+            "UpperHex" => FmtTrait::UpperHex,
+            "LowerExp" => FmtTrait::LowerExp,
+            "UpperExp" => FmtTrait::UpperExp,
+            _ => return None,
+        })
+    }
+}
+
+/// If `instance` is the `fmt` method of a formatting trait implementation, return the
 /// trait and the implementing (self) type. Such methods take a `&mut Formatter` argument that
 /// cannot be generated nondeterministically; instead, the generated harness formats a
 /// nondeterministic value of the self type into a discarding sink, which exercises `fmt`
@@ -1059,14 +1126,7 @@ fn fmt_impl_self_ty(tcx: TyCtxt, instance: Instance) -> Option<(FmtTrait, Ty)> {
 
     let impl_def_id = tcx.trait_impl_of_assoc(def_id)?;
     let trait_def_id = tcx.impl_trait_ref(impl_def_id).skip_binder().def_id;
-
-    let fmt_trait = if Some(trait_def_id) == tcx.get_diagnostic_item(rustc_span::sym::Debug) {
-        FmtTrait::Debug
-    } else if Some(trait_def_id) == tcx.get_diagnostic_item(rustc_span::sym::Display) {
-        FmtTrait::Display
-    } else {
-        return None;
-    };
+    let fmt_trait = FmtTrait::of_trait(tcx, trait_def_id)?;
 
     // The `fmt` method's first input is `&Self`; peel the reference to obtain the
     // (monomorphic) self type.
@@ -1244,6 +1304,15 @@ fn autoharness_supported_arg_ty(
             // There is no way to obtain a `&mut str` from our nondeterministic byte storage
             // without breaking the UTF-8 safety invariant on writes, so only support `&str`.
             TyKind::RigidTy(RigidTy::Str) => {
+                if inner_mutability == Mutability::Not {
+                    ArgSupport::Bounded
+                } else {
+                    ArgSupport::Unsupported
+                }
+            }
+            // A `&CStr` is the bytes of nondeterministic storage up to its first NUL, c.f.
+            // `any_c_str_ref`. Immutable only, as for `&str`.
+            TyKind::RigidTy(RigidTy::Adt(def, _)) if is_c_str(tcx, def) => {
                 if inner_mutability == Mutability::Not {
                     ArgSupport::Bounded
                 } else {

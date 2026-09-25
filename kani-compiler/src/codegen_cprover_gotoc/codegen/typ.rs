@@ -1906,22 +1906,46 @@ pub fn std_pointee_type(mir_type: Ty) -> Option<Ty> {
     mir_type.builtin_deref(true)
 }
 
-/// This is a place holder function that should normalize the given type.
-///
-/// TODO: We should normalize the type projection here. For more details, see
-/// <https://github.com/model-checking/kani/issues/752>
-fn normalize_type<'tcx>(ty: Unnormalized<'tcx, Ty<'tcx>>) -> Ty<'tcx> {
-    ty.skip_normalization()
-}
-
 impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
+    /// Resolve a type projection met while computing pointer metadata, e.g. the tail of a struct
+    /// whose last field is an associated type (`struct Wrap<S: Storage> { _b: S::Buffer }`).
+    /// Leaving it unresolved classifies such a reference as a thin pointer, and the unsized cast
+    /// then tries to build a slice fat pointer out of it, c.f.
+    /// <https://github.com/model-checking/kani/issues/4812>.
+    ///
+    /// This instantiates the current instance's arguments *and* normalizes, as
+    /// [`Self::monomorphize`] and therefore [`Self::is_unsized`] do. Normalizing alone would leave
+    /// the two halves of the thin/fat decision disagreeing about a type that still carries generic
+    /// parameters -- `is_unsized` resolving it, the metadata computation not -- which is #4812's
+    /// shape again: unsized, metadata unavailable, thin pointer.
+    ///
+    /// Falling back to the unresolved type keeps `ptr_metadata_ty_or_tail` returning the tail as
+    /// `Err` rather than panicking. Note that `ptr_metadata_ty` `bug!`s on that `Err` instead, so
+    /// the fallback only ever helps `use_thin_pointer`.
+    fn resolve_metadata_ty(&self, unnormalized: Unnormalized<'tcx, Ty<'tcx>>) -> Ty<'tcx> {
+        let ty = unnormalized.skip_normalization();
+        let typing_env = ty::TypingEnv::fully_monomorphized();
+        if let Some(current_fn) = &self.current_fn
+            && let Ok(resolved) =
+                current_fn.instance().try_instantiate_mir_and_normalize_erasing_regions(
+                    self.tcx,
+                    typing_env,
+                    ty::EarlyBinder::bind(self.tcx, ty),
+                )
+        {
+            return resolved;
+        }
+        self.tcx.try_normalize_erasing_regions(typing_env, unnormalized).unwrap_or(ty)
+    }
+
     /// A pointer to the mir type should be a thin pointer.
     /// Use thin pointer if the type is sized or if the resulting pointer has no metadata.
     /// Note: Foreign items are unsized but it codegen as a thin pointer since there is no
     /// metadata associated with it.
     pub fn use_thin_pointer(&self, mir_type: Ty<'tcx>) -> bool {
         // ptr_metadata_ty is not defined on all types, the projection of an associated type
-        let metadata = mir_type.ptr_metadata_ty_or_tail(self.tcx, normalize_type);
+        let metadata =
+            mir_type.ptr_metadata_ty_or_tail(self.tcx, |ty| self.resolve_metadata_ty(ty));
         !self.is_unsized(mir_type)
             || metadata.is_err()
             || (metadata.unwrap() == self.tcx.types.unit)
@@ -1935,14 +1959,14 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     /// A pointer to the mir type should be a slice fat pointer.
     /// We use a slice fat pointer if the metadata is the slice length (type usize).
     pub fn use_slice_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
-        let metadata = mir_type.ptr_metadata_ty(self.tcx, normalize_type);
+        let metadata = mir_type.ptr_metadata_ty(self.tcx, |ty| self.resolve_metadata_ty(ty));
         metadata == self.tcx.types.usize
     }
     /// A pointer to the mir type should be a vtable fat pointer.
     /// We use a vtable fat pointer if this is a fat pointer to anything that is not a slice ptr.
     /// I.e.: The metadata is not length (type usize).
     pub fn use_vtable_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
-        let metadata = mir_type.ptr_metadata_ty(self.tcx, normalize_type);
+        let metadata = mir_type.ptr_metadata_ty(self.tcx, |ty| self.resolve_metadata_ty(ty));
         metadata != self.tcx.types.unit && metadata != self.tcx.types.usize
     }
 

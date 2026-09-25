@@ -241,6 +241,25 @@ macro_rules! generate_arbitrary {
             unsafe { core_path::str::from_utf8_unchecked(&storage[..valid_len]) }
         }
 
+        /// Generate a C string referring to the bytes of `storage` up to its first NUL, where
+        /// `storage` is a nondeterministic byte array (at most `N` bytes; the driver rejects a
+        /// bound of 0, so `N` is at least 1) whose
+        /// last byte is set to NUL so that one always exists. As with `any_str_ref`, the result
+        /// is a deterministic function of the nondeterministic bytes: every C string of length
+        /// `k < N` arises from storage whose first NUL is at index `k`.
+        ///
+        /// This model is used by the compiler to generate nondeterministic `&CStr` arguments for
+        /// automatic harnesses (`kani autoharness`). Note that any verification result obtained
+        /// with a bounded value like this one is valid only up to the bound.
+        #[kanitool::fn_marker = "AnyCStrRefModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_c_str_ref<const N: usize>(storage: &mut [u8; N]) -> &core_path::ffi::CStr {
+            storage[N - 1] = 0;
+            // `storage` ends in NUL, so one is always found.
+            core_path::ffi::CStr::from_bytes_until_nul(storage).unwrap()
+        }
+
         arbitrary_tuple!(A);
         arbitrary_tuple!(A, B);
         arbitrary_tuple!(A, B, C);

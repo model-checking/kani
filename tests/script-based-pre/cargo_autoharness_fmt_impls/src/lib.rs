@@ -1,11 +1,11 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-// Test that the autoharness subcommand verifies Debug and Display implementations.
+// Test that the autoharness subcommand verifies formatting trait implementations.
 // Their `&mut Formatter` argument cannot be generated nondeterministically; instead, the
 // generated harness formats a nondeterministic value of the self type into a discarding sink
-// (c.f. the CheckDebugFmt/CheckDisplayFmt models), which exercises `fmt` through the core
-// formatting machinery with a real `Formatter`.
+// (c.f. the `check_*_fmt` models), which exercises `fmt` through the core formatting
+// machinery with a real `Formatter`.
 // The "TEST NOTE" comments explain the expected result per function.
 
 use std::fmt;
@@ -102,5 +102,71 @@ impl fmt::Debug for Contracted {
     #[kani::requires(self.0 <= 100)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+// TEST NOTE: each of the remaining formatting traits should FAIL on its type's own assert. Each
+// type implements exactly one formatting trait, so a model dispatched to the wrong trait cannot
+// resolve for that type; the harness would fail to generate rather than pass.
+pub struct Bin(u8);
+
+impl fmt::Binary for Bin {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        assert!(self.0 != 2, "binary");
+        write!(f, "{:b}", self.0)
+    }
+}
+
+pub struct Oct(u8);
+
+impl fmt::Octal for Oct {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        assert!(self.0 != 8, "octal");
+        write!(f, "{:o}", self.0)
+    }
+}
+
+pub struct LowHex(u8);
+
+impl fmt::LowerHex for LowHex {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        assert!(self.0 != 0xa, "lower hex");
+        write!(f, "{:x}", self.0)
+    }
+}
+
+pub struct UpHex(u8);
+
+impl fmt::UpperHex for UpHex {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        assert!(self.0 != 0xB, "upper hex");
+        write!(f, "{:X}", self.0)
+    }
+}
+
+pub struct LowExp(u8);
+
+impl fmt::LowerExp for LowExp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        assert!(self.0 != 1, "lower exp");
+        write!(f, "{:e}", self.0)
+    }
+}
+
+pub struct UpExp(u8);
+
+impl fmt::UpperExp for UpExp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        assert!(self.0 != 3, "upper exp");
+        write!(f, "{:E}", self.0)
+    }
+}
+
+pub struct Ptr(u8);
+
+impl fmt::Pointer for Ptr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        assert!(self.0 != 7, "pointer");
+        fmt::Pointer::fmt(&(self as *const Ptr), f)
     }
 }
