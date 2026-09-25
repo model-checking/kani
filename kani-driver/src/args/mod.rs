@@ -91,6 +91,10 @@ pub fn print_stabilized_feature_warning(
 // By default we configure CBMC to use 16 bits to represent the object bits in pointers.
 const DEFAULT_OBJECT_BITS: u32 = 16;
 
+/// The target triple Kani itself was built for, which is the default verification target
+/// (see build.rs).
+pub const HOST_TARGET: &str = env!("TARGET");
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, strum_macros::EnumString)]
 enum TimeUnit {
     #[strum(serialize = "s")]
@@ -403,6 +407,12 @@ pub struct VerificationArgs {
     #[arg(long)]
     pub target_dir: Option<PathBuf>,
 
+    /// Verify for this target triple instead of the host's, e.g. `riscv64gc-unknown-linux-gnu`.
+    /// Kani's libraries must have been built for it, see `cargo build-dev --lib-target`.
+    /// This option is experimental and requires `-Z unstable-options` to be used.
+    #[arg(long = "target", value_name = "TRIPLE")]
+    pub target_triple: Option<String>,
+
     /// Enable test function verification. Only use this option when the entry point is a test function
     #[arg(long)]
     pub tests: bool,
@@ -475,6 +485,11 @@ impl VerificationArgs {
     /// there is nothing to link or verify: Kani stops once the compiler has run.
     pub fn uses_llbc_backend(&self) -> bool {
         self.common_args.unstable_features.contains(UnstableFeature::Lean)
+    }
+
+    /// The target triple to verify for: the one given with `--target`, otherwise the host's.
+    pub fn verification_target(&self) -> &str {
+        self.target_triple.as_deref().unwrap_or(HOST_TARGET)
     }
 
     pub fn restrict_vtable(&self) -> bool {
@@ -820,6 +835,12 @@ impl ValidateArgs for VerificationArgs {
                 UnstableFeature::UnstableOptions,
             )?;
 
+            self.common_args.check_unstable(
+                self.target_triple.is_some(),
+                "target",
+                UnstableFeature::UnstableOptions,
+            )?;
+
             Ok(())
         };
 
@@ -855,6 +876,17 @@ impl ValidateArgs for VerificationArgs {
                     ErrorKind::ArgumentConflict,
                     "Conflicting options: --concrete-playback isn't compatible with \
                 --output-format=old.",
+                ));
+            }
+            if self.concrete_playback.is_some()
+                && let Some(triple) = &self.target_triple
+                && triple != HOST_TARGET
+            {
+                // Playback compiles and runs the generated test on the host.
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    "Conflicting options: --concrete-playback runs on the host, so it isn't \
+                compatible with --target for another platform.",
                 ));
             }
             if self.sarif.is_some() && self.output_format() == OutputFormat::Old {
