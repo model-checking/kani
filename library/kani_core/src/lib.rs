@@ -18,6 +18,7 @@
 #![feature(no_core)]
 #![no_core]
 
+mod alloc;
 mod arbitrary;
 mod bounded_arbitrary;
 mod float;
@@ -34,6 +35,9 @@ pub use kani_macros::*;
 /// Options are:
 /// - `kani`: Add definitions needed for Kani library.
 /// - `core`: Define a `kani` module inside `core` crate.
+/// - `alloc`: Define a `kani` module inside the `alloc` crate, extending `core::kani` with the
+///   definitions that can only live where `Vec`, `String`, `Box`, `Rc` and `Arc` are defined.
+///   Requires `kani_lib!(core)`.
 /// - `std`: TODO: Define a `kani` module inside `std` crate. Users must define kani inside core.
 #[macro_export]
 macro_rules! kani_lib {
@@ -66,6 +70,21 @@ macro_rules! kani_lib {
         }
     };
 
+    (alloc) => {
+        #[cfg(kani)]
+        #[unstable(feature = "kani", issue = "none")]
+        pub mod kani {
+            // `core::kani` holds the API (`any`, `assume`, `Arbitrary`, ...); this module only adds
+            // what needs `alloc`'s types, which `core` cannot name.
+            use core as core_path;
+            pub use core::kani::*;
+
+            // `alloc` has no self-alias (no `extern crate self as alloc`), so its own types are
+            // only reachable through `crate`.
+            kani_core::generate_alloc!(crate);
+        }
+    };
+
     (kani) => {
         pub use kani_core::*;
         use std as core_path;
@@ -73,6 +92,7 @@ macro_rules! kani_lib {
         kani_core::kani_intrinsics!();
         kani_core::generate_arbitrary!();
         kani_core::generate_bounded_arbitrary!();
+        kani_core::generate_alloc!(std);
         kani_core::generate_invariant!();
         kani_core::generate_models!();
         kani_core::generate_iter!();

@@ -320,33 +320,28 @@ impl TryFrom<Instance> for KaniFunction {
 /// Find all Kani functions.
 ///
 /// First try to find `kani` crate. If that exists, look for the items there.
-/// If there's no Kani crate, look for the items in `core` since we could be using `kani_core`.
-/// Note that users could have other `kani` crates, so we look in all the ones we find.
+/// If there's no Kani crate, we could be using `kani_core`: look in `core` and in `alloc`, since
+/// `core` cannot name `Vec` and friends, so the definitions that need them live in `alloc`
+/// (c.f. `kani_core::kani_lib!(alloc)`).
+/// Note that users could have other `kani` crates, so we look in all the ones we find and keep the
+/// first definition of each function.
 pub fn find_kani_functions() -> HashMap<KaniFunction, FnDef> {
     let mut kani = rustc_public::find_crates("kani");
     if kani.is_empty() {
         // In case we are using `kani_core`.
         kani.extend(rustc_public::find_crates("core"));
+        kani.extend(rustc_public::find_crates("alloc"));
     }
     debug!(?kani, "find_kani_functions");
-    let fns = kani
-        .into_iter()
-        .find_map(|krate| {
-            let kani_funcs: HashMap<_, _> = krate
-                .fn_defs()
-                .into_iter()
-                .filter_map(|fn_def| {
-                    KaniFunction::try_from(fn_def).ok().map(|kani_function| {
-                        debug!(?kani_function, ?fn_def, "Found kani function");
-                        (kani_function, fn_def)
-                    })
-                })
-                .collect();
-            // All definitions should live in the same crate, so we can return the first one.
-            // If there are no definitions, return `None` to indicate that.
-            (!kani_funcs.is_empty()).then_some(kani_funcs)
-        })
-        .unwrap_or_default();
+    let mut fns: HashMap<KaniFunction, FnDef> = HashMap::new();
+    for krate in kani {
+        for fn_def in krate.fn_defs() {
+            if let Ok(kani_function) = KaniFunction::try_from(fn_def) {
+                debug!(?kani_function, ?fn_def, "Found kani function");
+                fns.entry(kani_function).or_insert(fn_def);
+            }
+        }
+    }
     if cfg!(debug_assertions) {
         validate_kani_functions(&fns);
     }
