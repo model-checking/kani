@@ -1,0 +1,259 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Nondeterministic generation for `alloc`'s types.
+//!
+//! These live here rather than in the `kani` library because `kani verify-std` compiles the
+//! standard library against `kani_core` only: `core` cannot name `Vec`, so the crate that defines
+//! these types has to be the one that implements `Arbitrary`/`BoundedArbitrary` for them, c.f.
+//! `kani_lib!(alloc)`.
+//!
+//! The `kani` library expands the same macro (with `std` paths), so there is one definition of
+//! each model no matter which flow is in use.
+
+#[macro_export]
+#[allow(clippy::crate_in_macro_def)]
+macro_rules! generate_alloc {
+    ($alloc_path:tt) => {
+        impl<T> Arbitrary for $alloc_path::boxed::Box<T>
+        where
+            T: Arbitrary,
+        {
+            fn any() -> Self {
+                $alloc_path::boxed::Box::new(T::any())
+            }
+        }
+
+        impl<T> Arbitrary for $alloc_path::rc::Rc<T>
+        where
+            T: Arbitrary,
+        {
+            fn any() -> Self {
+                $alloc_path::rc::Rc::new(T::any())
+            }
+        }
+
+        impl<T> Arbitrary for $alloc_path::sync::Arc<T>
+        where
+            T: Arbitrary,
+        {
+            fn any() -> Self {
+                $alloc_path::sync::Arc::new(T::any())
+            }
+        }
+
+        /// The models below are used by the compiler to generate nondeterministic
+        /// `Box<T>`/`Rc<T>`/`Arc<T>` values for automatic harnesses when `T` does not implement
+        /// `Arbitrary` in source code but the compiler can derive it: the `any::<T>()` calls in
+        /// their bodies are then replaced with the compiler-synthesized implementation. (For `T`s
+        /// that do implement `Arbitrary`, the `Arbitrary` implementations above are resolved
+        /// directly instead.)
+        /// These models are *optional*: they require `alloc`, so they are absent when the crate
+        /// under compilation does not depend on it, c.f. `KaniModel::is_optional`.
+        #[kanitool::fn_marker = "AnyBoxModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_box<T: Arbitrary>() -> $alloc_path::boxed::Box<T> {
+            $alloc_path::boxed::Box::new(any())
+        }
+
+        #[kanitool::fn_marker = "AnyRcModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_rc<T: Arbitrary>() -> $alloc_path::rc::Rc<T> {
+            $alloc_path::rc::Rc::new(any())
+        }
+
+        #[kanitool::fn_marker = "AnyArcModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_arc<T: Arbitrary>() -> $alloc_path::sync::Arc<T> {
+            $alloc_path::sync::Arc::new(any())
+        }
+
+        /// Generate a slice of *unbounded* nondeterministic length: a fresh allocation of
+        /// nondeterministic size whose contents are nondeterministic, with element validity
+        /// established by `slice_validity_assume` (a compiler hook that emits a quantified
+        /// assumption constraining each element's raw bits to the element type's layout niche;
+        /// a no-op for element types whose every bit pattern is valid, e.g. integers).
+        ///
+        /// This model is used by the compiler to generate nondeterministic `&[T]` arguments for
+        /// automatic harnesses (`kani autoharness`) when the element type qualifies; verification
+        /// results hold for ALL slice lengths (functions that iterate over the slice surface any
+        /// insufficient loop bound as an unwinding-assertion failure rather than passing silently).
+        #[kanitool::fn_marker = "AnySliceRefUnboundedModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_slice_ref_unbounded<T>() -> &'static [T] {
+            let len: usize = any();
+            let elem = core_path::mem::size_of::<T>();
+            if elem == 0 {
+                // ZST slices: no storage needed, any length is fine.
+                return unsafe {
+                    core_path::slice::from_raw_parts(
+                        core_path::ptr::NonNull::dangling().as_ptr(),
+                        len,
+                    )
+                };
+            }
+            assume(len <= (isize::MAX as usize) / elem);
+            let layout = $alloc_path::alloc::Layout::array::<T>(len.max(1)).unwrap();
+            let ptr = unsafe { $alloc_path::alloc::alloc(layout) };
+            assume(!ptr.is_null());
+            slice_validity_assume::<T>(ptr, len);
+            unsafe { core_path::slice::from_raw_parts(ptr as *const T, len) }
+        }
+
+        /// Generate a mutable slice of *unbounded* nondeterministic length: as
+        /// `any_slice_ref_unbounded`, but returning `&mut [T]`. Each call produces a fresh (leaked)
+        /// allocation, so the returned slice is exclusive by construction; writes through it are
+        /// unconstrained by other generated values.
+        #[kanitool::fn_marker = "AnySliceMutUnboundedModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_slice_mut_unbounded<T>() -> &'static mut [T] {
+            let len: usize = any();
+            let elem = core_path::mem::size_of::<T>();
+            if elem == 0 {
+                return unsafe {
+                    core_path::slice::from_raw_parts_mut(
+                        core_path::ptr::NonNull::dangling().as_ptr(),
+                        len,
+                    )
+                };
+            }
+            assume(len <= (isize::MAX as usize) / elem);
+            let layout = $alloc_path::alloc::Layout::array::<T>(len.max(1)).unwrap();
+            let ptr = unsafe { $alloc_path::alloc::alloc(layout) };
+            assume(!ptr.is_null());
+            slice_validity_assume::<T>(ptr, len);
+            unsafe { core_path::slice::from_raw_parts_mut(ptr as *mut T, len) }
+        }
+
+        /// Generate a `Vec` of *unbounded* nondeterministic length: a fresh allocation of
+        /// nondeterministic size whose contents are nondeterministic, with element validity
+        /// established by `slice_validity_assume` (c.f. `any_slice_ref_unbounded`), handed to
+        /// `Vec::from_raw_parts` with `capacity` equal to the allocated element count (`len.max(1)`
+        /// for non-ZSTs, since the allocation uses `Layout::array::<T>(len.max(1))` to avoid a
+        /// zero-sized allocation; `usize::MAX` for ZSTs). The allocation thus came from the global
+        /// allocator with exactly the layout `Vec`'s safety contract requires for `capacity`, so
+        /// `Vec` frees it correctly on drop.
+        ///
+        /// This model is used by the compiler to generate nondeterministic `Vec<T>` arguments for
+        /// automatic harnesses (`kani autoharness`) when the element type qualifies; verification
+        /// results hold for ALL lengths.
+        #[kanitool::fn_marker = "AnyVecUnboundedModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_vec_unbounded<T>() -> $alloc_path::vec::Vec<T> {
+            let len: usize = any();
+            let elem = core_path::mem::size_of::<T>();
+            if elem == 0 {
+                // For ZSTs, Vec never allocates and uses a dangling pointer; constructing from a
+                // dangling pointer with any len is the documented pattern (and loop-free, which
+                // matters: generation code must not itself be bounded by unwinding).
+                return unsafe {
+                    $alloc_path::vec::Vec::from_raw_parts(
+                        core_path::ptr::NonNull::dangling().as_ptr(),
+                        len,
+                        usize::MAX,
+                    )
+                };
+            }
+            assume(len <= (isize::MAX as usize) / elem);
+            let layout = $alloc_path::alloc::Layout::array::<T>(len.max(1)).unwrap();
+            let ptr = unsafe { $alloc_path::alloc::alloc(layout) };
+            assume(!ptr.is_null());
+            slice_validity_assume::<T>(ptr, len);
+            unsafe { $alloc_path::vec::Vec::from_raw_parts(ptr as *mut T, len, len.max(1)) }
+        }
+
+        /// Compiler hook (c.f. `KaniHook::SliceValidityAssume`): assume that every element of the
+        /// `len`-element `T`-array at `ptr` has raw bits within `T`'s layout niche. Lowered
+        /// directly to a quantified goto assumption; a no-op when `T` has no niche. The default
+        /// body is unreachable: calls are always intercepted during code generation.
+        #[kanitool::fn_marker = "SliceValidityAssumeHook"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn slice_validity_assume<T>(_ptr: *const u8, _len: usize) {
+            #[cfg(not(kani))]
+            unreachable!("kani::slice_validity_assume is a verification-only hook");
+        }
+
+        impl<T: Arbitrary> BoundedArbitrary for $alloc_path::boxed::Box<[T]> {
+            fn bounded_any<const N: usize>() -> Self {
+                let len: usize = any_where(|l| *l <= N);
+                // The following is equivalent to:
+                // ```
+                // (0..len).map(|_| T::any()).collect()
+                // ```
+                // but leads to more efficient verification
+                let mut b = $alloc_path::boxed::Box::<[T]>::new_uninit_slice(len);
+                for i in 0..len {
+                    b[i] = core_path::mem::MaybeUninit::new(T::any());
+                }
+                unsafe { b.assume_init() }
+            }
+        }
+
+        // This implementation overlaps with `kani::any_vec` in `kani/library/kani/src/vec.rs`.
+        // This issue `https://github.com/model-checking/kani/issues/4027` tracks deprecating
+        // `kani::any_vec` in favor of this implementation.
+        impl<T: Arbitrary> BoundedArbitrary for $alloc_path::vec::Vec<T> {
+            fn bounded_any<const N: usize>() -> Self {
+                let real_length = any_where(|&size| size <= N);
+                let array: [T; N] = any();
+                let mut vec = $alloc_path::vec::Vec::from(array);
+                vec.truncate(real_length);
+                vec
+            }
+        }
+
+        impl BoundedArbitrary for $alloc_path::string::String {
+            fn bounded_any<const N: usize>() -> Self {
+                let bytes: [u8; N] = any();
+
+                if let Some(s) = bytes.utf8_chunks().next() {
+                    s.valid().into()
+                } else {
+                    $alloc_path::string::String::new()
+                }
+            }
+        }
+
+        impl<K, V> BoundedArbitrary for $alloc_path::collections::BTreeMap<K, V>
+        where
+            K: Arbitrary + core_path::cmp::Ord,
+            V: Arbitrary,
+        {
+            // duplicate `K::any()` values overwrite earlier entries, so the reachable
+            // map sizes are `0..=N` rather than always equal to the number of insert branches taken
+            fn bounded_any<const N: usize>() -> Self {
+                let mut btree_map = $alloc_path::collections::BTreeMap::new();
+                for _ in 0..N {
+                    if bool::any() {
+                        btree_map.insert(K::any(), V::any());
+                    }
+                }
+                btree_map
+            }
+        }
+
+        impl<V> BoundedArbitrary for $alloc_path::collections::BTreeSet<V>
+        where
+            V: Arbitrary + core_path::cmp::Ord,
+        {
+            // duplicate `V::any()` values collapse into one entry, so the reachable
+            // set sizes are `0..=N` rather than always equal to the number of insert branches taken
+            fn bounded_any<const N: usize>() -> Self {
+                let mut btree_set = $alloc_path::collections::BTreeSet::new();
+                for _ in 0..N {
+                    if bool::any() {
+                        btree_set.insert(V::any());
+                    }
+                }
+                btree_set
+            }
+        }
+    };
+}

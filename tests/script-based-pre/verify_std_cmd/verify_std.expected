@@ -39,3 +39,7 @@ Checking harness verify::harness...
 VERIFICATION:- SUCCESSFUL
 
 Complete - 3 successfully verified harnesses, 0 failures, 3 total.
+
+[TEST] Modify alloc
+[TEST] Run kani verify-std with alloc models
+Complete - 2 successfully verified harnesses, 0 failures, 2 total.
