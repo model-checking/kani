@@ -64,12 +64,19 @@ pub fn appears_incomplete() -> Option<PathBuf> {
         // installing Kani need not have just yet.
         #[allow(clippy::collapsible_if)]
         if let Some(file_name) = entry.file_name().to_str() {
-            if file_name.ends_with(".tar.gz") {
+            if is_leftover_bundle(file_name) {
                 return Some(kani_dir_parent.join(file_name));
             }
         }
     }
     None
+}
+
+/// Whether `file_name` is a leftover of an interrupted setup *of this version*. A bundle for some
+/// other version says nothing about whether our own setup completed, and extracting it would
+/// install the wrong Kani.
+fn is_leftover_bundle(file_name: &str) -> bool {
+    file_name == download_filename()
 }
 
 /// Sets up Kani by unpacking/installing to `~/.kani/kani-VERSION`
@@ -128,7 +135,13 @@ fn setup_kani_bundle(kani_dir: &Path, use_local_bundle: Option<OsString>) -> Res
             .run()
             .context("Failed to download Kani release bundle")?;
 
-        Command::new("tar").arg("zxf").arg(&bundle).current_dir(base_dir).run()?;
+        // Don't keep a bundle we couldn't extract: it is almost certainly truncated, and leaving it
+        // behind makes the next run try to install from it, c.f.
+        // <https://github.com/model-checking/kani/issues/2830>.
+        if let Err(err) = Command::new("tar").arg("zxf").arg(&bundle).current_dir(base_dir).run() {
+            let _ = std::fs::remove_file(&bundle);
+            return Err(err).context("Failed to extract the downloaded Kani release bundle");
+        }
 
         std::fs::remove_file(bundle)?;
     }
@@ -243,4 +256,22 @@ fn symlink_rust_toolchain(toolchain: &Path, kani_dir: &Path) -> Result<()> {
     }
     std::os::unix::fs::symlink(toolchain, path)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn check_is_leftover_bundle() {
+        // Our own bundle: an interrupted setup of this version left it behind.
+        assert!(is_leftover_bundle(&format!("kani-{VERSION}-{TARGET}.tar.gz")));
+        // Some other version's bundle says nothing about our setup, and extracting it would
+        // install the wrong Kani, c.f. https://github.com/model-checking/kani/issues/2830.
+        assert!(!is_leftover_bundle(&format!("kani-0.0.1-{TARGET}.tar.gz")));
+        assert!(!is_leftover_bundle(&format!("kani-{VERSION}-some-other-target.tar.gz")));
+        // Unrelated archives a user happens to keep in the Kani home directory.
+        assert!(!is_leftover_bundle("something-else.tar.gz"));
+        assert!(!is_leftover_bundle(""));
+    }
 }
