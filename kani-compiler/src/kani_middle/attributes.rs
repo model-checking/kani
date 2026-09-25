@@ -10,7 +10,8 @@ use rustc_ast::{LitKind, MetaItem, MetaItemKind};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_errors::ErrorGuaranteed;
 use rustc_hir::{
-    AttrArgs, Attribute,
+    Attribute,
+    attrs::AttrArgs,
     def::DefKind,
     def_id::{DefId, LocalDefId},
 };
