@@ -662,7 +662,12 @@ fn has_const_generic_precondition(tcx: TyCtxt, def: FnDef) -> bool {
             return true;
         };
         budget = remaining;
-        let body = tcx.optimized_mir(def_id);
+        // Not `optimized_mir`: rustc's provider refuses a def whose body is a const context, and
+        // a `#[rustc_comptime]` intrinsic is one while still reporting `is_mir_available`
+        // (`core::intrinsics::size_of` and eight others), which aborted the whole run.
+        // `instance_mir` is rustc's own dispatcher between `optimized_mir` and `mir_for_ctfe`.
+        // See <https://github.com/model-checking/kani/issues/4839>.
+        let body = tcx.instance_mir(rustc_middle::ty::InstanceKind::Item(def_id));
         if body_has_const_param_block(body) {
             return true;
         }

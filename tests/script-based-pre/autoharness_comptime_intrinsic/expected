@@ -1,0 +1,5 @@
+| comptime | plain             |
+| comptime | with_body         |
+| comptime | guarded          | Generic Function: the function has a `const {}` block that may constrain its const generic parameter(s), and the value autoharness substitutes (2) is not guaranteed to satisfy it |
+| comptime | guarded_const_fn | Generic Function: the function has a `const {}` block that may constrain its const generic parameter(s), and the value autoharness substitutes (2) is not guaranteed to satisfy it |
+| comptime | size_of::<i32>   | The function does not have a body                                                                                                                                                  |
