@@ -1,0 +1,4 @@
+warning: ignoring `RUSTC_WRAPPER=
+which a `rustc` wrapper cannot handle
+VERIFICATION:- SUCCESSFUL
+SUCCESS: kani-compiler was not invoked through the rustc wrapper
