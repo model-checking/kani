@@ -1641,9 +1641,11 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
         // integer of the same width -- `Type::vector` asserts otherwise and took the compiler down
         // for every `Simd<*const T, N>`, c.f.
         // <https://github.com/model-checking/kani/issues/4867>. Rust's SIMD types are array-based,
-        // so a value is built and read through a byte-level reinterpretation of the whole vector
-        // (`codegen_rvalue_aggregate` and `codegen_simd_field`) and the lanes are never accessed as
-        // pointers at this level.
+        // so a value is usually built and read through a byte-level reinterpretation of the whole
+        // vector (`codegen_rvalue_aggregate` and `codegen_simd_field`). The lane-wise intrinsics
+        // that do reach a single lane convert at the boundary instead: `simd_insert` and
+        // `simd_splat` cast the incoming pointer to the lane type, and `simd_extract` casts the lane
+        // back to the pointer type.
         let prim_type = element.primitive();
         let cbmc_type = if matches!(prim_type, Primitive::Pointer(_)) {
             Type::unsigned_int(self.symbol_table.machine_model().pointer_width)
