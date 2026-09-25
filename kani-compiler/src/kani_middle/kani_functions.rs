@@ -107,10 +107,24 @@ pub enum KaniModel {
     AssumeSafe,
     #[strum(serialize = "BoundedAnyModel")]
     BoundedAny,
+    #[strum(serialize = "CheckBinaryFmtModel")]
+    CheckBinaryFmt,
     #[strum(serialize = "CheckDebugFmtModel")]
     CheckDebugFmt,
     #[strum(serialize = "CheckDisplayFmtModel")]
     CheckDisplayFmt,
+    #[strum(serialize = "CheckLowerExpFmtModel")]
+    CheckLowerExpFmt,
+    #[strum(serialize = "CheckLowerHexFmtModel")]
+    CheckLowerHexFmt,
+    #[strum(serialize = "CheckOctalFmtModel")]
+    CheckOctalFmt,
+    #[strum(serialize = "CheckPointerFmtModel")]
+    CheckPointerFmt,
+    #[strum(serialize = "CheckUpperExpFmtModel")]
+    CheckUpperExpFmt,
+    #[strum(serialize = "CheckUpperHexFmtModel")]
+    CheckUpperHexFmt,
     #[strum(serialize = "CopyInitStateModel")]
     CopyInitState,
     #[strum(serialize = "CopyInitStateSingleModel")]
