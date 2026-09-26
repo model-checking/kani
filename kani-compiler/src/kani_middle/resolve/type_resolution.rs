@@ -8,7 +8,9 @@ use rustc_hir::def::DefKind;
 use rustc_middle::ty::TyCtxt;
 use rustc_public::mir::Mutability;
 use rustc_public::rustc_internal;
-use rustc_public::ty::{FloatTy, IntTy, Region, RegionKind, RigidTy, Ty, UintTy};
+use rustc_public::ty::{
+    FloatTy, GenericArgKind, GenericArgs, IntTy, Region, RegionKind, RigidTy, Ty, TyKind, UintTy,
+};
 use rustc_span::def_id::LocalDefId;
 use std::str::FromStr;
 use strum_macros::{EnumString, IntoStaticStr};
@@ -47,7 +49,8 @@ pub fn resolve_ty<'tcx>(
                     "type",
                     DefKind::Struct | DefKind::Union | DefKind::Enum
                 )?;
-                Ok(rustc_internal::stable(tcx.type_of(def_id)).value)
+                let ty = rustc_internal::stable(tcx.type_of(def_id)).value;
+                Ok(instantiate_path_args(tcx, current_module, path, ty))
             }
         }
         Type::Array(array) => {
@@ -94,6 +97,61 @@ pub fn resolve_ty<'tcx>(
             unreachable!()
         }
     }
+}
+
+/// If `path`'s final segment carries angle-bracketed generic arguments, instantiate `ty`
+/// (the definition's identity type, e.g. `Wrap<T>`) with those arguments resolved to
+/// concrete types (e.g. `Wrap<u8>`), so trait-implementation lookups can match a concrete
+/// impl. Returns `ty` unchanged when there are no arguments or when any argument cannot
+/// be resolved — preserving the previous behavior for everything that resolved before.
+fn instantiate_path_args<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    current_module: LocalDefId,
+    path: &syn::Path,
+    ty: Ty,
+) -> Ty {
+    let Some(syn::PathArguments::AngleBracketed(syn_args)) =
+        path.segments.last().map(|seg| &seg.arguments)
+    else {
+        return ty;
+    };
+    let TyKind::RigidTy(RigidTy::Adt(adt_def, identity_args)) = ty.kind() else {
+        return ty;
+    };
+    // Resolve the user-written type arguments; lifetimes are erased below, and anything
+    // else (const arguments, associated-type bindings) keeps the uninstantiated type.
+    let mut user_tys = Vec::new();
+    for arg in &syn_args.args {
+        match arg {
+            syn::GenericArgument::Type(syn_ty) => match resolve_ty(tcx, current_module, syn_ty) {
+                Ok(t) => user_tys.push(t),
+                Err(_) => return ty,
+            },
+            syn::GenericArgument::Lifetime(_) => {}
+            _ => return ty,
+        }
+    }
+    // Substitute the definition's type parameters in declaration order; erase lifetime
+    // parameters. A count mismatch (e.g. defaulted parameters the user omitted) keeps
+    // the uninstantiated type.
+    let mut user_iter = user_tys.into_iter();
+    let mut new_args = Vec::new();
+    for arg in &identity_args.0 {
+        match arg {
+            GenericArgKind::Type(_) => match user_iter.next() {
+                Some(t) => new_args.push(GenericArgKind::Type(t)),
+                None => return ty,
+            },
+            GenericArgKind::Lifetime(_) => {
+                new_args.push(GenericArgKind::Lifetime(Region { kind: RegionKind::ReErased }))
+            }
+            GenericArgKind::Const(_) => return ty,
+        }
+    }
+    if user_iter.next().is_some() {
+        return ty;
+    }
+    Ty::from_rigid_kind(RigidTy::Adt(adt_def, GenericArgs(new_args)))
 }
 
 /// Enumeration of existing primitive types that are not parametric.
