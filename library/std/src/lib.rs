@@ -84,10 +84,10 @@ pub mod prelude {
 #[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! assert {
-    ($cond:expr $(,)?) => {
+    ($cond:expr $(,)?) => {{
         // The double negation is to resolve https://github.com/model-checking/kani/issues/2108
         kani::assert(!!$cond, concat!("assertion failed: ", stringify!($cond)));
-    };
+    }};
     // Before edition 2021, the `assert!` macro could take a single argument
     // that wasn't a string literal. This is not supported in edition 2021 and above.
     // Because we reexport the 2021 edition macro, we need to support this
