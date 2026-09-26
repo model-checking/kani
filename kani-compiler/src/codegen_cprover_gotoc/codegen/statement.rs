@@ -171,8 +171,9 @@ impl GotocCtx<'_, '_> {
                     self.current_loop_decreases = Some(decreases_expr);
                     return Stmt::skip(location);
                 }
-                // we ignore assignment for all zero size types
-                if self.is_zst_stable(lty) {
+                // we ignore assignment for all zero size types, and to locals that stand for a
+                // function item
+                if self.is_zst_stable(lty) || self.is_fndef_local(lhs, location) {
                     Stmt::skip(location)
                 } else if lty.kind().is_fn_ptr() && rty.kind().is_fn() && !rty.kind().is_fn_ptr() {
                     // implicit address of a function pointer, e.g.
@@ -987,14 +988,15 @@ impl GotocCtx<'_, '_> {
     /// Generates Goto-C to assign a value to a [Place].
     /// A MIR [Place] is an L-value (i.e. the LHS of an assignment).
     ///
-    /// In Kani, we slightly optimize the special case for Unit and don't assign anything.
+    /// In Kani, we slightly optimize the special case for Unit and don't assign anything. Nor do we
+    /// assign to a local that stands for a function item (see `is_fndef_local`).
     pub(crate) fn codegen_expr_to_place_stable(
         &mut self,
         place: &Place,
         expr: Expr,
         loc: Location,
     ) -> Stmt {
-        if self.place_ty_stable(place).kind().is_unit() {
+        if self.place_ty_stable(place).kind().is_unit() || self.is_fndef_local(place, loc) {
             expr.as_stmt(loc)
         } else {
             unwrap_or_return_codegen_unimplemented_stmt!(

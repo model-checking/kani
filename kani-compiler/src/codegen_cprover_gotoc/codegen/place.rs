@@ -394,6 +394,14 @@ impl GotocCtx<'_, '_> {
         }
     }
 
+    /// Whether `place` is a local that `codegen_local` replaces by a reference to a function item.
+    /// Writes to such a place are dropped: no read uses the local's variable, and for a pointer or
+    /// a `Box` the replacement is not an lvalue.
+    pub fn is_fndef_local(&mut self, place: &Place, loc: Location) -> bool {
+        place.projection.is_empty()
+            && self.codegen_local_fndef(self.local_ty_stable(place.local), loc).is_some()
+    }
+
     /// Codegen for a local
     pub fn codegen_local(&mut self, l: Local, loc: Location) -> Expr {
         let local_ty = self.local_ty_stable(l);
