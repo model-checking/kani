@@ -944,12 +944,13 @@ pub fn ty_validity_per_offset(
             vec![]
         }
     };
-    // A pattern type is a scalar whose validity is fully captured by the
-    // scalar valid_range in its layout ABI (see `try_from_ty`): its base type
-    // is always a scalar, integer bases add no requirements of their own, and
-    // the `NotNull` constraint is part of the range. Handle it here without
-    // inspecting the stable kind, which would panic for kinds `rustc_public`
-    // cannot yet convert (e.g. `PatternKind::NotNull` for `NonNull`).
+    // A pattern type over a scalar base has its validity fully captured by the
+    // scalar valid_range in its layout ABI (see `try_from_ty`): integer bases
+    // add no requirements of their own, and the `NotNull` constraint is part
+    // of the range. Patterns over `char` or over a non-scalar base (a wide
+    // pointer) are rejected below. Handle it here without inspecting the
+    // stable kind, which would panic for kinds `rustc_public` cannot yet
+    // convert (e.g. `PatternKind::NotNull` for `NonNull`).
     if let rustc_middle::ty::TyKind::Pat(base_ty, _) = rustc_internal::internal(tcx, ty).kind() {
         // `char`'s validity (two intervals around the surrogate gap) exceeds
         // what a single scalar range can express, and the `char` special case
@@ -1067,7 +1068,7 @@ pub fn ty_validity_per_offset(
                         }
                     }
                 }
-                // Pattern types have a scalar ABI and are fully handled before
+                // Pattern types are fully handled (accepted or rejected) before
                 // the match on the layout's field shape, so this arm can never
                 // be reached.
                 RigidTy::Pat(..) => {
