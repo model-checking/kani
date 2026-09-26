@@ -26,7 +26,7 @@ Common to both `kani` and `cargo kani` are many command-line flags:
  * `--concrete-playback=[print|inplace]`: _Experimental_ feature that generates a Rust unit test case
  that plays back a failing proof harness using a concrete counterexample.
  If used with `print`, Kani will only print the unit test to stdout.
- If used with `inplace`, Kani will automatically add the unit test to the user's source code, next to the proof harness. For more detailed instructions, see the [concrete playback](./experimental/concrete-playback.md) section.
+ If used with `inplace`, Kani will automatically add the unit test to the user's source code, next to the proof harness. For more detailed instructions, see the [concrete playback](./reference/experimental/concrete-playback.md) section.
 
  * `--tests`: Build in "[test mode](https://doc.rust-lang.org/rustc/tests/index.html)", i.e. with `cfg(test)` set and `dev-dependencies` available (when using `cargo kani`).
 
