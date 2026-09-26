@@ -20,6 +20,7 @@
 // the `kani_core` memory models this crate expands.
 #![cfg_attr(feature = "concrete_playback", feature(layout_for_ptr))]
 #![feature(ptr_metadata)]
+#![feature(formatting_options)]
 #![feature(f16)]
 #![feature(f128)]
 #![feature(convert_float_to_int)]

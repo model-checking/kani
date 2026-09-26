@@ -94,8 +94,9 @@ impl fmt::Debug for Borrowed<'_> {
 }
 
 // TEST NOTE: `<Contracted as Debug>::fmt` is skipped: a `fmt` method under contract is handled
-// by the regular automatic contract harness path, which needs to call the function directly and
-// therefore cannot generate the `&mut Formatter` argument.
+// by the regular automatic contract harness path, which calls the function directly, so its
+// `&mut Formatter` argument comes from the bounded `Formatter` model and needs
+// `--bounded-arguments`, which this test does not pass.
 pub struct Contracted(u8);
 
 impl fmt::Debug for Contracted {

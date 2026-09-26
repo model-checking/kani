@@ -297,9 +297,10 @@ macro_rules! kani_intrinsics {
         }
 
         /// A [`core::fmt::Write`] sink that discards everything written to it, used by the
-        /// `check_*_fmt` models below. Writing never fails, so `fmt`
+        /// `check_*_fmt` and `any_formatter` models below. Writing never fails, so `fmt`
         /// implementations are not verified against the write-error path.
-        struct DiscardingSink;
+        #[doc(hidden)]
+        pub struct DiscardingSink;
 
         impl core_path::fmt::Write for DiscardingSink {
             fn write_str(&mut self, _s: &str) -> core_path::fmt::Result {
@@ -397,6 +398,61 @@ macro_rules! kani_intrinsics {
             }
             let via = ViaPointer(value);
             let _ = core_path::fmt::write(&mut DiscardingSink, format_args!("{via:p}"));
+        }
+
+        /// Generate a `Formatter` over a sink that discards its output, with every formatting
+        /// option nondeterministic: width and precision (each unset or up to `N`, at most
+        /// `u16::MAX`), fill
+        /// character, alignment, sign, the alternate and zero-padding flags, and debug hex mode.
+        /// Every combination is a valid `Formatter`, so none is excluded. The sink never
+        /// fails, so paths that handle a write error are not reached.
+        ///
+        /// This model is used by the compiler to generate `&Formatter` and `&mut Formatter`
+        /// arguments for automatic harnesses (`kani autoharness`). Note that any verification
+        /// result obtained with a bounded value like this one is valid only up to the bound.
+        #[kanitool::fn_marker = "AnyFormatterModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_formatter<const N: usize>(
+            sink: &mut DiscardingSink,
+        ) -> core_path::fmt::Formatter<'_> {
+            use core_path::fmt::{Alignment, DebugAsHex, FormattingOptions, Sign};
+            // Width and precision: unset, or a count in `0..=N` (capped at `u16::MAX`, their type in
+            // the API), by reduction rather than by an assumption. Written out rather than as a nested
+            // fn, which the standard-library flow would offer a harness of its own.
+            let max = N.min(u16::MAX as usize);
+            let width = match <Option<u16> as Arbitrary>::any() {
+                None => None,
+                Some(v) => Some((v as usize % (max + 1)) as u16),
+            };
+            let precision = match <Option<u16> as Arbitrary>::any() {
+                None => None,
+                Some(v) => Some((v as usize % (max + 1)) as u16),
+            };
+            let mut options = FormattingOptions::new();
+            options
+                .width(width)
+                .precision(precision)
+                .fill(<char as Arbitrary>::any())
+                .alternate(<bool as Arbitrary>::any())
+                .sign_aware_zero_pad(<bool as Arbitrary>::any())
+                .align(match <Option<u8> as Arbitrary>::any() {
+                    None => None,
+                    Some(0) => Some(Alignment::Left),
+                    Some(1) => Some(Alignment::Right),
+                    Some(_) => Some(Alignment::Center),
+                })
+                .sign(match <Option<bool> as Arbitrary>::any() {
+                    None => None,
+                    Some(true) => Some(Sign::Plus),
+                    Some(false) => Some(Sign::Minus),
+                })
+                .debug_as_hex(match <Option<bool> as Arbitrary>::any() {
+                    None => None,
+                    Some(true) => Some(DebugAsHex::Upper),
+                    Some(false) => Some(DebugAsHex::Lower),
+                });
+            core_path::fmt::Formatter::new(sink, options)
         }
 
         /// Creates a symbolic value *bounded* by `N`. Bounded means `|T| <= N`. The type
