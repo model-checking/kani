@@ -296,7 +296,11 @@ pub fn base_rustc_flags(lib_config: LibConfig) -> Vec<RustcArg> {
     // e.g. compiletest will set 'compile-flags' here and we should pass those down to rustc
     // and we fail in `tests/kani/Match/match_bool.rs`
     if let Ok(str) = std::env::var("RUSTFLAGS") {
-        flags.extend(str.split(' ').map(RustcArg::from));
+        // Split on whitespace rather than on a single space: `RUSTFLAGS=""` would otherwise
+        // contribute one empty argument, which rustc reads as a second input filename
+        // ("multiple input filenames provided"), and repeated or trailing spaces would do the
+        // same. Cargo parses the space-separated form the same way.
+        flags.extend(str.split_whitespace().map(RustcArg::from));
     }
 
     flags

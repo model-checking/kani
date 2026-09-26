@@ -1,0 +1,8 @@
+Complete - 1 successfully verified harnesses, 0 failures, 1 total
+empty RUSTFLAGS works
+Complete - 1 successfully verified harnesses, 0 failures, 1 total
+blank RUSTFLAGS works
+Complete - 1 successfully verified harnesses, 0 failures, 1 total
+repeated spaces keep both flags
+Complete - 1 successfully verified harnesses, 0 failures, 1 total
+empty RUSTFLAGS works for cargo kani
