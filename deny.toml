@@ -48,4 +48,9 @@ wildcards = "allow"
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
-allow-git = ["https://github.com/Nadrieril/tracing-tree"]
+# Charon's git dependencies. `serde_state` has no crates.io release (the crate of that name there is
+# an unrelated one); see https://github.com/AeneasVerif/charon/issues/1486.
+allow-git = [
+  "https://github.com/Nadrieril/serde_state",
+  "https://github.com/Nadrieril/tracing-tree",
+]
