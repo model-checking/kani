@@ -1630,27 +1630,14 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     fn translate_allocation(&self, alloc: &Allocation, ty: Ty) -> CharonRawConstantExpr {
         match ty.kind() {
             TyKind::RigidTy(RigidTy::Int(it)) => {
-                let value = alloc.read_int().unwrap();
-                let scalar_value = match it {
-                    IntTy::I8 => CharonScalarValue::I8(value as i8),
-                    IntTy::I16 => CharonScalarValue::I16(value as i16),
-                    IntTy::I32 => CharonScalarValue::I32(value as i32),
-                    IntTy::I64 => CharonScalarValue::I64(value as i64),
-                    IntTy::I128 => CharonScalarValue::I128(value),
-                    IntTy::Isize => CharonScalarValue::Isize(value as i64),
-                };
+                // `as u128` keeps the two's-complement bits, which `scalar_value` truncates.
+                let bits = alloc.read_int().unwrap() as u128;
+                let scalar_value = scalar_value(translate_int_ty(it), bits);
                 CharonRawConstantExpr::Literal(CharonLiteral::Scalar(scalar_value))
             }
             TyKind::RigidTy(RigidTy::Uint(uit)) => {
-                let value = alloc.read_uint().unwrap();
-                let scalar_value = match uit {
-                    UintTy::U8 => CharonScalarValue::U8(value as u8),
-                    UintTy::U16 => CharonScalarValue::U16(value as u16),
-                    UintTy::U32 => CharonScalarValue::U32(value as u32),
-                    UintTy::U64 => CharonScalarValue::U64(value as u64),
-                    UintTy::U128 => CharonScalarValue::U128(value),
-                    UintTy::Usize => CharonScalarValue::Usize(value as u64),
-                };
+                let bits = alloc.read_uint().unwrap();
+                let scalar_value = scalar_value(translate_uint_ty(uit), bits);
                 CharonRawConstantExpr::Literal(CharonLiteral::Scalar(scalar_value))
             }
             TyKind::RigidTy(RigidTy::Bool) => {
@@ -1695,23 +1682,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             };
             let branches = targets
                 .branches()
-                .map(|(value, bb)| {
-                    let scalar_val = match int_ty {
-                        CharonIntegerTy::I8 => CharonScalarValue::I8(value as i8),
-                        CharonIntegerTy::I16 => CharonScalarValue::I16(value as i16),
-                        CharonIntegerTy::I32 => CharonScalarValue::I32(value as i32),
-                        CharonIntegerTy::I64 => CharonScalarValue::I64(value as i64),
-                        CharonIntegerTy::I128 => CharonScalarValue::I128(value as i128),
-                        CharonIntegerTy::Isize => CharonScalarValue::Isize(value as i64),
-                        CharonIntegerTy::U8 => CharonScalarValue::U8(value as u8),
-                        CharonIntegerTy::U16 => CharonScalarValue::U16(value as u16),
-                        CharonIntegerTy::U32 => CharonScalarValue::U32(value as u32),
-                        CharonIntegerTy::U64 => CharonScalarValue::U64(value as u64),
-                        CharonIntegerTy::U128 => CharonScalarValue::U128(value),
-                        CharonIntegerTy::Usize => CharonScalarValue::Usize(value as u64),
-                    };
-                    (scalar_val, CharonBlockId::from_usize(bb))
-                })
+                .map(|(value, bb)| (scalar_value(*int_ty, value), CharonBlockId::from_usize(bb)))
                 .collect();
             let otherwise = CharonBlockId::from_usize(targets.otherwise());
             CharonSwitchTargets::SwitchInt(*int_ty, branches, otherwise)
@@ -1842,6 +1813,26 @@ fn translate_uint_ty(uint_ty: UintTy) -> CharonIntegerTy {
         UintTy::U128 => CharonIntegerTy::U128,
         // TODO: assumes 64-bit platform
         UintTy::Usize => CharonIntegerTy::Usize,
+    }
+}
+
+/// The Charon integer value of type `int_ty` whose two's-complement bits are the low bits of
+/// `bits`. MIR hands out both switch values and constant integers as such bit patterns.
+fn scalar_value(int_ty: CharonIntegerTy, bits: u128) -> CharonScalarValue {
+    match int_ty {
+        CharonIntegerTy::I8 => CharonScalarValue::I8(bits as i8),
+        CharonIntegerTy::I16 => CharonScalarValue::I16(bits as i16),
+        CharonIntegerTy::I32 => CharonScalarValue::I32(bits as i32),
+        CharonIntegerTy::I64 => CharonScalarValue::I64(bits as i64),
+        CharonIntegerTy::I128 => CharonScalarValue::I128(bits as i128),
+        // TODO: assumes 64-bit platform, as `translate_int_ty` does.
+        CharonIntegerTy::Isize => CharonScalarValue::Isize(bits as i64),
+        CharonIntegerTy::U8 => CharonScalarValue::U8(bits as u8),
+        CharonIntegerTy::U16 => CharonScalarValue::U16(bits as u16),
+        CharonIntegerTy::U32 => CharonScalarValue::U32(bits as u32),
+        CharonIntegerTy::U64 => CharonScalarValue::U64(bits as u64),
+        CharonIntegerTy::U128 => CharonScalarValue::U128(bits),
+        CharonIntegerTy::Usize => CharonScalarValue::Usize(bits as u64),
     }
 }
 
