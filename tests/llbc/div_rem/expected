@@ -1,0 +1,32 @@
+pub fn test::div(@1: u32, @2: u32) -> u32\
+{\
+    let @0: u32; // return\
+    let a@1: u32; // arg #1\
+    let b@2: u32; // arg #2\
+    let @3: bool; // anonymous local\
+\
+    nop\
+    nop\
+    @0 := copy (a@1) / copy (b@2)\
+    return\
+}
+
+pub fn test::rem(@1: i32, @2: i32) -> i32\
+{\
+    let @0: i32; // return\
+    let a@1: i32; // arg #1\
+    let b@2: i32; // arg #2\
+    let @3: bool; // anonymous local\
+    let @4: bool; // anonymous local\
+    let @5: bool; // anonymous local\
+    let @6: bool; // anonymous local\
+\
+    nop\
+    nop\
+    nop\
+    nop\
+    nop\
+    nop\
+    @0 := copy (a@1) % copy (b@2)\
+    return\
+}

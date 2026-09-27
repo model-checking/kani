@@ -1,0 +1,16 @@
+pub fn test::always() -> bool\
+{\
+    let @0: bool; // return\
+\
+    @0 := const (true)\
+    return\
+}
+
+pub fn test::is_a(@1: char) -> bool\
+{\
+    let @0: bool; // return\
+    let c@1: char; // arg #1\
+\
+    @0 := copy (c@1) == const (a)\
+    return\
+}
