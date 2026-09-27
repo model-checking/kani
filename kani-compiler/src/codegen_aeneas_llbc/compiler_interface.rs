@@ -4,7 +4,9 @@
 //! This file contains the code necessary to interface with the compiler backend
 
 use crate::args::ReachabilityType;
-use crate::codegen_aeneas_llbc::mir_to_ullbc::Context;
+use crate::codegen_aeneas_llbc::mir_to_ullbc::{
+    Context, prepare_translated_crate, record_item_names,
+};
 use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::check_reachable_items;
 use crate::kani_middle::codegen_units::{CodegenUnit, CodegenUnits};
@@ -44,7 +46,7 @@ use std::any::Any;
 use std::fs::File;
 use std::path::Path;
 use std::time::Instant;
-use tracing::{debug, info, trace};
+use tracing::{debug, info};
 
 #[derive(Clone)]
 pub struct LlbcCodegenBackend {}
@@ -124,6 +126,8 @@ impl LlbcCodegenBackend {
                 MonoItem::GlobalAsm(_) => {} // We have already warned above
             }
         }
+
+        record_item_names(&mut ccx.translated);
 
         // Everything after translation is Charon's own pipeline, run exactly as `charon` runs it,
         // so that the LLBC we emit is what Aeneas expects and a Charon bump does not require
@@ -368,18 +372,15 @@ where
 /// marker traits), so Kani does not keep a copy of that policy. `print_llbc` makes the final pass
 /// pipeline print the LLBC, as `charon --print-llbc` does; the expected tests rely on it.
 fn charon_cli_options(print_llbc: bool) -> CliOpts {
-    let mut options = CliOpts {
-        preset: Some(Preset::Aeneas),
-        print_llbc,
-        ..CliOpts::default()
-    };
+    let mut options = CliOpts { preset: Some(Preset::Aeneas), print_llbc, ..CliOpts::default() };
     options.apply_preset();
     options
 }
 
 fn create_charon_transformation_context(tcx: TyCtxt) -> TransformCtx {
     let crate_name = tcx.crate_name(LOCAL_CRATE).as_str().into();
-    let translated = TranslatedCrate { crate_name, ..TranslatedCrate::default() };
+    let mut translated = TranslatedCrate { crate_name, ..TranslatedCrate::default() };
+    prepare_translated_crate(tcx, &mut translated);
     let mut errors = ErrorCtx::new();
     let options = TranslateOptions::new(&mut errors, &charon_cli_options(false));
     TransformCtx { options, translated, errors: std::cell::RefCell::new(errors) }
