@@ -19,6 +19,7 @@
 // `core::mem::{size_of,align_of}_val_raw` are only reached by the `concrete_playback` paths of
 // the `kani_core` memory models this crate expands.
 #![cfg_attr(feature = "concrete_playback", feature(layout_for_ptr))]
+#![feature(bstr)]
 #![feature(ptr_metadata)]
 #![feature(f16)]
 #![feature(f128)]
