@@ -128,10 +128,10 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         let mut local_names = FxHashMap::default();
         // populate names of locals
         for info in instance.body().unwrap().var_debug_info {
-            if let VarDebugInfoContents::Place(p) = info.value {
-                if p.projection.is_empty() {
-                    local_names.insert(p.local, info.name);
-                }
+            if let VarDebugInfoContents::Place(p) = info.value
+                && p.projection.is_empty()
+            {
+                local_names.insert(p.local, info.name);
             }
         }
         let file_to_id: HashMap<CharonFileName, CharonFileId> = HashMap::new();
@@ -1621,8 +1621,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     //Get the Ty of the Place
     fn place_ty(&self, place: &Place) -> Ty {
         let body = self.instance.body().unwrap();
-        let ty = body.local_decl(place.local).unwrap().ty;
-        ty
+        body.local_decl(place.local).unwrap().ty
     }
 
     fn translate_rvalue(&mut self, rvalue: &Rvalue) -> CharonRvalue {
