@@ -12,12 +12,10 @@ use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
 use crate::kani_middle::transform::{BodyTransformation, GlobalPasses};
 use crate::kani_queries::QUERY_DB;
-use charon_lib::ast::{AnyTransId, TranslatedCrate, meta::ItemOpacity::*, meta::Span};
-use charon_lib::errors::{ErrorCtx, Level};
-use charon_lib::name_matcher::NamePattern;
-use charon_lib::options::{MirLevel, TranslateOptions};
-use charon_lib::transform::TransformCtx;
-use charon_lib::transform::ctx::TransformPass;
+use charon_lib::ast::{ItemId, TranslatedCrate};
+use charon_lib::errors::ErrorCtx;
+use charon_lib::options::{CliOpts, Preset, SerializationFormat, TranslateOptions};
+use charon_lib::transform::{TransformCtx, run_transformation_passes};
 use kani_metadata::ArtifactType;
 use kani_metadata::{AssignsContract, CompilerArtifactStub};
 use rustc_codegen_ssa::back::archive::{
@@ -105,7 +103,7 @@ impl LlbcCodegenBackend {
 
         // Create a Charon transformation context that will be populated with translation results
         let mut ccx = create_charon_transformation_context(tcx);
-        let mut id_map: FxHashMap<DefId, AnyTransId> = FxHashMap::default();
+        let mut id_map: FxHashMap<DefId, ItemId> = FxHashMap::default();
 
         // Translate all the items
         for item in &items {
@@ -127,42 +125,10 @@ impl LlbcCodegenBackend {
             }
         }
 
-        trace!("# ULLBC after translation from MIR:\n\n{}\n", ccx);
-
-        // # Reorder the graph of dependencies and compute the strictly
-        // connex components to:
-        // - compute the order in which to extract the definitions
-        // - find the recursive definitions
-        // - group the mutually recursive definitions
-        let reordered_decls = charon_lib::transform::reorder_decls::Transform {};
-        reordered_decls.transform_ctx(&mut ccx);
-
-        //
-        // =================
-        // **Micro-passes**:
-        // =================
-        // At this point, the bulk of the translation is done. From now onwards,
-        // we simply apply some micro-passes to make the code cleaner, before
-        // serializing the result.
-
-        // Run the micro-passes that clean up bodies.
-        for pass in charon_lib::transform::ULLBC_PASSES.iter() {
-            pass.run(&mut ccx)
-        }
-
-        // # Go from ULLBC to LLBC (Low-Level Borrow Calculus) by reconstructing
-        // the control flow.
-        // Run the micro-passes that clean up bodies.
-        for pass in charon_lib::transform::LLBC_PASSES.iter() {
-            pass.run(&mut ccx)
-        }
-
-        // Print the LLBC if requested. This is useful for expected tests.
-        if queries.args().print_llbc {
-            println!("# Final LLBC before serialization:\n\n{}\n", ccx);
-        } else {
-            debug!("# Final LLBC before serialization:\n\n{}\n", ccx);
-        }
+        // Everything after translation is Charon's own pipeline, run exactly as `charon` runs it,
+        // so that the LLBC we emit is what Aeneas expects and a Charon bump does not require
+        // re-deriving its pass list here.
+        run_transformation_passes(&charon_cli_options(queries.args().print_llbc), &mut ccx);
 
         // TODO: display an error report about the external dependencies, if necessary
         if ccx.errors.borrow().error_count > 0 {
@@ -178,7 +144,7 @@ impl LlbcCodegenBackend {
             let mut pb = llbc_file.to_path_buf();
             pb.set_extension("llbc");
             println!("Writing LLBC file to {}", pb.display());
-            if let Err(()) = crate_data.serialize_to_file(&pb) {
+            if let Err(()) = crate_data.serialize_to_file(&pb, SerializationFormat::Json) {
                 tcx.sess.dcx().err("Failed to write LLBC file");
             }
         }
@@ -397,65 +363,24 @@ where
     ret
 }
 
-fn get_translate_options(tcx: &TranslatedCrate, error_ctx: &mut ErrorCtx) -> TranslateOptions {
-    let mut parse_pattern = |s: &str| match NamePattern::parse(s) {
-        Ok(p) => Ok(p),
-        Err(e) => {
-            let msg = format!("failed to parse pattern `{s}` ({e})");
-            Err(error_ctx.span_err(&TranslatedCrate::default(), Span::dummy(), &msg, Level::Error))
-        }
+/// The Charon options Kani runs with: Charon's `aeneas` preset, which is the configuration Aeneas
+/// consumes -- including which items are opaque and which traits are hidden (`Allocator` and the
+/// marker traits), so Kani does not keep a copy of that policy. `print_llbc` makes the final pass
+/// pipeline print the LLBC, as `charon --print-llbc` does; the expected tests rely on it.
+fn charon_cli_options(print_llbc: bool) -> CliOpts {
+    let mut options = CliOpts {
+        preset: Some(Preset::Aeneas),
+        print_llbc,
+        ..CliOpts::default()
     };
-    let options = tcx.options.clone();
-    let item_opacities = {
-        let mut opacities = vec![];
-
-        // This is how to treat items that don't match any other pattern.
-        if options.extract_opaque_bodies {
-            opacities.push(("_".to_string(), Transparent));
-        } else {
-            opacities.push(("_".to_string(), Foreign));
-        }
-
-        // We always include the items from the crate.
-        opacities.push(("crate".to_owned(), Transparent));
-
-        for pat in options.include.iter() {
-            opacities.push((pat.to_string(), Transparent));
-        }
-        for pat in options.opaque.iter() {
-            opacities.push((pat.to_string(), Opaque));
-        }
-        for pat in options.exclude.iter() {
-            opacities.push((pat.to_string(), Invisible));
-        }
-
-        // We always hide this trait.
-        opacities.push(("core::alloc::Allocator".to_string(), Invisible));
-        opacities
-            .push(("alloc::alloc::{{impl core::alloc::Allocator for _}}".to_string(), Invisible));
-
-        opacities
-            .into_iter()
-            .filter_map(|(s, opacity)| parse_pattern(&s).ok().map(|pat| (pat, opacity)))
-            .collect()
-    };
-    TranslateOptions {
-        mir_level: MirLevel::Built,
-        translate_all_methods: false,
-        monomorphize: false,
-        no_ops_to_function_calls: false,
-        hide_marker_traits: true,
-        no_merge_goto_chains: false,
-        item_opacities,
-        print_built_llbc: true,
-        remove_associated_types: Vec::new(),
-    }
+    options.apply_preset();
+    options
 }
 
 fn create_charon_transformation_context(tcx: TyCtxt) -> TransformCtx {
     let crate_name = tcx.crate_name(LOCAL_CRATE).as_str().into();
     let translated = TranslatedCrate { crate_name, ..TranslatedCrate::default() };
-    let mut errors = ErrorCtx::new(true, false);
-    let options = get_translate_options(&translated, &mut errors);
+    let mut errors = ErrorCtx::new();
+    let options = TranslateOptions::new(&mut errors, &charon_cli_options(false));
     TransformCtx { options, translated, errors: std::cell::RefCell::new(errors) }
 }
