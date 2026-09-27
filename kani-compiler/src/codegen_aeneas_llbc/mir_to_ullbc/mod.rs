@@ -810,98 +810,13 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         crate_name.starts_with("core") && marker.starts_with("marker")
     }
 
+    /// Retrieve an item name from a [DefId].
+    /// This function is adapted from Charon:
+    /// https://github.com/AeneasVerif/charon/blob/53530427db2941ce784201e64086766504bc5642/charon/src/bin/charon-driver/translate/translate_ctx.rs#L344
     fn defid_to_name(&mut self, defid: DefId) -> Result<CharonName, CharonError> {
         let tcx = self.tcx();
         let def_id = rustc_internal::internal(self.tcx(), defid);
         let span: CharonSpan = self.translate_span(rustc_internal::stable(tcx.def_span(def_id)));
-        let mut found_crate_name = false;
-        let mut name: Vec<CharonPathElem> = Vec::new();
-
-        let def_path = tcx.def_path(def_id);
-        let crate_name = tcx.crate_name(def_path.krate).to_string();
-
-        let parents: Vec<_> = {
-            let mut parents = vec![def_id];
-            let mut cur_id = def_id;
-            while let Some(parent) = tcx.opt_parent(cur_id) {
-                parents.push(parent);
-                cur_id = parent;
-            }
-            parents.into_iter().rev().collect()
-        };
-
-        for cur_id in parents {
-            let data = tcx.def_key(cur_id).disambiguated_data;
-            // Match over the key data
-            let disambiguator = CharonDisambiguator::new(data.disambiguator as usize);
-            use rustc_hir::definitions::DefPathData;
-            match &data.data {
-                DefPathData::TypeNs(symbol) => {
-                    error_assert!(self, span, data.disambiguator == 0); // Sanity check
-                    name.push(CharonPathElem::Ident(symbol.to_string(), disambiguator));
-                }
-                DefPathData::ValueNs(symbol) => {
-                    // I think `disambiguator != 0` only with names introduced by macros (though
-                    // not sure).
-                    name.push(CharonPathElem::Ident(symbol.to_string(), disambiguator));
-                }
-                DefPathData::CrateRoot => {
-                    // Sanity check
-                    error_assert!(self, span, data.disambiguator == 0);
-
-                    // This should be the beginning of the path
-                    error_assert!(self, span, name.is_empty());
-                    found_crate_name = true;
-                    name.push(CharonPathElem::Ident(crate_name.clone(), disambiguator));
-                }
-                DefPathData::Impl => {} //will check
-                DefPathData::OpaqueTy => {
-                    // TODO: do nothing for now
-                }
-                DefPathData::MacroNs(symbol) => {
-                    error_assert!(self, span, data.disambiguator == 0); // Sanity check
-
-                    // There may be namespace collisions between, say, function
-                    // names and macros (not sure). However, this isn't much
-                    // of an issue here, because for now we don't expose macros
-                    // in the AST, and only use macro names in [register], for
-                    // instance to filter opaque modules.
-                    name.push(CharonPathElem::Ident(symbol.to_string(), disambiguator));
-                }
-                DefPathData::Closure => {
-                    // TODO: this is not very satisfactory, but on the other hand
-                    // we should be able to extract closures in local let-bindings
-                    // (i.e., we shouldn't have to introduce top-level let-bindings).
-                    name.push(CharonPathElem::Ident("closure".to_string(), disambiguator))
-                }
-                DefPathData::ForeignMod => {
-                    // Do nothing, functions in `extern` blocks are in the same namespace as the
-                    // block.
-                }
-                _ => {
-                    raise_error!(self, span, "Unexpected DefPathData: {:?}", data);
-                }
-            }
-        }
-
-        // We always add the crate name
-        if !found_crate_name {
-            name.push(CharonPathElem::Ident(crate_name, CharonDisambiguator::new(0)));
-        }
-
-        trace!("{:?}", name);
-        Ok(CharonName { name })
-    }
-
-    /// Retrieve an item name from a [DefId].
-    /// This function is adapted from Charon:
-    /// https://github.com/AeneasVerif/charon/blob/53530427db2941ce784201e64086766504bc5642/charon/src/bin/charon-driver/translate/translate_ctx.rs#L344
-    fn def_to_name(&mut self, def: InstanceDef) -> Result<CharonName, CharonError> {
-        let def_id = def.def_id();
-        trace!("{:?}", def_id);
-        let tcx = self.tcx();
-        let span: CharonSpan = self.translate_span(def.span());
-        let def_id = rustc_internal::internal(self.tcx(), def_id);
 
         // We have to be a bit careful when retrieving names from def ids. For instance,
         // due to reexports, [`TyCtxt::def_path_str`](TyCtxt::def_path_str) might give
@@ -969,10 +884,6 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             parents.into_iter().rev().collect()
         };
 
-        // Rk.: below we try to be as tight as possible with regards to sanity
-        // checks, to make sure we understand what happens with def paths, and
-        // fail whenever we get something which is even slightly outside what
-        // we expect.
         for cur_id in parents {
             let data = tcx.def_key(cur_id).disambiguated_data;
             // Match over the key data
@@ -1032,117 +943,40 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             name.push(CharonPathElem::Ident(crate_name, CharonDisambiguator::new(0)));
         }
 
-        if let Some(impl_defid_internal) = self.tcx.impl_of_assoc(def_id) {
-            let traitref = self
-                .tcx
-                .impl_trait_ref(impl_defid_internal)
-                .skip_binder()
-                .args
-                .first()
-                .unwrap()
-                .to_string();
-            let impl_defid = DefId::to_val(impl_defid_internal.index.as_usize());
-            let _impl_id = self.register_trait_impl_id(impl_defid);
-            let funcname = match name.pop().unwrap() {
-                CharonPathElem::Ident(name, _) => name + traitref.as_str(),
-                _ => panic!("Expected ident"),
-            };
-            name.push(CharonPathElem::Ident(funcname, CharonDisambiguator::new(0)));
-        };
         trace!("{:?}", name);
         Ok(CharonName { name })
+    }
+
+    /// The name of a function instance: its path, with the method name suffixed by the
+    /// implementing type when it is defined in an `impl` block.
+    fn def_to_name(&mut self, def: InstanceDef) -> Result<CharonName, CharonError> {
+        let mut name = self.defid_to_name(def.def_id())?;
+        let def_id = rustc_internal::internal(self.tcx(), def.def_id());
+        if let Some(impl_defid_internal) = self.tcx.impl_of_assoc(def_id) {
+            // `{impl}` path elements are skipped, so methods of different impls share a path
+            // (`core::num::wrapping_add` for every integer type); tell them apart by the
+            // implementing type. That is the impl's self type for inherent and trait impls
+            // alike -- only trait impls have a trait ref, and asking an inherent impl for one
+            // aborted the compiler on any inherent method call.
+            let self_ty = self.tcx.type_of(impl_defid_internal).skip_binder().to_string();
+            if self.tcx.impl_is_of_trait(impl_defid_internal) {
+                let impl_defid = DefId::to_val(impl_defid_internal.index.as_usize());
+                let _impl_id = self.register_trait_impl_id(impl_defid);
+            }
+            let funcname = match name.name.pop().unwrap() {
+                CharonPathElem::Ident(name, _) => name + self_ty.as_str(),
+                _ => panic!("Expected ident"),
+            };
+            name.name.push(CharonPathElem::Ident(funcname, CharonDisambiguator::new(0)));
+        };
+        trace!("{:?}", name);
+        Ok(name)
     }
 
     fn adtdef_to_name(&mut self, def: AdtDef) -> Result<CharonName, CharonError> {
-        let def_id = def.def_id();
-        trace!("{:?}", def_id);
-        let tcx = self.tcx();
-        let span: CharonSpan = self.translate_span(def.span());
-        let def_id = rustc_internal::internal(self.tcx(), def_id);
-        let mut found_crate_name = false;
-        let mut name: Vec<CharonPathElem> = Vec::new();
-
-        let def_path = tcx.def_path(def_id);
-        let crate_name = tcx.crate_name(def_path.krate).to_string();
-
-        let parents: Vec<_> = {
-            let mut parents = vec![def_id];
-            let mut cur_id = def_id;
-            while let Some(parent) = tcx.opt_parent(cur_id) {
-                parents.push(parent);
-                cur_id = parent;
-            }
-            parents.into_iter().rev().collect()
-        };
-
-        // Rk.: below we try to be as tight as possible with regards to sanity
-        // checks, to make sure we understand what happens with def paths, and
-        // fail whenever we get something which is even slightly outside what
-        // we expect.
-        for cur_id in parents {
-            let data = tcx.def_key(cur_id).disambiguated_data;
-            // Match over the key data
-            let disambiguator = CharonDisambiguator::new(data.disambiguator as usize);
-            use rustc_hir::definitions::DefPathData;
-            match &data.data {
-                DefPathData::TypeNs(symbol) => {
-                    error_assert!(self, span, data.disambiguator == 0); // Sanity check
-                    name.push(CharonPathElem::Ident(symbol.to_string(), disambiguator));
-                }
-                DefPathData::ValueNs(symbol) => {
-                    // I think `disambiguator != 0` only with names introduced by macros (though
-                    // not sure).
-                    name.push(CharonPathElem::Ident(symbol.to_string(), disambiguator));
-                }
-                DefPathData::CrateRoot => {
-                    // Sanity check
-                    error_assert!(self, span, data.disambiguator == 0);
-
-                    // This should be the beginning of the path
-                    error_assert!(self, span, name.is_empty());
-                    found_crate_name = true;
-                    name.push(CharonPathElem::Ident(crate_name.clone(), disambiguator));
-                }
-                DefPathData::Impl => todo!(),
-                DefPathData::OpaqueTy => {
-                    // TODO: do nothing for now
-                }
-                DefPathData::MacroNs(symbol) => {
-                    error_assert!(self, span, data.disambiguator == 0); // Sanity check
-
-                    // There may be namespace collisions between, say, function
-                    // names and macros (not sure). However, this isn't much
-                    // of an issue here, because for now we don't expose macros
-                    // in the AST, and only use macro names in [register], for
-                    // instance to filter opaque modules.
-                    name.push(CharonPathElem::Ident(symbol.to_string(), disambiguator));
-                }
-                DefPathData::Closure => {
-                    // TODO: this is not very satisfactory, but on the other hand
-                    // we should be able to extract closures in local let-bindings
-                    // (i.e., we shouldn't have to introduce top-level let-bindings).
-                    name.push(CharonPathElem::Ident("closure".to_string(), disambiguator))
-                }
-                DefPathData::ForeignMod => {
-                    // Do nothing, functions in `extern` blocks are in the same namespace as the
-                    // block.
-                }
-                _ => {
-                    raise_error!(self, span, "Unexpected DefPathData: {:?}", data);
-                }
-            }
-        }
-
-        // We always add the crate name
-        if !found_crate_name {
-            name.push(CharonPathElem::Ident(crate_name, CharonDisambiguator::new(0)));
-        }
-
-        trace!("{:?}", name);
-        Ok(CharonName { name })
+        self.defid_to_name(def.def_id())
     }
 
-    /// Compute the span information for the given instance
     fn translate_instance_span(&mut self, instance: Instance) -> CharonSpan {
         self.translate_span(instance.def.span())
     }

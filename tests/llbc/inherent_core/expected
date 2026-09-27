@@ -1,0 +1,11 @@
+pub fn core::num::wrapping_addu8(@1: u8, @2: u8) -> u8
+
+pub fn test::wrap(@1: u8, @2: u8) -> u8\
+{\
+    let @0: u8; // return\
+    let a@1: u8; // arg #1\
+    let b@2: u8; // arg #2\
+\
+    @0 := @Fun1(copy (a@1), copy (b@2))\
+    return\
+}

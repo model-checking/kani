@@ -1,0 +1,8 @@
+pub fn test::getCounter<'_0>(@1: &'_0 (@Adt0)) -> u32\
+{\
+    let @0: u32; // return\
+    let self@1: &'_ (@Adt0); // arg #1\
+\
+    @0 := copy ((*(self@1)).n)\
+    return\
+}
