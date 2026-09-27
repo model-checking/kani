@@ -1,0 +1,38 @@
+pub enum core::option::Option<T> =\
+|  None()\
+|  Some(0: T)
+
+pub fn core::ptr::drop_glue<'_0, T>(@1: &'_0 mut (T))
+
+pub fn test::both_none<T, U>(@1: @Adt0<T>, @2: @Adt0<U>) -> bool\
+{\
+    let @0: bool; // return\
+    let a@1: @Adt0<T>; // arg #1\
+    let b@2: @Adt0<U>; // arg #2\
+    let @3: isize; // anonymous local\
+    let @4: isize; // anonymous local\
+\
+    nop\
+    match a@1 {\
+        core::option::Option::None => {\
+            nop\
+            match b@2 {\
+                core::option::Option::None => {\
+                    @0 := const (true)\
+                    nop\
+                },\
+                core::option::Option::Some => {\
+                    @0 := const (false)\
+                    nop\
+                },\
+            }\
+        },\
+        core::option::Option::Some => {\
+            @0 := const (false)\
+            nop\
+        },\
+    }\
+    drop b@2\
+    drop a@1\
+    return\
+}

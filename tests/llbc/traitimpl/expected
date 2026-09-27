@@ -1,0 +1,27 @@
+pub fn test::get_valA<'_0>(@1: &'_0 (@Adt1)) -> i32\
+{\
+    let @0: i32; // return\
+    let self@1: &'_ (@Adt1); // arg #1\
+\
+    @0 := copy ((*(self@1)).val)\
+    return\
+}
+
+pub fn test::get_valB<'_0>(@1: &'_0 (@Adt0)) -> i32\
+{\
+    let @0: i32; // return\
+    let self@1: &'_ (@Adt0); // arg #1\
+\
+    @0 := copy ((*(self@1)).index)\
+    return\
+}
+
+pub struct test::A =\
+{\
+  val: i32,\
+}
+
+pub struct test::B =\
+{\
+  index: i32,\
+}
