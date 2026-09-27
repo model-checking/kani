@@ -35,6 +35,30 @@ pub fn pair<T: Copy, U: Default>(x: T, _y: U) -> (T, U) {
     (x, U::default())
 }
 
+// TEST NOTE: verified as `extend_unit::<()>`. The collection type is fixed to (),
+// whose Extend implementation requires unit items. Trait-impl discovery does not
+// infer T from this bound's concrete Self type, so () must be a base candidate.
+pub fn extend_unit<T>(value: T)
+where
+    (): Extend<T>,
+{
+    let mut items = core::iter::once(value);
+    ().extend(&mut items);
+    assert!(items.next().is_none());
+}
+
+// TEST NOTE: verified as `extend_unit_pair::<(), ()>`. Exercise the standard
+// library's tuple Extend implementation with two unit item parameters, and
+// check that extending the pair actually consumes the input iterator.
+pub fn extend_unit_pair<A, B>(a: A, b: B)
+where
+    (): Extend<A> + Extend<B>,
+{
+    let mut items = core::iter::once((a, b));
+    ((), ()).extend(&mut items);
+    assert!(items.next().is_none());
+}
+
 // TEST NOTE: verified as `first::<i32>`; lifetime parameters are erased.
 pub fn first<'a, T: Copy>(x: &'a T) -> T {
     *x

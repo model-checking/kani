@@ -470,6 +470,8 @@ fn generic_instantiation_candidates() -> Vec<Ty> {
         Ty::from_rigid_kind(RigidTy::Float(FloatTy::F32)),
         Ty::from_rigid_kind(RigidTy::Bool),
         Ty::from_rigid_kind(RigidTy::Char),
+        // Try `()` for item parameters paired with `Extend<()>` / `FromIterator<()>` impls.
+        Ty::new_tuple(&[]),
     ]
 }
 
