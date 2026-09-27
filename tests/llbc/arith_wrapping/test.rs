@@ -3,9 +3,9 @@
 // kani-flags: -Zlean --print-llbc
 
 //! This test checks that Kani's LLBC backend handles wrapping arithmetic. A plain MIR
-//! `Add`/`Sub`/`Mul` wraps on overflow, so it must become Charon's `wrapping.` operators rather
-//! than `checked.`, which produce a `(result, overflowed)` pair and made the LLBC type-incorrect:
-//! `u8 := a checked.+ b`.
+//! `Add`/`Sub`/`Mul` wraps on overflow, so it must become Charon's wrapping operators rather than
+//! its checked ones, which produce a `(result, overflowed)` pair and once made the LLBC
+//! type-incorrect: `u8 := a checked.+ b`.
 
 #![feature(core_intrinsics)]
 #![allow(internal_features)]

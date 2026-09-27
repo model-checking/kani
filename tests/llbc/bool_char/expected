@@ -1,16 +1,41 @@
-pub fn test::always() -> bool\
+// Full name: test::is_a\
+pub fn is_a(c: char) -> bool\
 {\
-    let @0: bool; // return\
+    let _0: bool; // return\
+    let c: char; // arg #1\
 \
-    @0 := const (true)\
+    storage_live(_0)\
+    _0 = copy c == const 'a'\
+    storage_dead(c)\
     return\
 }
 
-pub fn test::is_a(@1: char) -> bool\
+// Full name: test::always\
+pub fn always() -> bool\
 {\
-    let @0: bool; // return\
-    let c@1: char; // arg #1\
+    let _0: bool; // return\
 \
-    @0 := copy (c@1) == const (a)\
+    storage_live(_0)\
+    _0 = const true\
+    return\
+}
+
+// Full name: test::main\
+pub fn main()\
+{\
+    let _0: (); // return\
+    let _1: bool; // anonymous local\
+    let _2: bool; // anonymous local\
+\
+    storage_live(_0)\
+    storage_live(_1)\
+    storage_live(_2)\
+    _0 = ()\
+    _1 = is_a(const 'b')\
+    ↳⚡ undefined_behavior\
+    storage_dead(_1)\
+    _2 = always()\
+    ↳⚡ undefined_behavior\
+    storage_dead(_2)\
     return\
 }

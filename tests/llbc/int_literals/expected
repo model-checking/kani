@@ -1,15 +1,39 @@
-pub fn test::signed() -> (i8, i16, i32, i64, i128, isize)\
+// Full name: test::unsigned\
+pub fn unsigned() -> (u8, u16, u32, u64, u128, usize)\
 {\
-    let @0: (i8, i16, i32, i64, i128, isize); // return\
+    let _0: (u8, u16, u32, u64, u128, usize); // return\
 \
-    @0 := (const (-1 : i8), const (-2 : i16), const (-3 : i32), const (-4 : i64), const (-5 : i128), const (-6 : isize))\
+    storage_live(_0)\
+    _0 = (const 1u8, const 2u16, const 3u32, const 4u64, const 5u128, const 6usize)\
     return\
 }
 
-pub fn test::unsigned() -> (u8, u16, u32, u64, u128, usize)\
+// Full name: test::signed\
+pub fn signed() -> (i8, i16, i32, i64, i128, isize)\
 {\
-    let @0: (u8, u16, u32, u64, u128, usize); // return\
+    let _0: (i8, i16, i32, i64, i128, isize); // return\
 \
-    @0 := (const (1 : u8), const (2 : u16), const (3 : u32), const (4 : u64), const (5 : u128), const (6 : usize))\
+    storage_live(_0)\
+    _0 = (const -1i8, const -2i16, const -3i32, const -4i64, const -5i128, const -6isize)\
+    return\
+}
+
+// Full name: test::main\
+pub fn main()\
+{\
+    let _0: (); // return\
+    let _1: (i8, i16, i32, i64, i128, isize); // anonymous local\
+    let _2: (u8, u16, u32, u64, u128, usize); // anonymous local\
+\
+    storage_live(_0)\
+    storage_live(_1)\
+    storage_live(_2)\
+    _0 = ()\
+    _1 = signed()\
+    ↳⚡ undefined_behavior\
+    storage_dead(_1)\
+    _2 = unsigned()\
+    ↳⚡ undefined_behavior\
+    storage_dead(_2)\
     return\
 }

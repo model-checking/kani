@@ -1,27 +1,69 @@
-pub fn test::get_valA<'_0>(@1: &'_0 (@Adt\
+// Full name: test::B\
+pub struct B {\
+  index: i32,\
+}
+
+// Full name: test::get_valB\
+pub fn get_valB<'_0>(self: &'_0 B) -> i32\
 {\
-    let @0: i32; // return\
-    let self@1: &'_ (@Adt\
+    let _0: i32; // return\
+    let self: &'_ B; // arg #1\
 \
-    @0 := copy ((*(self@1)).val)\
+    storage_live(_0)\
+    _0 = copy (*self).index\
+    storage_dead(self)\
     return\
 }
 
-pub fn test::get_valB<'_0>(@1: &'_0 (@Adt\
-{\
-    let @0: i32; // return\
-    let self@1: &'_ (@Adt\
-\
-    @0 := copy ((*(self@1)).index)\
-    return\
-}
-
-pub struct test::A =\
-{\
+// Full name: test::A\
+pub struct A {\
   val: i32,\
 }
 
-pub struct test::B =\
+// Full name: test::get_valA\
+pub fn get_valA<'_0>(self: &'_0 A) -> i32\
 {\
-  index: i32,\
+    let _0: i32; // return\
+    let self: &'_ A; // arg #1\
+\
+    storage_live(_0)\
+    _0 = copy (*self).val\
+    storage_dead(self)\
+    return\
+}
+
+// Full name: test::main\
+pub fn main()\
+{\
+    let _0: (); // return\
+    let e: A; // local\
+    let k: B; // local\
+    let i: i32; // local\
+    let _4: &'_ A; // anonymous local\
+    let j: i32; // local\
+    let _6: &'_ B; // anonymous local\
+\
+    storage_live(_0)\
+    storage_live(e)\
+    storage_live(k)\
+    storage_live(i)\
+    storage_live(_4)\
+    storage_live(j)\
+    storage_live(_6)\
+    _0 = ()\
+    e = A { val: const 3i32 }\
+    k = B { index: const 3i32 }\
+    _4 = &e\
+    i = get_valA<'_>(move _4)\
+    ↳⚡ undefined_behavior\
+    storage_dead(_4)\
+    _6 = &k\
+    j = get_valB<'_>(move _6)\
+    ↳⚡ undefined_behavior\
+    storage_dead(_6)\
+    storage_dead(j)\
+    storage_dead(i)\
+    storage_dead(k)\
+    storage_dead(e)\
+    return\
 }

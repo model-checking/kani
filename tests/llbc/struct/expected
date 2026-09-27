@@ -1,14 +1,36 @@
-pub fn test::struct_project(@1: @Adt0) -> i32\
+// Full name: test::MyStruct\
+pub struct MyStruct {\
+  a: i32,\
+  b: bool,\
+}
+
+// Full name: test::struct_project\
+pub fn struct_project(s: MyStruct) -> i32\
 {\
-    let @0: i32; // return\
-    let s@1: @Adt0; // arg #1\
+    let _0: i32; // return\
+    let s: MyStruct; // arg #1\
 \
-    @0 := copy ((s@1).a)\
+    storage_live(_0)\
+    _0 = copy s.a\
+    storage_dead(s)\
     return\
 }
 
-pub struct test::MyStruct =\
+// Full name: test::main\
+pub fn main()\
 {\
-  a: i32,\
-  b: bool,\
+    let _0: (); // return\
+    let s: MyStruct; // local\
+    let a: i32; // local\
+\
+    storage_live(_0)\
+    storage_live(s)\
+    storage_live(a)\
+    _0 = ()\
+    s = MyStruct { a: const 1i32, b: const true }\
+    a = struct_project(copy s)\
+    ↳⚡ undefined_behavior\
+    storage_dead(a)\
+    storage_dead(s)\
+    return\
 }

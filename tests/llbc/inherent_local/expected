@@ -1,8 +1,39 @@
-pub fn test::getCounter<'_0>(@1: &'_0 (@Adt0)) -> u32\
+// Full name: test::Counter\
+pub struct Counter {\
+  n: u32,\
+}
+
+// Full name: test::getCounter\
+pub fn getCounter<'_0>(self: &'_0 Counter) -> u32\
 {\
-    let @0: u32; // return\
-    let self@1: &'_ (@Adt0); // arg #1\
+    let _0: u32; // return\
+    let self: &'_ Counter; // arg #1\
 \
-    @0 := copy ((*(self@1)).n)\
+    storage_live(_0)\
+    _0 = copy (*self).n\
+    storage_dead(self)\
+    return\
+}
+
+// Full name: test::main\
+pub fn main()\
+{\
+    let _0: (); // return\
+    let c: Counter; // local\
+    let _2: u32; // anonymous local\
+    let _3: &'_ Counter; // anonymous local\
+\
+    storage_live(_0)\
+    storage_live(c)\
+    storage_live(_2)\
+    storage_live(_3)\
+    _0 = ()\
+    c = Counter { n: const 1u32 }\
+    _3 = &c\
+    _2 = getCounter<'_>(move _3)\
+    ↳⚡ undefined_behavior\
+    storage_dead(_3)\
+    storage_dead(_2)\
+    storage_dead(c)\
     return\
 }
