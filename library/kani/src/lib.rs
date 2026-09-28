@@ -74,15 +74,18 @@ pub use core::assert as __kani__workaround_core_assert;
 
 #[macro_export]
 macro_rules! cover {
-    () => {
+    // The block wrapper keeps the expansion valid in expression position (e.g. as a
+    // `match` arm): a trailing semicolon there triggers the future-incompatible
+    // `semicolon_in_expressions_from_macros` lint in user code.
+    () => {{
         kani::cover(true, "cover location");
-    };
-    ($cond:expr $(,)?) => {
+    }};
+    ($cond:expr $(,)?) => {{
         kani::cover($cond, concat!("cover condition: ", stringify!($cond)));
-    };
-    ($cond:expr, $msg:literal) => {
+    }};
+    ($cond:expr, $msg:literal) => {{
         kani::cover($cond, $msg);
-    };
+    }};
 }
 
 /// `implies!(premise => conclusion)` means that if the `premise` is true, so
