@@ -18,7 +18,7 @@ use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_middle::{
     CtorReturn, FmtTrait, SmartPointerModels, adt_has_private_field_check, can_derive_arbitrary,
     find_arbitrary_constructor, fmt_impl_self_ty, implements_arbitrary, implements_invariant,
-    is_c_str, scalar_niche, smart_pointer_model_instance,
+    is_byte_str, is_c_str, is_formatter, scalar_niche, smart_pointer_model_instance,
 };
 use crate::kani_queries::QueryDb;
 use rustc_data_structures::fx::FxHashMap;
@@ -54,6 +54,10 @@ struct AnyModels {
     kani_any_str_ref: FnDef,
     /// The FnDef of KaniModel::AnyCStrRef
     kani_any_c_str_ref: FnDef,
+    /// The FnDef of KaniModel::AnyByteStrRef
+    kani_any_byte_str_ref: FnDef,
+    /// The FnDef of KaniModel::AnyFormatter
+    kani_any_formatter: FnDef,
     /// The FnDef of KaniHook::Assume (used for layout-niche assumptions and constructor
     /// success).
     kani_assume: FnDef,
@@ -88,6 +92,8 @@ impl AnyModels {
             kani_any_slice_ref: *kani_fns.get(&KaniModel::AnySliceRef.into()).unwrap(),
             kani_any_str_ref: *kani_fns.get(&KaniModel::AnyStrRef.into()).unwrap(),
             kani_any_c_str_ref: *kani_fns.get(&KaniModel::AnyCStrRef.into()).unwrap(),
+            kani_any_byte_str_ref: *kani_fns.get(&KaniModel::AnyByteStrRef.into()).unwrap(),
+            kani_any_formatter: *kani_fns.get(&KaniModel::AnyFormatter.into()).unwrap(),
             kani_assume: *kani_fns.get(&KaniHook::Assume.into()).unwrap(),
             kani_assert: *kani_fns.get(&KaniHook::Assert.into()).unwrap(),
             kani_assume_safe: *kani_fns.get(&KaniModel::AssumeSafe.into()).unwrap(),
@@ -1177,9 +1183,78 @@ fn call_kani_any_for_ty(
         return lcl;
     }
     if let TyKind::RigidTy(RigidTy::Ref(region, inner_ty, inner_mutability)) = ty.kind()
+        && let TyKind::RigidTy(RigidTy::Adt(def, _)) = inner_ty.kind()
+        && is_formatter(tcx, def)
+    {
+        // A `Formatter` writes to a sink, so the harness holds one as a local (the model's
+        // parameter type) and passes it to `any_formatter`, which builds a formatter with
+        // nondeterministic options over it; the sink outlives the formatter as the storage
+        // outlives a slice. Width and precision follow the slice bound.
+        let model_inst = Instance::resolve(
+            models.kani_any_formatter,
+            &GenericArgs(vec![GenericArgKind::Const(
+                TyConst::try_from_target_usize(models.slice_bound).unwrap(),
+            )]),
+        )
+        .unwrap();
+        let sink_ref_ty = model_inst.ty().kind().fn_sig().unwrap().skip_binder().inputs()[0];
+        let TyKind::RigidTy(RigidTy::Ref(_, sink_ty, _)) = sink_ref_ty.kind() else {
+            unreachable!("any_formatter takes the sink by mutable reference")
+        };
+        let TyKind::RigidTy(RigidTy::Adt(sink_def, sink_args)) = sink_ty.kind() else {
+            unreachable!("the sink is a struct")
+        };
+        let sink_lcl = body.new_local(sink_ty, source.span(body.blocks()), Mutability::Mut);
+        body.assign_to(
+            Place::from(sink_lcl),
+            Rvalue::Aggregate(
+                AggregateKind::Adt(sink_def, VariantIdx::to_val(0), sink_args, None, None),
+                vec![],
+            ),
+            source,
+            InsertPosition::Before,
+        );
+        let sink_ref_lcl = body.new_local(
+            Ty::new_ref(region.clone(), sink_ty, Mutability::Mut),
+            source.span(body.blocks()),
+            Mutability::Not,
+        );
+        body.assign_to(
+            Place::from(sink_ref_lcl),
+            Rvalue::Ref(
+                region.clone(),
+                BorrowKind::Mut { kind: MutBorrowKind::Default },
+                sink_lcl.into(),
+            ),
+            source,
+            InsertPosition::Before,
+        );
+        let fmt_lcl = body.new_local(inner_ty, source.span(body.blocks()), Mutability::Mut);
+        body.insert_call(
+            &model_inst,
+            source,
+            InsertPosition::Before,
+            vec![Operand::Move(Place::from(sink_ref_lcl))],
+            Place::from(fmt_lcl),
+        );
+        let ref_lcl = body.new_local(ty, source.span(body.blocks()), mutability);
+        let borrow_kind = if inner_mutability == Mutability::Not {
+            BorrowKind::Shared
+        } else {
+            BorrowKind::Mut { kind: MutBorrowKind::Default }
+        };
+        body.assign_to(
+            Place::from(ref_lcl),
+            Rvalue::Ref(region, borrow_kind, Place::from(fmt_lcl)),
+            source,
+            InsertPosition::Before,
+        );
+        return ref_lcl;
+    }
+    if let TyKind::RigidTy(RigidTy::Ref(region, inner_ty, inner_mutability)) = ty.kind()
         && match inner_ty.kind() {
             TyKind::RigidTy(RigidTy::Slice(..)) | TyKind::RigidTy(RigidTy::Str) => true,
-            TyKind::RigidTy(RigidTy::Adt(def, _)) => is_c_str(tcx, def),
+            TyKind::RigidTy(RigidTy::Adt(def, _)) => is_c_str(tcx, def) || is_byte_str(tcx, def),
             _ => false,
         }
     {
@@ -1202,12 +1277,19 @@ fn call_kani_any_for_ty(
                     TyConst::try_from_target_usize(models.string_bound).unwrap(),
                 )]),
             ),
-            // `&CStr`: bytes up to the first NUL of the storage, sized by the slice bound. Each
-            // ADT arm repeats its predicate from the guard above, so a type added there cannot
-            // fall into another type's model.
+            // `&CStr` is the bytes of the storage up to the first NUL and `&ByteStr` a prefix of
+            // it; both are sized by the slice bound. Each ADT arm repeats its predicate from the
+            // guard above, so a type added there cannot fall into another type's model.
             TyKind::RigidTy(RigidTy::Adt(def, _)) if is_c_str(tcx, def) => (
                 Ty::unsigned_ty(UintTy::U8),
                 models.kani_any_c_str_ref,
+                GenericArgs(vec![GenericArgKind::Const(
+                    TyConst::try_from_target_usize(models.slice_bound).unwrap(),
+                )]),
+            ),
+            TyKind::RigidTy(RigidTy::Adt(def, _)) if is_byte_str(tcx, def) => (
+                Ty::unsigned_ty(UintTy::U8),
+                models.kani_any_byte_str_ref,
                 GenericArgs(vec![GenericArgKind::Const(
                     TyConst::try_from_target_usize(models.slice_bound).unwrap(),
                 )]),
