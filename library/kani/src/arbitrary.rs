@@ -129,6 +129,9 @@ impl Arbitrary for std::ascii::EscapeDefault {
         let back = usize::from(u8::any());
         crate::assume(back <= len - front);
 
+        // The front/back consumption below is unrolled by hand (EscapeDefault
+        // yields at most 4 bytes) rather than written as a loop, so generating
+        // an arbitrary value does not require loop unwinding during verification.
         if front >= 1 {
             let _ = escape.next();
         }
