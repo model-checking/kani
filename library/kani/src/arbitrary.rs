@@ -71,6 +71,51 @@ impl Arbitrary for std::time::Duration {
     }
 }
 
+impl Arbitrary for std::char::EscapeUnicode {
+    fn any() -> Self {
+        // Generate any state reachable by consuming a freshly constructed
+        // EscapeUnicode iterator from the front.
+        let mut escape = char::any().escape_unicode();
+        let len = escape.len();
+
+        let front = usize::from(u8::any());
+        crate::assume(front <= len);
+
+        if front >= 1 {
+            let _ = escape.next();
+        }
+        if front >= 2 {
+            let _ = escape.next();
+        }
+        if front >= 3 {
+            let _ = escape.next();
+        }
+        if front >= 4 {
+            let _ = escape.next();
+        }
+        if front >= 5 {
+            let _ = escape.next();
+        }
+        if front >= 6 {
+            let _ = escape.next();
+        }
+        if front >= 7 {
+            let _ = escape.next();
+        }
+        if front >= 8 {
+            let _ = escape.next();
+        }
+        if front >= 9 {
+            let _ = escape.next();
+        }
+        if front >= 10 {
+            let _ = escape.next();
+        }
+
+        escape
+    }
+}
+
 /// Generate a slice of *unbounded* nondeterministic length: a fresh allocation of
 /// nondeterministic size whose contents are nondeterministic, with element validity
 /// established by `slice_validity_assume` (a compiler hook that emits a quantified

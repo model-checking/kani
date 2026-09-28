@@ -9,6 +9,9 @@ use rustc_index::IndexVec;
 use rustc_middle::mir::{Body, Const as mirConst, ConstValue, Operand, TerminatorKind};
 use rustc_middle::mir::{Local, LocalDecl};
 use rustc_middle::ty::{self, Ty, TyCtxt};
+// `Const`'s constructors moved to the `ConstExt` extension trait when `Const` itself moved to
+// `rustc_type_ir` (nightly-2026-09-23), so the trait has to be in scope to call them.
+use rustc_middle::ty::consts::ConstExt;
 use rustc_middle::ty::{Const, GenericArgsRef, IntrinsicDef};
 use rustc_span::Spanned;
 use rustc_span::symbol::{Symbol, sym};

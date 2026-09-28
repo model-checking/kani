@@ -3,6 +3,7 @@
 
 use crate::args::Timeout;
 use crate::args::VerificationArgs;
+use crate::args::autoharness_args::AutoharnessBounds;
 use crate::args::common::Verbosity;
 use crate::util::render_command;
 use anyhow::{Context, Result, bail};
@@ -39,6 +40,10 @@ pub struct KaniSession {
     /// Invariant: this field is_some() iff the autoharness subcommand is enabled.
     pub autoharness_compiler_flags: Option<Vec<String>>,
 
+    /// The bounds automatic harnesses generate bounded arguments with, reported in the
+    /// autoharness summary. Only meaningful if the autoharness subcommand is enabled.
+    pub autoharness_bounds: AutoharnessBounds,
+
     /// The location we found the 'kani_rustc' command
     pub kani_compiler: PathBuf,
     /// The location we found 'kani_lib.c'
@@ -69,6 +74,7 @@ impl KaniSession {
         Ok(KaniSession {
             args,
             autoharness_compiler_flags: None,
+            autoharness_bounds: AutoharnessBounds::default(),
             kani_compiler: install.kani_compiler()?,
             kani_lib_c: install.kani_lib_c()?,
             temporaries: Mutex::new(vec![]),

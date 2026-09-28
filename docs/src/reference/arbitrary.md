@@ -53,6 +53,7 @@ fn verify_with_constraints() {
     // Now x represents all even numbers from 0 to 998
     my_function(x);
 }
+```
 
 ## Derive Implementations
 

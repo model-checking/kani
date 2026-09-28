@@ -18,7 +18,7 @@ use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_middle::{
     CtorReturn, FmtTrait, SmartPointerModels, adt_has_private_field_check, can_derive_arbitrary,
     find_arbitrary_constructor, fmt_impl_self_ty, implements_arbitrary, implements_invariant,
-    scalar_niche, smart_pointer_model_instance,
+    is_byte_str, is_c_str, is_formatter, scalar_niche, smart_pointer_model_instance,
 };
 use crate::kani_queries::QueryDb;
 use rustc_data_structures::fx::FxHashMap;
@@ -36,6 +36,7 @@ use rustc_public::ty::{
 };
 use rustc_public::{CrateDef, CrateDefType};
 use rustc_public_bridge::IndexedVal;
+use strum::IntoEnumIterator;
 use tracing::debug;
 
 /// The Kani model functions used to construct nondeterministic values.
@@ -51,6 +52,12 @@ struct AnyModels {
     kani_any_slice_ref: FnDef,
     /// The FnDef of KaniModel::AnyStrRef
     kani_any_str_ref: FnDef,
+    /// The FnDef of KaniModel::AnyCStrRef
+    kani_any_c_str_ref: FnDef,
+    /// The FnDef of KaniModel::AnyByteStrRef
+    kani_any_byte_str_ref: FnDef,
+    /// The FnDef of KaniModel::AnyFormatter
+    kani_any_formatter: FnDef,
     /// The FnDef of KaniHook::Assume (used for layout-niche assumptions and constructor
     /// success).
     kani_assume: FnDef,
@@ -68,6 +75,12 @@ struct AnyModels {
     /// Whether --constructor-args is enabled: under this heuristic-filter umbrella, generated
     /// ADT values additionally assume the type's mined invariant conjuncts.
     constructor_args: bool,
+    /// The maximum length for nondeterministic `&[T]`/`&mut [T]` values.
+    slice_bound: u64,
+    /// The maximum length, in bytes, for nondeterministic `&str` values.
+    string_bound: u64,
+    /// The bound for nondeterministic values of types implementing `BoundedArbitrary`.
+    bounded_arbitrary_bound: u64,
 }
 
 impl AnyModels {
@@ -78,6 +91,9 @@ impl AnyModels {
             kani_any_ptr: *kani_fns.get(&KaniModel::AnyPtr.into()).unwrap(),
             kani_any_slice_ref: *kani_fns.get(&KaniModel::AnySliceRef.into()).unwrap(),
             kani_any_str_ref: *kani_fns.get(&KaniModel::AnyStrRef.into()).unwrap(),
+            kani_any_c_str_ref: *kani_fns.get(&KaniModel::AnyCStrRef.into()).unwrap(),
+            kani_any_byte_str_ref: *kani_fns.get(&KaniModel::AnyByteStrRef.into()).unwrap(),
+            kani_any_formatter: *kani_fns.get(&KaniModel::AnyFormatter.into()).unwrap(),
             kani_assume: *kani_fns.get(&KaniHook::Assume.into()).unwrap(),
             kani_assert: *kani_fns.get(&KaniHook::Assert.into()).unwrap(),
             kani_assume_safe: *kani_fns.get(&KaniModel::AssumeSafe.into()).unwrap(),
@@ -85,6 +101,9 @@ impl AnyModels {
             smart_pointer_models: SmartPointerModels::from_kani_functions(kani_fns),
             unbounded_models: UnboundedModels::from_kani_functions(kani_fns),
             constructor_args: query_db.args().autoharness_constructor_args,
+            slice_bound: query_db.args().autoharness_slice_bound,
+            string_bound: query_db.args().autoharness_string_bound,
+            bounded_arbitrary_bound: query_db.args().autoharness_bounded_arbitrary_bound,
         }
     }
 }
@@ -223,31 +242,6 @@ impl TransformPass for AutomaticArbitraryPass {
         }
     }
 }
-
-/// The maximum length for nondeterministic slices that automatic harnesses generate.
-/// Verification results for functions taking `&[T]`/`&mut [T]` arguments are only valid up to
-/// this bound. The value must stay below Kani's default unwinding bound (20), so that loops
-/// iterating over such a slice can be fully unwound by default.
-const AUTOHARNESS_SLICE_BOUND: u64 = 16;
-
-/// The maximum length (in bytes) for nondeterministic strings that automatic harnesses
-/// generate. Strings use a much smaller bound than slices: the generated string is the longest
-/// valid-UTF-8 prefix of nondeterministic bytes, and reasoning about UTF-8 validity is
-/// expensive. On top of that, a harness that decodes every `char` (e.g. `s.chars().count()`)
-/// unwinds the decoding loop up to the default bound (20) over symbolic bytes, so the cost grows
-/// steeply with the number of bytes: on a typical machine 8 bytes already exceed Kani's default
-/// 60s harness timeout for such harnesses, while 4 stay comfortably within it (though a
-/// char-decoding harness can still approach the timeout on slow machines, so callers that must
-/// not time out should raise `--harness-timeout`).
-const AUTOHARNESS_STR_BOUND: u64 = 4;
-
-/// The bound for nondeterministic values of types that implement `BoundedArbitrary` (rather
-/// than `Arbitrary`) that automatic harnesses generate, e.g. `Vec<T>` or `String`.
-/// Verification results for functions with such arguments are only valid up to this bound.
-/// This is smaller than the slice/str bounds since `BoundedArbitrary` values are heap
-/// allocated, and for `String` additionally involve UTF-8 reasoning; a bound of 8 already
-/// makes simple `String` harnesses exceed Kani's default 60s harness timeout.
-const AUTOHARNESS_BOUNDED_ANY_BOUND: u64 = 4;
 
 /// Remap all locals and block targets of an inlined basic block. Returns false (bail out)
 /// when the block contains a construct the remapper does not support; the caller then falls
@@ -996,11 +990,11 @@ fn check_mined_invariants(
 /// of `body`, which keeps it alive for as long as the transformed body executes.
 /// For `&[T]`/`&mut [T]`/`&str`, insert calls to the `KaniModel::AnySliceRef`/`AnyStrRef`
 /// models instead, which return a slice of nondeterministic length (bounded by
-/// [AUTOHARNESS_SLICE_BOUND]) backed by a nondeterministic array stored in a dedicated local,
+/// the configured slice bound) backed by a nondeterministic array stored in a dedicated local,
 /// which stays alive for the entire harness.
 /// If `ty` does not implement `Arbitrary` (and cannot derive it) but implements `BoundedArbitrary`
 /// (e.g. `Vec<T>` or `String`), insert a call to the `KaniModel::BoundedAny` model, which returns
-/// a *bounded* nondeterministic value (bounded by [AUTOHARNESS_BOUNDED_ANY_BOUND]).
+/// a *bounded* nondeterministic value (bounded by the configured `BoundedArbitrary` bound).
 /// If `ty` is an ADT that implements `Invariant`, additionally insert a call to the
 /// `KaniModel::AssumeSafe` model (`kani_assume_safe`), which assumes that the nondeterministic
 /// value respects the type's safety invariant, c.f.
@@ -1189,10 +1183,80 @@ fn call_kani_any_for_ty(
         return lcl;
     }
     if let TyKind::RigidTy(RigidTy::Ref(region, inner_ty, inner_mutability)) = ty.kind()
-        && matches!(
-            inner_ty.kind(),
-            TyKind::RigidTy(RigidTy::Slice(..)) | TyKind::RigidTy(RigidTy::Str)
+        && let TyKind::RigidTy(RigidTy::Adt(def, _)) = inner_ty.kind()
+        && is_formatter(tcx, def)
+    {
+        // A `Formatter` writes to a sink, so the harness holds one as a local (the model's
+        // parameter type) and passes it to `any_formatter`, which builds a formatter with
+        // nondeterministic options over it; the sink outlives the formatter as the storage
+        // outlives a slice. Width and precision follow the slice bound.
+        let model_inst = Instance::resolve(
+            models.kani_any_formatter,
+            &GenericArgs(vec![GenericArgKind::Const(
+                TyConst::try_from_target_usize(models.slice_bound).unwrap(),
+            )]),
         )
+        .unwrap();
+        let sink_ref_ty = model_inst.ty().kind().fn_sig().unwrap().skip_binder().inputs()[0];
+        let TyKind::RigidTy(RigidTy::Ref(_, sink_ty, _)) = sink_ref_ty.kind() else {
+            unreachable!("any_formatter takes the sink by mutable reference")
+        };
+        let TyKind::RigidTy(RigidTy::Adt(sink_def, sink_args)) = sink_ty.kind() else {
+            unreachable!("the sink is a struct")
+        };
+        let sink_lcl = body.new_local(sink_ty, source.span(body.blocks()), Mutability::Mut);
+        body.assign_to(
+            Place::from(sink_lcl),
+            Rvalue::Aggregate(
+                AggregateKind::Adt(sink_def, VariantIdx::to_val(0), sink_args, None, None),
+                vec![],
+            ),
+            source,
+            InsertPosition::Before,
+        );
+        let sink_ref_lcl = body.new_local(
+            Ty::new_ref(region.clone(), sink_ty, Mutability::Mut),
+            source.span(body.blocks()),
+            Mutability::Not,
+        );
+        body.assign_to(
+            Place::from(sink_ref_lcl),
+            Rvalue::Ref(
+                region.clone(),
+                BorrowKind::Mut { kind: MutBorrowKind::Default },
+                sink_lcl.into(),
+            ),
+            source,
+            InsertPosition::Before,
+        );
+        let fmt_lcl = body.new_local(inner_ty, source.span(body.blocks()), Mutability::Mut);
+        body.insert_call(
+            &model_inst,
+            source,
+            InsertPosition::Before,
+            vec![Operand::Move(Place::from(sink_ref_lcl))],
+            Place::from(fmt_lcl),
+        );
+        let ref_lcl = body.new_local(ty, source.span(body.blocks()), mutability);
+        let borrow_kind = if inner_mutability == Mutability::Not {
+            BorrowKind::Shared
+        } else {
+            BorrowKind::Mut { kind: MutBorrowKind::Default }
+        };
+        body.assign_to(
+            Place::from(ref_lcl),
+            Rvalue::Ref(region, borrow_kind, Place::from(fmt_lcl)),
+            source,
+            InsertPosition::Before,
+        );
+        return ref_lcl;
+    }
+    if let TyKind::RigidTy(RigidTy::Ref(region, inner_ty, inner_mutability)) = ty.kind()
+        && match inner_ty.kind() {
+            TyKind::RigidTy(RigidTy::Slice(..)) | TyKind::RigidTy(RigidTy::Str) => true,
+            TyKind::RigidTy(RigidTy::Adt(def, _)) => is_c_str(tcx, def) || is_byte_str(tcx, def),
+            _ => false,
+        }
     {
         let is_str = matches!(inner_ty.kind(), TyKind::RigidTy(RigidTy::Str));
         let (elem_ty, model, model_args) = match inner_ty.kind() {
@@ -1202,7 +1266,7 @@ fn call_kani_any_for_ty(
                 GenericArgs(vec![
                     GenericArgKind::Type(elem_ty),
                     GenericArgKind::Const(
-                        TyConst::try_from_target_usize(AUTOHARNESS_SLICE_BOUND).unwrap(),
+                        TyConst::try_from_target_usize(models.slice_bound).unwrap(),
                     ),
                 ]),
             ),
@@ -1210,7 +1274,24 @@ fn call_kani_any_for_ty(
                 Ty::unsigned_ty(UintTy::U8),
                 models.kani_any_str_ref,
                 GenericArgs(vec![GenericArgKind::Const(
-                    TyConst::try_from_target_usize(AUTOHARNESS_STR_BOUND).unwrap(),
+                    TyConst::try_from_target_usize(models.string_bound).unwrap(),
+                )]),
+            ),
+            // `&CStr` is the bytes of the storage up to the first NUL and `&ByteStr` a prefix of
+            // it; both are sized by the slice bound. Each ADT arm repeats its predicate from the
+            // guard above, so a type added there cannot fall into another type's model.
+            TyKind::RigidTy(RigidTy::Adt(def, _)) if is_c_str(tcx, def) => (
+                Ty::unsigned_ty(UintTy::U8),
+                models.kani_any_c_str_ref,
+                GenericArgs(vec![GenericArgKind::Const(
+                    TyConst::try_from_target_usize(models.slice_bound).unwrap(),
+                )]),
+            ),
+            TyKind::RigidTy(RigidTy::Adt(def, _)) if is_byte_str(tcx, def) => (
+                Ty::unsigned_ty(UintTy::U8),
+                models.kani_any_byte_str_ref,
+                GenericArgs(vec![GenericArgKind::Const(
+                    TyConst::try_from_target_usize(models.slice_bound).unwrap(),
                 )]),
             ),
             _ => unreachable!(),
@@ -1223,7 +1304,7 @@ fn call_kani_any_for_ty(
         // compiler derives are supported: `<[T; N] as Arbitrary>::any` is unresolvable for
         // such `T`, whereas each element can be generated through the same path as any other
         // value of that type.
-        let bound = if is_str { AUTOHARNESS_STR_BOUND } else { AUTOHARNESS_SLICE_BOUND };
+        let bound = if is_str { models.string_bound } else { models.slice_bound };
         let storage_ty = Ty::try_new_array(elem_ty, bound).unwrap();
         let elem_lcls = (0..bound)
             .map(|_| {
@@ -1266,10 +1347,11 @@ fn call_kani_any_for_ty(
             InsertPosition::Before,
         );
         let model_inst = Instance::resolve(model, &model_args).unwrap();
-        // For `&str`, the model already returns the shared-reference type (there is no
-        // `&mut str` in practice); for slices it returns `&mut [T]`.
+        // The slice model returns `&mut [T]`, to serve both mutabilities; the string models
+        // return the shared reference, since a mutable one is not supported.
+        let is_slice = matches!(inner_ty.kind(), TyKind::RigidTy(RigidTy::Slice(..)));
         let model_ret_ty =
-            if is_str { ty } else { Ty::new_ref(region.clone(), inner_ty, Mutability::Mut) };
+            if is_slice { Ty::new_ref(region.clone(), inner_ty, Mutability::Mut) } else { ty };
         let slice_lcl = body.new_local(model_ret_ty, source.span(body.blocks()), mutability);
         body.insert_call(
             &model_inst,
@@ -1279,7 +1361,7 @@ fn call_kani_any_for_ty(
             Place::from(slice_lcl),
         );
 
-        if inner_mutability == Mutability::Not && !is_str {
+        if inner_mutability == Mutability::Not && is_slice {
             // Reborrow the `&mut [T]` the model returned as `&[T]`.
             let shared_lcl = body.new_local(ty, source.span(body.blocks()), mutability);
             body.assign_to(
@@ -1378,6 +1460,31 @@ fn call_kani_any_for_ty(
         } else {
             ptr_lcl
         }
+    } else if let TyKind::RigidTy(RigidTy::Pat(base_ty, _)) = ty.kind() {
+        // A pattern type (e.g. `pattern_type!(u8 is 1..=12)`) is layout-compatible with its base
+        // type. Generate an arbitrary value of the base type, constrain it to the pattern's
+        // validity range via `assume_scalar_niche`, then transmute it to the pattern type. The
+        // assumption must come first: with `-Z valid-value-checks` the transmute itself is
+        // checked, so the value has to be valid before the pattern-typed local ever exists.
+        let base_lcl = call_kani_any_for_ty(
+            tcx,
+            models,
+            body,
+            base_ty,
+            mutability,
+            source,
+            invariant_cache,
+            mined_cache,
+        );
+        assume_scalar_niche(tcx, models.kani_assume, body, source, base_lcl, ty);
+        let pat_lcl = body.new_local(ty, source.span(body.blocks()), mutability);
+        body.assign_to(
+            Place::from(pat_lcl),
+            Rvalue::Cast(CastKind::Transmute, Operand::Move(Place::from(base_lcl)), ty),
+            source,
+            InsertPosition::Before,
+        );
+        pat_lcl
     } else {
         // Prefer an unbounded nondeterministic value via (implemented or compiler-derived)
         // Arbitrary; fall back to a smart-pointer model (`Box`/`Rc`/`Arc` of a derivable pointee)
@@ -1410,7 +1517,7 @@ fn call_kani_any_for_ty(
                 &GenericArgs(vec![
                     GenericArgKind::Type(ty),
                     GenericArgKind::Const(
-                        TyConst::try_from_target_usize(AUTOHARNESS_BOUNDED_ANY_BOUND).unwrap(),
+                        TyConst::try_from_target_usize(models.bounded_arbitrary_bound).unwrap(),
                     ),
                 ]),
             )
@@ -1892,10 +1999,8 @@ impl AutomaticArbitraryPass {
 pub struct AutomaticHarnessPass {
     /// The Kani model functions used to construct nondeterministic values.
     models: AnyModels,
-    /// The FnDef of KaniModel::CheckDebugFmt
-    kani_check_debug_fmt: FnDef,
-    /// The FnDef of KaniModel::CheckDisplayFmt
-    kani_check_display_fmt: FnDef,
+    /// The `check_*_fmt` model for each formatting trait, c.f. `FmtTrait::model`.
+    check_fmt_models: FxHashMap<FmtTrait, FnDef>,
     init_contracts_hook: Instance,
     reset_clause_depth: Instance,
     kani_autoharness_intrinsic: FnDef,
@@ -1909,8 +2014,9 @@ impl AutomaticHarnessPass {
         let kani_fns = query_db.kani_functions();
         let kani_autoharness_intrinsic =
             *kani_fns.get(&KaniIntrinsic::AutomaticHarness.into()).unwrap();
-        let kani_check_debug_fmt = *kani_fns.get(&KaniModel::CheckDebugFmt.into()).unwrap();
-        let kani_check_display_fmt = *kani_fns.get(&KaniModel::CheckDisplayFmt.into()).unwrap();
+        let check_fmt_models = FmtTrait::iter()
+            .map(|fmt_trait| (fmt_trait, *kani_fns.get(&fmt_trait.model().into()).unwrap()))
+            .collect();
         let init_contracts_hook = *kani_fns.get(&KaniHook::InitContracts.into()).unwrap();
         let init_contracts_hook =
             Instance::resolve(init_contracts_hook, &GenericArgs(vec![])).unwrap();
@@ -1921,8 +2027,7 @@ impl AutomaticHarnessPass {
         let check_invariants = query_db.args().autoharness_check_invariants;
         Self {
             models: AnyModels::new(query_db),
-            kani_check_debug_fmt,
-            kani_check_display_fmt,
+            check_fmt_models,
             init_contracts_hook,
             reset_clause_depth,
             kani_autoharness_intrinsic,
@@ -1965,7 +2070,7 @@ impl TransformPass for AutomaticHarnessPass {
         harness_body.clear_body(TerminatorKind::Return);
         let mut source = SourceInstruction::Terminator { bb: 0 };
 
-        // Debug/Display fmt implementations are exercised through the corresponding check
+        // Formatting trait implementations are exercised through the corresponding check
         // model, which formats a nondeterministic value of the self type into a discarding
         // sink: their `&mut Formatter` argument cannot be generated nondeterministically,
         // and the model reaches `fn_to_verify` through the core formatting machinery with a
@@ -1987,10 +2092,7 @@ impl TransformPass for AutomaticHarnessPass {
                 &mut invariant_cache,
                 &mut mined_cache,
             );
-            let model = match fmt_trait {
-                FmtTrait::Debug => self.kani_check_debug_fmt,
-                FmtTrait::Display => self.kani_check_display_fmt,
-            };
+            let model = self.check_fmt_models[&fmt_trait];
             let model_inst =
                 Instance::resolve(model, &GenericArgs(vec![GenericArgKind::Type(self_ty)]))
                     .unwrap();
