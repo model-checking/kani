@@ -68,41 +68,7 @@ impl GotocCtx<'_, '_> {
     }
 }
 
-/// Members traverse path to get to the raw pointer of a box (b.0.pointer.pointer).
-const RAW_PTR_FROM_BOX: [&str; 3] = ["0", "pointer", "pointer"];
-
 impl GotocCtx<'_, '_> {
-    /// `Box<T>` initializer
-    ///
-    /// Traverse over the Box representation and only initialize the raw_ptr field. All other
-    /// members are left uninitialized.
-    /// `boxed_type` is the type of the resulting expression
-    pub fn box_value(&self, boxed_value: Expr, boxed_type: Type) -> Expr {
-        self.assert_is_rust_box_like(&boxed_type);
-        tracing::debug!(?boxed_type, ?boxed_value, "box_value");
-        let mut inner_type = boxed_type;
-        let type_members = RAW_PTR_FROM_BOX
-            .iter()
-            .map(|name| {
-                let outer_type = inner_type.clone();
-                inner_type = outer_type.lookup_field_type(name, &self.symbol_table).unwrap();
-                (*name, outer_type)
-            })
-            .collect::<Vec<_>>();
-
-        // `inner_type` is now the innermost field's type, which wraps the raw pointer in a
-        // pattern-type struct. Rebuild that wrapping so the value matches the field.
-        let boxed_value = self.codegen_ptr_in_wrappers(inner_type, boxed_value);
-
-        type_members.iter().rfold(boxed_value, |value, (name, typ)| {
-            Expr::struct_expr_with_nondet_fields(
-                typ.clone(),
-                btree_string_map![(*name, value),],
-                &self.symbol_table,
-            )
-        })
-    }
-
     /// Best effort check if the struct represents a rust `std::alloc::Global`
     fn assert_is_rust_global_alloc_like(&self, t: &Type) {
         // TODO: A `std::alloc::Global` appears to be an empty struct, in the cases we've seen.
