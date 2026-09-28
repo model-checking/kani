@@ -85,6 +85,7 @@ pub mod prelude {
 #[macro_export]
 macro_rules! assert {
     ($cond:expr $(,)?) => {{
+        // Emit a block expression so assert! works in expression positions (#4874).
         // The double negation is to resolve https://github.com/model-checking/kani/issues/2108
         kani::assert(!!$cond, concat!("assertion failed: ", stringify!($cond)));
     }};
