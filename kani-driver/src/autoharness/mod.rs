@@ -255,19 +255,19 @@ impl KaniSession {
         self.autoharness_compiler_flags.as_ref()?;
 
         automatic.sort_by(|a, b| a.harness.pretty_name.cmp(&b.harness.pretty_name));
-        let (successes, failing) =
+        let (successes, failures): (Vec<_>, Vec<_>) =
             automatic.into_iter().partition(|r| r.result.status == VerificationStatus::Success);
 
-        Some(AutoharnessResult { successes, failing })
+        Some(AutoharnessResult { successes, failures })
     }
 
     /// Prints the results from running the `autoharness` subcommand.
     pub fn print_autoharness_summary(&self, autoharness_result: AutoharnessResult<'_, '_>) {
-        let AutoharnessResult { successes, failing } = autoharness_result;
+        let AutoharnessResult { successes, failures } = autoharness_result;
 
         let succeeding = successes.len();
-        let failing_count = failing.len();
-        let total = succeeding + failing_count;
+        let failing = failures.len();
+        let total = succeeding + failing;
 
         println!("\nAutoharness Summary:");
 
@@ -303,7 +303,7 @@ impl KaniSession {
             ]);
         }
 
-        for failure in failing {
+        for failure in failures {
             any_bounded |= failure.harness.is_bounded;
             any_ctor |= failure.harness.is_ctor_based;
             verified_fns.add_row(vec![
@@ -335,7 +335,7 @@ impl KaniSession {
             );
         }
 
-        if failing_count > 0 {
+        if failing > 0 {
             println!(
                 "Note that `kani autoharness` sets default --harness-timeout of {AUTOHARNESS_TIMEOUT} and --default-unwind of {LOOP_UNWIND_DEFAULT}."
             );
@@ -346,7 +346,7 @@ impl KaniSession {
 
         if total > 0 {
             println!(
-                "Complete - {succeeding} successfully verified functions, {failing_count} failures, {total} total."
+                "Complete - {succeeding} successfully verified functions, {failing} failures, {total} total."
             );
         } else {
             println!("No functions were eligible for automatic verification.");
@@ -357,5 +357,5 @@ impl KaniSession {
 /// The outcome of computing results for automatically-generated harnesses.
 pub struct AutoharnessResult<'a, 'pr> {
     successes: Vec<&'a HarnessResult<'pr>>,
-    pub(crate) failing: Vec<&'a HarnessResult<'pr>>,
+    pub(crate) failures: Vec<&'a HarnessResult<'pr>>,
 }

@@ -369,7 +369,8 @@ impl KaniSession {
 
         let failing =
             manual.iter().filter(|r| r.result.status != VerificationStatus::Success).count();
-        let autoharness_failing = self.autoharness_result(automatic).map_or(0, |r| r.failing.len());
+        let autoharness_failing =
+            self.autoharness_result(automatic).map_or(0, |r| r.failures.len());
 
         if failing + autoharness_failing > 0 {
             // Failure exit code without additional error message
