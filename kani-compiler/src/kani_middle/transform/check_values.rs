@@ -944,13 +944,14 @@ pub fn ty_validity_per_offset(
             vec![]
         }
     };
-    // A pattern type over a scalar base has its validity fully captured by the
-    // scalar valid_range in its layout ABI (see `try_from_ty`): integer bases
-    // add no requirements of their own, and the `NotNull` constraint is part
-    // of the range. Patterns over `char` or over a non-scalar base (a wide
-    // pointer) are rejected below. Handle it here without inspecting the
-    // stable kind, which would panic for kinds `rustc_public` cannot yet
-    // convert (e.g. `PatternKind::NotNull` for `NonNull`).
+    // A pattern type's validity is fully captured by the valid_range of its
+    // layout's first scalar (see `try_from_ty`): integer bases add no
+    // requirements of their own, and the `NotNull` constraint is part of the
+    // range. This holds for a `Scalar` base and for a `ScalarPair` base (a
+    // pattern over a wide pointer, whose first scalar is the data pointer).
+    // Patterns over `char` are rejected below. Handle it here without
+    // inspecting the stable kind, which would panic for kinds `rustc_public`
+    // cannot yet convert (e.g. `PatternKind::NotNull` for `NonNull`).
     if let rustc_middle::ty::TyKind::Pat(base_ty, _) = rustc_internal::internal(tcx, ty).kind() {
         // `char`'s validity (two intervals around the surrogate gap) exceeds
         // what a single scalar range can express, and the `char` special case
@@ -960,10 +961,11 @@ pub fn ty_validity_per_offset(
             return Err("Unsupported pattern type over `char`".to_string());
         }
         // A pattern over a wide pointer (e.g. `NonNull<[u8]>`'s `*const [u8] is !null`, which
-        // the allocation shims take since nightly-2026-03-21) has a `ScalarPair` ABI; report it
-        // as unsupported rather than asserting, so `-Z valid-value-checks` degrades to a
-        // reported unsupported construct instead of an ICE on any allocating function.
-        if !matches!(layout.value_repr, ValueRepr::Scalar(..)) {
+        // every allocation reaches since nightly-2026-03-21) has a `ScalarPair` ABI whose
+        // first scalar is the data pointer, so `try_from_ty` checks it like `&[u8]`. Any other
+        // ABI is reported as unsupported rather than asserted on, so `-Z valid-value-checks`
+        // never ICEs.
+        if !matches!(layout.value_repr, ValueRepr::Scalar(..) | ValueRepr::ScalarPair { .. }) {
             return Err(format!("Unsupported pattern type over a non-scalar type: {ty}"));
         }
         return Ok(ty_req());
@@ -1068,9 +1070,8 @@ pub fn ty_validity_per_offset(
                         }
                     }
                 }
-                // Pattern types are fully handled (accepted or rejected) before
-                // the match on the layout's field shape, so this arm can never
-                // be reached.
+                // Pattern types are fully handled before the match on the
+                // layout's field shape, so this arm can never be reached.
                 RigidTy::Pat(..) => {
                     unreachable!("pattern types are handled before the field-shape match")
                 }

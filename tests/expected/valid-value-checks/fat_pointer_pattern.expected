@@ -1,3 +1,4 @@
-Failed Checks: Kani currently doesn't support checking validity of `transmute` for `std::ptr::NonNull<[u8]>`
+Failed Checks: Undefined Behavior: Invalid value of type `std::ptr::NonNull<[u8]>`
 
-VERIFICATION:- FAILED
+Verification failed for - null_data_pointer
+Complete - 1 successfully verified harnesses, 1 failures, 2 total.
