@@ -518,7 +518,7 @@ impl<'tcx> KaniAttributes<'tcx> {
             )
             .with_note(format!("see issue {} for more information", unstable_attr.issue))
             .with_help(format!("use `-Z {}` to enable using this function.", unstable_attr.feature))
-            .emit()
+            .emit_err()
     }
 
     /// Is this item a harness? (either `proof` or `proof_for_contract`
@@ -1149,7 +1149,7 @@ impl UnstableAttrParseError<'_> {
                 "expected format: #[kani::unstable_feature({}, {}, {})]",
                 r#"feature="<IDENTIFIER>""#, r#"issue="<ISSUE>""#, r#"reason="<DESCRIPTION>""#
             ))
-            .emit()
+            .emit_err()
     }
 }
 

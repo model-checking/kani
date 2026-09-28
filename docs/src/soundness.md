@@ -83,7 +83,7 @@ to any function with a compatible signature. This is sound but may be imprecise
 dispatch targets based on vtable analysis, but **this is a known soundness
 issue**: the analysis may exclude valid targets, causing Kani to miss real
 failures (false negatives). See
-[#3134](https://github.com/model-checking/kani/issues/3134) for details.
+[#802](https://github.com/model-checking/kani/issues/802) for details.
 
 ## Reporting Soundness Issues
 
