@@ -89,5 +89,23 @@ RUSTFLAGS="--cfg=uninit_checks" kani verify-std \
     -Z mem-predicates \
     -Z uninit-checks
 
+# Test that `alloc` can define the models that need its own types, c.f.
+# https://github.com/model-checking/kani/issues/4807. Injected after the runs above so their
+# expected output is unaffected.
+echo "[TEST] Modify alloc"
+ALLOC_CODE=$(cat verify_alloc.rs)
+cp ${TMP_DIR}/library/alloc/src/lib.rs ${TMP_DIR}/alloc_lib.rs
+echo '#![cfg_attr(kani, feature(kani))]' > ${TMP_DIR}/library/alloc/src/lib.rs
+cat ${TMP_DIR}/alloc_lib.rs >> ${TMP_DIR}/library/alloc/src/lib.rs
+echo "${ALLOC_CODE}" >> ${TMP_DIR}/library/alloc/src/lib.rs
+
+echo "[TEST] Run kani verify-std with alloc models"
+kani verify-std \
+    -Z unstable-options \
+    "${TMP_DIR}/library" \
+    --target-dir "${TMP_DIR}/target" \
+    --harness verify_alloc \
+    --output-format=terse
+
 # Cleanup
 rm -r ${TMP_DIR}
