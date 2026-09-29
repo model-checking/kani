@@ -34,6 +34,14 @@ use strum_macros::{AsRefStr, EnumIter};
 // Use a static variable for simplicity.
 static VERBOSE: AtomicBool = AtomicBool::new(false);
 
+/// The name of a local item as `kani list` reports it: `def_path_str` prefixes
+/// the local crate name (rust-lang/rust#149401), and the compiler strips it with
+/// this same function, so every name the scanner writes goes through here and
+/// the two outputs can be joined by name (kani#4868).
+pub(crate) fn item_name<T: rustc_public::CrateDef>(def: &T) -> String {
+    kani_metadata::strip_crate_prefix(&def.name(), &rustc_public::local_crate().name)
+}
+
 pub fn run_all(rustc_args: Vec<String>, verbose: bool) -> ExitCode {
     run_analyses(rustc_args, &Analysis::iter().collect::<Vec<_>>(), verbose)
 }
