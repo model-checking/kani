@@ -1665,7 +1665,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 self.translate_operand(rhs),
             ),
             Rvalue::CheckedBinaryOp(bin_op, lhs, rhs) => CharonRvalue::BinaryOp(
-                translate_bin_op(*bin_op),
+                translate_checked_bin_op(*bin_op),
                 self.translate_operand(lhs),
                 self.translate_operand(rhs),
             ),
@@ -2011,14 +2011,28 @@ fn translate_uint_ty(uint_ty: UintTy) -> CharonIntegerTy {
     }
 }
 
+/// The operator of a MIR `CheckedBinaryOp`, which yields `(result, overflowed)`. Charon folds it with
+/// the overflow `Assert` that follows into a panicking operator (`remove_dynamic_checks`).
+fn translate_checked_bin_op(bin_op: BinOp) -> CharonBinOp {
+    match bin_op {
+        BinOp::Add => CharonBinOp::CheckedAdd,
+        BinOp::Sub => CharonBinOp::CheckedSub,
+        BinOp::Mul => CharonBinOp::CheckedMul,
+        _ => translate_bin_op(bin_op),
+    }
+}
+
+/// The operator of a plain MIR `BinaryOp`. MIR's `Add`/`Sub`/`Mul` wrap on overflow -- checked
+/// arithmetic is a separate `CheckedBinaryOp` -- so they must not become Charon's `Checked*`
+/// operators, which produce a `(result, overflowed)` pair.
 fn translate_bin_op(bin_op: BinOp) -> CharonBinOp {
     match bin_op {
         BinOp::AddUnchecked => CharonBinOp::Add,
-        BinOp::Add => CharonBinOp::CheckedAdd,
+        BinOp::Add => CharonBinOp::WrappingAdd,
         BinOp::SubUnchecked => CharonBinOp::Sub,
-        BinOp::Sub => CharonBinOp::CheckedSub,
+        BinOp::Sub => CharonBinOp::WrappingSub,
         BinOp::MulUnchecked => CharonBinOp::Mul,
-        BinOp::Mul => CharonBinOp::CheckedMul,
+        BinOp::Mul => CharonBinOp::WrappingMul,
         BinOp::Div => CharonBinOp::Div,
         BinOp::Rem => CharonBinOp::Rem,
         BinOp::BitXor => CharonBinOp::BitXor,

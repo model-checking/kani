@@ -1,0 +1,25 @@
+pub fn test::shl(@1: u32, @2: u32) -> u32\
+{\
+    let @0: u32; // return\
+    let a@1: u32; // arg #1\
+    let b@2: u32; // arg #2\
+    let @3: bool; // anonymous local\
+\
+    nop\
+    nop\
+    @0 := copy (a@1) << copy (b@2)\
+    return\
+}
+
+pub fn test::shr(@1: i64, @2: u32) -> i64\
+{\
+    let @0: i64; // return\
+    let a@1: i64; // arg #1\
+    let b@2: u32; // arg #2\
+    let @3: bool; // anonymous local\
+\
+    nop\
+    nop\
+    @0 := copy (a@1) >> copy (b@2)\
+    return\
+}
