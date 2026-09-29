@@ -1,16 +1,16 @@
-pub fn test::get_valA<'_0>(@1: &'_0 (@Adt1)) -> i32\
+pub fn test::get_valA<'_0>(@1: &'_0 (@Adt\
 {\
     let @0: i32; // return\
-    let self@1: &'_ (@Adt1); // arg #1\
+    let self@1: &'_ (@Adt\
 \
     @0 := copy ((*(self@1)).val)\
     return\
 }
 
-pub fn test::get_valB<'_0>(@1: &'_0 (@Adt0)) -> i32\
+pub fn test::get_valB<'_0>(@1: &'_0 (@Adt\
 {\
     let @0: i32; // return\
-    let self@1: &'_ (@Adt0); // arg #1\
+    let self@1: &'_ (@Adt\
 \
     @0 := copy ((*(self@1)).index)\
     return\
