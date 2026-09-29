@@ -1,0 +1,18 @@
+// Full name: test::{impl Tr<U> for Wrapper<T>}\
+impl<T, U> "impl_Tr_for_Wrapper" Tr<U> for Wrapper<T> {\
+    vtable: unknown // Kani does not translate vtables\
+}
+
+// Full name: test::{impl Tr<U> for Wrapper<T>}::m\
+pub fn impl_Tr_for_Wrapper::m<'_0, T, U>(self: &'_0 Wrapper<T>, u: U) -> U
+
+// Full name: test::{Wrapper<T>}::get\
+pub fn get<'_0, T>(self: &'_0 Wrapper<T>) -> T
+
+// Full name: test::{impl Tr<u8> for &'a u32}::m\
+pub fn {impl Tr<u8> for &'a u32}::m<'a, '_1>(self: &'_1 &'a u32, u: u8) -> u8
+
+// Full name: test::{impl Tr<u8> for &'a u32}\
+impl<'a> Tr<u8> for &'a u32 {\
+    vtable: unknown // Kani does not translate vtables\
+}

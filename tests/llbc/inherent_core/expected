@@ -1,5 +1,5 @@
-// Full name: core::num::wrapping_addu8\
-pub fn wrapping_addu8(_1: u8, _2: u8) -> u8\
+// Full name: core::num::{u8}::wrapping_add\
+pub fn wrapping_add(_1: u8, _2: u8) -> u8\
 = <opaque>
 
 // Full name: test::wrap\
@@ -10,7 +10,7 @@ pub fn wrap(a: u8, b: u8) -> u8\
     let b: u8; // arg #2\
 \
     storage_live(_0)\
-    _0 = wrapping_addu8(copy a, copy b)\
+    _0 = wrapping_add(copy a, copy b)\
     ↳⚡ undefined_behavior\
     storage_dead(b)\
     storage_dead(a)\

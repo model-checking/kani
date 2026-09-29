@@ -12,20 +12,21 @@ use charon_lib::ast::meta::{
 use charon_lib::ast::types::{Ty as CharonTy, TyKind as CharonTyKind};
 use charon_lib::ast::{
     Abi as CharonAbi, AbortKind as CharonAbortKind, AggregateKind as CharonAggregateKind,
-    Assert as CharonAssert, BinOp as CharonBinOp, Body as CharonBody,
-    BorrowKind as CharonBorrowKind, BuiltinAdt as CharonBuiltinAdt,
-    BuiltinAssertKind as CharonBuiltinAssertKind, BuiltinImplData as CharonBuiltinImplData,
-    BuiltinPathElem as CharonBuiltinPathElem, Call as CharonCall, CastKind as CharonCastKind,
-    ConstGenericParam as CharonConstGenericVar, ConstGenericVarId as CharonConstGenericVarId,
-    ConstantExpr as CharonConstantExpr, ConstantExprKind as CharonRawConstantExpr,
-    DeBruijnId as CharonDeBruijnId, DeBruijnVar as CharonDeBruijnVar,
-    Disambiguator as CharonDisambiguator, DropKind as CharonDropKind, Field as CharonField,
-    FieldId as CharonFieldId, File as CharonFile, FileId as CharonFileId,
-    FileName as CharonFileName, FloatTy as CharonFloatTy, FnOperand as CharonFnOperand,
-    FnPtr as CharonFnPtr, FnPtrKind as CharonFunIdOrTraitMethodRef, FunDecl as CharonFunDecl,
-    FunDeclId as CharonFunDeclId, FunSig as CharonFunSig, FunSource as CharonFunSource,
-    GenericArgs as CharonGenericArgs, GenericParams as CharonGenericParams,
-    GlobalDeclId as CharonGlobalDeclId, GlobalDeclRef as CharonGlobalDeclRef, IntTy as CharonIntTy,
+    Assert as CharonAssert, BinOp as CharonBinOp, Binder as CharonBinder,
+    BinderKind as CharonBinderKind, Body as CharonBody, BorrowKind as CharonBorrowKind,
+    BuiltinAdt as CharonBuiltinAdt, BuiltinAssertKind as CharonBuiltinAssertKind,
+    BuiltinImplData as CharonBuiltinImplData, BuiltinPathElem as CharonBuiltinPathElem,
+    Call as CharonCall, CastKind as CharonCastKind, ConstGenericParam as CharonConstGenericVar,
+    ConstGenericVarId as CharonConstGenericVarId, ConstantExpr as CharonConstantExpr,
+    ConstantExprKind as CharonRawConstantExpr, DeBruijnId as CharonDeBruijnId,
+    DeBruijnVar as CharonDeBruijnVar, Disambiguator as CharonDisambiguator,
+    DropKind as CharonDropKind, Field as CharonField, FieldId as CharonFieldId, File as CharonFile,
+    FileId as CharonFileId, FileName as CharonFileName, FloatTy as CharonFloatTy,
+    FnOperand as CharonFnOperand, FnPtr as CharonFnPtr, FnPtrKind as CharonFunIdOrTraitMethodRef,
+    FunDecl as CharonFunDecl, FunDeclId as CharonFunDeclId, FunSig as CharonFunSig,
+    FunSource as CharonFunSource, GenericArgs as CharonGenericArgs,
+    GenericParams as CharonGenericParams, GlobalDeclId as CharonGlobalDeclId,
+    GlobalDeclRef as CharonGlobalDeclRef, ImplElem as CharonImplElem, IntTy as CharonIntTy,
     IntegerTy as CharonIntegerTy, IntegerValue as CharonScalarValue, ItemId as CharonAnyTransId,
     ItemMeta as CharonItemMeta, ItemOpacity as CharonItemOpacity,
     LifetimeMutability as CharonLifetimeMutability, Local as CharonVar, LocalId as CharonVarId,
@@ -39,14 +40,15 @@ use charon_lib::ast::{
     SwitchScrutinee as CharonSwitchScrutinee, TargetInfo as CharonTargetInfo,
     TraitClauseId as CharonTraitClauseId, TraitDecl as CharonTraitDecl,
     TraitDeclId as CharonTraitDeclId, TraitDeclRef as CharonTraitDeclRef,
-    TraitDeclSource as CharonTraitDeclSource, TraitImplId as CharonTraitImplId,
+    TraitDeclSource as CharonTraitDeclSource, TraitImpl as CharonTraitImpl,
+    TraitImplId as CharonTraitImplId, TraitImplSource as CharonTraitImplSource,
     TraitParam as CharonTraitClause, TraitRef as CharonTraitRef,
     TraitRefKind as CharonTraitRefKind, TranslatedCrate as CharonTranslatedCrate,
     TypeDecl as CharonTypeDecl, TypeDeclId as CharonTypeDeclId, TypeDeclKind as CharonTypeDeclKind,
     TypeDeclRef as CharonTypeDeclRef, TypeParam as CharonTypeVar, TypeSource as CharonTypeSource,
     TypeVarId as CharonTypeVarId, UIntTy as CharonUIntTy, UnOp as CharonUnOp,
-    Variance as CharonVariance, Variant as CharonVariant, VariantId as CharonVariantId,
-    WithRetag as CharonWithRetag,
+    VTableDecl as CharonVTableDecl, Variance as CharonVariance, Variant as CharonVariant,
+    VariantId as CharonVariantId, WithRetag as CharonWithRetag,
 };
 use charon_lib::errors::{Error as CharonError, ErrorCtx as CharonErrorCtx, Level as CharonLevel};
 use charon_lib::ids::IndexVec as CharonVector;
@@ -966,7 +968,10 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     found_crate_name = true;
                     name.push(CharonPathElem::Ident(crate_name.clone(), disambiguator));
                 }
-                DefPathData::Impl => {} //will check
+                DefPathData::Impl => {
+                    let impl_elem = self.impl_path_elem(cur_id);
+                    name.push(CharonPathElem::Impl(impl_elem));
+                }
                 DefPathData::OpaqueTy => {
                     // TODO: do nothing for now
                 }
@@ -1005,30 +1010,121 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         Ok(CharonName { name })
     }
 
-    /// The name of a function instance: its path, with the method name suffixed by the
-    /// implementing type when it is defined in an `impl` block.
+    /// The name of a function instance: its path, in which a method's `impl` block appears as
+    /// Charon's `PathElem::Impl`.
     fn def_to_name(&mut self, def: InstanceDef) -> Result<CharonName, CharonError> {
-        let mut name = self.defid_to_name(def.def_id())?;
-        let def_id = rustc_internal::internal(self.tcx(), def.def_id());
-        if let Some(impl_defid_internal) = self.tcx.impl_of_assoc(def_id) {
-            // `{impl}` path elements are skipped, so methods of different impls share a path
-            // (`core::num::wrapping_add` for every integer type); tell them apart by the
-            // implementing type. That is the impl's self type for inherent and trait impls
-            // alike -- only trait impls have a trait ref, and asking an inherent impl for one
-            // aborted the compiler on any inherent method call.
-            let self_ty = self.tcx.type_of(impl_defid_internal).skip_binder().to_string();
-            if self.tcx.impl_is_of_trait(impl_defid_internal) {
-                let impl_defid = DefId::to_val(impl_defid_internal.index.as_usize());
-                let _impl_id = self.register_trait_impl_id(impl_defid);
-            }
-            let funcname = match name.name.pop().unwrap() {
-                CharonPathElem::Ident(name, _) => name + self_ty.as_str(),
-                _ => panic!("Expected ident"),
-            };
-            name.name.push(CharonPathElem::Ident(funcname, CharonDisambiguator::new(0)));
-        };
+        let name = self.defid_to_name(def.def_id())?;
         trace!("{:?}", name);
         Ok(name)
+    }
+
+    /// The path element of an `impl` block, built as in Charon's translation: an inherent impl is
+    /// identified by its self type (bound by the impl's generics), a trait impl by its declaration,
+    /// which is created the first time the impl is named.
+    fn impl_path_elem(&mut self, impl_id: rustc_span::def_id::DefId) -> CharonImplElem {
+        let impl_def: DefId = rustc_internal::stable(impl_id);
+        if self.tcx.impl_is_of_trait(impl_id) {
+            return CharonImplElem::Trait(self.translate_trait_impl(impl_def));
+        }
+        let (params, self_ty) = self.with_item_generics(impl_def, false, |this| {
+            let params = this.generic_params_from_impl(impl_def);
+            let self_ty = this.tcx.type_of(impl_id).instantiate_identity().skip_normalization();
+            (params, this.translate_ty(rustc_internal::stable(self_ty)))
+        });
+        CharonImplElem::Ty(Box::new(CharonBinder {
+            params,
+            skip_binder: self_ty,
+            kind: CharonBinderKind::InherentImplBlock,
+        }))
+    }
+
+    /// Declare the trait impl `impl_def` (if not done yet) and return its id. As with trait
+    /// declarations, Kani only declares the implemented trait and the generics: no associated
+    /// items, methods or vtable.
+    fn translate_trait_impl(&mut self, impl_def: DefId) -> CharonTraitImplId {
+        // The impl's own name refers to the impl (see `impl_path_elem`), so the id must be
+        // registered before the name is computed, and the declaration built only once.
+        let first_time = !self.id_map.contains_key(&impl_def);
+        let trait_impl_id = self.register_trait_impl_id(impl_def);
+        if first_time {
+            let impl_id = rustc_internal::internal(self.tcx, impl_def);
+            let (generics, impl_trait) = self.with_item_generics(impl_def, false, |this| {
+                let generics = this.generic_params_from_impl(impl_def);
+                let trait_ref = this.tcx.impl_trait_ref(impl_id).instantiate_identity();
+                let trait_ref: rustc_public::ty::TraitRef =
+                    rustc_internal::stable(trait_ref.skip_normalization());
+                let trait_decl_id = this.translate_traitdecl(trait_ref.def_id);
+                let args = this.translate_generic_args_without_trait(trait_ref.args().clone());
+                (generics, CharonTraitDeclRef { id: trait_decl_id, generics: Box::new(args) })
+            });
+            let item_meta = self.translate_item_meta_from_defid(impl_def);
+            let trait_impl = CharonTraitImpl {
+                def_id: trait_impl_id,
+                item_meta,
+                src: CharonTraitImplSource::Normal,
+                impl_trait,
+                generics,
+                implied_trait_refs: CharonVector::new(),
+                consts: Default::default(),
+                types: Default::default(),
+                methods: Default::default(),
+                vtable: CharonVTableDecl::Unknown("Kani does not translate vtables".to_owned()),
+            };
+            self.translated.trait_impls.set_slot(trait_impl_id, trait_impl);
+        }
+        trait_impl_id
+    }
+
+    /// The generic parameters of the `impl` block `impl_def`, in Charon's numbering. Must run in
+    /// the scope of the impl's generics (`with_item_generics`).
+    fn generic_params_from_impl(&mut self, impl_def: DefId) -> CharonGenericParams {
+        let impl_id = rustc_internal::internal(self.tcx, impl_def);
+        // An impl block has no parent generics.
+        let params = self.tcx.generics_of(impl_id).own_params.clone();
+        let mut regions: CharonVector<CharonRegionId, CharonRegionVar> = CharonVector::new();
+        let mut types: CharonVector<CharonTypeVarId, CharonTypeVar> = CharonVector::new();
+        let mut const_generics: CharonVector<CharonConstGenericVarId, CharonConstGenericVar> =
+            CharonVector::new();
+        for param in params {
+            let position = self.param_position(param.index);
+            let name = param.name.to_string();
+            match param.kind {
+                rustc_middle::ty::GenericParamDefKind::Lifetime => {
+                    regions.push(CharonRegionVar {
+                        index: CharonRegionId::from_usize(position),
+                        // Charon leaves elided (`'_`) regions unnamed.
+                        name: (name != "'_").then_some(name),
+                        variance: CharonVariance::Unknown,
+                        mutability: CharonLifetimeMutability::Unknown,
+                    });
+                }
+                rustc_middle::ty::GenericParamDefKind::Type { .. } => {
+                    types.push(CharonTypeVar {
+                        index: CharonTypeVarId::from_usize(position),
+                        name,
+                        variance: CharonVariance::Unknown,
+                    });
+                }
+                rustc_middle::ty::GenericParamDefKind::Const { .. } => {
+                    let ty = self.tcx.type_of(param.def_id).instantiate_identity();
+                    let ty = self.translate_ty(rustc_internal::stable(ty.skip_normalization()));
+                    const_generics.push(CharonConstGenericVar {
+                        index: CharonConstGenericVarId::from_usize(position),
+                        name,
+                        ty,
+                    });
+                }
+            }
+        }
+        CharonGenericParams {
+            regions,
+            types,
+            const_generics,
+            trait_clauses: self.get_traitclauses_from_defid(impl_def),
+            regions_outlive: Vec::new(),
+            types_outlive: Vec::new(),
+            trait_type_constraints: CharonVector::new(),
+        }
     }
 
     fn adtdef_to_name(&mut self, def: AdtDef) -> Result<CharonName, CharonError> {
