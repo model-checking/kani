@@ -320,7 +320,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_stacker",
- "serde_state",
+ "serde_state_perfect_derive",
  "smallvec",
  "stacker",
  "syn 1.0.109",
@@ -2068,18 +2068,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_state"
+name = "serde_state_perfect_derive"
 version = "1.0.0"
-source = "git+https://github.com/Nadrieril/serde_state?branch=main#78055e2f2be94b27c58027854d151d87a75957cc"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fee99988af71dac4de7dd0882da328b8089e1b0bf10c4bb68792ec7581fb0375"
 dependencies = [
  "serde",
- "serde_state_derive",
+ "serde_state_perfect_derive_derive",
 ]
 
 [[package]]
-name = "serde_state_derive"
+name = "serde_state_perfect_derive_derive"
 version = "1.0.0"
-source = "git+https://github.com/Nadrieril/serde_state?branch=main#78055e2f2be94b27c58027854d151d87a75957cc"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d80d31bfa32e1e337cb392a33c11b6548c0cc888ab1054ce6661aa45f07d28fa"
 dependencies = [
  "proc-macro2",
  "quote",
