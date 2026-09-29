@@ -247,23 +247,11 @@ impl KaniSession {
         }
     }
 
-    /// Computes the outcome of automatically-generated harnesses, if autoharness is enabled.
-    pub fn autoharness_result<'a, 'pr>(
-        &self,
-        mut automatic: Vec<&'a HarnessResult<'pr>>,
-    ) -> Option<AutoharnessResult<'a, 'pr>> {
-        self.autoharness_compiler_flags.as_ref()?;
-
+    /// Prints the results from running the `autoharness` subcommand.
+    pub fn print_autoharness_summary(&self, mut automatic: Vec<&HarnessResult<'_>>) {
         automatic.sort_by(|a, b| a.harness.pretty_name.cmp(&b.harness.pretty_name));
         let (successes, failures): (Vec<_>, Vec<_>) =
             automatic.into_iter().partition(|r| r.result.status == VerificationStatus::Success);
-
-        Some(AutoharnessResult { successes, failures })
-    }
-
-    /// Prints the results from running the `autoharness` subcommand.
-    pub fn print_autoharness_summary(&self, autoharness_result: AutoharnessResult<'_, '_>) {
-        let AutoharnessResult { successes, failures } = autoharness_result;
 
         let succeeding = successes.len();
         let failing = failures.len();
@@ -352,10 +340,4 @@ impl KaniSession {
             println!("No functions were eligible for automatic verification.");
         }
     }
-}
-
-/// The outcome of computing results for automatically-generated harnesses.
-pub struct AutoharnessResult<'a, 'pr> {
-    successes: Vec<&'a HarnessResult<'pr>>,
-    pub(crate) failures: Vec<&'a HarnessResult<'pr>>,
 }

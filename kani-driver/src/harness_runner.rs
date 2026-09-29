@@ -334,45 +334,49 @@ impl KaniSession {
             println!(
                 "Complete - {succeeding} successfully verified harnesses, {failing} failures, {total} total."
             );
-        } else if self.args.harnesses.is_empty() {
-            // TODO: This could use a better message, possibly with links to Kani documentation.
-            // New users may encounter this and could use a pointer to how to write proof harnesses.
-            println!("No proof harnesses (functions with #[kani::proof]) were found to verify.")
+        } else {
+            match self.args.harnesses.as_slice() {
+                [] =>
+                // TODO: This could use a better message, possibly with links to Kani documentation.
+                // New users may encounter this and could use a pointer to how to write proof harnesses.
+                {
+                    println!(
+                        "No proof harnesses (functions with #[kani::proof]) were found to verify."
+                    )
+                }
+                // `determine_targets` fails a zero-match filter before codegen, so this arm
+                // only guards paths that skip harness filtering.
+                _ => return Err(crate::metadata::no_harness_match_error(&self.args.harnesses)),
+            };
         }
 
         if self.args.coverage {
             self.show_coverage_summary()?;
         }
 
-        if let Some(autoharness_result) = self.autoharness_result(automatic) {
-            self.print_autoharness_summary(autoharness_result);
+        if self.autoharness_compiler_flags.is_some() {
+            self.print_autoharness_summary(automatic);
         }
 
         Ok(())
     }
 
-    /// Concludes a session by exiting the process with an error code if any harness failed.
-    ///
-    /// This runs regardless of `--quiet`, so `--quiet` only changes what is printed.
+    /// Exits the process with an error code if any harness failed.
     ///
     /// Note: Takes `self` "by ownership". This function wants to be able to drop before
     /// exiting with an error code, if needed.
     pub(crate) fn conclude(self, results: &[HarnessResult<'_>]) -> Result<()> {
-        let (automatic, manual): (Vec<_>, Vec<_>) =
-            results.iter().partition(|r| r.harness.is_automatically_generated);
-
-        // `determine_targets` fails a zero-match filter before codegen, so this only guards paths
-        // that skip harness filtering.
-        if manual.is_empty() && !self.args.harnesses.is_empty() {
+        // `--quiet` skips `print_final_summary`, so its zero-match error is raised here too.
+        if !self.args.harnesses.is_empty()
+            && results.iter().all(|r| r.harness.is_automatically_generated)
+        {
             return Err(crate::metadata::no_harness_match_error(&self.args.harnesses));
         }
 
         let failing =
-            manual.iter().filter(|r| r.result.status != VerificationStatus::Success).count();
-        let autoharness_failing =
-            self.autoharness_result(automatic).map_or(0, |r| r.failures.len());
+            results.iter().filter(|r| r.result.status != VerificationStatus::Success).count();
 
-        if failing + autoharness_failing > 0 {
+        if failing > 0 {
             // Failure exit code without additional error message
             drop(self);
             std::process::exit(1);
