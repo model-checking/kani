@@ -6,6 +6,6 @@ pub fn test::wrap(@1: u8, @2: u8) -> u8\
     let a@1: u8; // arg #1\
     let b@2: u8; // arg #2\
 \
-    @0 := @Fun1(copy (a@1), copy (b@2))\
+    @0 := @Fun\
     return\
 }
