@@ -134,9 +134,13 @@ impl LlbcCodegenBackend {
         // re-deriving its pass list here.
         run_transformation_passes(&charon_cli_options(queries.args().print_llbc), &mut ccx);
 
+        // Charon has already printed each error, including those of its type check. Stop here
+        // rather than emit LLBC that Charon considers ill-formed.
         // TODO: display an error report about the external dependencies, if necessary
-        if ccx.errors.borrow().error_count > 0 {
-            todo!()
+        let error_count = ccx.errors.borrow().error_count;
+        if error_count > 0 {
+            tcx.dcx()
+                .fatal(format!("Charon reported {error_count} error(s) while translating to LLBC"));
         }
 
         let crate_data: charon_lib::export::CrateData = charon_lib::export::CrateData::new(ccx);
