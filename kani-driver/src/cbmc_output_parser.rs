@@ -97,6 +97,7 @@ pub struct PropertyId {
 impl Property {
     const COVER_PROPERTY_CLASS: &'static str = "cover";
     const COVERAGE_PROPERTY_CLASS: &'static str = "code_coverage";
+    const UNSUPPORTED_CONSTRUCT_PROPERTY_CLASS: &'static str = "unsupported_construct";
 
     pub fn property_class(&self) -> String {
         self.property_id.class.clone()
@@ -110,6 +111,10 @@ impl Property {
     /// Returns true if this is a cover property
     pub fn is_cover_property(&self) -> bool {
         self.property_id.class == Self::COVER_PROPERTY_CLASS
+    }
+
+    pub fn is_unsupported_construct_property(&self) -> bool {
+        self.property_id.class == Self::UNSUPPORTED_CONSTRUCT_PROPERTY_CLASS
     }
 
     pub fn property_name(&self) -> String {
@@ -209,6 +214,30 @@ impl<'de> serde::Deserialize<'de> for PropertyId {
             class,
             id: attributes_tuple.2.parse().unwrap(),
         })
+    }
+}
+
+impl PropertyId {
+    /// CBMC's property id format, with the demangled function name (as `Deserialize` above
+    /// produces it). Unlike [`Property::property_name`], a display rendering that always uses the
+    /// three-part shape, this keeps the shorter `missing_definition` and `recursion` forms.
+    pub fn to_cbmc_id(&self) -> String {
+        if self.class == "recursion" && self.id == 1 {
+            return match &self.fn_name {
+                Some(name) => format!("{name}.recursion"),
+                None => ".recursion".to_string(),
+            };
+        }
+        if self.class == "missing_definition" {
+            return match &self.fn_name {
+                Some(name) => format!("{name}.{}", self.id),
+                None => format!("{}.{}", self.class, self.id),
+            };
+        }
+        match &self.fn_name {
+            Some(name) => format!("{name}.{}.{}", self.class, self.id),
+            None => format!("{}.{}", self.class, self.id),
+        }
     }
 }
 
@@ -742,6 +771,49 @@ mod tests {
     }
 
     #[test]
+    fn to_cbmc_id_general_form() {
+        let with_fn = PropertyId {
+            fn_name: Some("alloc::raw_vec::RawVec::<u8>::allocate_in".to_string()),
+            class: "sanity_check".to_string(),
+            id: 1,
+        };
+        assert_eq!(
+            with_fn.to_cbmc_id(),
+            "alloc::raw_vec::RawVec::<u8>::allocate_in.sanity_check.1"
+        );
+
+        let without_fn = PropertyId { fn_name: None, class: "assertion".to_string(), id: 7 };
+        assert_eq!(without_fn.to_cbmc_id(), "assertion.7");
+    }
+
+    #[test]
+    fn to_cbmc_id_missing_definition_shorter_forms() {
+        let with_fn = PropertyId {
+            fn_name: Some("alloc::raw_vec::RawVec::<u8>::allocate_in".to_string()),
+            class: "missing_definition".to_string(),
+            id: 1,
+        };
+        assert_eq!(with_fn.to_cbmc_id(), "alloc::raw_vec::RawVec::<u8>::allocate_in.1");
+
+        let without_fn =
+            PropertyId { fn_name: None, class: "missing_definition".to_string(), id: 3 };
+        assert_eq!(without_fn.to_cbmc_id(), "missing_definition.3");
+    }
+
+    #[test]
+    fn to_cbmc_id_recursion_form() {
+        let with_fn = PropertyId {
+            fn_name: Some("alloc::raw_vec::RawVec::<u8>::allocate_in".to_string()),
+            class: "recursion".to_string(),
+            id: 1,
+        };
+        assert_eq!(with_fn.to_cbmc_id(), "alloc::raw_vec::RawVec::<u8>::allocate_in.recursion");
+
+        let without_fn = PropertyId { fn_name: None, class: "recursion".to_string(), id: 1 };
+        assert_eq!(without_fn.to_cbmc_id(), ".recursion");
+    }
+
+    #[test]
     fn check_trace_value_deserialization_works() {
         let data = format!(
             r#"{{
@@ -780,5 +852,19 @@ mod tests {
         let result_struct: Result<ResultStruct, _> = serde_json::from_str(data);
         assert!(parser_item.is_ok());
         assert!(result_struct.is_ok());
+    }
+
+    #[test]
+    fn check_property_id_round_trips() {
+        let cases = [
+            "alloc::raw_vec::RawVec::<u8>::allocate_in.sanity_check.1",
+            "alloc::raw_vec::RawVec::<u8>::allocate_in.1",
+            "assertion.1",
+            "alloc::raw_vec::RawVec::<u8>::allocate_in.recursion",
+        ];
+        for prop_id_string in cases {
+            let prop_id: PropertyId = serde_json::from_str(&format!("{prop_id_string:?}")).unwrap();
+            assert_eq!(prop_id.to_cbmc_id(), prop_id_string, "round trip for {prop_id_string:?}");
+        }
     }
 }

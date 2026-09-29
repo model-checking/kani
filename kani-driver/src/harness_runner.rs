@@ -12,7 +12,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::args::OutputFormat;
 use crate::call_cbmc::{VerificationResult, VerificationStatus};
-use crate::frontend::{JsonHandler, schema_utils::add_runner_results_to_json};
 use crate::progress_indicator::ProgressIndicator;
 use crate::project::Project;
 use crate::session::{BUG_REPORT_URL, KaniSession};
@@ -98,7 +97,6 @@ impl<'pr> HarnessRunner<'_, 'pr> {
     pub(crate) fn check_all_harnesses(
         &self,
         harnesses: &'pr [&HarnessMetadata],
-        json_handler: Option<&mut JsonHandler>,
     ) -> Result<Vec<HarnessResult<'pr>>> {
         let sorted_harnesses = crate::metadata::sort_harnesses_by_loc(harnesses);
 
@@ -151,12 +149,7 @@ impl<'pr> HarnessRunner<'_, 'pr> {
         progress_indicator.finish();
 
         // The `Err` channel carries genuine errors only, so any error propagates.
-        let (results, fail_fast) = run_result?;
-
-        if let Some(handler) = json_handler {
-            let status_label = if fail_fast { "completed_with_fail_fast" } else { "completed" };
-            add_runner_results_to_json(handler, &results, harnesses.len(), status_label);
-        }
+        let (results, _) = run_result?;
 
         Ok(results)
     }

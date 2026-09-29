@@ -27,10 +27,15 @@ fi
 # 2. With `--export-json`, a non-matching filter must fail and must not write a
 #    document (the run must fail before the export is written).
 rm -f out.json
-kani fixture.rs -Z unstable-options --harness does_not_exist --export-json out.json >/dev/null 2>&1
+OUT=$(kani fixture.rs -Z export-json --harness does_not_exist --export-json out.json 2>&1)
 CODE=$?
 if [[ ${CODE} -eq 0 ]]; then
     echo "FAIL: zero-match run with --export-json exited 0"
+    exit 1
+fi
+if ! grep -q "Failed to match the following harness(es):" <<< "${OUT}"; then
+    echo "FAIL: expected the zero-match error, got:"
+    echo "${OUT}"
     exit 1
 fi
 if [[ -f out.json ]]; then

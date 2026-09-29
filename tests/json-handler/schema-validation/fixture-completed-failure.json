@@ -1,0 +1,182 @@
+{
+  "schema_version": "0.1.0",
+  "kani_commit": null,
+  "kani_commit_dirty": null,
+  "tools": {
+    "kani": "0.68.0",
+    "rustc": null,
+    "cbmc": null
+  },
+  "enabled_unstable_features": [
+    "export-json"
+  ],
+  "harness_selection": {
+    "requested_filters": [
+      "check_two",
+      "typo"
+    ],
+    "exact": false,
+    "unmatched_filters": [
+      "typo"
+    ],
+    "matched_count": 1
+  },
+  "harness_timeout_s": null,
+  "configuration": {
+    "checks": {
+      "memory_safety": true,
+      "overflow": true,
+      "unwinding": true,
+      "undefined_function": true,
+      "assertion_reach_checks": true,
+      "ignore_global_asm": false,
+      "extra_pointer_checks": false,
+      "assert_contracts": true,
+      "prove_safety_only": false
+    },
+    "cbmc_args": [
+      "--object-bits",
+      "16"
+    ],
+    "coverage_enabled": false
+  },
+  "outcome": {
+    "kind": "COMPLETED"
+  },
+  "run_state": "COMPLETE",
+  "target": "x86_64-unknown-linux-gnu",
+  "started_at": "2026-09-29T20:35:12Z",
+  "wall_time_s": 0.095685365,
+  "harnesses": [
+    {
+      "name": "check_two",
+      "crate_name": "test",
+      "file": "test.rs",
+      "line": 8,
+      "contract": {
+        "contracted_function_name": "add_one",
+        "recursion_tracker": "KANI_RECURSION_add_one"
+      },
+      "is_automatically_generated": false,
+      "has_loop_contracts": false,
+      "is_bounded": false,
+      "attributes": {
+        "kind": {
+          "ProofForContract": {
+            "target_fn": "add_one"
+          }
+        },
+        "should_panic": false,
+        "solver": {
+          "Binary": "/opt/solvers/my-solver"
+        },
+        "unwind_value": 5,
+        "stubs": [
+          {
+            "original": "real_fn",
+            "replacement": "stub_fn"
+          }
+        ],
+        "verified_stubs": [
+          "verified_target_fn"
+        ]
+      },
+      "outcome": {
+        "kind": "COMPLETED",
+        "verdict": "FAILURE"
+      },
+      "resolved_solver": "/opt/solvers/my-solver",
+      "resolved_unwind": 5,
+      "generated_concrete_test": false,
+      "resources": {
+        "verification_time_s": 0.014286075
+      },
+      "n_properties": 4,
+      "n_failed": 2,
+      "failed_properties": [
+        {
+          "id": "check_two.assertion.1",
+          "description": "attempt to add with overflow",
+          "class": "assertion",
+          "file": "test.rs",
+          "line": "10",
+          "trace_available": true,
+          "status": "FAILURE"
+        },
+        {
+          "id": "check_two.unsupported_construct.1",
+          "description": "not currently supported by Kani",
+          "class": "unsupported_construct",
+          "file": "test.rs",
+          "line": "9",
+          "trace_available": false,
+          "status": "FAILURE"
+        }
+      ],
+      "unsupported_constructs": [
+        {
+          "id": "check_two.unsupported_construct.1",
+          "description": "not currently supported by Kani",
+          "class": "unsupported_construct",
+          "file": "test.rs",
+          "line": "9",
+          "trace_available": false,
+          "status": "FAILURE"
+        }
+      ],
+      "warnings": [
+        {
+          "message": "warning: ignoring forall",
+          "truncated": false,
+          "original_chars": null
+        },
+        {
+          "message": "xxxx",
+          "truncated": true,
+          "original_chars": 9000
+        }
+      ],
+      "warnings_truncated": 2,
+      "checks": {
+        "total": 3,
+        "success": 0,
+        "failure": [
+          "check_two.assertion.1",
+          "check_two.unsupported_construct.1"
+        ],
+        "unreachable": [],
+        "undetermined": [],
+        "error": [],
+        "unknown": [],
+        "other": [
+          {
+            "id": "check_two.assertion.2",
+            "status": "SATISFIED"
+          }
+        ]
+      },
+      "covers": {
+        "total": 1,
+        "satisfied": [],
+        "unsatisfiable": [
+          "check_two.cover.1"
+        ],
+        "unreachable": [],
+        "undetermined": [],
+        "error": [],
+        "unknown": [],
+        "other": []
+      },
+      "failure_kind": "OTHER"
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "successful": 0,
+    "failed": 1,
+    "checks_total": 3,
+    "checks_success": 0,
+    "covers_total": 1,
+    "covers_satisfied": 0
+  }
+}
