@@ -69,9 +69,10 @@ use rustc_public::mir::{
 };
 use rustc_public::rustc_internal;
 use rustc_public::ty::{
-    AdtDef, AdtKind, Allocation, ConstantKind, FieldDef, FnDef, GenericArgKind, GenericArgs,
-    GenericParamDefKind, IntTy, MirConst, Region, RegionKind, RigidTy, Span, TraitDecl, TraitDef,
-    Ty, TyConst, TyConstKind, TyKind, UintTy, VariantIdx,
+    AdtDef, AdtKind, Allocation, BoundRegionKind, BoundVariableKind, ConstantKind, FieldDef, FnDef,
+    GenericArgKind, GenericArgs, GenericParamDefKind, IntTy, MirConst, PolyFnSig, Region,
+    RegionKind, RigidTy, Span, TraitDecl, TraitDef, Ty, TyConst, TyConstKind, TyKind, UintTy,
+    VariantIdx,
 };
 use rustc_public::{CrateDef, CrateDefType, DefId};
 use rustc_public_bridge::IndexedVal;
@@ -93,6 +94,25 @@ pub struct Context<'a, 'tcx> {
     /// Block ID of the synthetic block that aborts. It is the target of every call's unwind edge
     /// (Kani does not model unwinding) and of the return edge of calls that never return.
     abort_block: CharonBlockId,
+    /// How Charon numbers the generic parameters of the item whose declaration is being
+    /// translated (see [`ItemGenerics`]); `None` outside of declarations.
+    item_generics: Option<ItemGenerics>,
+    /// The number of binders (`for<..>` of function-pointer types) entered since the item's
+    /// own binder, i.e. the De Bruijn index of the item's generic parameters.
+    binder_depth: usize,
+}
+
+/// How Charon numbers the generic parameters of a type or function declaration: per kind
+/// (regions, types, const generics), parent generics first, and a function's late-bound regions
+/// after its early-bound ones. rustc instead numbers early-bound parameters across all kinds.
+#[derive(Clone, Default)]
+struct ItemGenerics {
+    /// rustc's parameter index -> position among the parameters of the same kind.
+    positions: FxHashMap<u32, usize>,
+    /// The number of early-bound region parameters.
+    early_regions: usize,
+    /// Whether the item is a function, whose signature binds late-bound regions.
+    binds_late_regions: bool,
 }
 
 impl<'a, 'tcx> Context<'a, 'tcx> {
@@ -116,11 +136,79 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         }
         let file_to_id: HashMap<CharonFileName, CharonFileId> = HashMap::new();
         let abort_block = CharonBlockId::from_usize(0);
-        Self { tcx, instance, translated, id_map, errors, local_names, file_to_id, abort_block }
+        Self {
+            tcx,
+            instance,
+            translated,
+            id_map,
+            errors,
+            local_names,
+            file_to_id,
+            abort_block,
+            item_generics: None,
+            binder_depth: 0,
+        }
     }
 
     fn tcx(&self) -> TyCtxt<'tcx> {
         self.tcx
+    }
+
+    /// Charon's numbering of the generic parameters of `def_id` (see [`ItemGenerics`]).
+    fn item_generics(&self, def_id: DefId, binds_late_regions: bool) -> ItemGenerics {
+        let mut chain = Vec::new();
+        let mut next = Some(rustc_internal::internal(self.tcx, def_id));
+        while let Some(def_id) = next {
+            let generics = self.tcx.generics_of(def_id);
+            chain.push(generics);
+            next = generics.parent;
+        }
+        let mut positions = FxHashMap::default();
+        let (mut regions, mut types, mut consts) = (0, 0, 0);
+        for param in chain.iter().rev().flat_map(|generics| generics.own_params.iter()) {
+            let counter = match param.kind {
+                rustc_middle::ty::GenericParamDefKind::Lifetime => &mut regions,
+                rustc_middle::ty::GenericParamDefKind::Type { .. } => &mut types,
+                rustc_middle::ty::GenericParamDefKind::Const { .. } => &mut consts,
+            };
+            positions.insert(param.index, *counter);
+            *counter += 1;
+        }
+        ItemGenerics { positions, early_regions: regions, binds_late_regions }
+    }
+
+    /// Run `f` with the generic parameters of `def_id` in scope, as for translating its
+    /// declaration. Declarations nest (a field's type may need its own declaration), so the
+    /// enclosing scope is restored afterwards.
+    fn with_item_generics<T>(
+        &mut self,
+        def_id: DefId,
+        binds_late_regions: bool,
+        f: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        let generics = self.item_generics(def_id, binds_late_regions);
+        let outer_generics = self.item_generics.replace(generics);
+        let outer_depth = std::mem::replace(&mut self.binder_depth, 0);
+        let result = f(self);
+        self.item_generics = outer_generics;
+        self.binder_depth = outer_depth;
+        result
+    }
+
+    /// The signature of `fndef` as declared, with its early-bound regions as parameters.
+    /// `FnDef::fn_sig` erases those, which would lose e.g. the `'a` in
+    /// `fn f<'a, T: 'a>(x: &'a T)`.
+    fn declared_fn_sig(&self, fndef: FnDef) -> PolyFnSig {
+        let def_id = rustc_internal::internal(self.tcx, fndef.def_id());
+        rustc_internal::stable(self.tcx.fn_sig(def_id).instantiate_identity().skip_normalization())
+    }
+
+    /// Charon's position of the early-bound parameter with rustc index `index`.
+    fn param_position(&self, index: u32) -> usize {
+        self.item_generics
+            .as_ref()
+            .and_then(|generics| generics.positions.get(&index).copied())
+            .unwrap_or(index as usize)
     }
 
     fn span_err(&mut self, span: CharonSpan, msg: &str, level: CharonLevel) -> CharonError {
@@ -374,6 +462,15 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
 
     //Get the GenericParams for Trait Decl, which is neccessary in Trait Decl translation
     fn generic_params_from_traitdecl(&mut self, traitdecl: TraitDecl) -> CharonGenericParams {
+        self.with_item_generics(traitdecl.def_id.def_id(), false, |this| {
+            this.generic_params_from_traitdecl_in_scope(traitdecl)
+        })
+    }
+
+    fn generic_params_from_traitdecl_in_scope(
+        &mut self,
+        traitdecl: TraitDecl,
+    ) -> CharonGenericParams {
         let genvec = traitdecl.generics_of().params;
         let mut c_regions: CharonVector<CharonRegionId, CharonRegionVar> = CharonVector::new();
         let mut c_types: CharonVector<CharonTypeVarId, CharonTypeVar> = CharonVector::new();
@@ -381,7 +478,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             CharonVector::new();
         for gendef in genvec.iter() {
             let genkind = gendef.kind.clone();
-            let index = gendef.index as usize;
+            let index = self.param_position(gendef.index);
             let name = gendef.name.clone();
             match genkind {
                 GenericParamDefKind::Lifetime => {
@@ -404,7 +501,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 GenericParamDefKind::Const { has_default: _ } => {
                     let def_id_internal = rustc_internal::internal(self.tcx, gendef.def_id.0);
                     let pc_internal = rustc_middle::ty::ParamConst {
-                        index: index as u32,
+                        index: gendef.index,
                         name: rustc_span::Symbol::intern(&name.clone()),
                     };
                     let paramenv = TypingEnv::post_analysis(self.tcx, def_id_internal).param_env;
@@ -432,7 +529,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     }
 
     //Get the GenericParams for Func Decl, which is neccessary in Func Decl translation
-    fn generic_params_from_fndef(&mut self, fndef: FnDef, input: Vec<Ty>) -> CharonGenericParams {
+    fn generic_params_from_fndef(&mut self, fndef: FnDef, sig: &PolyFnSig) -> CharonGenericParams {
         let genvec = match fndef.ty().kind() {
             TyKind::RigidTy(RigidTy::FnDef(_, genarg)) => genarg.0,
             _ => panic!("generic_params_from_fndef: not an FnDef"),
@@ -447,7 +544,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 GenericArgKind::Lifetime(region) => match region.kind {
                     RegionKind::ReEarlyParam(epr) => {
                         let c_region = CharonRegionVar {
-                            index: CharonRegionId::from_usize(epr.index as usize),
+                            index: CharonRegionId::from_usize(self.param_position(epr.index)),
                             name: Some(epr.name),
                             variance: CharonVariance::Unknown,
                             mutability: CharonLifetimeMutability::Unknown,
@@ -459,7 +556,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 GenericArgKind::Type(ty) => match ty.kind() {
                     TyKind::Param(paramty) => {
                         let c_typevar = CharonTypeVar {
-                            index: CharonTypeVarId::from_usize(paramty.index as usize),
+                            index: CharonTypeVarId::from_usize(self.param_position(paramty.index)),
                             name: paramty.name,
                             variance: CharonVariance::Unknown,
                         };
@@ -479,7 +576,9 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                         let ty_stable = rustc_internal::stable(ty_internal);
                         let trans_ty = self.translate_ty(ty_stable);
                         let c_constgeneric = CharonConstGenericVar {
-                            index: CharonConstGenericVarId::from_usize(paramtc.index as usize),
+                            index: CharonConstGenericVarId::from_usize(
+                                self.param_position(paramtc.index),
+                            ),
                             name: paramtc.name.clone(),
                             ty: trans_ty,
                         };
@@ -489,10 +588,12 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 },
             }
         }
-        for id in late_bound_input_regions(&input) {
-            c_regions.push(CharonRegionVar {
-                index: CharonRegionId::from_usize(id),
-                name: None,
+        // The signature's late-bound regions, numbered after the early-bound ones, as Charon
+        // does. They are all in the binder, wherever in the signature they occur.
+        for name in late_bound_regions(sig) {
+            c_regions.push_with(|index| CharonRegionVar {
+                index,
+                name,
                 variance: CharonVariance::Unknown,
                 mutability: CharonLifetimeMutability::Unknown,
             });
@@ -525,7 +626,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 GenericArgKind::Lifetime(region) => match region.kind {
                     RegionKind::ReEarlyParam(epr) => {
                         let c_region = CharonRegionVar {
-                            index: CharonRegionId::from_usize(epr.index as usize),
+                            index: CharonRegionId::from_usize(self.param_position(epr.index)),
                             name: Some(epr.name),
                             variance: CharonVariance::Unknown,
                             mutability: CharonLifetimeMutability::Unknown,
@@ -537,7 +638,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 GenericArgKind::Type(ty) => match ty.kind() {
                     TyKind::Param(paramty) => {
                         let c_typevar = CharonTypeVar {
-                            index: CharonTypeVarId::from_usize(paramty.index as usize),
+                            index: CharonTypeVarId::from_usize(self.param_position(paramty.index)),
                             name: paramty.name,
                             variance: CharonVariance::Unknown,
                         };
@@ -558,7 +659,9 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                         let ty_stable = rustc_internal::stable(ty_internal);
                         let trans_ty = self.translate_ty(ty_stable);
                         let c_constgeneric = CharonConstGenericVar {
-                            index: CharonConstGenericVarId::from_usize(paramtc.index as usize),
+                            index: CharonConstGenericVarId::from_usize(
+                                self.param_position(paramtc.index),
+                            ),
                             name: paramtc.name.clone(),
                             ty: trans_ty,
                         };
@@ -581,6 +684,12 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     }
 
     fn translate_adtdef(&mut self, adt_def: AdtDef) -> CharonTypeDecl {
+        self.with_item_generics(adt_def.def_id(), false, |this| {
+            this.translate_adtdef_in_scope(adt_def)
+        })
+    }
+
+    fn translate_adtdef_in_scope(&mut self, adt_def: AdtDef) -> CharonTypeDecl {
         let def_id = adt_def.def_id();
         let c_typedeclid = self.register_type_decl_id(def_id);
         let generics = self.generic_params_from_adtdef(adt_def);
@@ -969,11 +1078,16 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             TyKind::RigidTy(RigidTy::FnDef(fndef, _)) => fndef,
             _ => panic!("Expected a function type"),
         };
-        let value = fndef.fn_sig().value;
-        let inputs = value.inputs().to_vec();
-        let c_genparam = self.generic_params_from_fndef(fndef, inputs.clone());
-        let c_inputs: Vec<CharonTy> = inputs.iter().map(|ty| self.translate_ty(*ty)).collect();
-        let c_output = self.translate_ty(value.output());
+        let sig = self.declared_fn_sig(fndef);
+        let value = sig.value.clone();
+        let (c_genparam, c_inputs, c_output) =
+            self.with_item_generics(fndef.def_id(), true, |this| {
+                let c_genparam = this.generic_params_from_fndef(fndef, &sig);
+                let c_inputs: Vec<CharonTy> =
+                    value.inputs().iter().map(|ty| this.translate_ty(*ty)).collect();
+                let c_output = this.translate_ty(value.output());
+                (c_genparam, c_inputs, c_output)
+            });
         // TODO: populate the rest of the information (`is_unsafe`, `abi`, etc.)
         let sig = CharonFunSig {
             is_unsafe: false,
@@ -990,8 +1104,10 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             TyKind::RigidTy(RigidTy::FnDef(fndef, _)) => fndef,
             _ => panic!("Expected a function type"),
         };
+        // This is the generic body, so its types refer to the function's generic parameters.
         let mir_body = fndef.body().unwrap();
-        let body = self.translate_body(mir_body);
+        let body =
+            self.with_item_generics(fndef.def_id(), true, |this| this.translate_body(mir_body));
         Ok(body)
     }
 
@@ -1147,8 +1263,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             TyKind::RigidTy(rigid_ty) => self.translate_rigid_ty(rigid_ty),
             TyKind::Param(paramty) => {
                 let debr = CharonDeBruijnVar::Bound(
-                    CharonDeBruijnId::new(0),
-                    CharonTypeVarId::from_usize(paramty.index as usize),
+                    CharonDeBruijnId::new(self.binder_depth),
+                    CharonTypeVarId::from_usize(self.param_position(paramty.index)),
                 );
                 CharonTy::new(CharonTyKind::TypeVar(debr))
             }
@@ -1170,8 +1286,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             }
             TyConstKind::Param(paramc) => {
                 let debr = CharonDeBruijnVar::Bound(
-                    CharonDeBruijnId::new(0),
-                    CharonConstGenericVarId::from_usize(paramc.index as usize),
+                    CharonDeBruijnId::new(self.binder_depth),
+                    CharonConstGenericVarId::from_usize(self.param_position(paramc.index)),
                 );
                 // Neither `TyConst` nor `ParamConst` carries the parameter's type.
                 let ty = param_ty.unwrap_or_else(|| todo!("const generic parameter {paramc:?}"));
@@ -1262,9 +1378,20 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 ))
             }
             RigidTy::FnPtr(polyfunsig) => {
+                let mut regions = CharonVector::new();
+                for name in late_bound_regions(&polyfunsig) {
+                    regions.push_with(|index| CharonRegionVar {
+                        index,
+                        name,
+                        variance: CharonVariance::Unknown,
+                        mutability: CharonLifetimeMutability::Unknown,
+                    });
+                }
                 let value = polyfunsig.value;
+                self.binder_depth += 1;
                 let inputs = value.inputs().iter().map(|ty| self.translate_ty(*ty)).collect();
                 let output = self.translate_ty(value.output());
+                self.binder_depth -= 1;
                 let sig = CharonFunSig {
                     is_unsafe: value.safety == rustc_public::mir::Safety::Unsafe,
                     abi: CharonAbi::Rust,
@@ -1272,11 +1399,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     inputs,
                     output,
                 };
-                // TODO: populate regions?
-                CharonTy::new(CharonTyKind::FnPtr(CharonRegionBinder {
-                    regions: CharonVector::new(),
-                    skip_binder: sig,
-                }))
+                CharonTy::new(CharonTyKind::FnPtr(CharonRegionBinder { regions, skip_binder: sig }))
             }
             // Kani never translated trait objects: this used to be a placeholder predicate, and
             // Charon now requires the real one.
@@ -1441,14 +1564,14 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             _ => panic!("Expected a function type"),
         };
         let mut generics = self.translate_generic_args(genarg_resolve, def_id);
-        // The callee's declaration also binds a region for each late-bound region of its inputs
+        // The callee's declaration also binds its signature's late-bound regions
         // (`generic_params_from_fndef`), which the instance's arguments do not carry. Pass them as
         // erased, as Charon's own translation does; Charon's type check rejects the call otherwise.
-        let inputs = match instance.ty().kind() {
-            TyKind::RigidTy(RigidTy::FnDef(fndef, _)) => fndef.fn_sig().value.inputs().to_vec(),
+        let sig = match instance.ty().kind() {
+            TyKind::RigidTy(RigidTy::FnDef(fndef, _)) => fndef.fn_sig(),
             _ => panic!("Expected a function type"),
         };
-        for _ in late_bound_input_regions(&inputs) {
+        for _ in late_bound_regions(&sig) {
             generics.regions.push(CharonRegion::Erased);
         }
         CharonFnPtr::new(CharonFunIdOrTraitMethodRef::Fun(fid), generics)
@@ -1784,15 +1907,26 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             RegionKind::ReErased => CharonRegion::Erased,
             RegionKind::ReEarlyParam(epr) => {
                 let debr = CharonDeBruijnVar::bound(
-                    CharonDeBruijnId { index: 0_usize },
-                    CharonRegionId::from_usize(epr.index as usize),
+                    CharonDeBruijnId { index: self.binder_depth },
+                    CharonRegionId::from_usize(self.param_position(epr.index)),
                 );
                 CharonRegion::Var(debr)
             }
             RegionKind::ReBound(var, boundregion) => {
+                // A region bound by the function's own signature is one of the function's
+                // generics, numbered after its early-bound regions; any other binder is a
+                // function-pointer type's, whose regions are numbered from zero.
+                let offset = match &self.item_generics {
+                    Some(generics)
+                        if generics.binds_late_regions && var as usize == self.binder_depth =>
+                    {
+                        generics.early_regions
+                    }
+                    _ => 0,
+                };
                 let debr = CharonDeBruijnVar::bound(
                     CharonDeBruijnId { index: var as usize },
-                    CharonRegionId::from_usize(boundregion.var as usize),
+                    CharonRegionId::from_usize(offset + boundregion.var as usize),
                 );
                 CharonRegion::Var(debr)
             }
@@ -1925,18 +2059,20 @@ fn missing_ptr_metadata() -> CharonOperand {
     ))
 }
 
-/// The late-bound regions a function declaration binds for its inputs: one per top-level
-/// reference argument. `generic_params_from_fndef` declares them and call sites must supply them,
-/// so both use this.
-fn late_bound_input_regions(inputs: &[Ty]) -> Vec<usize> {
-    inputs
+/// The regions bound by a function signature's binder, in order, with their names if any. They
+/// are its late-bound regions, wherever in the signature they occur, each listed once.
+fn late_bound_regions(sig: &PolyFnSig) -> Vec<Option<String>> {
+    sig.bound_vars
         .iter()
-        .filter_map(|ty| match ty.kind() {
-            TyKind::RigidTy(RigidTy::Ref(r, _, _)) => match r.kind {
-                RegionKind::ReBound(_, br) => Some(br.var as usize),
-                _ => None,
-            },
-            _ => None,
+        .map(|var| match var {
+            // Charon leaves elided (`'_`) regions unnamed, too.
+            BoundVariableKind::Region(BoundRegionKind::BrNamed(_, name)) if name == "'_" => None,
+            BoundVariableKind::Region(BoundRegionKind::BrNamed(_, name)) => Some(name.clone()),
+            BoundVariableKind::Region(BoundRegionKind::BrAnon | BoundRegionKind::BrEnv) => None,
+            // Only `#![feature(non_lifetime_binders)]` binds anything else here.
+            BoundVariableKind::Ty(_) | BoundVariableKind::Const => {
+                todo!("non-region bound variable {var:?}")
+            }
         })
         .collect()
 }
