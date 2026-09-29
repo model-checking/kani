@@ -1637,9 +1637,25 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             _ => unreachable!(),
         };
 
+        // CBMC requires a numeric vector element type, so a pointer lane is modeled as an unsigned
+        // integer of the same width -- `Type::vector` asserts otherwise and took the compiler down
+        // for every `Simd<*const T, N>`, c.f.
+        // <https://github.com/model-checking/kani/issues/4867>. Rust's SIMD types are array-based,
+        // so a value is usually built and read through a byte-level reinterpretation of the whole
+        // vector (`codegen_rvalue_aggregate` and `codegen_simd_field`). The lane-wise intrinsics
+        // that do reach a single lane convert at the boundary instead: `simd_insert` and
+        // `simd_splat` cast the incoming pointer to the lane type, and `simd_extract` casts the lane
+        // back to the pointer type. The integer lane holds CBMC's pointer encoding (object and
+        // offset), so these casts keep provenance, as `ptr as usize as *const T` does. The
+        // multi-field arm of `codegen_simd_field` indexes a lane without a cast; it is unreachable
+        // because rustc rejects `#[repr(simd)]` structs whose only field is not an array (E0076).
         let prim_type = element.primitive();
-        let rust_type = self.codegen_prim_typ(prim_type);
-        let cbmc_type = self.codegen_ty(rust_type);
+        let cbmc_type = if matches!(prim_type, Primitive::Pointer(_)) {
+            Type::unsigned_int(self.symbol_table.machine_model().pointer_width)
+        } else {
+            let rust_type = self.codegen_prim_typ(prim_type);
+            self.codegen_ty(rust_type)
+        };
 
         // As of nightly-2026-08-21 the lane count is a `BackendLaneCount` (a `NonZero<u16>`)
         // rather than a bare `u64`.
