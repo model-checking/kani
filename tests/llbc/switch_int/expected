@@ -1,0 +1,21 @@
+pub fn test::classify(@1: u8) -> u8\
+{\
+    let @0: u8; // return\
+    let x@1: u8; // arg #1\
+\
+    switch copy (x@1) {\
+        0 : u8 => {\
+            nop\
+        },\
+        1 : u8 | 2 : u8 => {\
+            @0 := const (20 : u8)\
+            return\
+        },\
+        _ => {\
+            @0 := const (30 : u8)\
+            return\
+        },\
+    }\
+    @0 := const (10 : u8)\
+    return\
+}

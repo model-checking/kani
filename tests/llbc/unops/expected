@@ -1,0 +1,29 @@
+pub fn test::lnot(@1: bool) -> bool\
+{\
+    let @0: bool; // return\
+    let a@1: bool; // arg #1\
+\
+    @0 := ~(copy (a@1))\
+    return\
+}
+
+pub fn test::neg(@1: i32) -> i32\
+{\
+    let @0: i32; // return\
+    let a@1: i32; // arg #1\
+    let @2: bool; // anonymous local\
+\
+    nop\
+    nop\
+    @0 := -(copy (a@1))\
+    return\
+}
+
+pub fn test::not(@1: u8) -> u8\
+{\
+    let @0: u8; // return\
+    let a@1: u8; // arg #1\
+\
+    @0 := ~(copy (a@1))\
+    return\
+}
