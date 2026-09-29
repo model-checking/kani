@@ -1645,7 +1645,10 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
         // vector (`codegen_rvalue_aggregate` and `codegen_simd_field`). The lane-wise intrinsics
         // that do reach a single lane convert at the boundary instead: `simd_insert` and
         // `simd_splat` cast the incoming pointer to the lane type, and `simd_extract` casts the lane
-        // back to the pointer type.
+        // back to the pointer type. The integer lane holds CBMC's pointer encoding (object and
+        // offset), so these casts keep provenance, as `ptr as usize as *const T` does. The
+        // multi-field arm of `codegen_simd_field` indexes a lane without a cast; it is unreachable
+        // because rustc rejects `#[repr(simd)]` structs whose only field is not an array (E0076).
         let prim_type = element.primitive();
         let cbmc_type = if matches!(prim_type, Primitive::Pointer(_)) {
             Type::unsigned_int(self.symbol_table.machine_model().pointer_width)
