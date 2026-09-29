@@ -86,7 +86,44 @@ pub fn resolve_ty<'tcx>(
             Ok(Ty::new_tuple(&elems))
         }
         Type::Never(_) => Ok(Ty::from_rigid_kind(RigidTy::Never)),
-        Type::BareFn(_) => unsupported("bare function"),
+        Type::BareFn(bare_fn) => {
+            // Rust-ABI, non-variadic fn pointers; lifetimes are erased like everywhere
+            // else in this resolver, so `fn(&u8) -> u8` and `for<'a> fn(&'a u8) -> u8`
+            // resolve to the same erased signature.
+            if bare_fn.variadic.is_some() {
+                return unsupported("variadic bare function");
+            }
+            if bare_fn
+                .abi
+                .as_ref()
+                .is_some_and(|abi| abi.name.as_ref().is_none_or(|name| name.value() != "Rust"))
+            {
+                return unsupported("non-Rust-ABI bare function");
+            }
+            let inputs = bare_fn
+                .inputs
+                .iter()
+                .map(|arg| resolve_ty(tcx, current_module, &arg.ty))
+                .collect::<Result<Vec<_>, _>>()?;
+            let output = match &bare_fn.output {
+                syn::ReturnType::Default => Ty::new_tuple(&[]),
+                syn::ReturnType::Type(_, ty) => resolve_ty(tcx, current_module, ty)?,
+            };
+            let safety = if bare_fn.unsafety.is_some() {
+                rustc_hir::Safety::Unsafe
+            } else {
+                rustc_hir::Safety::Safe
+            };
+            let sig = tcx.mk_fn_sig_rust_abi(
+                inputs.iter().map(|ty| rustc_internal::internal(tcx, *ty)),
+                rustc_internal::internal(tcx, output),
+                safety,
+            );
+            Ok(rustc_internal::stable(rustc_middle::ty::Ty::new_fn_ptr(
+                tcx,
+                rustc_middle::ty::Binder::dummy(sig),
+            )))
+        }
         Type::Macro(_) => invalid("macro"),
         Type::Group(_) => invalid("group paths"),
         Type::ImplTrait(_) => invalid("trait impl paths"),
