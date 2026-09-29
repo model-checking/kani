@@ -266,8 +266,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 continue;
             };
             let c_traitdecl_id = self.translate_traitdecl(trait_def);
-            let c_genarg = self
-                .translate_generic_args_without_trait(trait_ref.args().clone(), trait_def.def_id());
+            let c_genarg = self.translate_generic_args_without_trait(trait_ref.args().clone());
             let c_polytrait = CharonPolyTraitDeclRef {
                 regions: CharonVector::new(),
                 skip_binder: CharonTraitDeclRef {
@@ -305,8 +304,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 continue;
             };
             let c_traitdecl_id = self.translate_traitdecl(trait_def);
-            let c_genarg = self
-                .translate_generic_args_without_trait(trait_ref.args().clone(), trait_def.def_id());
+            let c_genarg = self.translate_generic_args_without_trait(trait_ref.args().clone());
             let c_polytrait = CharonPolyTraitDeclRef {
                 regions: CharonVector::new(),
                 skip_binder: CharonTraitDeclRef {
@@ -1222,12 +1220,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         }
     }
 
-    fn translate_generic_args_without_trait(
-        &mut self,
-        ga: GenericArgs,
-        defid: DefId,
-    ) -> CharonGenericArgs {
-        let _ = defid;
+    fn translate_generic_args_without_trait(&mut self, ga: GenericArgs) -> CharonGenericArgs {
         let genvec = ga.0;
         let mut c_regions: CharonVector<CharonRegionId, CharonRegion> = CharonVector::new();
         let mut c_types: CharonVector<CharonTypeVarId, CharonTy> = CharonVector::new();
@@ -1475,8 +1468,10 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             }
             TerminatorKind::Drop { place, target, .. } => {
                 // Charon now carries the drop glue to run. Upstream reaches it through a trait
-                // proof for its synthetic `Destruct::drop_glue` method, which Kani does not model;
-                // the glue for `T` is exactly `drop_in_place::<T>`, which Kani already collects.
+                // proof for its synthetic `Destruct::drop_glue` method, which Kani does not model.
+                // `resolve_drop_in_place` gives the glue for `T` directly: an instance of the
+                // `core::ptr::drop_glue` lang item (which `drop_in_place::<T>` merely wraps), and
+                // Kani already collects it.
                 let place_ty = place.ty(self.instance.body().unwrap().locals()).unwrap();
                 let drop_glue = Instance::resolve_drop_in_place(place_ty);
                 let fn_ptr = self.translate_fn_ptr(drop_glue);
