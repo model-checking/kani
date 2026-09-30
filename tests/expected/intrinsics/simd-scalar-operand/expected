@@ -1,0 +1,2 @@
+`simd_lt` on non-SIMD type `i32`
+`simd_splat` on non-SIMD type `i32`
