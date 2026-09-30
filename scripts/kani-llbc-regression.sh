@@ -19,6 +19,9 @@ cargo build-dev -- --features cprover --features llbc
 
 # The LLBC backend is only built by this script, so its warnings and lints are checked here: CI's
 # `-D warnings` build and clippy run cover the default (`cprover`) features only.
+# The `-D warnings` build also covers Charon itself: it is a path dependency, and cargo only caps
+# lints for registry and git dependencies, so a Charon pin that introduces a warning fails here.
+# The clippy run lints `kani-compiler` only.
 echo "--- Build and lint the LLBC backend with warnings denied"
 RUSTFLAGS="-D warnings" cargo build --target-dir /tmp/kani_llbc_build_warnings --features llbc
 cargo clippy -p kani-compiler --features llbc -- -D warnings
