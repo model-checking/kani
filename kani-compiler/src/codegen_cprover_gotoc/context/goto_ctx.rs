@@ -36,7 +36,7 @@ use rustc_middle::ty::layout::{
 use rustc_middle::ty::{self, Ty, TyCtxt};
 use rustc_public::mir::Body;
 use rustc_public::mir::mono::Instance;
-use rustc_public::ty::Allocation;
+use rustc_public::ty::{Allocation, PolyFnSig};
 use rustc_span::Span;
 use rustc_span::respan;
 use rustc_span::span_bug;
@@ -1229,6 +1229,20 @@ impl<'tcx> HasTyCtxt<'tcx> for GotocCtx<'tcx, '_> {
 impl HasDataLayout for GotocCtx<'_, '_> {
     fn data_layout(&self) -> &TargetDataLayout {
         self.tcx.data_layout()
+    }
+}
+
+impl GotocCtx<'_, '_> {
+    /// Whether `instance` is a variadic function Kani cannot model, c.f.
+    /// [crate::kani_middle::is_unsupported_variadic].
+    pub fn is_unsupported_variadic(&self, instance: Instance) -> bool {
+        crate::kani_middle::is_unsupported_variadic(self.tcx, instance)
+    }
+
+    /// The same check for a call through a function pointer, c.f.
+    /// [crate::kani_middle::is_unsupported_variadic_fn_ptr].
+    pub fn is_unsupported_variadic_fn_ptr(&self, fn_sig: PolyFnSig) -> bool {
+        crate::kani_middle::is_unsupported_variadic_fn_ptr(self.tcx, fn_sig)
     }
 }
 

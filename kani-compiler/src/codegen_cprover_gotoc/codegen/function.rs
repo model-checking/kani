@@ -78,6 +78,13 @@ impl GotocCtx<'_, '_> {
             debug!("Double codegen of {:?}", old_sym);
         } else {
             assert!(old_sym.is_function());
+            if self.is_unsupported_variadic(instance) {
+                // Kani cannot model such a function (c.f. `is_unsupported_variadic`), and CBMC
+                // cannot convert a body whose parameters it has no symbols for, so leave the
+                // symbol a declaration. Calls to it are replaced by an unsupported-construct
+                // stub, so the missing body is never reached.
+                return;
+            }
             let body = self.transformer.body(self.tcx, instance);
             self.set_current_fn(instance, &body);
             self.print_instance(instance, &body);

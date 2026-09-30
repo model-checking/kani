@@ -149,6 +149,7 @@ fn print_autoharness_metadata(metadata: Vec<KaniMetadata>) {
                 }
                 AutoHarnessSkipReason::Comptime
                 | AutoHarnessSkipReason::NoBody
+                | AutoHarnessSkipReason::UnsupportedVariadic
                 | AutoHarnessSkipReason::UserFilter => {
                     Some(vec![md.crate_name.clone(), func, reason.to_string()])
                 }
