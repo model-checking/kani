@@ -362,12 +362,11 @@ impl GotocCtx<'_, '_> {
         }
     }
 
-    /// If a local is a function definition, ignore the local variable name and
-    /// generate a function call based on the def id.
+    /// If a local is a function definition, use the function item's singleton instead of the
+    /// named variable.
     ///
     /// For example, the auto-generated code for Fn::call_once uses a local FnDef to call the
-    /// wrapped function. A function item is zero-sized, so every value of it is the same and we
-    /// can use its singleton instead of a named variable.
+    /// wrapped function. A function item is zero-sized, so every value of it is the same.
     ///
     /// A pointer to a function item, or a `Box` of one, is not zero-sized: it is an ordinary
     /// variable that holds whatever address was assigned to it.

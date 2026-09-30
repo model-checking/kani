@@ -31,5 +31,8 @@ fn check_pointer_value() {
 #[kani::proof]
 #[kani::should_panic]
 fn check_null_stays_null() {
+    // Calling `foo` declares its symbol, so with the old code this fails on the assertion rather
+    // than on the #2255 crash.
+    assert_eq!(foo(), 42);
     assert!(!null_of(foo).is_null());
 }
