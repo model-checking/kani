@@ -23,3 +23,12 @@ pushd sample_crate > /dev/null
 cargo kani --target $TARGET -Z unstable-options -Z stubbing
 cargo clean
 popd > /dev/null
+
+echo "[TEST] --concrete-playback is refused for another target"
+kani riscv64.rs --target $TARGET -Z unstable-options -Z concrete-playback --concrete-playback print
+
+echo "[TEST] verify-std is refused with --target"
+kani verify-std . --target $TARGET -Z unstable-options
+
+# The rejections above exit non-zero on purpose; the suite passes when the transcript matches.
+exit 0

@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /var/folders/k8/vfxgc_cs5l52g36064xt6n8r0000gn/T/opencode/kani-upstream-build/kani/target/kani/bin/kani-driver "$@"
