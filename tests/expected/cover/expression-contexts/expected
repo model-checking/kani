@@ -1,0 +1,15 @@
+Status: SATISFIED\
+Description: "cover location"\
+main.rs:16:17 in function cover_expression_contexts
+
+Status: SATISFIED\
+Description: "cover condition: counted_true(&mut evaluations)"\
+main.rs:17:17 in function cover_expression_contexts
+
+Status: UNSATISFIABLE\
+Description: "unsatisfiable cover condition"\
+main.rs:18:17 in function cover_expression_contexts
+
+ ** 2 of 3 cover properties satisfied
+
+VERIFICATION:- SUCCESSFUL

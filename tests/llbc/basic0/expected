@@ -1,8 +1,26 @@
-fn test::is_zero(@1: i32) -> bool\
+// Full name: test::is_zero\
+pub fn is_zero(i: i32) -> bool\
 {\
-    let @0: bool; // return\
-    let i@1: i32; // arg #1\
+    let _0: bool; // return\
+    let i: i32; // arg #1\
+\
+    storage_live(_0)\
+    _0 = copy i == const 0i32\
+    storage_dead(i)\
+    return\
+}
 
-    @0 := copy (i@1) == const (0 : i32)\
+// Full name: test::main\
+pub fn main()\
+{\
+    let _0: (); // return\
+    let _1: bool; // anonymous local\
+\
+    storage_live(_0)\
+    storage_live(_1)\
+    _0 = ()\
+    _1 = is_zero(const 0i32)\
+    ↳⚡ undefined_behavior\
+    storage_dead(_1)\
     return\
 }

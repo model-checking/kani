@@ -1,0 +1,85 @@
+// Full name: core::option::Option\
+pub enum Option<T> {\
+  None,\
+  Some { _0: T },\
+}
+
+// Full name: test::add_opt\
+pub fn add_opt(x: Option<i32>, y: Option<i32>) -> Option<i32>\
+{\
+    let _0: Option<i32>; // return\
+    let x: Option<i32>; // arg #1\
+    let y: Option<i32>; // arg #2\
+    let u: i32; // local\
+    let v: i32; // local\
+    let _5: i32; // anonymous local\
+    let _6: i32; // anonymous local\
+\
+    storage_live(_0)\
+    storage_live(u)\
+    storage_live(v)\
+    storage_live(_5)\
+    storage_live(_6)\
+    match x {\
+        Option::Some => {\
+            u = copy (x as variant Option::Some)._0\
+            match y {\
+                Option::Some => {\
+                    v = copy (y as variant Option::Some)._0\
+                    _6 = copy u panic.+ copy v\
+                    _5 = move _6\
+                    _0 = Option::Some { _0: move _5 }\
+                    storage_dead(_5)\
+                    storage_dead(_6)\
+                    storage_dead(v)\
+                    storage_dead(u)\
+                    storage_dead(y)\
+                    storage_dead(x)\
+                    return\
+                },\
+                Option::None => {\
+                    _0 = Option::None {  }\
+                    storage_dead(_6)\
+                    storage_dead(v)\
+                    storage_dead(u)\
+                    storage_dead(y)\
+                    storage_dead(x)\
+                    return\
+                },\
+            }\
+        },\
+        Option::None => {\
+            _0 = Option::None {  }\
+            storage_dead(_6)\
+            storage_dead(v)\
+            storage_dead(u)\
+            storage_dead(y)\
+            storage_dead(x)\
+            return\
+        },\
+    }\
+    undefined_behavior\
+}
+
+// Full name: test::main\
+pub fn main()\
+{\
+    let _0: (); // return\
+    let e: Option<i32>; // local\
+    let _2: Option<i32>; // anonymous local\
+    let _3: Option<i32>; // anonymous local\
+\
+    storage_live(_0)\
+    storage_live(e)\
+    storage_live(_2)\
+    storage_live(_3)\
+    _0 = ()\
+    _2 = Option::Some { _0: const 1i32 }\
+    _3 = Option::Some { _0: const 2i32 }\
+    e = add_opt(move _2, move _3)\
+    ↳⚡ undefined_behavior\
+    storage_dead(_3)\
+    storage_dead(_2)\
+    storage_dead(e)\
+    return\
+}

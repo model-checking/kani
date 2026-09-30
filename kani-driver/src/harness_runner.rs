@@ -300,16 +300,8 @@ impl KaniSession {
         Ok(result)
     }
 
-    /// Concludes a session by printing a summary report and exiting the process with an
-    /// error code (if applicable).
-    ///
-    /// Note: Takes `self` "by ownership". This function wants to be able to drop before
-    /// exiting with an error code, if needed.
-    pub(crate) fn print_final_summary(self, results: &[HarnessResult<'_>]) -> Result<()> {
-        if self.args.common_args.quiet {
-            return Ok(());
-        }
-
+    /// Prints a summary report of the verification results.
+    pub(crate) fn print_final_summary(&self, results: &[HarnessResult<'_>]) -> Result<()> {
         let (automatic, manual): (Vec<_>, Vec<_>) =
             results.iter().partition(|r| r.harness.is_automatically_generated);
 
@@ -362,13 +354,29 @@ impl KaniSession {
             self.show_coverage_summary()?;
         }
 
-        let autoharness_failing = if self.autoharness_compiler_flags.is_some() {
-            self.print_autoharness_summary(automatic)?
-        } else {
-            0
-        };
+        if self.autoharness_compiler_flags.is_some() {
+            self.print_autoharness_summary(automatic);
+        }
 
-        if failing + autoharness_failing > 0 {
+        Ok(())
+    }
+
+    /// Exits the process with an error code if any harness failed.
+    ///
+    /// Note: Takes `self` "by ownership". This function wants to be able to drop before
+    /// exiting with an error code, if needed.
+    pub(crate) fn conclude(self, results: &[HarnessResult<'_>]) -> Result<()> {
+        // `--quiet` skips `print_final_summary`, so its zero-match error is raised here too.
+        if !self.args.harnesses.is_empty()
+            && results.iter().all(|r| r.harness.is_automatically_generated)
+        {
+            return Err(crate::metadata::no_harness_match_error(&self.args.harnesses));
+        }
+
+        let failing =
+            results.iter().filter(|r| r.result.status != VerificationStatus::Success).count();
+
+        if failing > 0 {
             // Failure exit code without additional error message
             drop(self);
             std::process::exit(1);
