@@ -25,12 +25,37 @@ exec "\$@"
 WRAPPER_EOF
 chmod +x "${WRAPPER}"
 
+# Each case starts from a clean build: a crate that is already up to date is not recompiled, so
+# a wrapper would go unnoticed.
+fresh() {
+    cargo clean --quiet
+}
+
+check_marker() {
+    if [ -e "${MARKER}" ]; then
+        echo "FAILURE ($1): kani-compiler was invoked through the rustc wrapper"
+        rm -f "${MARKER}"
+    else
+        echo "SUCCESS ($1): kani-compiler was not invoked through the rustc wrapper"
+    fi
+}
+
+echo "--- wrapper set via RUSTC_WRAPPER"
+fresh
 RUSTC_WRAPPER="${WRAPPER}" cargo kani
+check_marker "RUSTC_WRAPPER"
 
-if [ -e "${MARKER}" ]; then
-    echo "FAILURE: kani-compiler was invoked through the rustc wrapper"
-else
-    echo "SUCCESS: kani-compiler was not invoked through the rustc wrapper"
-fi
+echo "--- wrapper set via CARGO_BUILD_RUSTC_WRAPPER"
+fresh
+CARGO_BUILD_RUSTC_WRAPPER="${WRAPPER}" cargo kani
+check_marker "CARGO_BUILD_RUSTC_WRAPPER"
 
-rm -f "${WRAPPER}" "${MARKER}"
+# The setup the sccache documentation recommends.
+echo "--- wrapper set via .cargo/config.toml"
+fresh
+mkdir -p .cargo
+printf '[build]\nrustc-wrapper = "%s"\n' "${WRAPPER}" > .cargo/config.toml
+cargo kani
+check_marker ".cargo/config.toml"
+
+rm -rf .cargo "${WRAPPER}" "${MARKER}"

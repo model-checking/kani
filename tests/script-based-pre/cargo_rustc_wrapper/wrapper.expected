@@ -1,4 +1,7 @@
 warning: ignoring `RUSTC_WRAPPER=
 which a `rustc` wrapper cannot handle
+SUCCESS (RUSTC_WRAPPER): kani-compiler was not invoked through the rustc wrapper
+warning: ignoring `CARGO_BUILD_RUSTC_WRAPPER=
+SUCCESS (CARGO_BUILD_RUSTC_WRAPPER): kani-compiler was not invoked through the rustc wrapper
+SUCCESS (.cargo/config.toml): kani-compiler was not invoked through the rustc wrapper
 VERIFICATION:- SUCCESSFUL
-SUCCESS: kani-compiler was not invoked through the rustc wrapper
