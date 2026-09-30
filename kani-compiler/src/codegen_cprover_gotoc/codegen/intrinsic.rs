@@ -256,6 +256,22 @@ impl GotocCtx<'_, '_> {
 
         let intrinsic = Intrinsic::from_instance(&instance);
 
+        // A SIMD intrinsic whose vector operand was monomorphized to a scalar cannot be
+        // translated: every SIMD codegen path below reads a lane count or an element type that a
+        // scalar does not have. rustc rejects these instantiations, so they only reach us when
+        // something else synthesizes them (`-Z autoharness` does, for a generic helper whose
+        // parameter carries no SIMD bound). Report it against the harness that reached it instead
+        // of unwrapping a `None` length, which crashed the whole run.
+        if let Some(operand_ty) = intrinsic.simd_vector_operand(farg_types, ret_ty)
+            && !operand_ty.kind().is_simd()
+        {
+            return self.codegen_unimplemented_stmt(
+                &format!("`{intrinsic_str}` with the non-SIMD type `{operand_ty}`"),
+                loc,
+                "https://github.com/model-checking/kani/issues/4919",
+            );
+        }
+
         match intrinsic {
             Intrinsic::AddWithOverflow => {
                 self.codegen_op_with_overflow(BinaryOperator::OverflowResultPlus, fargs, place, loc)

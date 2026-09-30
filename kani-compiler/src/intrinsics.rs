@@ -5,7 +5,7 @@
 
 use rustc_public::{
     mir::{Mutability, mono::Instance},
-    ty::{FloatTy, IntTy, RigidTy, TyKind, UintTy},
+    ty::{FloatTy, IntTy, RigidTy, Ty, TyKind, UintTy},
 };
 
 // Enumeration of all intrinsics we support right now, with the last option being a catch-all. This
@@ -176,6 +176,47 @@ macro_rules! assert_sig_matches {
 }
 
 impl Intrinsic {
+    /// The operand that must be a SIMD vector for this intrinsic to have a meaning, given the
+    /// monomorphized argument and return types of a call to it; `None` for a non-SIMD intrinsic.
+    ///
+    /// rustc checks this when it monomorphizes and rejects a violation with `E0511` (`invalid
+    /// monomorphization of `simd_lt` intrinsic: expected SIMD input type, found non-SIMD `i32``),
+    /// so no call site written in source code reaches codegen with a scalar here. A *synthesized*
+    /// instantiation can: `-Z autoharness` monomorphizes a generic function itself, and nothing
+    /// bounds the parameter of a helper like `fn imin<T: Copy>(a: T, b: T) -> T` whose body calls
+    /// `simd_lt` to the SIMD types. See <https://github.com/model-checking/kani/issues/4919>.
+    pub fn simd_vector_operand(&self, arg_tys: &[Ty], ret_ty: Ty) -> Option<Ty> {
+        match self {
+            // `simd_splat<T, U>(value: U) -> T` broadcasts a scalar, so its vector is the return
+            // type. Every other SIMD intrinsic takes a vector first, including the ones that take
+            // a scalar or an index later (`simd_insert`, `simd_extract`, `simd_shuffle`).
+            Intrinsic::SimdSplat => Some(ret_ty),
+            Intrinsic::SimdAdd
+            | Intrinsic::SimdAnd
+            | Intrinsic::SimdDiv
+            | Intrinsic::SimdEq
+            | Intrinsic::SimdExtract
+            | Intrinsic::SimdGe
+            | Intrinsic::SimdGt
+            | Intrinsic::SimdInsert
+            | Intrinsic::SimdLe
+            | Intrinsic::SimdLt
+            | Intrinsic::SimdMul
+            | Intrinsic::SimdNe
+            | Intrinsic::SimdOr
+            | Intrinsic::SimdReduceAll
+            | Intrinsic::SimdRem
+            | Intrinsic::SimdShl
+            | Intrinsic::SimdShr
+            | Intrinsic::SimdShuffle(_)
+            | Intrinsic::SimdSub
+            | Intrinsic::SimdXor => arg_tys.first().copied(),
+            // Listing the non-SIMD intrinsics would not make a new SIMD one any harder to miss:
+            // `try_match_simd` is where they are added, and it sits next to this match.
+            _ => None,
+        }
+    }
+
     /// Create an intrinsic enum from a given intrinsic instance, shallowly validating the argument types.
     pub fn from_instance(intrinsic_instance: &Instance) -> Self {
         let intrinsic_str = intrinsic_instance.intrinsic_name().unwrap();
