@@ -1446,8 +1446,13 @@ impl GotocCtx<'_, '_> {
         }
         self.tcx.dcx().abort_if_errors();
 
+        // A pointer lane is modeled as an integer of the same width (see `codegen_vector`), so the
+        // extracted lane has to be cast back to the return type. `simd_insert` and `simd_splat`
+        // cast in the other direction for the same reason. This is a no-op for every other element
+        // type, where the lane type already is the return type.
+        let ret_typ = self.codegen_ty_stable(rust_ret_type);
         let loc = self.codegen_span_stable(span);
-        self.codegen_expr_to_place_stable(p, vec.index_array(index), loc)
+        self.codegen_expr_to_place_stable(p, vec.index_array(index).cast_to(ret_typ), loc)
     }
 
     /// Insert is a generic update of a single value in a SIMD vector.

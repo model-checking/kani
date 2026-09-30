@@ -1,0 +1,66 @@
+// Full name: test::sub\
+pub fn sub(a: i16, b: i16) -> i16\
+{\
+    let _0: i16; // return\
+    let a: i16; // arg #1\
+    let b: i16; // arg #2\
+\
+    storage_live(_0)\
+    _0 = copy a wrap.- copy b\
+    storage_dead(b)\
+    storage_dead(a)\
+    return\
+}
+
+// Full name: test::add\
+pub fn add(a: u8, b: u8) -> u8\
+{\
+    let _0: u8; // return\
+    let a: u8; // arg #1\
+    let b: u8; // arg #2\
+\
+    storage_live(_0)\
+    _0 = copy a wrap.+ copy b\
+    storage_dead(b)\
+    storage_dead(a)\
+    return\
+}
+
+// Full name: test::mul\
+pub fn mul(a: u32, b: u32) -> u32\
+{\
+    let _0: u32; // return\
+    let a: u32; // arg #1\
+    let b: u32; // arg #2\
+\
+    storage_live(_0)\
+    _0 = copy a wrap.* copy b\
+    storage_dead(b)\
+    storage_dead(a)\
+    return\
+}
+
+// Full name: test::main\
+pub fn main()\
+{\
+    let _0: (); // return\
+    let _1: u8; // anonymous local\
+    let _2: i16; // anonymous local\
+    let _3: u32; // anonymous local\
+\
+    storage_live(_0)\
+    storage_live(_1)\
+    storage_live(_2)\
+    storage_live(_3)\
+    _0 = ()\
+    _1 = add(const 200u8, const 100u8)\
+    ↳⚡ undefined_behavior\
+    storage_dead(_1)\
+    _2 = sub(const -1i16, const 2i16)\
+    ↳⚡ undefined_behavior\
+    storage_dead(_2)\
+    _3 = mul(const 3u32, const 4u32)\
+    ↳⚡ undefined_behavior\
+    storage_dead(_3)\
+    return\
+}

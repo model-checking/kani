@@ -1,0 +1,40 @@
+// Full name: test::classify\
+pub fn classify(x: u8) -> u8\
+{\
+    let _0: u8; // return\
+    let x: u8; // arg #1\
+\
+    storage_live(_0)\
+    switch copy x {\
+        0u8 => {\
+        },\
+        1u8 | 2u8 => {\
+            _0 = const 20u8\
+            storage_dead(x)\
+            return\
+        },\
+        _ => {\
+            _0 = const 30u8\
+            storage_dead(x)\
+            return\
+        },\
+    }\
+    _0 = const 10u8\
+    storage_dead(x)\
+    return\
+}
+
+// Full name: test::main\
+pub fn main()\
+{\
+    let _0: (); // return\
+    let _1: u8; // anonymous local\
+\
+    storage_live(_0)\
+    storage_live(_1)\
+    _0 = ()\
+    _1 = classify(const 1u8)\
+    ↳⚡ undefined_behavior\
+    storage_dead(_1)\
+    return\
+}

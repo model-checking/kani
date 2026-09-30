@@ -1,0 +1,15 @@
+[without --bounded-arguments]
+| cargo_autoharness_wtf8 | first            | Requires --bounded-arguments for argument(s) s: &core::wtf8::Wtf8      |
+[with --bounded-arguments]
+| cargo_autoharness_wtf8 | nested           | Missing Arbitrary implementation for argument(s) s: &&core::wtf8::Wtf8 |
+Failed Checks: index out of bounds: the length is less than or equal to the given index
+Status: SATISFIED\
+Description: "empty string"
+Status: SATISFIED\
+Description: "maximum-length string"
+Status: SATISFIED\
+Description: "string "ab""
+| cargo_autoharness_wtf8 | len               | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_wtf8 | first             | #[kani::proof] (bounded)  | Failure             |
+| cargo_autoharness_wtf8 | wtf8_cover        | #[kani::proof] (bounded)  | Success             |
+Complete - 2 successfully verified functions, 1 failures, 3 total.
