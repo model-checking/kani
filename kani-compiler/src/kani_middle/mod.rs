@@ -1312,8 +1312,9 @@ fn autoharness_supported_arg_ty(
                 }
             }
             // A `&CStr` is the bytes of nondeterministic storage up to its first NUL, a
-            // `&ByteStr` a prefix of it and a `&Wtf8` a `&str` over it, c.f. `any_c_str_ref`,
-            // `any_byte_str_ref` and `any_wtf8_ref`. Immutable only, as for `&str`.
+            // `&ByteStr` a prefix of it and a `&Wtf8` its longest valid WTF-8 prefix, c.f.
+            // `any_c_str_ref`, `any_byte_str_ref` and `any_wtf8_ref`. Immutable only, as for
+            // `&str`.
             TyKind::RigidTy(RigidTy::Adt(def, _))
                 if is_c_str(tcx, def) || is_byte_str(tcx, def) || is_wtf8(tcx, def) =>
             {

@@ -276,10 +276,13 @@ macro_rules! generate_arbitrary {
             core_path::bstr::ByteStr::new(any_slice_ref(storage))
         }
 
-        /// Generate a WTF-8 string referring to a prefix of `storage` of nondeterministic length
-        /// (at most `N`), through `any_str_ref`: WTF-8 is a superset of UTF-8, so every `&str`
-        /// converts with `Wtf8::from_str`. Strings holding surrogate code points, which only
-        /// WTF-8 admits, are not generated.
+        /// Generate a WTF-8 string referring to the longest well-formed WTF-8 prefix of `storage`,
+        /// a nondeterministic byte array (at most `N` bytes), as `any_str_ref` does for UTF-8.
+        /// WTF-8 is UTF-8 that also admits the three-byte encodings of surrogate code points
+        /// (`ED A0..=BF 80..=BF`), except that a lead surrogate may not be directly followed by a
+        /// trail surrogate: that pair is written as the four-byte encoding of one supplementary
+        /// code point instead. All WTF-8 contents up to length `N` are covered, unpaired
+        /// surrogates included.
         ///
         /// This model is used by the compiler to generate nondeterministic `&Wtf8` arguments for
         /// automatic harnesses (`kani autoharness`). Note that any verification result obtained
@@ -289,7 +292,46 @@ macro_rules! generate_arbitrary {
         #[doc(hidden)]
         // `std` does not re-export `core::wtf8`, so the type is named through `core` in both arms.
         pub fn any_wtf8_ref<const N: usize>(storage: &mut [u8; N]) -> &core::wtf8::Wtf8 {
-            core::wtf8::Wtf8::from_str(any_str_ref(storage))
+            let mut valid_len = 0;
+            // Whether the last code point of `storage[..valid_len]` is a lead surrogate.
+            let mut after_lead = false;
+            while valid_len < N {
+                let rest = &storage[valid_len..];
+                if rest[0] < 0x80 {
+                    after_lead = false;
+                    valid_len += 1;
+                    continue;
+                }
+                // The sequence width and the range of its second byte, as in UTF-8, except that
+                // `ED` also accepts `A0..=BF`, the surrogates.
+                let (width, second) = match rest[0] {
+                    0xC2..=0xDF => (2, 0x80..=0xBF),
+                    0xE0 => (3, 0xA0..=0xBF),
+                    0xE1..=0xEF => (3, 0x80..=0xBF),
+                    0xF0 => (4, 0x90..=0xBF),
+                    0xF1..=0xF3 => (4, 0x80..=0xBF),
+                    0xF4 => (4, 0x80..=0x8F),
+                    _ => break,
+                };
+                // Continuation bytes are `80..=BF`. They are checked by index, which leaves no
+                // loop over a slice of nondeterministic length for symbolic execution to unwind.
+                let is_cont = |b: u8| b & 0xC0 == 0x80;
+                if rest.len() < width
+                    || !second.contains(&rest[1])
+                    || (width > 2 && !is_cont(rest[2]))
+                    || (width > 3 && !is_cont(rest[3]))
+                {
+                    break;
+                }
+                let is_surrogate = rest[0] == 0xED && rest[1] >= 0xA0;
+                if after_lead && is_surrogate && rest[1] >= 0xB0 {
+                    break;
+                }
+                after_lead = is_surrogate && rest[1] < 0xB0;
+                valid_len += width;
+            }
+            // SAFETY: `storage[..valid_len]` is well-formed WTF-8, checked above.
+            unsafe { core::wtf8::Wtf8::from_bytes_unchecked(&storage[..valid_len]) }
         }
 
         arbitrary_tuple!(A);
