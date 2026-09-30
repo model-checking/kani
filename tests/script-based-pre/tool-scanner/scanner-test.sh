@@ -25,7 +25,7 @@ cat test_scan_unsafe_distance.csv
 # Names must be crate-relative, as `kani list` reports them, so the two outputs
 # can be joined by name (kani#4868). The crate is `test`, so no name may start
 # with `test::`.
-if grep -q '^test::' *.csv; then
+if grep -qE '(^|[^[:alnum:]_:])test::' *.csv; then
     echo "FAIL: crate-prefixed names in the CSVs"
 else
     echo "OK: no crate-prefixed names"
