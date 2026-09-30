@@ -1,0 +1,18 @@
+Checking harness read_option_char_unsupported...
+Failed Checks: Kani currently doesn't support checking validity of `raw pointer dereference` for `std::option::Option<char>`
+VERIFICATION:- FAILED
+
+Checking harness read_invalid_option_bool_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `std::option::Option<bool>`
+VERIFICATION:- FAILED
+
+Checking harness read_valid_option_bool...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness transmute_to_option_ref...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness transmute_null_to_option_nonnull...
+VERIFICATION:- SUCCESSFUL
+
+Complete - 3 successfully verified harnesses, 2 failures, 5 total.

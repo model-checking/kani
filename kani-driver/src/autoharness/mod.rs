@@ -147,7 +147,9 @@ fn print_autoharness_metadata(metadata: Vec<KaniMetadata>) {
                 AutoHarnessSkipReason::GenericFn(ref detail) => {
                     Some(vec![md.crate_name.clone(), func, format!("{reason}: {detail}")])
                 }
-                AutoHarnessSkipReason::NoBody | AutoHarnessSkipReason::UserFilter => {
+                AutoHarnessSkipReason::Comptime
+                | AutoHarnessSkipReason::NoBody
+                | AutoHarnessSkipReason::UserFilter => {
                     Some(vec![md.crate_name.clone(), func, reason.to_string()])
                 }
                 // We don't report Kani implementations to the user to avoid exposing Kani functions we insert during instrumentation.
@@ -248,10 +250,7 @@ impl KaniSession {
     }
 
     /// Prints the results from running the `autoharness` subcommand.
-    pub fn print_autoharness_summary(
-        &self,
-        mut automatic: Vec<&HarnessResult<'_>>,
-    ) -> Result<usize> {
+    pub fn print_autoharness_summary(&self, mut automatic: Vec<&HarnessResult<'_>>) {
         automatic.sort_by(|a, b| a.harness.pretty_name.cmp(&b.harness.pretty_name));
         let (successes, failures): (Vec<_>, Vec<_>) =
             automatic.into_iter().partition(|r| r.result.status == VerificationStatus::Success);
@@ -342,7 +341,5 @@ impl KaniSession {
         } else {
             println!("No functions were eligible for automatic verification.");
         }
-
-        Ok(failing)
     }
 }

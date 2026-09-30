@@ -1,4 +1,23 @@
-pub fn test::diverge() -> !\
+// Full name: test::diverge\
+pub fn diverge() -> !\
 {\
-    let @0: !; // return
-pub fn test::main()
+    let _0: !; // return\
+\
+    storage_live(_0)\
+    loop {\
+        continue 0\
+    }\
+}
+
+// Full name: test::main\
+pub fn main()\
+{\
+    let _0: (); // return\
+    let _1: !; // anonymous local\
+\
+    storage_live(_0)\
+    storage_live(_1)\
+    _0 = ()\
+    _1 = diverge()\
+    ↳⚡ undefined_behavior\
+}

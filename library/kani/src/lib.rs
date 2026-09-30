@@ -19,7 +19,10 @@
 // `core::mem::{size_of,align_of}_val_raw` are only reached by the `concrete_playback` paths of
 // the `kani_core` memory models this crate expands.
 #![cfg_attr(feature = "concrete_playback", feature(layout_for_ptr))]
+#![feature(bstr)]
+#![feature(wtf8_internals)]
 #![feature(ptr_metadata)]
+#![feature(formatting_options)]
 #![feature(f16)]
 #![feature(f128)]
 #![feature(convert_float_to_int)]
@@ -72,15 +75,15 @@ pub use core::assert as __kani__workaround_core_assert;
 
 #[macro_export]
 macro_rules! cover {
-    () => {
+    () => {{
         kani::cover(true, "cover location");
-    };
-    ($cond:expr $(,)?) => {
+    }};
+    ($cond:expr $(,)?) => {{
         kani::cover($cond, concat!("cover condition: ", stringify!($cond)));
-    };
-    ($cond:expr, $msg:literal) => {
+    }};
+    ($cond:expr, $msg:literal) => {{
         kani::cover($cond, $msg);
-    };
+    }};
 }
 
 /// `implies!(premise => conclusion)` means that if the `premise` is true, so

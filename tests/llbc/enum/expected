@@ -1,0 +1,49 @@
+// Full name: test::MyEnum\
+pub enum MyEnum {\
+  A { _0: i32 },\
+  B,\
+}
+
+// Full name: test::enum_match\
+pub fn enum_match(e: MyEnum) -> i32\
+{\
+    let _0: i32; // return\
+    let e: MyEnum; // arg #1\
+    let i: i32; // local\
+\
+    storage_live(_0)\
+    storage_live(i)\
+    match e {\
+        MyEnum::A => {\
+        },\
+        MyEnum::B => {\
+            _0 = const 0i32\
+            storage_dead(e)\
+            return\
+        },\
+    }\
+    i = copy (e as variant MyEnum::A)._0\
+    _0 = copy i\
+    storage_dead(i)\
+    storage_dead(e)\
+    return\
+}
+
+// Full name: test::main\
+pub fn main()\
+{\
+    let _0: (); // return\
+    let e: MyEnum; // local\
+    let i: i32; // local\
+\
+    storage_live(_0)\
+    storage_live(e)\
+    storage_live(i)\
+    _0 = ()\
+    e = MyEnum::A { _0: const 1i32 }\
+    i = enum_match(copy e)\
+    ↳⚡ undefined_behavior\
+    storage_dead(i)\
+    storage_dead(e)\
+    return\
+}

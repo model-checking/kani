@@ -21,6 +21,8 @@ use rustc_public::{CrateDef, CrateDefType, DefId, local_crate};
 use std::ops::ControlFlow;
 
 use self::attributes::KaniAttributes;
+use self::kani_functions::KaniModel;
+use strum_macros::EnumIter;
 
 /// Return an item's name for user-facing output and CBMC symbol pretty-names.
 ///
@@ -161,6 +163,14 @@ pub fn check_crate_items(tcx: TyCtxt, ignore_asm: bool) {
     }
 
     tcx.dcx().abort_if_errors();
+}
+
+/// Whether `def` is `core::fmt::Formatter`.
+///
+/// Shared by the eligibility check and the harness generation, so they cannot disagree.
+pub fn is_formatter(tcx: TyCtxt, def: AdtDef) -> bool {
+    tcx.get_diagnostic_item(rustc_span::Symbol::intern("Formatter"))
+        == Some(rustc_internal::internal(tcx, def.def_id()))
 }
 
 /// Traverse the type definition to see if the type contains interior mutability.
@@ -793,8 +803,9 @@ pub fn scalar_width_bits(tcx: TyCtxt, ty: Ty) -> Option<u64> {
 
 /// The niche constraint of a scalar-ABI type: the width of the scalar in bits, and the
 /// (possibly wrapping) inclusive range of valid bit patterns.
-/// Returns None for non-scalar ABIs, pointer/float scalars, and scalars whose valid range
-/// covers every bit pattern.
+/// Returns None for non-scalar ABIs, float scalars, and scalars whose valid range covers every
+/// bit pattern. Pointer scalars are supported (their width is the target's pointer size), which
+/// is what lets `!null` pattern types such as `NonNull<T>`'s field report their niche.
 ///
 /// Rationale: a layout niche is a language-level validity invariant (rustc packs enum
 /// variants into the invalid patterns), so a synthesized `kani::any` body must not produce
@@ -817,8 +828,11 @@ pub fn scalar_niche(tcx: TyCtxt, ty: Ty) -> Option<ScalarNiche> {
         .ok()?;
     let BackendRepr::Scalar(scalar) = layout.backend_repr else { return None };
     let Scalar::Initialized { value, valid_range } = scalar else { return None };
-    let Primitive::Int(int, _signed) = value else { return None };
-    let bits = int.size().bits();
+    let bits = match value {
+        Primitive::Int(int, _) => int.size().bits(),
+        Primitive::Pointer(_) => tcx.data_layout.pointer_size().bits(),
+        Primitive::Float(_) => return None,
+    };
     let full = if bits == 128 { u128::MAX } else { (1u128 << bits) - 1 };
     if valid_range.start == 0 && valid_range.end == full {
         return None;
@@ -1024,15 +1038,110 @@ fn implements_bounded_arbitrary(tcx: TyCtxt, ty: Ty, kani_bounded_any_def: FnDef
     false
 }
 
-/// The formatting traits whose implementations automatic harnesses can verify via dedicated
-/// models (c.f. `KaniModel::CheckDebugFmt`/`CheckDisplayFmt`).
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum FmtTrait {
-    Debug,
-    Display,
+/// Whether `def` is `core::ffi::CStr`.
+///
+/// Both the eligibility check (`autoharness_supported_arg_ty`) and the harness generation
+/// (`call_kani_any_for_ty`) use this, so that they cannot disagree on a `&CStr` argument.
+pub fn is_c_str(tcx: TyCtxt, def: AdtDef) -> bool {
+    Some(rustc_internal::internal(tcx, def.def_id()))
+        == tcx.get_diagnostic_item(rustc_span::sym::cstr_type)
 }
 
-/// If `instance` is the `fmt` method of a `Debug` or `Display` implementation, return the
+/// Whether `def` is `core::bstr::ByteStr`, which has no diagnostic item.
+///
+/// Shared by the eligibility check and the harness generation, as `is_c_str` is.
+///
+/// Matching by name means a rename in `core` would silently return these functions to the
+/// skipped list; `cargo_autoharness_byte_str` pins a `&ByteStr` function as selected, so the test
+/// fails instead.
+pub fn is_byte_str(tcx: TyCtxt, def: AdtDef) -> bool {
+    let def_id = rustc_internal::internal(tcx, def.def_id());
+    tcx.crate_name(def_id.krate) == rustc_span::sym::core
+        && tcx
+            .opt_parent(def_id)
+            .and_then(|module| tcx.opt_item_name(module))
+            .is_some_and(|name| name.as_str() == "bstr")
+        && tcx.item_name(def_id).as_str() == "ByteStr"
+}
+
+/// Whether `def` is `core::wtf8::Wtf8`, which has no diagnostic item.
+///
+/// Shared by the eligibility check and the harness generation, as `is_c_str` is.
+pub fn is_wtf8(tcx: TyCtxt, def: AdtDef) -> bool {
+    let def_id = rustc_internal::internal(tcx, def.def_id());
+    tcx.crate_name(def_id.krate) == rustc_span::sym::core
+        && tcx
+            .opt_parent(def_id)
+            .and_then(|module| tcx.opt_item_name(module))
+            .is_some_and(|name| name.as_str() == "wtf8")
+        && tcx.item_name(def_id).as_str() == "Wtf8"
+}
+
+/// The formatting traits whose implementations automatic harnesses can verify via dedicated
+/// models, one per trait (c.f. `KaniModel::CheckDebugFmt` and [`FmtTrait::model`]).
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, EnumIter)]
+pub enum FmtTrait {
+    Binary,
+    Debug,
+    Display,
+    LowerExp,
+    LowerHex,
+    Octal,
+    Pointer,
+    UpperExp,
+    UpperHex,
+}
+
+impl FmtTrait {
+    /// The model that formats a nondeterministic value through this trait.
+    pub fn model(self) -> KaniModel {
+        match self {
+            FmtTrait::Binary => KaniModel::CheckBinaryFmt,
+            FmtTrait::Debug => KaniModel::CheckDebugFmt,
+            FmtTrait::Display => KaniModel::CheckDisplayFmt,
+            FmtTrait::LowerExp => KaniModel::CheckLowerExpFmt,
+            FmtTrait::LowerHex => KaniModel::CheckLowerHexFmt,
+            FmtTrait::Octal => KaniModel::CheckOctalFmt,
+            FmtTrait::Pointer => KaniModel::CheckPointerFmt,
+            FmtTrait::UpperExp => KaniModel::CheckUpperExpFmt,
+            FmtTrait::UpperHex => KaniModel::CheckUpperHexFmt,
+        }
+    }
+
+    /// The formatting trait `trait_def_id` is, if any.
+    ///
+    /// Only `Debug`, `Display` and `Pointer` carry a diagnostic item; the other traits are
+    /// matched by name inside `core::fmt`.
+    fn of_trait(tcx: TyCtxt, trait_def_id: InternalDefId) -> Option<FmtTrait> {
+        let diagnostic = |sym| Some(trait_def_id) == tcx.get_diagnostic_item(sym);
+        if diagnostic(rustc_span::sym::Debug) {
+            return Some(FmtTrait::Debug);
+        }
+        if diagnostic(rustc_span::sym::Display) {
+            return Some(FmtTrait::Display);
+        }
+        if diagnostic(rustc_span::sym::Pointer) {
+            return Some(FmtTrait::Pointer);
+        }
+        let in_core_fmt = tcx.crate_name(trait_def_id.krate) == rustc_span::sym::core
+            && tcx.opt_parent(trait_def_id).and_then(|module| tcx.opt_item_name(module))
+                == Some(rustc_span::sym::fmt);
+        if !in_core_fmt {
+            return None;
+        }
+        Some(match tcx.item_name(trait_def_id).as_str() {
+            "Binary" => FmtTrait::Binary,
+            "Octal" => FmtTrait::Octal,
+            "LowerHex" => FmtTrait::LowerHex,
+            "UpperHex" => FmtTrait::UpperHex,
+            "LowerExp" => FmtTrait::LowerExp,
+            "UpperExp" => FmtTrait::UpperExp,
+            _ => return None,
+        })
+    }
+}
+
+/// If `instance` is the `fmt` method of a formatting trait implementation, return the
 /// trait and the implementing (self) type. Such methods take a `&mut Formatter` argument that
 /// cannot be generated nondeterministically; instead, the generated harness formats a
 /// nondeterministic value of the self type into a discarding sink, which exercises `fmt`
@@ -1055,14 +1164,7 @@ fn fmt_impl_self_ty(tcx: TyCtxt, instance: Instance) -> Option<(FmtTrait, Ty)> {
 
     let impl_def_id = tcx.trait_impl_of_assoc(def_id)?;
     let trait_def_id = tcx.impl_trait_ref(impl_def_id).skip_binder().def_id;
-
-    let fmt_trait = if Some(trait_def_id) == tcx.get_diagnostic_item(rustc_span::sym::Debug) {
-        FmtTrait::Debug
-    } else if Some(trait_def_id) == tcx.get_diagnostic_item(rustc_span::sym::Display) {
-        FmtTrait::Display
-    } else {
-        return None;
-    };
+    let fmt_trait = FmtTrait::of_trait(tcx, trait_def_id)?;
 
     // The `fmt` method's first input is `&Self`; peel the reference to obtain the
     // (monomorphic) self type.
@@ -1071,6 +1173,25 @@ fn fmt_impl_self_ty(tcx: TyCtxt, instance: Instance) -> Option<(FmtTrait, Ty)> {
         return None;
     };
     Some((fmt_trait, self_ty))
+}
+
+/// Whether a pattern type's base can be generated by `call_kani_any_for_ty`: the base
+/// (an integer, bool, etc.) must implement or derive Arbitrary.
+///
+/// Raw-pointer bases (`*const T is !null`, as in `NonNull<T>`'s field) are not supported: the
+/// pointee storage the raw-pointer codegen allocates is a local of whatever body generates the
+/// value, and for a struct field that is a synthesized `any()` body -- the pointer would dangle
+/// once it returns (the same reason reference fields are rejected in `can_derive_arbitrary`).
+fn pat_base_is_derivable(
+    base_ty: Ty,
+    kani_any_def: FnDef,
+    ty_arbitrary_cache: &mut FxHashMap<Ty, bool>,
+) -> bool {
+    if matches!(base_ty.kind(), TyKind::RigidTy(RigidTy::RawPtr(..))) {
+        return false;
+    }
+    implements_arbitrary(base_ty, kani_any_def, ty_arbitrary_cache)
+        || can_derive_arbitrary(base_ty, kani_any_def, ty_arbitrary_cache)
 }
 
 /// Is `ty` a struct or enum whose fields/variants implement Arbitrary, or a reference to such a
@@ -1103,6 +1224,9 @@ fn can_derive_arbitrary(
                     // Note that this differs from *top-level argument* references, for which
                     // the harness itself owns the storage.
                     fields_impl_arbitrary = false;
+                } else if let TyKind::RigidTy(RigidTy::Pat(base_ty, _)) = ty.kind() {
+                    fields_impl_arbitrary &=
+                        pat_base_is_derivable(base_ty, kani_any_def, ty_arbitrary_cache);
                 } else {
                     fields_impl_arbitrary &=
                         implements_arbitrary(ty, kani_any_def, ty_arbitrary_cache);
@@ -1135,6 +1259,8 @@ fn can_derive_arbitrary(
         }
     } else if let TyKind::RigidTy(RigidTy::Ref(_, inner_ty, _)) = ty.kind() {
         can_derive_arbitrary(inner_ty, kani_any_def, ty_arbitrary_cache)
+    } else if let TyKind::RigidTy(RigidTy::Pat(base_ty, _)) = ty.kind() {
+        pat_base_is_derivable(base_ty, kani_any_def, ty_arbitrary_cache)
     } else {
         false
     }
@@ -1222,6 +1348,21 @@ fn autoharness_supported_arg_ty(
                     ArgSupport::Unsupported
                 }
             }
+            // A `&CStr` is the bytes of nondeterministic storage up to its first NUL, a
+            // `&ByteStr` a prefix of it and a `&Wtf8` a `&str` over it, c.f. `any_c_str_ref`,
+            // `any_byte_str_ref` and `any_wtf8_ref`. Immutable only, as for `&str`.
+            TyKind::RigidTy(RigidTy::Adt(def, _))
+                if is_c_str(tcx, def) || is_byte_str(tcx, def) || is_wtf8(tcx, def) =>
+            {
+                if inner_mutability == Mutability::Not {
+                    ArgSupport::Bounded
+                } else {
+                    ArgSupport::Unsupported
+                }
+            }
+            // A `Formatter` is built by `any_formatter` over a harness-local sink, with its width
+            // and precision bounded; `fmt` methods take it mutably, so both mutabilities.
+            TyKind::RigidTy(RigidTy::Adt(def, _)) if is_formatter(tcx, def) => ArgSupport::Bounded,
             _ => arbitrary_or_derive(ty, ty_arbitrary_cache),
         }
     } else {

@@ -231,7 +231,10 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
     }
 
     session.write_sarif(&results)?;
-    session.print_final_summary(&results)
+    if !session.args.common_args.quiet {
+        session.print_final_summary(&results)?;
+    }
+    session.conclude(&results)
 }
 
 #[derive(Debug, PartialEq, Eq)]

@@ -662,7 +662,12 @@ fn has_const_generic_precondition(tcx: TyCtxt, def: FnDef) -> bool {
             return true;
         };
         budget = remaining;
-        let body = tcx.optimized_mir(def_id);
+        // Not `optimized_mir`: rustc's provider refuses a def whose body is a const context, and
+        // a `#[rustc_comptime]` intrinsic is one while still reporting `is_mir_available`
+        // (`core::intrinsics::size_of` and eight others), which aborted the whole run.
+        // `instance_mir` is rustc's own dispatcher between `optimized_mir` and `mir_for_ctfe`.
+        // See <https://github.com/model-checking/kani/issues/4839>.
+        let body = tcx.instance_mir(rustc_middle::ty::InstanceKind::Item(def_id));
         if body_has_const_param_block(body) {
             return true;
         }
@@ -1142,7 +1147,7 @@ fn automatic_harness_partition(
             return Err(AutoHarnessSkipReason::UserFilter);
         }
 
-        // Debug/Display fmt implementations are handled specially: their `&mut Formatter`
+        // Formatting trait implementations are handled specially: their `&mut Formatter`
         // argument cannot be generated, but the generated harness formats a nondeterministic
         // value of the self type into a discarding sink instead, c.f. `fmt_impl_self_ty`.
         // The self type is generated with `kani::any`, so it must implement (or be able to
@@ -1249,6 +1254,21 @@ fn automatic_harness_partition(
             skipped.insert(
                 crate::kani_middle::strip_local_crate_prefix(func.name()),
                 AutoHarnessSkipReason::KaniImpl,
+            );
+            continue;
+        }
+
+        // A `#[rustc_comptime]` function can only be called at compile time: rustc rejects any
+        // other call (`enforce_context_effects`), so a harness calling it is not a program rustc
+        // accepts. Check before instantiating, so that generic ones are skipped for this reason
+        // too, and none reaches the const-block precondition search (#4839).
+        if matches!(
+            tcx.constness(rustc_internal::internal(tcx, func.def_id())),
+            rustc_hir::Constness::Const { always: true }
+        ) {
+            skipped.insert(
+                crate::kani_middle::strip_local_crate_prefix(func.name()),
+                AutoHarnessSkipReason::Comptime,
             );
             continue;
         }
