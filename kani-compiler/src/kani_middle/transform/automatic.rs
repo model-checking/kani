@@ -1263,7 +1263,8 @@ fn call_kani_any_for_ty(
             _ => false,
         }
     {
-        // A `&Wtf8` is generated as a `&str` and handled as one below.
+        // `&str` and `&Wtf8` take the string bound for their storage; the rest take the slice
+        // bound.
         let is_str = match inner_ty.kind() {
             TyKind::RigidTy(RigidTy::Str) => true,
             TyKind::RigidTy(RigidTy::Adt(def, _)) => is_wtf8(tcx, def),
@@ -1288,9 +1289,10 @@ fn call_kani_any_for_ty(
                 )]),
             ),
             // `&CStr` is the bytes of the storage up to the first NUL and `&ByteStr` a prefix of
-            // it; both are sized by the slice bound. `&Wtf8` is a `&str` over the storage and is
-            // sized by the string bound. Each ADT arm repeats its predicate from the guard above, so
-            // a type added there cannot fall into another type's model.
+            // it; both are sized by the slice bound. `&Wtf8` is a valid WTF-8 prefix of the
+            // storage, unpaired surrogates included, and is sized by the string bound. Each ADT
+            // arm repeats its predicate from the guard above, so a type added there cannot fall
+            // into another type's model.
             TyKind::RigidTy(RigidTy::Adt(def, _)) if is_c_str(tcx, def) => (
                 Ty::unsigned_ty(UintTy::U8),
                 models.kani_any_c_str_ref,
