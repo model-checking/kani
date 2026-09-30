@@ -95,6 +95,8 @@ pub fn parse_config(args: Vec<String>) -> Config {
         .optopt("", "timeout", "the timeout for each test in seconds", "TIMEOUT")
         .optflag("", "no-fail-fast", "run all tests regardless of failure")
         .optflag("", "dry-run", "don't actually run the tests")
+        .optflag("", "require-success",
+        "in `expected` mode, also fail a test whose Kani invocation exits unsuccessfully")
         .optflag("", "fix-expected",
         "override all expected files that did not match the output. Tests will NOT fail when there is a mismatch")
         .optflag("", "report-time",
@@ -177,6 +179,7 @@ pub fn parse_config(args: Vec<String>) -> Config {
         fail_fast: !matches.opt_present("no-fail-fast"),
         dry_run: matches.opt_present("dry-run"),
         fix_expected: matches.opt_present("fix-expected"),
+        require_success: matches.opt_present("require-success"),
         timeout,
         time_opts: matches
             .opt_present("report-time")
@@ -202,6 +205,7 @@ pub fn log_config(config: &Config) {
     logv(c, format!("fail-fast: {:?}", config.fail_fast));
     logv(c, format!("dry-run: {:?}", config.dry_run));
     logv(c, format!("fix-expected: {:?}", config.fix_expected));
+    logv(c, format!("require-success: {:?}", config.require_success));
     logv(
         c,
         format!(

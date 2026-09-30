@@ -153,6 +153,10 @@ pub struct Config {
     /// relevant expectations.
     pub fix_expected: bool,
 
+    /// Whether an `expected` test also requires Kani to exit successfully. By default only the
+    /// output is checked, since many `expected` tests pin the output of a failing verification.
+    pub require_success: bool,
+
     /// Whether we should measure and limit the time of a test.
     pub time_opts: Option<TestTimeOptions>,
 
