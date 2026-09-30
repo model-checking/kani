@@ -16,3 +16,5 @@ check_outer_coercion;1
 with_iterator;2
 current_id;0
 generic;0
+
+OK: no crate-prefixed names

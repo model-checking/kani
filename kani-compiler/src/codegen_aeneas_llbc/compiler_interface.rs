@@ -118,7 +118,7 @@ impl LlbcCodegenBackend {
                         *instance,
                         &mut ccx.translated,
                         &mut id_map,
-                        &mut *errors_borrow,
+                        &mut errors_borrow,
                     );
                     let _ = fcx.translate();
                 }

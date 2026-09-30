@@ -1,10 +1,20 @@
+// Full name: test::{impl T for A}\
+impl "impl_T_for_A" T for A {\
+    vtable: unknown // Kani does not translate vtables\
+}
+
+// Full name: test::{impl T for B}\
+impl "impl_T_for_B" T for B {\
+    vtable: unknown // Kani does not translate vtables\
+}
+
 // Full name: test::B\
 pub struct B {\
   index: i32,\
 }
 
-// Full name: test::get_valB\
-pub fn get_valB<'_0>(self: &'_0 B) -> i32\
+// Full name: test::{impl T for B}::get_val\
+pub fn impl_T_for_B::get_val<'_0>(self: &'_0 B) -> i32\
 {\
     let _0: i32; // return\
     let self: &'_ B; // arg #1\
@@ -20,8 +30,8 @@ pub struct A {\
   val: i32,\
 }
 
-// Full name: test::get_valA\
-pub fn get_valA<'_0>(self: &'_0 A) -> i32\
+// Full name: test::{impl T for A}::get_val\
+pub fn impl_T_for_A::get_val<'_0>(self: &'_0 A) -> i32\
 {\
     let _0: i32; // return\
     let self: &'_ A; // arg #1\
@@ -54,11 +64,11 @@ pub fn main()\
     e = A { val: const 3i32 }\
     k = B { index: const 3i32 }\
     _4 = &e\
-    i = get_valA<'_>(move _4)\
+    i = impl_T_for_A::get_val<'_>(move _4)\
     ↳⚡ undefined_behavior\
     storage_dead(_4)\
     _6 = &k\
-    j = get_valB<'_>(move _6)\
+    j = impl_T_for_B::get_val<'_>(move _6)\
     ↳⚡ undefined_behavior\
     storage_dead(_6)\
     storage_dead(j)\

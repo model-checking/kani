@@ -80,6 +80,10 @@ pub struct AutoHarnessMetadata {
 /// Reasons that Kani does not generate an automatic harness for a function.
 #[derive(Debug, Clone, Serialize, Deserialize, Display, EnumString)]
 pub enum AutoHarnessSkipReason {
+    /// A `#[rustc_comptime]` function, which rustc only lets const items, statics and const
+    /// blocks call; a harness calling it would not be a program rustc accepts.
+    #[strum(serialize = "Can only be called at compile time")]
+    Comptime,
     /// The function is generic and autoharness could not find a monomorphic instantiation to
     /// verify. The payload gives the specific reason (e.g. const generic parameters, or trait
     /// bounds that no candidate type satisfies).
@@ -134,4 +138,86 @@ pub struct Location {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompilerArtifactStub {
     pub metadata_path: PathBuf,
+}
+
+/// Strip a crate's name from an absolute item path, restoring the crate-relative
+/// form Kani uses in `kani list`, harness names, and stub targets. Since
+/// rust-lang/rust#149401, `def_path_str` prefixes the local crate name at
+/// *every* local path component, so it appears not just at the start
+/// (`my_crate::f`) but also inside qualifiers and generic args
+/// (`<my_crate::T as my_crate::Tr>::m`, `f::<my_crate::T>`). Remove `<crate>::`
+/// at each path-component boundary (start of string or after a non-identifier
+/// char) so these become `f`, `<T as Tr>::m`, `f::<T>`. Paths of other crates
+/// are unaffected.
+///
+/// Every producer of item names that a consumer joins by name (the compiler's
+/// metadata and the `scanner` tool's CSVs) must go through this one function,
+/// so the two never disagree.
+pub fn strip_crate_prefix(name: &str, krate: &str) -> String {
+    let needle = format!("{krate}::");
+    if !name.contains(&needle) {
+        return name.to_string();
+    }
+    let mut out = String::with_capacity(name.len());
+    let mut rest = name;
+    // The previous char in the input, used to decide whether a `<crate>::` here
+    // is a crate-root *qualifier* (droppable) or a path *continuation* segment
+    // (a module/item that happens to share the crate's name, which must be
+    // kept). A qualifier appears at the start or after a type/path delimiter
+    // (`<`, `,`, ` `, `&`, `*`, `(`, `[`, ...); a continuation appears after
+    // `::`. So drop `<crate>::` only when the previous char is neither part of
+    // an identifier nor `:`. After dropping, pretend the previous char is `:`
+    // so an immediately following same-named segment is treated as a
+    // continuation (e.g. `main::main::{closure#0}` -> `main::{closure#0}`).
+    let mut prev: Option<char> = None;
+    loop {
+        let at_qualifier = match prev {
+            None => true,
+            Some(c) => !c.is_alphanumeric() && c != '_' && c != ':',
+        };
+        if at_qualifier && rest.starts_with(&needle) {
+            rest = &rest[needle.len()..];
+            prev = Some(':');
+            continue;
+        }
+        let Some(ch) = rest.chars().next() else { break };
+        out.push(ch);
+        prev = Some(ch);
+        rest = &rest[ch.len_utf8()..];
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::strip_crate_prefix;
+
+    /// The prefix is dropped only at a path-component boundary, including inside a
+    /// `<T as Trait>` qualifier; a segment that merely shares the crate's name stays.
+    #[test]
+    fn strips_crate_root_qualifiers_only() {
+        let cases = [
+            (
+                "core",
+                "<char as core::ascii::AsciiExt>::is_ascii",
+                "<char as ascii::AsciiExt>::is_ascii",
+            ),
+            ("core", "core::core_simd::vector::Simd", "core_simd::vector::Simd"),
+            ("core", "ptr::align_offset", "ptr::align_offset"),
+            ("core", "alloc::vec::Vec", "alloc::vec::Vec"),
+            ("my_crate", "<my_crate::T as my_crate::Tr>::m", "<T as Tr>::m"),
+            ("my_crate", "f::<my_crate::T>", "f::<T>"),
+        ];
+        for (krate, name, expected) in cases {
+            assert_eq!(strip_crate_prefix(name, krate), expected, "{name}");
+        }
+    }
+
+    /// Not idempotent, by design: a second application would eat a continuation
+    /// segment. Callers must apply it exactly once, to a raw `def_path_str`.
+    #[test]
+    fn strips_one_qualifier_per_boundary() {
+        assert_eq!(strip_crate_prefix("main::main::{closure#0}", "main"), "main::{closure#0}");
+        assert_eq!(strip_crate_prefix("core::core::foo", "core"), "core::foo");
+    }
 }

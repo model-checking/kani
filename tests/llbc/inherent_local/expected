@@ -3,8 +3,8 @@ pub struct Counter {\
   n: u32,\
 }
 
-// Full name: test::getCounter\
-pub fn getCounter<'_0>(self: &'_0 Counter) -> u32\
+// Full name: test::{Counter}::get\
+pub fn get<'_0>(self: &'_0 Counter) -> u32\
 {\
     let _0: u32; // return\
     let self: &'_ Counter; // arg #1\
@@ -30,7 +30,7 @@ pub fn main()\
     _0 = ()\
     c = Counter { n: const 1u32 }\
     _3 = &c\
-    _2 = getCounter<'_>(move _3)\
+    _2 = get<'_>(move _3)\
     ↳⚡ undefined_behavior\
     storage_dead(_3)\
     storage_dead(_2)\

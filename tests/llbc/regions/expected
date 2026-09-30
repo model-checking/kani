@@ -4,11 +4,9 @@ pub fn deref2<'_0, '_1>(x: &'_0 &'_1 u32) -> u32
 // Full name: test::early\
 pub fn early<'a, T>(x: &'a T) -> &'a T
 
-// Full name: test::getHolder<'a>\
-pub fn getHolder<'a><'a, '_1>(self: &'_1 Holder<'a>) -> u32
+pub fn test::{Holder<'a>}::get<'a, '_1>(self: &'_1 Holder<'a>) -> u32
 
-// Full name: test::get\
-pub fn get<'_0>(x: Option<&'_0 u32>) -> u32
+pub fn test::get<'_0>(x: Option<&'_0 u32>) -> u32
 
 // Full name: test::pick\
 pub fn pick<'a>(x: &'a u32, y: &'a u32, c: bool) -> &'a u32
