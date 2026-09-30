@@ -268,6 +268,8 @@ Name | Support | Notes |
 `simd_mul`  | Yes | |
 `simd_ne`  | Yes | |
 `simd_or`  | Yes | |
+`simd_reduce_max`  | Partial | Integer lanes only |
+`simd_reduce_min`  | Partial | Integer lanes only |
 `simd_rem`  | Yes | Doesn't check for floating point overflow [#2669](https://github.com/model-checking/kani/issues/2669) |
 `simd_shl`  | Yes | |
 `simd_shr`  | Yes | |
