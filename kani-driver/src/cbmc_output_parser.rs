@@ -379,7 +379,8 @@ enum Action {
 ///  2. Messages, which can appears anywhere, and are either status messages or error messages.
 ///  3. Verification results, another JSON array with all individual checks.
 ///  4. Prover status, at the end. Because the verification results depends on
-///     our postprocessing, this is not used.
+///     our postprocessing, its value is not used, but its presence shows that
+///     CBMC finished writing the verification results.
 ///
 /// The parser reads the output line by line. A line may trigger one action, and
 /// the action may return a parsed item.
