@@ -147,7 +147,8 @@ fn print_autoharness_metadata(metadata: Vec<KaniMetadata>) {
                 AutoHarnessSkipReason::GenericFn(ref detail) => {
                     Some(vec![md.crate_name.clone(), func, format!("{reason}: {detail}")])
                 }
-                AutoHarnessSkipReason::NoBody
+                AutoHarnessSkipReason::Comptime
+                | AutoHarnessSkipReason::NoBody
                 | AutoHarnessSkipReason::UnsupportedVariadic
                 | AutoHarnessSkipReason::UserFilter => {
                     Some(vec![md.crate_name.clone(), func, reason.to_string()])
