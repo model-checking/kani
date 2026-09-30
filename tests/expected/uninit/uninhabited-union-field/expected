@@ -1,0 +1,8 @@
+Checking harness read_uninit_bytes_should_fail...
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `u64`
+VERIFICATION:- FAILED
+
+Checking harness read_init_ok...
+VERIFICATION:- SUCCESSFUL
+
+Complete - 1 successfully verified harnesses, 1 failures, 2 total.
