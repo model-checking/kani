@@ -189,6 +189,21 @@ impl ValidateArgs for CommonAutoharnessArgs {
             }
         }
 
+        // A bound of 0 leaves no room for a value (and none for a `&CStr`'s terminating NUL), so it
+        // is rejected here rather than reaching the models.
+        for (option, bound) in [
+            ("--slice-bound", self.slice_bound),
+            ("--string-bound", self.string_bound),
+            ("--bounded-arbitrary-bound", self.bounded_arbitrary_bound),
+        ] {
+            if bound == 0 {
+                return Err(Error::raw(
+                    ErrorKind::InvalidValue,
+                    format!("`{option}` must be at least 1."),
+                ));
+            }
+        }
+
         Ok(())
     }
 }
@@ -310,6 +325,21 @@ mod tests {
         ])
         .expect("expected the bound option to parse with --bounded-arguments");
         assert_eq!(args.slice_bound, 2);
+    }
+
+    #[test]
+    fn zero_bounds_are_rejected() {
+        for opt in ["--slice-bound", "--string-bound", "--bounded-arbitrary-bound"] {
+            let args = CommonAutoharnessArgs::try_parse_from([
+                "autoharness",
+                "--bounded-arguments",
+                opt,
+                "0",
+            ])
+            .expect("a bound of 0 parses; validation rejects it");
+            let err = args.validate().expect_err("expected a bound of 0 to be rejected");
+            assert_eq!(err.kind(), ErrorKind::InvalidValue);
+        }
     }
 
     /// A default value must not stand in for the option being supplied, or every run without

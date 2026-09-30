@@ -1,0 +1,39 @@
+// Full name: test::unsigned\
+pub fn unsigned() -> (u8, u16, u32, u64, u128, usize)\
+{\
+    let _0: (u8, u16, u32, u64, u128, usize); // return\
+\
+    storage_live(_0)\
+    _0 = (const 1u8, const 2u16, const 3u32, const 4u64, const 5u128, const 6usize)\
+    return\
+}
+
+// Full name: test::signed\
+pub fn signed() -> (i8, i16, i32, i64, i128, isize)\
+{\
+    let _0: (i8, i16, i32, i64, i128, isize); // return\
+\
+    storage_live(_0)\
+    _0 = (const -1i8, const -2i16, const -3i32, const -4i64, const -5i128, const -6isize)\
+    return\
+}
+
+// Full name: test::main\
+pub fn main()\
+{\
+    let _0: (); // return\
+    let _1: (i8, i16, i32, i64, i128, isize); // anonymous local\
+    let _2: (u8, u16, u32, u64, u128, usize); // anonymous local\
+\
+    storage_live(_0)\
+    storage_live(_1)\
+    storage_live(_2)\
+    _0 = ()\
+    _1 = signed()\
+    ↳⚡ undefined_behavior\
+    storage_dead(_1)\
+    _2 = unsigned()\
+    ↳⚡ undefined_behavior\
+    storage_dead(_2)\
+    return\
+}

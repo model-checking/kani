@@ -2,14 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Ranged scalar newtypes are expressed with pattern types since nightly-2026-06-01 removed
 // `rustc_layout_scalar_valid_range_start`/`_end`; `core::num::niche_types` made the same move.
-//
-// Note the consequence for autoharness: a pattern type is not an ADT and has no `Arbitrary`
-// implementation, so `can_derive_arbitrary` cannot synthesize a struct that has one as a field.
-// The locally-defined ranged types below are therefore *skipped* rather than harnessed, which the
-// expected output pins. The niche assumption itself is still exercised end to end through
-// `std::time::Duration`, whose `Nanoseconds` field carries the same kind of range. Teaching
-// autoharness to generate pattern-type fields (generate the base integer, assume the layout
-// niche that `scalar_niche` already computes) would restore the wider reach.
+// Autoharness generates values for pattern-type fields by producing the base integer, assuming
+// the layout niche that `scalar_niche` computes, and transmuting to the pattern type.
 #![feature(pattern_types)]
 #![feature(pattern_type_macro)]
 

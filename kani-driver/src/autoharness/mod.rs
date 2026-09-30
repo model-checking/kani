@@ -250,10 +250,7 @@ impl KaniSession {
     }
 
     /// Prints the results from running the `autoharness` subcommand.
-    pub fn print_autoharness_summary(
-        &self,
-        mut automatic: Vec<&HarnessResult<'_>>,
-    ) -> Result<usize> {
+    pub fn print_autoharness_summary(&self, mut automatic: Vec<&HarnessResult<'_>>) {
         automatic.sort_by(|a, b| a.harness.pretty_name.cmp(&b.harness.pretty_name));
         let (successes, failures): (Vec<_>, Vec<_>) =
             automatic.into_iter().partition(|r| r.result.status == VerificationStatus::Success);
@@ -344,7 +341,5 @@ impl KaniSession {
         } else {
             println!("No functions were eligible for automatic verification.");
         }
-
-        Ok(failing)
     }
 }

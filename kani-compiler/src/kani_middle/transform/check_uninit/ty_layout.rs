@@ -184,6 +184,9 @@ fn data_bytes_for_ty(
     let layout = ty.layout().unwrap().shape();
 
     match layout.fields {
+        // A zero-sized primitive, e.g. the never type `!`, has no data bytes to track (its
+        // layout is not a scalar, so it must not reach the scalar case below).
+        FieldsShape::Primitive if layout.size.bytes() == 0 => Ok(vec![]),
         FieldsShape::Primitive => Ok(vec![match layout.value_repr {
             ValueRepr::Scalar(Scalar::Initialized { value, .. }) => {
                 DataBytes { offset: current_offset, size: value.size(machine_info) }

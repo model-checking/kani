@@ -1,6 +1,6 @@
-Failed Checks: Kani currently doesn't support checking validity of `transmute` for `std::option::Option<std::num::NonZero<u8>>`
-Failed Checks: Kani currently doesn't support checking validity of `transmute` for `std::option::Option<std::num::NonZero<u8>>`
-Failed Checks: Kani currently doesn't support checking validity of `transmute` for `std::option::Option<std::num::NonZero<u8>>`
+Failed Checks: Undefined Behavior: Invalid value of type `std::num::NonZero<u8>`
+Failed Checks: Undefined Behavior: Invalid value of type `std::num::NonZero<u8>`
+Failed Checks: Undefined Behavior: Invalid value of type `std::num::NonZero<u8>`
 
 Verification failed for - read_invalid_is_ub
 Verification failed for - write_valid_before_read

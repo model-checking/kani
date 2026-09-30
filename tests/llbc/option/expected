@@ -1,0 +1,66 @@
+// Full name: core::option::Option\
+pub enum Option<T> {\
+  None,\
+  Some { _0: T },\
+}
+
+// Full name: core::ptr::drop_glue\
+pub fn drop_glue<'_0, T>(_1: &'_0 mut T)\
+where\
+    TypeOutlives0: T: '_0,\
+= <opaque>
+
+// Full name: test::both_none\
+pub fn both_none<T, U>(a: Option<T>, b: Option<U>) -> bool\
+{\
+    let _0: bool; // return\
+    let a: Option<T>; // arg #1\
+    let b: Option<U>; // arg #2\
+\
+    storage_live(_0)\
+    match a {\
+        Option::None => {\
+            match b {\
+                Option::None => {\
+                    _0 = const true\
+                },\
+                Option::Some => {\
+                    _0 = const false\
+                },\
+            }\
+        },\
+        Option::Some => {\
+            _0 = const false\
+        },\
+    }\
+    drop[drop_glue<'_, Option<i32>>] b\
+    ↳⚡ undefined_behavior\
+    drop[drop_glue<'_, Option<u32>>] a\
+    ↳⚡ undefined_behavior\
+    storage_dead(b)\
+    storage_dead(a)\
+    return\
+}
+
+// Full name: test::main\
+pub fn main()\
+{\
+    let _0: (); // return\
+    let a: Option<u32>; // local\
+    let b: Option<i32>; // local\
+    let i: bool; // local\
+\
+    storage_live(_0)\
+    storage_live(a)\
+    storage_live(b)\
+    storage_live(i)\
+    _0 = ()\
+    a = Option::Some { _0: const 1u32 }\
+    b = Option::Some { _0: const 2i32 }\
+    i = both_none<u32, i32>(copy a, copy b)\
+    ↳⚡ undefined_behavior\
+    storage_dead(i)\
+    storage_dead(b)\
+    storage_dead(a)\
+    return\
+}

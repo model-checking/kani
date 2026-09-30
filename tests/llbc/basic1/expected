@@ -1,15 +1,38 @@
-fn test::select(@1: bool, @2: i32, @3: i32) -> i32
-{
-    let @0: i32; // return
-    let s@1: bool; // arg #1
-    let x@2: i32; // arg #2
-    let y@3: i32; // arg #3
+// Full name: test::select\
+pub fn select(s: bool, x: i32, y: i32) -> i32\
+{\
+    let _0: i32; // return\
+    let s: bool; // arg #1\
+    let x: i32; // arg #2\
+    let y: i32; // arg #3\
+\
+    storage_live(_0)\
+    if copy s {\
+    } else {\
+        _0 = copy y\
+        storage_dead(y)\
+        storage_dead(x)\
+        storage_dead(s)\
+        return\
+    }\
+    _0 = copy x\
+    storage_dead(y)\
+    storage_dead(x)\
+    storage_dead(s)\
+    return\
+}
 
-    if copy (s@1) {
-        @0 := copy (x@2)
-    }
-    else {
-        @0 := copy (y@3)
-    }
-    return
+// Full name: test::main\
+pub fn main()\
+{\
+    let _0: (); // return\
+    let _1: i32; // anonymous local\
+\
+    storage_live(_0)\
+    storage_live(_1)\
+    _0 = ()\
+    _1 = select(const true, const 3i32, const 7i32)\
+    ↳⚡ undefined_behavior\
+    storage_dead(_1)\
+    return\
 }

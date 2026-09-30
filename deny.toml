@@ -8,6 +8,13 @@
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
 yanked = "deny"
+ignore = [
+    # Unmaintained (not vulnerable) crates that only the LLBC backend pulls in, through charon:
+    # `paste` directly, `atomic-polyfill` via postcard -> heapless. The LLBC backend is behind the
+    # `llbc` feature and not part of Kani releases.
+    { id = "RUSTSEC-2024-0436", reason = "paste is unmaintained; only reached via charon" },
+    { id = "RUSTSEC-2023-0089", reason = "atomic-polyfill is unmaintained; only reached via charon" },
+]
 
 # This section is considered when running `cargo deny check licenses`
 # More documentation for the licenses section can be found here:
@@ -25,10 +32,7 @@ confidence-threshold = 0.8
 exceptions = [
     { name = "foldhash", allow=["Zlib"] },
     # Transitive dependencies via charon (LLBC backend)
-    { name = "brownstone", allow=["MPL-2.0"] },
-    { name = "colored", allow=["MPL-2.0"] },
-    { name = "indent_write", allow=["MPL-2.0"] },
-    { name = "nom-supreme", allow=["MPL-2.0"] },
+    { name = "ustr", allow=["BSD-2-Clause-Patent"] },
 ]
 
 [licenses.private]

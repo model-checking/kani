@@ -19,6 +19,8 @@ use crate::kani_middle::transform::body::{
 };
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
+// `ConstExt` carries `Const`'s constructors as of nightly-2026-09-23, c.f. `kani_middle::intrinsics`.
+use rustc_middle::ty::consts::ConstExt;
 use rustc_middle::ty::{Const, TyCtxt};
 use rustc_public::CrateDef;
 use rustc_public::CrateDefType;
@@ -34,7 +36,7 @@ use rustc_public::mir::{
 };
 use rustc_public::rustc_internal;
 use rustc_public::target::{MachineInfo, MachineSize};
-use rustc_public::ty::{AdtKind, RigidTy, Span, Ty, TyKind, UintTy};
+use rustc_public::ty::{AdtKind, GenericArgs, RigidTy, Span, Ty, TyKind, UintTy, VariantDef};
 use rustc_public_bridge::IndexedVal;
 use std::fmt::Debug;
 use strum_macros::AsRefStr;
@@ -926,6 +928,23 @@ fn is_pattern_type(tcx: TyCtxt, ty: Ty) -> bool {
     matches!(rustc_internal::internal(tcx, ty).kind(), rustc_middle::ty::TyKind::Pat(..))
 }
 
+/// Whether all validity requirements of the fields of `variant` (the untagged variant of a
+/// scalar niche-encoded enum) are single ranges, which the enum's own scalar `valid_range` then
+/// subsumes. Returns `false` if any requirement is not a single range (e.g. for `char`) or cannot
+/// be computed.
+fn niche_payload_is_single_range(
+    tcx: TyCtxt,
+    machine_info: &MachineInfo,
+    variant: &VariantDef,
+    args: &GenericArgs,
+) -> bool {
+    variant.fields().iter().all(|field| {
+        ty_validity_per_offset(tcx, machine_info, field.ty_with_args(args), 0).is_ok_and(|reqs| {
+            reqs.iter().all(|req| matches!(req.valid_range, ValidityRange::Single(_)))
+        })
+    })
+}
+
 /// Not all values are currently supported. For those not supported, we return Error.
 pub fn ty_validity_per_offset(
     tcx: TyCtxt,
@@ -1011,6 +1030,33 @@ pub fn ty_validity_per_offset(
                                         )?);
                                     }
                                     Ok(fields_validity)
+                                }
+                                VariantsShape::Multiple {
+                                    tag_encoding: TagEncoding::Niche { untagged_variant, .. },
+                                    ref variants,
+                                    ..
+                                } if matches!(layout.value_repr, ValueRepr::Scalar(_))
+                                    && variants.iter().enumerate().all(|(index, variant)| {
+                                        index == untagged_variant.to_index()
+                                            || variant.offsets.is_empty()
+                                    })
+                                    && niche_payload_is_single_range(
+                                        tcx,
+                                        machine_info,
+                                        &ty_variants[untagged_variant.to_index()],
+                                        args,
+                                    ) =>
+                                {
+                                    // A niche-optimized enum like `Option<NonNull<T>>`,
+                                    // `Option<&T>` or `Option<NonZero<u32>>`: its layout is a single
+                                    // scalar, every variant except the untagged one is fieldless and
+                                    // thus encoded purely by niche values of that scalar, and the
+                                    // untagged variant's payload is that same scalar. The enum's own
+                                    // scalar `valid_range` is the payload's valid range widened by
+                                    // the niche values, so it describes exactly the enum's valid
+                                    // values, provided the payload's validity is itself a single
+                                    // range (checked above; e.g. `char`'s is not).
+                                    Ok(ty_req())
                                 }
                                 VariantsShape::Multiple {
                                     tag_encoding: TagEncoding::Niche { .. },
