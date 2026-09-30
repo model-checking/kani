@@ -6,8 +6,10 @@
 //! in #4820 fetched it that way and aborted the whole run on any crate declaring one -- `core`
 //! declares 27: https://github.com/model-checking/kani/issues/4839
 //!
-//! The three shapes below are the ones `core` has, and the search has to reach the third: a
-//! const-block precondition in a const-context body still has to be found, not skipped.
+//! rustc also rejects any call to a comptime function outside a const item, static or const
+//! block, so autoharness skips all of them ("Can only be called at compile time") rather than
+//! verifying a harness rustc would not accept. The three shapes below are the ones `core` has;
+//! `guarded_const_fn` keeps the const-block precondition search covered.
 
 #![feature(intrinsics, rustc_attrs)]
 

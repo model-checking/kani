@@ -1258,6 +1258,21 @@ fn automatic_harness_partition(
             continue;
         }
 
+        // A `#[rustc_comptime]` function can only be called at compile time: rustc rejects any
+        // other call (`enforce_context_effects`), so a harness calling it is not a program rustc
+        // accepts. Check before instantiating, so that generic ones are skipped for this reason
+        // too, and none reaches the const-block precondition search (#4839).
+        if matches!(
+            tcx.constness(rustc_internal::internal(tcx, func.def_id())),
+            rustc_hir::Constness::Const { always: true }
+        ) {
+            skipped.insert(
+                crate::kani_middle::strip_local_crate_prefix(func.name()),
+                AutoHarnessSkipReason::Comptime,
+            );
+            continue;
+        }
+
         // For generic functions, try to find a monomorphic instantiation whose bounds are
         // satisfied; the generated harness verifies the function for that instantiation only,
         // and its name (e.g. `foo::<i32>`) reflects that.
