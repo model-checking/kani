@@ -80,7 +80,16 @@ class TestSolverRuntimeCheck(unittest.TestCase):
 
         bare = {"number_vccs": 0, "number_program_steps": 10}
         self.assertFalse(self.regressed(bare, bare))
-        self.assertFalse(self.regressed(bare, metrics(30.0)))
+        self.assertFalse(self.regressed(metrics(30.0), bare))
+        self.assertFalse(self.regressed(bare, metrics(9.0)))
+
+    def test_newly_needing_the_solver_is_caught(self):
+        """A harness that `main` decides without the solver but the change sends to it for 10s
+        or more has regressed, although there is no old solver time to take a ratio of"""
+
+        bare = {"number_vccs": 0, "number_program_steps": 10}
+        self.assertTrue(self.regressed(bare, metrics(30.0)))
+        self.assertTrue(self.regressed(metrics(0.0), metrics(30.0)))
 
 
 class TestAllMetricsChecker(unittest.TestCase):

@@ -122,12 +122,12 @@ visualize:
       - metric: solver_runtime
         all_metrics: true
         test: >
-          lambda old, new: bool(old.get("solver_runtime"))
-          and new.get("solver_runtime", 0) >= 10
-          and new["solver_runtime"] / old["solver_runtime"] > (
-            4 if all(old.get(k) == new.get(k) for k in (
-              "number_vccs", "number_program_steps", "solver_variables", "solver_clauses"))
-            else 1.5)
+          lambda old, new: new.get("solver_runtime", 0) >= 10 and (
+            not old.get("solver_runtime")
+            or new["solver_runtime"] / old["solver_runtime"] > (
+              4 if all(old.get(k) == new.get(k) for k in (
+                "number_vccs", "number_program_steps", "solver_variables", "solver_clauses"))
+              else 1.5))
 
       # Symex time is deterministic given the formula, so it keeps the simple rule.
       - metric: symex_runtime
