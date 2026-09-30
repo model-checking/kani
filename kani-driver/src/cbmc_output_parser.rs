@@ -376,9 +376,9 @@ enum Action {
 ///
 /// CBMC's JSON output is defined as a JSON array which contains:
 ///  1. One program at the beginning (i.e., a message with CBMC's version).
-///  2. Messages, which can appears anywhere, and are either status messages or error messages.
+///  2. Messages, which can appear anywhere, and are either status messages or error messages.
 ///  3. Verification results, another JSON array with all individual checks.
-///  4. Prover status, at the end. Because the verification results depends on
+///  4. Prover status, at the end. Because the verification results depend on
 ///     our postprocessing, its value is not used, but its presence shows that
 ///     CBMC finished writing the verification results.
 ///

@@ -179,6 +179,9 @@ pub enum FailedProperties {
 pub enum ExitStatus {
     Timeout,
     OutOfMemory,
+    /// CBMC printed a result array but not the overall status that follows the complete array,
+    /// so the results may be truncated; the integer is the process exit status
+    IncompleteResults(i32),
     /// the integer is the process exit status
     Other(i32),
 }
@@ -524,9 +527,10 @@ fn cbmc_reported_out_of_memory(items: &[ParserItem]) -> bool {
     })
 }
 
-/// Whether CBMC reported its overall status (`cProverStatus`). CBMC prints it only after the
-/// complete result array (`output_overall_result` in `goto-checker/report_util.cpp`), so its
-/// absence means the results may be truncated, whatever stopped CBMC.
+/// Whether CBMC reported its overall status (`cProverStatus`). When CBMC prints a result array,
+/// it prints its overall status only after the complete array (`output_overall_result` in
+/// `goto-checker/report_util.cpp`), so a result array without it may be truncated, whatever
+/// stopped CBMC.
 fn cbmc_reported_prover_status(items: &[ParserItem]) -> bool {
     items.iter().any(|item| matches!(item, ParserItem::ProverStatus { .. }))
 }
@@ -552,6 +556,7 @@ impl VerificationResult {
         let runtime = start_time.elapsed();
         let ignored_quantifiers = count_ignored_quantifiers(&output.processed_items);
         let (remaining_items, results) = extract_results(output.processed_items);
+        let reported_results = results.is_some();
 
         // Only `--export-json` consumes these, and collecting them means running several regexes
         // over every message CBMC emitted, so skip the work entirely when nothing will read it.
@@ -589,6 +594,8 @@ impl VerificationResult {
             let exit_status =
                 if output.process_status == 137 || cbmc_reported_out_of_memory(&remaining_items) {
                     ExitStatus::OutOfMemory
+                } else if reported_results && !cbmc_reported_prover_status(&remaining_items) {
+                    ExitStatus::IncompleteResults(output.process_status)
                 } else {
                     ExitStatus::Other(output.process_status)
                 };
@@ -683,6 +690,11 @@ impl VerificationResult {
                         String::from("CBMC failed"),
                         "CBMC timed out. You may want to rerun your proof with a larger timeout \
                     or use stubbing to reduce the size of the code the verifier reasons about.\n",
+                    ),
+                    ExitStatus::IncompleteResults(exit_status) => (
+                        format!("CBMC failed with status {exit_status}"),
+                        "CBMC's output ended before its overall verification status, so the \
+                    results it reported may be incomplete and were not used.\n",
                     ),
                     ExitStatus::Other(exit_status) => {
                         (format!("CBMC failed with status {exit_status}"), "")
@@ -957,7 +969,7 @@ mod tests {
 
         let result = verify(mock_cbmc_output(6, "SUCCESS", &["some internal error"], None));
         assert_eq!(result.status, VerificationStatus::Failure);
-        assert!(matches!(result.results, Err(ExitStatus::Other(6))));
+        assert!(matches!(result.results, Err(ExitStatus::IncompleteResults(6))));
 
         // A truncated array can contain an ERROR property from before the truncation point.
         let result = verify(mock_cbmc_output(6, "ERROR", &["Out of memory"], None));
@@ -967,7 +979,7 @@ mod tests {
         // Killed by a signal (here SIGSEGV) after writing some results.
         let result = verify(mock_cbmc_output(139, "SUCCESS", &[], None));
         assert_eq!(result.status, VerificationStatus::Failure);
-        assert!(matches!(result.results, Err(ExitStatus::Other(139))));
+        assert!(matches!(result.results, Err(ExitStatus::IncompleteResults(139))));
 
         // CBMC exits with 5 when some property is UNKNOWN or NOT_CHECKED. Kani's verdict logic
         // does not treat UNKNOWN as a failure, so these results must not be used.
@@ -984,15 +996,15 @@ mod tests {
         // may contain an ERROR property from before the truncation point.
         let result = verify(mock_cbmc_output(6, "ERROR", &["some internal error"], None));
         assert_eq!(result.status, VerificationStatus::Failure);
-        assert!(matches!(result.results, Err(ExitStatus::Other(6))));
+        assert!(matches!(result.results, Err(ExitStatus::IncompleteResults(6))));
 
         let result = verify(mock_cbmc_output(0, "SUCCESS", &[], None));
         assert_eq!(result.status, VerificationStatus::Failure);
-        assert!(matches!(result.results, Err(ExitStatus::Other(0))));
+        assert!(matches!(result.results, Err(ExitStatus::IncompleteResults(0))));
 
         let result = verify(mock_cbmc_output(10, "FAILURE", &[], None));
         assert_eq!(result.status, VerificationStatus::Failure);
-        assert!(matches!(result.results, Err(ExitStatus::Other(10))));
+        assert!(matches!(result.results, Err(ExitStatus::IncompleteResults(10))));
     }
 
     #[test]
