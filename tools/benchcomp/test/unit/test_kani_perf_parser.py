@@ -30,9 +30,13 @@ class TestKaniPerfParser(unittest.TestCase):
 
         benchmarks = self.parse("""\
             Checking harness demo::check...
+            Running propositional reduction
             Solving with CaDiCaL 3.0.0
+            20705 variables, 30763 clauses
             Runtime Solver: 2.0s
+            Running propositional reduction
             Solving with CaDiCaL 3.0.0
+            20706 variables, 30764 clauses
             Runtime Solver: 4.0s
             size of program expression: 100 steps
             slicing removed 10 assignments
@@ -46,6 +50,9 @@ class TestKaniPerfParser(unittest.TestCase):
         self.assertEqual(metrics["solver_calls"], 2)
         self.assertEqual(metrics["solver_runtime"], 6.0)
         self.assertEqual(metrics["solver_runtime_per_call"], 3.0)
+        # The instance size is the first call's: later calls extend it incrementally.
+        self.assertEqual(metrics["solver_variables"], 20705)
+        self.assertEqual(metrics["solver_clauses"], 30763)
         # unchanged by this addition
         self.assertEqual(metrics["number_program_steps"], 90)
         self.assertEqual(metrics["number_vccs"], 7)
@@ -67,3 +74,4 @@ class TestKaniPerfParser(unittest.TestCase):
         metrics = benchmarks["demo/demo::check"]["metrics"]
         self.assertNotIn("solver_calls", metrics)
         self.assertNotIn("solver_runtime_per_call", metrics)
+        self.assertNotIn("solver_variables", metrics)

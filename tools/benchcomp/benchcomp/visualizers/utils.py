@@ -85,11 +85,18 @@ class AnyBenchmarkRegressedChecker:
 
                 old_metrics = bench["variants"][old_variant]["metrics"]
                 new_metrics = bench["variants"][new_variant]["metrics"]
-                old = old_metrics[self.metric]
-                new = new_metrics[self.metric]
+                if has_regressed.all_metrics:
+                    # `metric` only labels the warning here, so a benchmark that lacks it is
+                    # still judged: the test decides what the absence of a metric means.
+                    old = old_metrics.get(self.metric)
+                    new = new_metrics.get(self.metric)
+                    regressed = has_regressed(old_metrics, new_metrics)
+                else:
+                    old = old_metrics[self.metric]
+                    new = new_metrics[self.metric]
+                    regressed = has_regressed(old, new)
 
-                if has_regressed(old_metrics, new_metrics) if has_regressed.all_metrics \
-                        else has_regressed(old, new):
+                if regressed:
                     logging.warning(
                         "Benchmark '%s' regressed on metric '%s' (%s -> %s)",
                         bench_name, self.metric, old, new)

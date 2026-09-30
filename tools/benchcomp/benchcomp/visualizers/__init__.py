@@ -80,8 +80,10 @@ class error_on_regression:
     ```
 
     A check may instead set `all_metrics: true`, in which case the test receives the two
-    variants' entire metric dicts rather than a single metric's values. `metric` is then only
-    used to label the warning that the check prints:
+    variants' entire metric dicts rather than a single metric's values. `metric` is still
+    required, but is then only used to label the warning that the check prints; a benchmark
+    that lacks it is still passed to the test, which must handle missing metrics itself (e.g.
+    with `dict.get`):
 
     ```
     visualize:

@@ -105,29 +105,29 @@ visualize:
         # benchmark has regressed if the lambda returns true.
         test: "lambda old, new: False if not old else not new"
 
-      # Solver time is only attributable to a change when the change altered the formula, so
-      # require that the VCC or step count moved before calling a slowdown a regression. On
-      # identical counts the two sides are solving the same problem, and measurements of the
-      # perf suite's heavy harnesses spread far too wide to read anything into the difference:
-      # over seven `main` runs, 910 (benchmark, run) pairs with identical VCC *and* step counts
-      # had a median old→new ratio of 0.99x but a range of 0.41x to 2.41x, and
+      # Solver time on the perf suite's heavy harnesses is noisy even when nothing changed: over
+      # seven `main` runs, 910 (benchmark, run) pairs with identical VCC *and* step counts had a
+      # median old→new ratio of 0.99x but a range of 0.41x to 2.41x, and
       # `inet::checksum::tests::differential` alone ranged 38.8s to 116.0s on the `main` side.
-      # That is what tripped this check on #4801, #4804 and #4820, none of which touched the
+      # A flat 1.5x therefore tripped on #4801, #4804 and #4820, none of which touched the
       # harnesses involved (https://github.com/model-checking/kani/issues/4822).
       #
-      # `solver_runtime` also sums over a number of solver calls that is not stable across runs
-      # of the same code (https://github.com/model-checking/kani/issues/4821), so compare the
-      # per-call time, which is the quantity the two sides share.
-      - metric: solver_runtime_per_call
+      # So the threshold depends on whether the SAT instance moved. When the VCC and step counts
+      # and the size of the first solver call's instance all match, the two sides are very
+      # likely solving the same problem, and only a slowdown well past the observed noise (4x)
+      # counts: that still catches, e.g., a change to the solver options Kani passes. Otherwise
+      # the original 1.5x applies. Both compare the *total* solver time, so a change that adds
+      # solver calls is caught even if each call is as fast as before; `solver_calls` and
+      # `solver_runtime_per_call` are in the results table to explain a differing total.
+      - metric: solver_runtime
         all_metrics: true
         test: >
-          lambda old, new: False if (
-            old["number_vccs"] == new["number_vccs"]
-            and old["number_program_steps"] == new["number_program_steps"]
-          ) else (
-            new["solver_runtime"] >= 10
-            and new["solver_runtime_per_call"] / old["solver_runtime_per_call"] > 1.5
-          )
+          lambda old, new: bool(old.get("solver_runtime"))
+          and new.get("solver_runtime", 0) >= 10
+          and new["solver_runtime"] / old["solver_runtime"] > (
+            4 if all(old.get(k) == new.get(k) for k in (
+              "number_vccs", "number_program_steps", "solver_variables", "solver_clauses"))
+            else 1.5)
 
       # Symex time is deterministic given the formula, so it keeps the simple rule.
       - metric: symex_runtime
