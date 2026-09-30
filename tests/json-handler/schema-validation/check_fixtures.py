@@ -7,18 +7,23 @@ Checks scripts/validate_json_export.py against the fixtures in `fixture-*.json`.
 Every fixture must validate. Each case below breaks one rule in a copy of a valid fixture;
 the validator must reject it with a diagnostic naming the broken field, and must not crash.
 Each extension below adds a field RFC 0015 does not define to a copy; the validator must accept it.
+The reading-rule predicates the validator exports (`vacuous_pass` and the others) are called directly.
 
 Usage: check_fixtures.py <path to validate_json_export.py>
 """
 
 import copy
+import importlib.util
 import json
 import subprocess
 import sys
 from pathlib import Path
 
+sys.dont_write_bytecode = True
+
 FIXTURES = Path(__file__).parent
 COMPLETED = "fixture-completed-failure"
+SUCCESS = "fixture-completed-success"
 NON_COMPLETED = "fixture-non-completed-outcomes"
 
 
@@ -51,6 +56,11 @@ def all_of(*mutations):
         for mutation in mutations:
             mutation(doc)
     return mutate
+
+
+def load_base(name):
+    with open(FIXTURES / f"{name}.json") as f:
+        return json.load(f)
 
 
 H0 = "harnesses.0"
@@ -168,6 +178,102 @@ EXTENSIONS = [
 ]
 
 
+def checks_all_unreachable(doc):
+    set_at(f"{H0}.checks.success", 0)(doc)
+    set_at(f"{H0}.checks.unreachable", [f"check_ok.assertion.{n}" for n in (1, 2, 3)])(doc)
+
+
+def covers_all_unreachable(doc):
+    set_at(f"{H0}.covers.satisfied", [])(doc)
+    set_at(f"{H0}.covers.unreachable", ["check_ok.cover.1"])(doc)
+
+
+REACH_CHECKS_OFF = set_at("configuration.checks.assertion_reach_checks", False)
+FAILING = set_at(f"{H0}.outcome.verdict", "FAILURE")
+
+
+def predicate(name):
+    def call(validator, doc):
+        harness = doc["harnesses"][0]
+        if name == "cover_only_vacuous":
+            return validator.cover_only_vacuous(harness)
+        return getattr(validator, name)(harness, doc["configuration"])
+    return call
+
+
+# (case name, fixture, mutation or None, predicate, expected result). The predicates read only
+# the verdict, the unreachable lists, the totals and the reach-checks flag.
+PREDICATES = [
+    ("vacuous_pass: one of three checks unreachable", SUCCESS, None, predicate("vacuous_pass"), False),
+    ("vacuous_pass: every check unreachable", SUCCESS, checks_all_unreachable, predicate("vacuous_pass"), True),
+    ("vacuous_pass: failing verdict", SUCCESS, all_of(checks_all_unreachable, FAILING),
+     predicate("vacuous_pass"), False),
+    ("vacuous_pass: no checks", SUCCESS,
+     all_of(set_at(f"{H0}.checks.total", 0), set_at(f"{H0}.checks.unreachable", [])),
+     predicate("vacuous_pass"), False),
+    ("vacuous_pass: reach checks off", SUCCESS, all_of(checks_all_unreachable, REACH_CHECKS_OFF),
+     predicate("vacuous_pass"), None),
+    ("vacuous_pass: every cover unreachable", SUCCESS, covers_all_unreachable, predicate("vacuous_pass"), False),
+    ("vacuity_suspect: one unreachable check", SUCCESS, None, predicate("vacuity_suspect"), True),
+    ("vacuity_suspect: no unreachable check", SUCCESS, set_at(f"{H0}.checks.unreachable", []),
+     predicate("vacuity_suspect"), False),
+    ("vacuity_suspect: failing verdict", SUCCESS, FAILING, predicate("vacuity_suspect"), False),
+    ("vacuity_suspect: reach checks off", SUCCESS, REACH_CHECKS_OFF, predicate("vacuity_suspect"), None),
+    ("cover_only_vacuous: a satisfied cover", SUCCESS, None, predicate("cover_only_vacuous"), False),
+    ("cover_only_vacuous: every cover unreachable", SUCCESS, covers_all_unreachable,
+     predicate("cover_only_vacuous"), True),
+    ("cover_only_vacuous: one of two covers unreachable", SUCCESS, all_of(
+        set_at(f"{H0}.covers.total", 2), set_at(f"{H0}.covers.unreachable", ["check_ok.cover.2"])),
+     predicate("cover_only_vacuous"), False),
+    ("cover_only_vacuous: no covers", SUCCESS,
+     all_of(set_at(f"{H0}.covers.total", 0), set_at(f"{H0}.covers.satisfied", [])),
+     predicate("cover_only_vacuous"), False),
+    ("cover_only_vacuous: every check unreachable", SUCCESS, checks_all_unreachable,
+     predicate("cover_only_vacuous"), False),
+]
+
+def load_validator(path):
+    spec = importlib.util.spec_from_file_location("validate_json_export", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def check_join_key_and_warnings(validator, failures):
+    """`join_key` tells same-named harnesses of two crates apart, which warnings_shape_equivalent relies on."""
+    doc = load_base(SUCCESS)
+    other_crate = copy.deepcopy(doc["harnesses"][0])
+    other_crate["crate_name"] = "other"
+    doc["harnesses"].append(other_crate)
+    if validator.join_key(doc["harnesses"][0]) == validator.join_key(doc["harnesses"][1]):
+        failures.append("join_key does not tell same-named harnesses of two crates apart")
+
+    def with_warnings(warnings, dropped=0, index=0):
+        changed = copy.deepcopy(doc)
+        changed["harnesses"][index]["warnings"] = warnings
+        changed["harnesses"][index]["warnings_truncated"] = dropped
+        return changed
+
+    plain = {"message": "warning: a", "truncated": False, "original_chars": None}
+    cut = {"message": "warning: a", "truncated": True, "original_chars": 90}
+    with_plain = with_warnings([plain])
+    cases = [
+        ("the same document", doc, doc, True),
+        ("a different message", with_plain, with_warnings([{**plain, "message": "warning: b"}]), True),
+        ("an added warning", doc, with_plain, False),
+        ("a truncated warning", with_plain, with_warnings([cut]), False),
+        ("a dropped warning count", doc, with_warnings([], 1), False),
+        ("a warning on the first of two same-named harnesses", doc, with_warnings([plain], 0, 0), False),
+        ("a warning on the second of two same-named harnesses", doc, with_warnings([plain], 0, 1), False),
+        ("a missing harness", doc, {"harnesses": doc["harnesses"][:1]}, False),
+    ]
+    for name, left, right, expected in cases:
+        if validator.warnings_shape_equivalent(left, right) is not expected:
+            failures.append(f"warnings_shape_equivalent should be {expected} for {name}")
+        else:
+            print(f"  warnings_shape_equivalent for {name}: {expected}")
+
+
 def run_validator(validator, path):
     result = subprocess.run(
         [sys.executable, validator, str(path)], capture_output=True, text=True
@@ -214,6 +320,18 @@ def main():
                 print(f"  {name}: accepted")
     finally:
         scratch.unlink(missing_ok=True)
+
+    module = load_validator(validator)
+    for name, base, mutate, call, expected in PREDICATES:
+        doc = load_base(base)
+        if mutate:
+            mutate(doc)
+        result = call(module, doc)
+        if result is not expected:
+            failures.append(f"{name}: expected {expected}, got {result}")
+        else:
+            print(f"  {name}: {expected}")
+    check_join_key_and_warnings(module, failures)
 
     for failure in failures:
         print(f"ERROR: {failure}")

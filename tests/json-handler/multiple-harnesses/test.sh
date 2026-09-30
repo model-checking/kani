@@ -2,37 +2,27 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
-# Test JSON export with multiple harnesses - validates aggregation logic
+# Check that the export aggregates multiple harnesses consistently.
 
 set -eu
-# The validator's exit status is piped into `tail` below; without pipefail a failed
-# validation is masked by tail's success and this test passes regardless.
 set -o pipefail
 
 OUTPUT_FILE="multi_harness_output.json"
-# Remove the export on every exit path, not just the happy one: a failing
-# validation step exits early under `set -e` and would otherwise leave it behind.
 trap 'rm -f "$OUTPUT_FILE"' EXIT
 
-# Find the project root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 VALIDATOR="$PROJECT_ROOT/scripts/validate_json_export.py"
 
-# Run Kani with JSON export
 kani -Z export-json test.rs --export-json "$OUTPUT_FILE"
 
-# Check that JSON file was created
 if [ ! -f "$OUTPUT_FILE" ]; then
     echo "ERROR: JSON file $OUTPUT_FILE was not created"
     exit 1
 fi
 
-# Validate JSON structure (suppress verbose output)
 python3 "$VALIDATOR" "$OUTPUT_FILE" 2>&1 | tail -1
 
-# Check that the export accounts for all three harnesses: not just that the flat harnesses[]
-# array lists them, but that the run-level summary agrees with the per-harness entries.
 python3 << EOF
 import json
 import sys
@@ -66,6 +56,10 @@ summary = data['summary']
 for field, want in [('total', 3), ('successful', 3), ('failed', 0)]:
     check(summary[field] == want,
           f"summary.{field} should be {want}, got {summary[field]}")
+check(data['harness_selection']['matched_count'] == 3,
+      f"harness_selection.matched_count should be 3, got "
+      f"{data['harness_selection']['matched_count']}")
+check(data['run_state'] == 'COMPLETE', f"run_state should be COMPLETE, got {data['run_state']!r}")
 
 check(all(h.get('outcome', {}).get('verdict') == 'SUCCESS' for h in harnesses),
       "every harness should report SUCCESS")
@@ -88,5 +82,3 @@ if failures:
 
 print("All three harnesses are accounted for and consistent")
 EOF
-
-
