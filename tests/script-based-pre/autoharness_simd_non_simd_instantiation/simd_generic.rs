@@ -31,6 +31,7 @@ pub unsafe fn imin<T: Copy>(a: T, b: T) -> T {
 
 /// Reaches the invalid instantiation through a call, which autoharness does not inspect: its own
 /// body calls no SIMD intrinsic, so `i32` is chosen and codegen reports the unsupported construct.
+/// Detecting this in the harness selection instead is <https://github.com/model-checking/kani/issues/4926>.
 pub unsafe fn calls_imin<T: Copy>(a: T, b: T) -> T {
     imin(a, b)
 }

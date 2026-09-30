@@ -912,7 +912,8 @@ fn resolve_deferred_fn_slots<'tcx>(
 ///
 /// Only `instance`'s own body is inspected. An invalid instantiation a level down (a generic
 /// function calling a generic SIMD helper) is reported by codegen against the harness that reached
-/// it, which fails that harness instead of the run.
+/// it, which fails that harness instead of the run; see
+/// <https://github.com/model-checking/kani/issues/4926>.
 fn invalid_simd_instantiation(instance: Instance) -> Option<(String, Ty)> {
     let body = instance.body()?;
     body.blocks.iter().find_map(|block| {
