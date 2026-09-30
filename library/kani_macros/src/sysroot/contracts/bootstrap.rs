@@ -70,7 +70,13 @@ impl<'a> ContractConditionsHandler<'a> {
                     unreachable!()
                 }
                 // Dummy function that we replace to pick the contract mode.
-                // By default, return ORIGINAL
+                // By default, return ORIGINAL.
+                //
+                // `#[inline]`, unlike the other markers: this is the only non-generic one, so its
+                // single instantiation lives in the defining crate, and `compiler_builtins` cannot
+                // call through an upstream monomorphization (rust-lang/rust#137222). `#[inline]`
+                // makes rustc emit a local copy in each crate that needs it. Kani still finds the
+                // call in MIR because the MIR `Inline` pass is off at Kani's default opt level.
                 #[inline]
                 #[kanitool::fn_marker = "kani_contract_mode"]
                 const fn kani_contract_mode() -> kani::internal::Mode {
