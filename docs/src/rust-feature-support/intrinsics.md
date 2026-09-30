@@ -152,8 +152,7 @@ exp2f32 | Partial | Results are overapproximated |
 exp2f64 | Partial | Results are overapproximated |
 expf32 | Partial | Results are overapproximated |
 expf64 | Partial | Results are overapproximated |
-fabsf32 | Yes | |
-fabsf64 | Yes | |
+fabs | Yes | |
 fadd_fast | Yes | |
 fdiv_fast | Partial | [#809](https://github.com/model-checking/kani/issues/809) |
 float_to_int_unchecked | Yes | |
@@ -172,12 +171,12 @@ log2f32 | Partial | Results are overapproximated |
 log2f64 | Partial | Results are overapproximated |
 logf32 | Partial | Results are overapproximated |
 logf64 | Partial | Results are overapproximated |
-maxnumf32 | Yes | |
-maxnumf64 | Yes | |
+maximum_number_nsz_f32 | Yes | |
+maximum_number_nsz_f64 | Yes | |
 align_of | Yes | |
 align_of_val | Yes | |
-minnumf32 | Yes | |
-minnumf64 | Yes | |
+minimum_number_nsz_f32 | Yes | |
+minimum_number_nsz_f64 | Yes | |
 move_val_init | No | |
 mul_with_overflow | Yes | |
 needs_drop | Yes | |
@@ -220,8 +219,8 @@ try | No | [#267](https://github.com/model-checking/kani/issues/267) |
 type_id | Yes | |
 type_name | Yes | |
 typed_swap_nonoverlapping | Yes | |
-unaligned_volatile_load | No | See [Notes - Concurrency](#concurrency) |
-unaligned_volatile_store | No | See [Notes - Concurrency](#concurrency) |
+unaligned_volatile_load | Partial | See [Notes - Concurrency](#concurrency) |
+unaligned_volatile_store | Partial | See [Notes - Concurrency](#concurrency) |
 unchecked_add | Yes | |
 unchecked_div | Yes | |
 unchecked_mul | Yes | |
@@ -232,10 +231,10 @@ unchecked_sub | Yes | |
 unlikely | Yes | |
 unreachable | Yes | |
 variant_count | Yes | |
-volatile_copy_memory | No | See [Notes - Concurrency](#concurrency) |
-volatile_copy_nonoverlapping_memory | No | See [Notes - Concurrency](#concurrency) |
+volatile_copy_memory | Partial | See [Notes - Concurrency](#concurrency) |
+volatile_copy_nonoverlapping_memory | Partial | See [Notes - Concurrency](#concurrency) |
 volatile_load | Partial | See [Notes - Concurrency](#concurrency) |
-volatile_set_memory | No | See [Notes - Concurrency](#concurrency) |
+volatile_set_memory | Partial | See [Notes - Concurrency](#concurrency) |
 volatile_store | Partial | See [Notes - Concurrency](#concurrency) |
 wrapping_add | Yes | |
 wrapping_mul | Yes | |

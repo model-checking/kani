@@ -1,0 +1,47 @@
+// Full name: test::rem\
+pub fn rem(a: i32, b: i32) -> i32\
+{\
+    let _0: i32; // return\
+    let a: i32; // arg #1\
+    let b: i32; // arg #2\
+\
+    storage_live(_0)\
+    _0 = copy a panic.% copy b\
+    storage_dead(b)\
+    storage_dead(a)\
+    return\
+}
+
+// Full name: test::div\
+pub fn div(a: u32, b: u32) -> u32\
+{\
+    let _0: u32; // return\
+    let a: u32; // arg #1\
+    let b: u32; // arg #2\
+\
+    storage_live(_0)\
+    _0 = copy a panic./ copy b\
+    storage_dead(b)\
+    storage_dead(a)\
+    return\
+}
+
+// Full name: test::main\
+pub fn main()\
+{\
+    let _0: (); // return\
+    let _1: u32; // anonymous local\
+    let _2: i32; // anonymous local\
+\
+    storage_live(_0)\
+    storage_live(_1)\
+    storage_live(_2)\
+    _0 = ()\
+    _1 = div(const 7u32, const 2u32)\
+    ↳⚡ undefined_behavior\
+    storage_dead(_1)\
+    _2 = rem(const 7i32, const 2i32)\
+    ↳⚡ undefined_behavior\
+    storage_dead(_2)\
+    return\
+}

@@ -1,0 +1,75 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+cff-version: 1.2.0
+title: Kani Rust Verifier
+message: >-
+  If you use Kani in your research, please cite the ASE 2026 paper listed under
+  `preferred-citation`.
+type: software
+authors:
+  - name: The Kani Contributors
+abstract: >-
+  Kani is a bit-precise model checker for Rust. It verifies both safety
+  (undefined behavior) and correctness (panics, arithmetic overflow, and
+  user-defined properties expressed as assertions or function contracts) of Rust
+  programs, including unsafe code.
+repository-code: https://github.com/model-checking/kani
+url: https://model-checking.github.io/kani/
+license:
+  - Apache-2.0
+  - MIT
+keywords:
+  - rust
+  - model checking
+  - formal verification
+  - program analysis
+  - undefined behavior
+preferred-citation:
+  type: conference-paper
+  title: "Kani: A Model Checker for Rust"
+  authors:
+    - given-names: Rémi
+      family-names: Delmas
+    - given-names: Zyad
+      family-names: Hassan
+    - given-names: Qinheping
+      family-names: Hu
+    - given-names: Rahul
+      family-names: Kumar
+    - given-names: Felipe R.
+      family-names: Monteiro
+    - given-names: Thanh
+      family-names: Nguyen
+    - given-names: Adrián
+      family-names: Palacios
+    - given-names: Celina
+      family-names: Val
+    - given-names: Michael
+      family-names: Tautschnig
+    - given-names: Justus
+      family-names: Adam
+    - given-names: Daniel
+      family-names: Schwartz-Narbonne
+    - given-names: Carolyn
+      family-names: Zech
+  collection-title: >-
+    Proceedings of the 41st IEEE/ACM International Conference on Automated
+    Software Engineering (ASE '26)
+  collection-type: proceedings
+  conference:
+    name: >-
+      41st IEEE/ACM International Conference on Automated Software Engineering
+    city: Munich
+    country: DE
+    date-start: '2026-10-12'
+    date-end: '2026-10-16'
+  publisher:
+    name: Association for Computing Machinery
+    city: New York
+    region: NY
+    country: US
+  year: 2026
+  month: 10
+  pages: 13
+  doi: 10.1145/3832783.3834499
+  url: https://doi.org/10.1145/3832783.3834499

@@ -1,0 +1,2 @@
+Cannot stub `original` by `wrong_return_type`
+Expected return type `T`, but found `bool`

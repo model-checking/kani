@@ -17,14 +17,24 @@ impl LibConfig {
     pub fn new(path: PathBuf) -> LibConfig {
         let sysroot = &path.parent().unwrap();
         let kani_std_rlib = path.join("libstd.rlib");
-        let kani_std_wrapper = format!("noprelude:std={}", kani_std_rlib.to_str().unwrap());
+        // `noprelude`: do not inject Kani's std into the prelude (it is aliased over the real
+        // std); `nounused`: do not fire the `unused_crate_dependencies` lint for it, since
+        // `#[no_std]` crates that deny that lint would otherwise fail through no fault of
+        // their own (Kani injects this extern unconditionally).
+        let kani_std_wrapper =
+            format!("noprelude,nounused:std={}", kani_std_rlib.to_str().unwrap());
         let args = [
             "--sysroot",
             sysroot.to_str().unwrap(),
             "-L",
             path.to_str().unwrap(),
+            // Use the `force` modifier so that the `kani` crate is resolved even if the code
+            // under verification never references it. `#[no_std]` crates do not link Kani's
+            // `std` (which would otherwise pull in `kani`), so without `force` the Kani
+            // library and its functions would be missing entirely, c.f.
+            // https://github.com/model-checking/kani/issues/3906.
             "--extern",
-            "kani",
+            "force:kani",
             "--extern",
             kani_std_wrapper.as_str(),
         ]
@@ -115,6 +125,10 @@ impl KaniSession {
     /// being compiled.
     pub fn kani_compiler_local_flags(&self) -> Vec<KaniArg> {
         let mut flags: Vec<KaniArg> = vec![];
+
+        if self.args.no_assert_overrides {
+            flags.push("--no-assert-overrides".into());
+        }
 
         if self.args.common_args.debug {
             flags.push("--log-level=debug".into());
@@ -259,6 +273,20 @@ pub fn base_rustc_flags(lib_config: LibConfig) -> Vec<RustcArg> {
         "crate-attr=feature(register_tool)",
         "-Z",
         "crate-attr=register_tool(kanitool)",
+        // nightly-2026-09-22 turns the next-generation trait solver on by default
+        // (rust-lang/rust#160619), and that solver cannot handle `generic_const_exprs`
+        // (rust-lang/rust#160895). rustc reverts to this setting automatically for a crate that
+        // enables the feature itself, but Kani's library exposes such a signature
+        // (`kani::pointer_generator`, whose return type computes its buffer length), so every
+        // crate Kani compiles needs the same setting to be able to call it. Tracked for removal in
+        // https://github.com/model-checking/kani/issues/4832.
+        "-Znext-solver=coherence",
+        // Kani injects unstable features (`register_tool` above) into every crate it compiles,
+        // so crates that `forbid(unstable_features)` (e.g. rustls) would fail to build through
+        // no fault of their own. Downgrade that lint to a warning; `--force-warn` overrides
+        // even a `forbid` in the crate source.
+        "--force-warn",
+        "unstable_features",
     ]
     .map(RustcArg::from)
     .to_vec();

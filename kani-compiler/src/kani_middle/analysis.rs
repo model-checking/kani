@@ -123,7 +123,6 @@ impl From<&Statement> for Key {
     fn from(value: &Statement) -> Self {
         match value.kind {
             StatementKind::Assign(..) => Key("Assign"),
-            StatementKind::Deinit(_) => Key("Deinit"),
             StatementKind::Intrinsic(_) => Key("Intrinsic"),
             StatementKind::SetDiscriminant { .. } => Key("SetDiscriminant"),
             // For now, we don't care about the ones below.
@@ -133,7 +132,6 @@ impl From<&Statement> for Key {
             | StatementKind::FakeRead(..)
             | StatementKind::Nop
             | StatementKind::PlaceMention(_)
-            | StatementKind::Retag(_, _)
             | StatementKind::StorageLive(_)
             | StatementKind::StorageDead(_) => Key("Ignored"),
         }
@@ -160,7 +158,8 @@ impl From<&Terminator> for Key {
 impl From<&Rvalue> for Key {
     fn from(value: &Rvalue) -> Self {
         match value {
-            Rvalue::Use(_) => Key("Use"),
+            Rvalue::Reborrow(..) => Key("Reborrow"),
+            Rvalue::Use(..) => Key("Use"),
             Rvalue::Repeat(_, _) => Key("Repeat"),
             Rvalue::Ref(_, _, _) => Key("Ref"),
             Rvalue::ThreadLocalRef(_) => Key("ThreadLocalRef"),
@@ -169,11 +168,9 @@ impl From<&Rvalue> for Key {
             Rvalue::Cast(_, _, _) => Key("Cast"),
             Rvalue::BinaryOp(..) => Key("BinaryOp"),
             Rvalue::CheckedBinaryOp(..) => Key("CheckedBinaryOp"),
-            Rvalue::NullaryOp(_, _) => Key("NullaryOp"),
             Rvalue::UnaryOp(_, _) => Key("UnaryOp"),
             Rvalue::Discriminant(_) => Key("Discriminant"),
             Rvalue::Aggregate(_, _) => Key("Aggregate"),
-            Rvalue::ShallowInitBox(_, _) => Key("ShallowInitBox"),
             Rvalue::CopyForDeref(_) => Key("CopyForDeref"),
         }
     }

@@ -65,6 +65,12 @@ pub struct Arguments {
     /// Option used for suppressing global ASM error.
     #[clap(long)]
     pub ignore_global_asm: bool,
+    /// Do not inject Kani's macro overrides (`assert!`, `panic!`, ...) into the crate.
+    /// Assertion failures are then reported as generic panics rather than with the original
+    /// condition/message. This is an escape hatch for crates whose macro imports conflict
+    /// with the injected overrides (rustc E0659).
+    #[clap(long)]
+    pub no_assert_overrides: bool,
     /// Compute verification results under the assumption that no panic occurs.
     /// This feature is unstable, and it requires `-Z unstable-options` to be used
     #[clap(long)]
@@ -111,6 +117,34 @@ pub struct Arguments {
     /// See kani_driver::autoharness_args for documentation.
     #[arg(long = "autoharness-exclude-pattern", num_args(1))]
     pub autoharness_excluded_patterns: Vec<String>,
+    /// If we are running the autoharness subcommand, whether to generate harnesses for
+    /// functions whose arguments require bounded nondeterministic values (e.g. slice
+    /// references). See kani_driver::autoharness_args for documentation.
+    #[arg(long = "autoharness-bounded-arguments")]
+    pub autoharness_bounded_arguments: bool,
+    /// If we are running the autoharness subcommand, the maximum length for nondeterministic
+    /// slice arguments. See kani_driver::autoharness_args for documentation.
+    #[arg(long = "autoharness-slice-bound", default_value_t = kani_metadata::AUTOHARNESS_SLICE_BOUND)]
+    pub autoharness_slice_bound: u64,
+    /// If we are running the autoharness subcommand, the maximum length for nondeterministic
+    /// string slice arguments. See kani_driver::autoharness_args for documentation.
+    #[arg(long = "autoharness-string-bound", default_value_t = kani_metadata::AUTOHARNESS_STR_BOUND)]
+    pub autoharness_string_bound: u64,
+    /// If we are running the autoharness subcommand, the bound for nondeterministic arguments
+    /// whose type implements BoundedArbitrary. See kani_driver::autoharness_args for documentation.
+    #[arg(
+        long = "autoharness-bounded-arbitrary-bound",
+        default_value_t = kani_metadata::AUTOHARNESS_BOUNDED_ARBITRARY_BOUND
+    )]
+    pub autoharness_bounded_arbitrary_bound: u64,
+
+    /// Enable constructor-based nondeterministic value generation for autoharness.
+    #[arg(long = "autoharness-constructor-args")]
+    pub autoharness_constructor_args: bool,
+
+    /// Check mined type invariants on values returned by autoharness-verified functions.
+    #[arg(long = "autoharness-check-invariants")]
+    pub autoharness_check_invariants: bool,
 }
 
 #[derive(Debug, Clone, Copy, AsRefStr, EnumString, VariantNames, PartialEq, Eq)]

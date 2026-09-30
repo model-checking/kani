@@ -1,6 +1,7 @@
 .clang-format
 .diff
 .ico
+.json
 .md
 .png
 .props

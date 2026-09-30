@@ -4,20 +4,20 @@
 //! This file contains the code necessary to interface with the compiler backend
 
 use crate::args::ReachabilityType;
-use crate::codegen_aeneas_llbc::mir_to_ullbc::Context;
+use crate::codegen_aeneas_llbc::mir_to_ullbc::{
+    Context, prepare_translated_crate, record_item_names,
+};
 use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::check_reachable_items;
 use crate::kani_middle::codegen_units::{CodegenUnit, CodegenUnits};
 use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
 use crate::kani_middle::transform::{BodyTransformation, GlobalPasses};
-use crate::kani_queries::QueryDb;
-use charon_lib::ast::{AnyTransId, TranslatedCrate, meta::ItemOpacity::*, meta::Span};
+use crate::kani_queries::QUERY_DB;
+use charon_lib::ast::{ItemId, TranslatedCrate};
 use charon_lib::errors::ErrorCtx;
-use charon_lib::errors::error_or_panic;
-use charon_lib::name_matcher::NamePattern;
-use charon_lib::transform::TransformCtx;
-use charon_lib::transform::ctx::{TransformOptions, TransformPass};
+use charon_lib::options::{CliOpts, Preset, SerializationFormat, TranslateOptions};
+use charon_lib::transform::{TransformCtx, run_transformation_passes};
 use kani_metadata::ArtifactType;
 use kani_metadata::{AssignsContract, CompilerArtifactStub};
 use rustc_codegen_ssa::back::archive::{
@@ -25,9 +25,10 @@ use rustc_codegen_ssa::back::archive::{
 };
 use rustc_codegen_ssa::back::link::link_binary;
 use rustc_codegen_ssa::traits::CodegenBackend;
-use rustc_codegen_ssa::{CodegenResults, CrateInfo};
-use rustc_data_structures::fx::{FxHashMap, FxIndexMap};
-use rustc_errors::{DEFAULT_LOCALE_RESOURCE, ErrorGuaranteed};
+use rustc_codegen_ssa::{CompiledModules, CrateInfo};
+use rustc_data_structures::fx::FxHashMap;
+use rustc_data_structures::unord::UnordMap;
+use rustc_errors::ErrorGuaranteed;
 use rustc_hir::def_id::{DefId as InternalDefId, LOCAL_CRATE};
 use rustc_metadata::EncodedMetadata;
 use rustc_middle::dep_graph::{WorkProduct, WorkProductId};
@@ -37,28 +38,22 @@ use rustc_public::mir::mono::{Instance, MonoItem};
 use rustc_public::rustc_internal;
 use rustc_public::ty::FnDef;
 use rustc_public::{CrateDef, DefId};
-use rustc_session::Session;
-use rustc_session::config::{CrateType, OutputFilenames, OutputType};
+use rustc_session::config::{OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
+use rustc_session::{IncrCompSession, Session};
+use rustc_structures::CrateType;
 use std::any::Any;
 use std::fs::File;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use tracing::{debug, info, trace};
+use tracing::{debug, info};
 
 #[derive(Clone)]
-pub struct LlbcCodegenBackend {
-    /// The query is shared with `KaniCompiler` and it is initialized as part of `rustc`
-    /// initialization, which may happen after this object is created.
-    /// Since we don't have any guarantees on when the compiler creates the Backend object, neither
-    /// in which thread it will be used, we prefer to explicitly synchronize any query access.
-    queries: Arc<Mutex<QueryDb>>,
-}
+pub struct LlbcCodegenBackend {}
 
 impl LlbcCodegenBackend {
-    pub fn new(queries: Arc<Mutex<QueryDb>>) -> Self {
-        LlbcCodegenBackend { queries }
+    pub fn new() -> Self {
+        LlbcCodegenBackend {}
     }
 
     /// Generate code that is reachable from the given starting points.
@@ -91,16 +86,18 @@ impl LlbcCodegenBackend {
             .collect();
 
         // Apply all transformation passes, including global passes.
-        let mut global_passes = GlobalPasses::new(&self.queries.lock().unwrap(), tcx);
-        global_passes.run_global_passes(
-            &mut transformer,
-            tcx,
-            starting_items,
-            instances,
-            call_graph,
-        );
+        QUERY_DB.with(|db| {
+            let mut global_passes = GlobalPasses::new(&db.borrow(), tcx);
+            global_passes.run_global_passes(
+                &mut transformer,
+                tcx,
+                starting_items,
+                instances,
+                call_graph,
+            );
+        });
 
-        let queries = self.queries.lock().unwrap().clone();
+        let queries = QUERY_DB.with(|db| db.borrow().clone());
         check_reachable_items(tcx, &queries, &items);
 
         // Follow rustc naming convention (cx is abbrev for context).
@@ -108,19 +105,20 @@ impl LlbcCodegenBackend {
 
         // Create a Charon transformation context that will be populated with translation results
         let mut ccx = create_charon_transformation_context(tcx);
-        let mut id_map: FxHashMap<DefId, AnyTransId> = FxHashMap::default();
+        let mut id_map: FxHashMap<DefId, ItemId> = FxHashMap::default();
 
         // Translate all the items
         for item in &items {
             debug!("Translating: {item:?}");
             match item {
                 MonoItem::Fn(instance) => {
+                    let mut errors_borrow = ccx.errors.borrow_mut();
                     let mut fcx = Context::new(
                         tcx,
                         *instance,
                         &mut ccx.translated,
                         &mut id_map,
-                        &mut ccx.errors,
+                        &mut *errors_borrow,
                     );
                     let _ = fcx.translate();
                 }
@@ -129,49 +127,23 @@ impl LlbcCodegenBackend {
             }
         }
 
-        trace!("# ULLBC after translation from MIR:\n\n{}\n", ccx);
+        record_item_names(&mut ccx.translated);
 
-        // # Reorder the graph of dependencies and compute the strictly
-        // connex components to:
-        // - compute the order in which to extract the definitions
-        // - find the recursive definitions
-        // - group the mutually recursive definitions
-        let reordered_decls = charon_lib::transform::reorder_decls::Transform {};
-        reordered_decls.transform_ctx(&mut ccx);
+        // Everything after translation is Charon's own pipeline, run exactly as `charon` runs it,
+        // so that the LLBC we emit is what Aeneas expects and a Charon bump does not require
+        // re-deriving its pass list here.
+        run_transformation_passes(&charon_cli_options(queries.args().print_llbc), &mut ccx);
 
-        //
-        // =================
-        // **Micro-passes**:
-        // =================
-        // At this point, the bulk of the translation is done. From now onwards,
-        // we simply apply some micro-passes to make the code cleaner, before
-        // serializing the result.
-
-        // Run the micro-passes that clean up bodies.
-        for pass in charon_lib::transform::ULLBC_PASSES.iter() {
-            pass.run(&mut ccx)
-        }
-
-        // # Go from ULLBC to LLBC (Low-Level Borrow Calculus) by reconstructing
-        // the control flow.
-        // Run the micro-passes that clean up bodies.
-        for pass in charon_lib::transform::LLBC_PASSES.iter() {
-            pass.run(&mut ccx)
-        }
-
-        // Print the LLBC if requested. This is useful for expected tests.
-        if queries.args().print_llbc {
-            println!("# Final LLBC before serialization:\n\n{}\n", ccx);
-        } else {
-            debug!("# Final LLBC before serialization:\n\n{}\n", ccx);
-        }
-
+        // Charon has already printed each error, including those of its type check. Stop here
+        // rather than emit LLBC that Charon considers ill-formed.
         // TODO: display an error report about the external dependencies, if necessary
-        if ccx.errors.error_count > 0 {
-            todo!()
+        let error_count = ccx.errors.borrow().error_count;
+        if error_count > 0 {
+            tcx.dcx()
+                .fatal(format!("Charon reported {error_count} error(s) while translating to LLBC"));
         }
 
-        let crate_data: charon_lib::export::CrateData = charon_lib::export::CrateData::new(&ccx);
+        let crate_data: charon_lib::export::CrateData = charon_lib::export::CrateData::new(ccx);
 
         // No output should be generated if user selected no_codegen.
         if !tcx.sess.opts.unstable_opts.no_codegen && tcx.sess.opts.output_types.should_codegen() {
@@ -180,7 +152,7 @@ impl LlbcCodegenBackend {
             let mut pb = llbc_file.to_path_buf();
             pb.set_extension("llbc");
             println!("Writing LLBC file to {}", pb.display());
-            if let Err(()) = crate_data.serialize_to_file(&pb) {
+            if let Err(()) = crate_data.serialize_to_file(&pb, SerializationFormat::Json) {
                 tcx.sess.dcx().err("Failed to write LLBC file");
             }
         }
@@ -191,22 +163,29 @@ impl LlbcCodegenBackend {
 
 impl CodegenBackend for LlbcCodegenBackend {
     fn provide(&self, providers: &mut Providers) {
-        provide::provide(providers, &self.queries.lock().unwrap());
+        QUERY_DB.with(|db| provide::provide(providers, &db.borrow()));
     }
 
     fn print_version(&self) {
         println!("Kani-llbc version: {}", env!("CARGO_PKG_VERSION"));
     }
 
-    fn locale_resource(&self) -> &'static str {
-        // We don't currently support multiple languages.
-        DEFAULT_LOCALE_RESOURCE
+    fn name(&self) -> &'static str {
+        "kani-llbc"
     }
 
-    fn codegen_crate(&self, tcx: TyCtxt) -> Box<dyn Any> {
+    fn target_cpu(&self, sess: &Session) -> String {
+        match sess.opts.cg.target_cpu {
+            Some(ref name) => name,
+            None => sess.target.cpu.as_ref(),
+        }
+        .to_owned()
+    }
+
+    fn codegen_crate<'tcx>(&self, tcx: TyCtxt<'tcx>) -> Box<dyn Any> {
         let ret_val = rustc_internal::run(tcx, || {
             // Queries shouldn't change today once codegen starts.
-            let queries = self.queries.lock().unwrap().clone();
+            let queries = QUERY_DB.with(|db| db.borrow().clone());
 
             // Codegen all items that need to be processed according to the selected reachability mode:
             //
@@ -283,7 +262,7 @@ impl CodegenBackend for LlbcCodegenBackend {
                 // To avoid overriding the metadata for its verification, we skip this step when
                 // reachability is None, even because there is nothing to record.
             }
-            codegen_results(tcx)
+            codegen_results()
         });
         ret_val.unwrap()
     }
@@ -292,9 +271,11 @@ impl CodegenBackend for LlbcCodegenBackend {
         &self,
         ongoing_codegen: Box<dyn Any>,
         _sess: &Session,
+        _incr_comp_session: Option<&IncrCompSession>,
         _filenames: &OutputFilenames,
-    ) -> (CodegenResults, FxIndexMap<WorkProductId, WorkProduct>) {
-        match ongoing_codegen.downcast::<(CodegenResults, FxIndexMap<WorkProductId, WorkProduct>)>()
+        _crate_info: &CrateInfo,
+    ) -> (CompiledModules, UnordMap<WorkProductId, WorkProduct>) {
+        match ongoing_codegen.downcast::<(CompiledModules, UnordMap<WorkProductId, WorkProduct>)>()
         {
             Ok(val) => *val,
             Err(val) => panic!("unexpected error: {:?}", (*val).type_id()),
@@ -318,14 +299,23 @@ impl CodegenBackend for LlbcCodegenBackend {
     fn link(
         &self,
         sess: &Session,
-        codegen_results: CodegenResults,
+        compiled_modules: CompiledModules,
+        crate_info: CrateInfo,
         rustc_metadata: EncodedMetadata,
         outputs: &OutputFilenames,
     ) {
-        let requested_crate_types = &codegen_results.crate_info.crate_types.clone();
-        let local_crate_name = codegen_results.crate_info.local_crate_name;
-        link_binary(sess, &ArArchiveBuilderBuilder, codegen_results, rustc_metadata, outputs);
-        for crate_type in requested_crate_types {
+        let requested_crate_types = crate_info.crate_types.clone();
+        let local_crate_name = crate_info.local_crate_name;
+        link_binary(
+            sess,
+            &ArArchiveBuilderBuilder,
+            compiled_modules,
+            crate_info,
+            rustc_metadata,
+            outputs,
+            self.name(),
+        );
+        for crate_type in &requested_crate_types {
             let out_fname = out_filename(sess, *crate_type, outputs, local_crate_name);
             let out_path = out_fname.as_path();
             debug!(?crate_type, ?out_path, "link");
@@ -359,16 +349,13 @@ fn contract_metadata_for_harness(
 }
 
 /// Return a struct that contains information about the codegen results as expected by `rustc`.
-fn codegen_results(tcx: TyCtxt) -> Box<dyn Any> {
-    let work_products = FxIndexMap::<WorkProductId, WorkProduct>::default();
-    Box::new((
-        CodegenResults {
-            modules: vec![],
-            allocator_module: None,
-            crate_info: CrateInfo::new(tcx, tcx.sess.target.arch.clone().to_string()),
-        },
-        work_products,
-    ))
+///
+/// Kani produces no object files, so the module lists are empty. `rustc` now builds the `CrateInfo`
+/// itself and passes it to `codegen_crate` and `link`, so there is nothing crate-specific to report
+/// here.
+fn codegen_results() -> Box<dyn Any> {
+    let work_products = UnordMap::<WorkProductId, WorkProduct>::default();
+    Box::new((CompiledModules { modules: vec![], allocator_module: None }, work_products))
 }
 
 /// Execute the provided function and measure the clock time it took for its execution.
@@ -384,61 +371,21 @@ where
     ret
 }
 
-fn get_transform_options(tcx: &TranslatedCrate, error_ctx: &mut ErrorCtx) -> TransformOptions {
-    let mut parse_pattern = |s: &str| match NamePattern::parse(s) {
-        Ok(p) => Ok(p),
-        Err(e) => {
-            let msg = format!("failed to parse pattern `{s}` ({e})");
-            error_or_panic!(error_ctx, &TranslatedCrate::default(), Span::dummy(), msg)
-        }
-    };
-    let options = tcx.options.clone();
-    let item_opacities = {
-        let mut opacities = vec![];
-
-        // This is how to treat items that don't match any other pattern.
-        if options.extract_opaque_bodies {
-            opacities.push(("_".to_string(), Transparent));
-        } else {
-            opacities.push(("_".to_string(), Foreign));
-        }
-
-        // We always include the items from the crate.
-        opacities.push(("crate".to_owned(), Transparent));
-
-        for pat in options.include.iter() {
-            opacities.push((pat.to_string(), Transparent));
-        }
-        for pat in options.opaque.iter() {
-            opacities.push((pat.to_string(), Opaque));
-        }
-        for pat in options.exclude.iter() {
-            opacities.push((pat.to_string(), Invisible));
-        }
-
-        // We always hide this trait.
-        opacities.push(("core::alloc::Allocator".to_string(), Invisible));
-        opacities
-            .push(("alloc::alloc::{{impl core::alloc::Allocator for _}}".to_string(), Invisible));
-
-        opacities
-            .into_iter()
-            .filter_map(|(s, opacity)| parse_pattern(&s).ok().map(|pat| (pat, opacity)))
-            .collect()
-    };
-    TransformOptions {
-        no_code_duplication: false,
-        hide_marker_traits: true,
-        no_merge_goto_chains: false,
-        item_opacities,
-        print_built_llbc: true,
-    }
+/// The Charon options Kani runs with: Charon's `aeneas` preset, which is the configuration Aeneas
+/// consumes -- including which items are opaque and which traits are hidden (`Allocator` and the
+/// marker traits), so Kani does not keep a copy of that policy. `print_llbc` makes the final pass
+/// pipeline print the LLBC, as `charon --print-llbc` does; the expected tests rely on it.
+fn charon_cli_options(print_llbc: bool) -> CliOpts {
+    let mut options = CliOpts { preset: Some(Preset::Aeneas), print_llbc, ..CliOpts::default() };
+    options.apply_preset();
+    options
 }
 
 fn create_charon_transformation_context(tcx: TyCtxt) -> TransformCtx {
     let crate_name = tcx.crate_name(LOCAL_CRATE).as_str().into();
-    let translated = TranslatedCrate { crate_name, ..TranslatedCrate::default() };
-    let mut errors = ErrorCtx::new(true, false);
-    let options = get_transform_options(&translated, &mut errors);
-    TransformCtx { options, translated, errors }
+    let mut translated = TranslatedCrate { crate_name, ..TranslatedCrate::default() };
+    prepare_translated_crate(tcx, &mut translated);
+    let mut errors = ErrorCtx::new();
+    let options = TranslateOptions::new(&mut errors, &charon_cli_options(false));
+    TransformCtx { options, translated, errors: std::cell::RefCell::new(errors) }
 }

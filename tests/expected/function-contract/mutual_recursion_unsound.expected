@@ -1,0 +1,1 @@
+error: `#[kani::recursion]` is used on `mutual_a`, which calls `mutual_b` that calls back to `mutual_a`. Mutual recursion is not supported by contract verification and produces unsound results.

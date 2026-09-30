@@ -16,10 +16,14 @@ permissions:
 
 jobs:
   create-toolchain-pr:
+    # This workflow is restricted to the main repository (model-checking/kani) to prevent
+    # unnecessary PRs being created in forks. The toolchain upgrade action should only run in
+    # the main repository context.
+    if: github.repository == 'model-checking/kani'
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
@@ -38,7 +42,7 @@ jobs:
       - name: Create Pull Request
         id: create_pr
         if: ${{ env.next_step == 'create_pr' }}
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           commit-message: Upgrade Rust toolchain to nightly-${{ env.next_toolchain_date }}
           branch: toolchain-${{ env.next_toolchain_date }}
@@ -50,7 +54,7 @@ jobs:
 
       - name: Add debugging hints
         if: ${{ steps.create_pr.outputs.pull-request-number }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             github.rest.issues.createComment({
@@ -68,7 +72,7 @@ jobs:
             })
 
       - name: Create Issue
-        if: ${{ env.next_step == 'create_issue' && github.repository_owner == 'model-checking' }}
+        if: ${{ env.next_step == 'create_issue' }}
         uses: dacbd/create-issue-action@main
         with:
           token: ${{ github.token }}

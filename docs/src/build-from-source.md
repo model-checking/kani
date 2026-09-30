@@ -76,6 +76,28 @@ This script has a lot of noisy output, but on a successful run you'll see at the
 All Kani regression tests completed successfully.
 ```
 
+## LLBC back-end
+
+Kani includes an experimental back-end that generates Low-Level Borrow Calculus (LLBC)
+output, which is the format used by [Charon](https://github.com/AeneasVerif/charon) and
+[Aeneas](https://github.com/AeneasVerif/aeneas). This back-end translates Rust code into
+LLBC, enabling integration with verification tools built on the Aeneas framework.
+
+To build Kani with the LLBC back-end enabled, use:
+
+```
+cargo build-dev -- --features cprover --features llbc
+```
+
+This builds Kani with both the default CBMC/CPROVER back-end and the LLBC back-end.
+To run the LLBC-specific regression tests:
+
+```
+./scripts/kani-llbc-regression.sh
+```
+
+> **NOTE**: The LLBC back-end is experimental and under active development.
+
 ## Adding Kani to your path
 
 To use a locally-built Kani from anywhere, add the Kani scripts to your path:

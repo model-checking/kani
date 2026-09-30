@@ -1,0 +1,14 @@
+Checking harness check_unaligned_volatile_load_out_of_bounds...
+
+check_unaligned_volatile_load_out_of_bounds.pointer_dereference\
+Status: FAILURE\
+Description: "dereference failure: pointer outside object bounds"
+
+Checking harness check_unaligned_volatile_store_out_of_bounds...
+
+check_unaligned_volatile_store_out_of_bounds.pointer_dereference\
+Status: FAILURE\
+Description: "dereference failure: pointer outside object bounds"
+
+Verification failed for - check_unaligned_volatile_load_out_of_bounds
+Verification failed for - check_unaligned_volatile_store_out_of_bounds

@@ -33,6 +33,7 @@ pub enum CheckStatus {
     Unreachable,
     Uncovered,     // for `code_coverage` properties only
     Unsatisfiable, // for `cover` properties only
+    Error,         // returned by CBMC when using SMT solvers
 }
 
 /// Kani coverage check.
@@ -60,6 +61,8 @@ impl std::fmt::Display for CheckStatus {
             CheckStatus::Unreachable => style("UNREACHABLE").yellow(),
             CheckStatus::Undetermined => style("UNDETERMINED").yellow(),
             CheckStatus::Unsatisfiable => style("UNSATISFIABLE").yellow(),
+            // CBMC returns ERROR when using SMT solvers and the solver encounters an error.
+            CheckStatus::Error => style("ERROR").red(),
         };
         write!(f, "{check_str}")
     }

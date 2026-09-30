@@ -171,6 +171,127 @@ macro_rules! generate_arbitrary {
             }
         }
 
+        /// Generate a raw pointer in a nondeterministic allocation state, pointing to `storage`
+        /// in the valid case. The states are:
+        /// - null,
+        /// - out of bounds of the allocation (one past the end of `storage`, aligned and
+        ///   non-null, but not valid for reads or writes),
+        /// - valid, i.e., pointing to `storage`, which the caller keeps alive for as long as the
+        ///   returned pointer is in use.
+        ///
+        /// This model is used by the compiler to generate nondeterministic raw pointer values for
+        /// automatic harnesses (`kani autoharness`). Note that the returned pointer is aligned in
+        /// all states and has valid provenance, so that memory predicates such as
+        /// `kani::mem::can_dereference` can reason about it (they do not support pointers cast
+        /// from arbitrary integer addresses).
+        /// We do not generate pointers to deallocated objects, since Kani's memory predicates
+        /// cannot reason about those either ("Kani does not support reasoning about pointer to
+        /// unallocated memory"), which would break harnesses for functions with contracts over
+        /// their pointer arguments.
+        #[kanitool::fn_marker = "AnyPtrModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_ptr<T>(storage: &mut T) -> *mut T {
+            match crate::kani::any::<u8>() {
+                0 => ptr::null_mut(),
+                1 => (storage as *mut T).wrapping_add(1),
+                _ => storage as *mut T,
+            }
+        }
+
+        /// Generate a slice of nondeterministic length (at most `N`) referring to a prefix of
+        /// `storage`, a nondeterministic array that the caller keeps alive for as long as the
+        /// returned slice is in use.
+        ///
+        /// This model is used by the compiler to generate nondeterministic `&[T]` / `&mut [T]`
+        /// arguments for automatic harnesses (`kani autoharness`). Note that any verification
+        /// result obtained with a bounded value like this one is valid only up to the bound.
+        #[kanitool::fn_marker = "AnySliceRefModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_slice_ref<T, const N: usize>(storage: &mut [T; N]) -> &mut [T] {
+            let len: usize = crate::kani::any();
+            crate::kani::assume(len <= N);
+            &mut storage[..len]
+        }
+
+        /// Generate a string slice referring to the longest valid-UTF-8 prefix of `storage`, a
+        /// nondeterministic byte array (at most `N` bytes) that the caller keeps alive for as
+        /// long as the returned slice is in use. This is the same approach as `String`'s
+        /// `BoundedArbitrary` implementation: computing the valid prefix is a deterministic
+        /// function of the nondeterministic bytes, which symbolic execution handles well,
+        /// whereas *assuming* `str::from_utf8(..).is_ok()` over nondeterministic bytes and
+        /// length is intractable even for a handful of bytes. All string contents up to length
+        /// `N` are covered: a string of length `k < N` arises from storage whose byte at index
+        /// `k` starts an invalid sequence.
+        ///
+        /// This model is used by the compiler to generate nondeterministic `&str` arguments for
+        /// automatic harnesses (`kani autoharness`). Note that any verification result obtained
+        /// with a bounded value like this one is valid only up to the bound.
+        #[kanitool::fn_marker = "AnyStrRefModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_str_ref<const N: usize>(storage: &mut [u8; N]) -> &str {
+            let valid_len = match core_path::str::from_utf8(storage) {
+                Ok(_) => N,
+                // `valid_up_to` is always a character boundary.
+                Err(e) => e.valid_up_to(),
+            };
+            // SAFETY: `storage[..valid_len]` is the longest valid UTF-8 prefix of `storage`.
+            unsafe { core_path::str::from_utf8_unchecked(&storage[..valid_len]) }
+        }
+
+        /// Generate a C string referring to the bytes of `storage` up to its first NUL, where
+        /// `storage` is a nondeterministic byte array (at most `N` bytes; the driver rejects a
+        /// bound of 0, so `N` is at least 1) whose
+        /// last byte is set to NUL so that one always exists. As with `any_str_ref`, the result
+        /// is a deterministic function of the nondeterministic bytes: every C string of length
+        /// `k < N` arises from storage whose first NUL is at index `k`.
+        ///
+        /// This model is used by the compiler to generate nondeterministic `&CStr` arguments for
+        /// automatic harnesses (`kani autoharness`). Note that any verification result obtained
+        /// with a bounded value like this one is valid only up to the bound.
+        #[kanitool::fn_marker = "AnyCStrRefModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_c_str_ref<const N: usize>(storage: &mut [u8; N]) -> &core_path::ffi::CStr {
+            storage[N - 1] = 0;
+            // `storage` ends in NUL, so one is always found.
+            core_path::ffi::CStr::from_bytes_until_nul(storage).unwrap()
+        }
+
+        /// Generate a byte string referring to a prefix of `storage` of nondeterministic length
+        /// (at most `N`), as `any_slice_ref` does for `&[u8]`: a `ByteStr` is a `[u8]` with no
+        /// further invariant.
+        ///
+        /// This model is used by the compiler to generate nondeterministic `&ByteStr` arguments
+        /// for automatic harnesses (`kani autoharness`). Note that any verification result
+        /// obtained with a bounded value like this one is valid only up to the bound.
+        #[kanitool::fn_marker = "AnyByteStrRefModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_byte_str_ref<const N: usize>(
+            storage: &mut [u8; N],
+        ) -> &core_path::bstr::ByteStr {
+            core_path::bstr::ByteStr::new(any_slice_ref(storage))
+        }
+
+        /// Generate a WTF-8 string referring to a prefix of `storage` of nondeterministic length
+        /// (at most `N`), through `any_str_ref`: WTF-8 is a superset of UTF-8, so every `&str`
+        /// converts with `Wtf8::from_str`. Strings holding surrogate code points, which only
+        /// WTF-8 admits, are not generated.
+        ///
+        /// This model is used by the compiler to generate nondeterministic `&Wtf8` arguments for
+        /// automatic harnesses (`kani autoharness`). Note that any verification result obtained
+        /// with a bounded value like this one is valid only up to the bound.
+        #[kanitool::fn_marker = "AnyWtf8RefModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        // `std` does not re-export `core::wtf8`, so the type is named through `core` in both arms.
+        pub fn any_wtf8_ref<const N: usize>(storage: &mut [u8; N]) -> &core::wtf8::Wtf8 {
+            core::wtf8::Wtf8::from_str(any_str_ref(storage))
+        }
+
         arbitrary_tuple!(A);
         arbitrary_tuple!(A, B);
         arbitrary_tuple!(A, B, C);

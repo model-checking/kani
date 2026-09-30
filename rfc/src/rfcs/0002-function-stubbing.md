@@ -367,6 +367,29 @@ One possibility would be writing proofs about stubs (possibly relating their beh
 - Our proposed approach will not work with `--concrete-playback` (for now).
 - We are only able to apply abstractions to some dependencies if the user enables the MIR linker.
 
+### `stub_verified` and `Arbitrary` interaction (known limitation)
+
+A contract replacement havocs its own return value with `kani::any::<Ret>()`.
+So if the `kani::Arbitrary` implementation for `Ret` reaches the stubbed
+function, the replacement re-enters itself through `Arbitrary::any`:
+
+```text
+normalize -> replace closure -> kani::any::<Wrapper>
+          -> <Wrapper as Arbitrary>::any -> Wrapper::new -> normalize -> ...
+```
+
+This recursion has no fixpoint, so CBMC unwinds it until it exhausts memory.
+Kani detects the cycle at compile time and reports an error naming the call
+path, rather than letting verification hang.
+
+**Workarounds:**
+- Derive `Arbitrary` instead of implementing it manually (`#[derive(kani::Arbitrary)]`
+  generates field-by-field values without calling user functions).
+- Avoid calling the stubbed function from the `Arbitrary` implementation.
+
+Note that the detection walks statically resolvable calls only, so a cycle
+routed through a function pointer or trait object is not reported.
+
 ## Future possibilities
 
 - It would increase the utility of stubbing if we supported stubs for types.

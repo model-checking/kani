@@ -48,6 +48,7 @@
   - [Profiling Kani](./profiling.md)
 
 - [Limitations](./limitations.md)
+  - [Soundness](./soundness.md)
   - [Undefined behaviour](./undefined-behaviour.md)
   - [Rust feature support](./rust-feature-support.md)
     - [Intrinsics](./rust-feature-support/intrinsics.md)

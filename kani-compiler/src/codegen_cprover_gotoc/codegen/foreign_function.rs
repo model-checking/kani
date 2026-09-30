@@ -11,6 +11,7 @@ use std::collections::HashSet;
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::codegen_cprover_gotoc::codegen::PropertyClass;
+use crate::kani_middle::nonnull_pointee;
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use cbmc::{InternString, InternedString};
@@ -109,7 +110,20 @@ impl GotocCtx<'_, '_> {
             .unwrap()
             .iter()
             .zip(args)
-            .map(|(param, arg)| arg.cast_to(param.typ().clone()))
+            .map(|(param, arg)| {
+                let param_typ = param.typ().clone();
+                // `cast_to` only handles scalar conversions. When an aggregate is
+                // involved — e.g. `core::ptr::Alignment` (a struct) passed where the C
+                // shim in `kani_lib.c` declares `size_t` — reinterpret the bits with
+                // `transmute_to` instead (the two are ABI-identical).
+                if arg.typ().is_scalar() && param_typ.is_scalar() {
+                    arg.cast_to(param_typ)
+                } else if *arg.typ() == param_typ {
+                    arg
+                } else {
+                    arg.transmute_to(param_typ, &self.symbol_table)
+                }
+            })
             .collect::<Vec<_>>();
         let call_expr = fn_expr.call(expected_args);
 
@@ -155,7 +169,21 @@ impl GotocCtx<'_, '_> {
             .map(|(idx, arg)| {
                 let arg_name = format!("{fn_name}::param_{idx}");
                 let base_name = format!("param_{idx}");
-                let arg_type = self.codegen_ty_stable(arg.ty);
+                // `core::mem::Alignment` is `repr(transparent)` over a `repr(usize)`
+                // enum (ABI-identical to `usize`). As of nightly-2026-02-16 the Rust
+                // allocation shims (`__rust_alloc` etc.) take their alignment argument
+                // as `Alignment` rather than `usize`. Its goto type is not `size_t`,
+                // which would mismatch the `size_t` parameters of the C definitions in
+                // `kani_lib.c` at link time, leaving the allocator body unlinked (so it
+                // havocs and may "fail", making the OOM path reachable). Represent it as
+                // `size_t` for FFI so the definitions link.
+                let arg_type = if is_alignment(arg.ty) {
+                    Type::size_t()
+                } else if let Some(pointee) = nonnull_pointee(arg.ty) {
+                    self.codegen_ty_stable(pointee).to_pointer()
+                } else {
+                    self.codegen_ty_stable(arg.ty)
+                };
                 let sym = Symbol::variable(&arg_name, &base_name, arg_type.clone(), loc)
                     .with_is_parameter(true);
                 self.symbol_table.insert(sym);
@@ -197,4 +225,27 @@ impl GotocCtx<'_, '_> {
             loc,
         )
     }
+}
+
+/// Returns `true` if `ty` is the standard library's `Alignment`, under either the `core` or `std`
+/// path and under either the `mem` module (as of nightly-2026-03-21) or the `ptr` module (before).
+///
+/// That type is `repr(transparent)` over a `repr(usize)` enum and is therefore
+/// ABI-identical to `usize`, but its goto type is not `size_t`. We treat it as
+/// `size_t` in foreign (FFI) signatures so that Rust's allocation shims match the
+/// `size_t`-typed definitions in `kani_lib.c`.
+fn is_alignment(ty: rustc_public::ty::Ty) -> bool {
+    matches!(
+        ty.kind(),
+        TyKind::RigidTy(RigidTy::Adt(def, _))
+            if matches!(
+                def.name().as_str(),
+                // The type moved from `ptr` to `mem` in nightly-2026-03-21; both paths are matched
+                // so that this keeps working across the move.
+                "core::mem::Alignment"
+                    | "std::mem::Alignment"
+                    | "core::ptr::Alignment"
+                    | "std::ptr::Alignment"
+            )
+    )
 }

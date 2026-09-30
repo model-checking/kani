@@ -17,6 +17,8 @@ import yaml
 import benchcomp
 import benchcomp.visualizers.utils as viz_utils
 
+from jinja2 import Environment, select_autoescape
+
 
 
 @dataclasses.dataclass
@@ -419,8 +421,8 @@ class dump_markdown_results_table:
             "scaled_variants": self._get_scaled_variants(scaled),
         }
 
-        env = jinja2.Environment(
-            loader=jinja2.BaseLoader, autoescape=jinja2.select_autoescape(
+        env = Environment(
+            loader=jinja2.BaseLoader, autoescape=select_autoescape(
                 enabled_extensions=("html"),
                 default_for_string=True))
         env.filters["safe_round"] = self._safe_round

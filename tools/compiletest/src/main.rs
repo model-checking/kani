@@ -32,7 +32,6 @@ pub mod common;
 pub mod header;
 mod json;
 mod raise_fd_limit;
-mod read2;
 pub mod runtest;
 pub mod util;
 
@@ -264,6 +263,11 @@ pub fn run_tests(config: Config) {
         return;
     }
 
+    // `run_tests_console` now takes a tagged list. compiletest collects tests by walking
+    // directories, so the order is not by name and must be reported as `Unsorted`: the
+    // harness binary-searches a list tagged `Sorted`.
+    let test_refs: Vec<&test::TestDescAndFn> = tests.iter().collect();
+    let tests = test::TestList::new(&test_refs, test::TestListOrder::Unsorted);
     let res = test::run_tests_console(&opts, tests);
     match res {
         Ok(true) => {}
@@ -593,8 +597,8 @@ fn make_test_name(config: &Config, testpaths: &TestPaths) -> test::TestName {
 fn make_test_closure(config: &Config, testpaths: &TestPaths) -> test::TestFn {
     let config = config.clone();
     let testpaths = testpaths.clone();
-    test::DynTestFn(Box::new(move || {
-        runtest::run(config, &testpaths);
+    test::DynTestFn(std::sync::Arc::new(move || {
+        runtest::run(config.clone(), &testpaths);
         Ok(())
     }))
 }

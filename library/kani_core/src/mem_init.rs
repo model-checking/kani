@@ -12,7 +12,10 @@
 macro_rules! kani_mem_init {
     ($core:path) => {
         /// Global object for tracking memory initialization state.
-        #[rustc_diagnostic_item = "KaniMemoryInitializationState"]
+        // `#[rustc_diagnostic_item]` cannot be applied to statics (rust-lang/rust
+        // disallows it), so we identify this static via Kani's own `fn_marker` tool
+        // attribute instead; the compiler looks it up by that marker.
+        #[kanitool::fn_marker = "KaniMemoryInitializationState"]
         static mut MEM_INIT_STATE: MemoryInitializationState = MemoryInitializationState::new();
 
         /// Global object for tracking union initialization state across function boundaries.

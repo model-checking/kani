@@ -15,11 +15,15 @@ permissions:
   pull-requests: write
 
 jobs:
-  create-cargo-update-pr:
+  create-cbmc-update-pr:
+    # This workflow is restricted to the main repository (model-checking/kani) to prevent
+    # unnecessary PRs being created in forks. The CBMC update action should only run in
+    # the main repository context.
+    if: github.repository == 'model-checking/kani'
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
@@ -65,7 +69,7 @@ jobs:
 
       - name: Create Pull Request
         if: ${{ env.next_step == 'create_pr' }}
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           commit-message: Upgrade CBMC from ${{ env.CBMC_VERSION }} to ${{ env.CBMC_LATEST }}
           branch: cbmc-${{ env.CBMC_LATEST }}
@@ -75,7 +79,7 @@ jobs:
             Upgrade CBMC to its latest release.
 
       - name: Create Issue
-        if: ${{ env.next_step == 'create_issue' && github.repository_owner == 'model-checking' }}
+        if: ${{ env.next_step == 'create_issue' }}
         uses: dacbd/create-issue-action@main
         with:
           token: ${{ github.token }}

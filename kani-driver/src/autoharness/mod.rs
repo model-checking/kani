@@ -4,8 +4,9 @@
 use std::str::FromStr;
 
 use crate::args::Timeout;
+use crate::args::VerificationArgs;
 use crate::args::autoharness_args::{
-    CargoAutoharnessArgs, CommonAutoharnessArgs, StandaloneAutoharnessArgs,
+    AutoharnessBounds, CargoAutoharnessArgs, CommonAutoharnessArgs, StandaloneAutoharnessArgs,
 };
 use crate::args::common::UnstableFeature;
 use crate::call_cbmc::VerificationStatus;
@@ -14,10 +15,11 @@ use crate::list::collect_metadata::process_metadata;
 use crate::list::output::output_list_results;
 use crate::project::{Project, standalone_project, std_project};
 use crate::session::KaniSession;
+use crate::util::warning;
 use crate::{InvocationType, print_kani_version, project, verify_project};
 use anyhow::Result;
 use comfy_table::Table as PrettyTable;
-use kani_metadata::{AutoHarnessSkipReason, KaniMetadata};
+use kani_metadata::{AutoHarnessSkipReason, HarnessMetadata, KaniMetadata};
 
 const AUTOHARNESS_TIMEOUT: &str = "60s";
 const LOOP_UNWIND_DEFAULT: u32 = 20;
@@ -27,7 +29,7 @@ pub fn autoharness_cargo(args: CargoAutoharnessArgs) -> Result<()> {
     setup_session(&mut session, &args.common_autoharness_args);
 
     if !session.args.common_args.quiet {
-        print_kani_version(InvocationType::CargoKani(vec![]));
+        print_kani_version(InvocationType::CargoKani(vec![]), session.args.common_args.verbose);
     }
     let project = project::cargo_project(&mut session, false)?;
     postprocess_project(project, session, args.common_autoharness_args)
@@ -38,7 +40,7 @@ pub fn autoharness_standalone(args: StandaloneAutoharnessArgs) -> Result<()> {
     setup_session(&mut session, &args.common_autoharness_args);
 
     if !session.args.common_args.quiet {
-        print_kani_version(InvocationType::Standalone);
+        print_kani_version(InvocationType::Standalone, session.args.common_args.verbose);
     }
 
     let project = if args.std {
@@ -52,12 +54,47 @@ pub fn autoharness_standalone(args: StandaloneAutoharnessArgs) -> Result<()> {
 
 /// Execute autoharness-specific KaniSession configuration.
 fn setup_session(session: &mut KaniSession, common_autoharness_args: &CommonAutoharnessArgs) {
+    // `main` already applies these before validating the arguments (so that validation sees the
+    // options the run will actually use); repeat it here -- the call is idempotent -- so that the
+    // session is configured correctly regardless of how it was constructed.
+    session.args.apply_autoharness_parallel_defaults();
     session.enable_autoharness();
     session.add_default_bounds();
+    let bounds = common_autoharness_args.bounds();
+    if common_autoharness_args.bounded_arguments {
+        warn_if_bounds_reach_unwind(bounds, &session.args);
+    }
     session.add_auto_harness_args(
         &common_autoharness_args.include_pattern,
         &common_autoharness_args.exclude_pattern,
+        common_autoharness_args.bounded_arguments,
+        common_autoharness_args.constructor_args,
+        common_autoharness_args.check_invariants,
+        bounds,
     );
+}
+
+/// Warn about a bound that reaches the effective unwinding bound. A loop iterating over such an
+/// argument is not fully unwound, so the result does not hold up to the bound after all.
+///
+/// Called after `add_default_bounds`, so the unwinding bound is resolved by this point.
+fn warn_if_bounds_reach_unwind(bounds: AutoharnessBounds, args: &VerificationArgs) {
+    // `--unwind` takes precedence over `--default-unwind`, c.f. `resolve_unwind_value`. Automatic
+    // harnesses carry no `#[kani::unwind]` attribute, so those two are the whole precedence here.
+    let Some(unwind) = args.unwind.or(args.default_unwind) else { return };
+    for (option, value) in [
+        ("--slice-bound", bounds.slice),
+        ("--string-bound", bounds.string),
+        ("--bounded-arbitrary-bound", bounds.bounded_arbitrary),
+    ] {
+        if value >= u64::from(unwind) {
+            warning(&format!(
+                "{option} is {value}, which is not below the unwinding bound ({unwind}). Loops \
+                 iterating over such an argument may not be fully unwound, so verification \
+                 results may not hold up to the bound."
+            ));
+        }
+    }
 }
 
 /// After generating the automatic harnesses, postprocess metadata and run verification.
@@ -95,7 +132,8 @@ fn print_autoharness_metadata(metadata: Vec<KaniMetadata>) {
         );
         skipped_table.add_rows(autoharness_md.skipped.into_iter().filter_map(|(func, reason)| {
             match reason {
-                AutoHarnessSkipReason::MissingArbitraryImpl(ref args) => Some(vec![
+                AutoHarnessSkipReason::MissingArbitraryImpl(ref args)
+                | AutoHarnessSkipReason::RequiresBoundedArguments(ref args) => Some(vec![
                     md.crate_name.clone(),
                     func,
                     format!(
@@ -106,9 +144,10 @@ fn print_autoharness_metadata(metadata: Vec<KaniMetadata>) {
                             .join(", ")
                     ),
                 ]),
-                AutoHarnessSkipReason::GenericFn
-                | AutoHarnessSkipReason::NoBody
-                | AutoHarnessSkipReason::UserFilter => {
+                AutoHarnessSkipReason::GenericFn(ref detail) => {
+                    Some(vec![md.crate_name.clone(), func, format!("{reason}: {detail}")])
+                }
+                AutoHarnessSkipReason::NoBody | AutoHarnessSkipReason::UserFilter => {
                     Some(vec![md.crate_name.clone(), func, reason.to_string()])
                 }
                 // We don't report Kani implementations to the user to avoid exposing Kani functions we insert during instrumentation.
@@ -161,7 +200,15 @@ impl KaniSession {
     }
 
     /// Add the compiler arguments specific to the `autoharness` subcommand.
-    pub fn add_auto_harness_args(&mut self, included: &[String], excluded: &[String]) {
+    pub fn add_auto_harness_args(
+        &mut self,
+        included: &[String],
+        excluded: &[String],
+        bounded_arguments: bool,
+        constructor_args: bool,
+        check_invariants: bool,
+        bounds: AutoharnessBounds,
+    ) {
         let mut args = vec![];
         for pattern in included {
             args.push(format!("--autoharness-include-pattern {pattern}"));
@@ -169,7 +216,23 @@ impl KaniSession {
         for pattern in excluded {
             args.push(format!("--autoharness-exclude-pattern {pattern}"));
         }
+        if bounded_arguments {
+            args.push("--autoharness-bounded-arguments".to_string());
+            args.push(format!("--autoharness-slice-bound {}", bounds.slice));
+            args.push(format!("--autoharness-string-bound {}", bounds.string));
+            args.push(format!(
+                "--autoharness-bounded-arbitrary-bound {}",
+                bounds.bounded_arbitrary
+            ));
+        }
+        if constructor_args {
+            args.push("--autoharness-constructor-args".to_string());
+        }
+        if check_invariants {
+            args.push("--autoharness-check-invariants".to_string());
+        }
         self.autoharness_compiler_flags = Some(args);
+        self.autoharness_bounds = bounds;
     }
 
     /// Add global harness timeout and loop unwinding bounds if not provided.
@@ -185,10 +248,7 @@ impl KaniSession {
     }
 
     /// Prints the results from running the `autoharness` subcommand.
-    pub fn print_autoharness_summary(
-        &self,
-        mut automatic: Vec<&HarnessResult<'_>>,
-    ) -> Result<usize> {
+    pub fn print_autoharness_summary(&self, mut automatic: Vec<&HarnessResult<'_>>) {
         automatic.sort_by(|a, b| a.harness.pretty_name.cmp(&b.harness.pretty_name));
         let (successes, failures): (Vec<_>, Vec<_>) =
             automatic.into_iter().partition(|r| r.result.status == VerificationStatus::Success);
@@ -207,26 +267,60 @@ impl KaniSession {
             "Verification Result",
         ]);
 
+        let harness_kind = |harness: &HarnessMetadata| {
+            let mut kind = harness.attributes.kind.to_string();
+            if harness.is_bounded {
+                kind.push_str(" (bounded)");
+            }
+            if harness.is_ctor_based {
+                kind.push_str(" (ctor)");
+            }
+            kind
+        };
+        let mut any_bounded = false;
+        let mut any_ctor = false;
+
         for success in successes {
+            any_bounded |= success.harness.is_bounded;
+            any_ctor |= success.harness.is_ctor_based;
             verified_fns.add_row(vec![
                 success.harness.crate_name.clone(),
                 success.harness.pretty_name.clone(),
-                success.harness.attributes.kind.to_string(),
+                harness_kind(success.harness),
                 success.result.status.to_string(),
             ]);
         }
 
         for failure in failures {
+            any_bounded |= failure.harness.is_bounded;
+            any_ctor |= failure.harness.is_ctor_based;
             verified_fns.add_row(vec![
                 failure.harness.crate_name.clone(),
                 failure.harness.pretty_name.clone(),
-                failure.harness.attributes.kind.to_string(),
+                harness_kind(failure.harness),
                 failure.result.status.to_string(),
             ]);
         }
 
         if total > 0 {
             println!("{verified_fns}");
+        }
+
+        if any_bounded {
+            let bounds = self.autoharness_bounds;
+            println!(
+                "Note: harnesses marked \"(bounded)\" use bounded nondeterministic values for some arguments (--bounded-arguments):\n\
+                 slices up to {} elements, strings up to {} bytes, and BoundedArbitrary \
+                 values at bound {}, which each implementation defines for itself.\n\
+                 Their verification results only hold up to those bounds, i.e., bugs that require larger input values may be missed.",
+                bounds.slice, bounds.string, bounds.bounded_arbitrary
+            );
+        }
+        if any_ctor {
+            println!(
+                "Note: harnesses marked \"(ctor)\" generate some values through one of a type's own constructors (--constructor-args);\n\
+                 their verification results only cover values reachable through that constructor."
+            );
         }
 
         if failing > 0 {
@@ -245,7 +339,5 @@ impl KaniSession {
         } else {
             println!("No functions were eligible for automatic verification.");
         }
-
-        Ok(failing)
     }
 }

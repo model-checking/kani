@@ -60,6 +60,7 @@ impl ToIrepId for BinaryOperator {
             BinaryOperator::Bitxor => IrepId::Bitxor,
             BinaryOperator::Div => IrepId::Div,
             BinaryOperator::Equal => IrepId::Equal,
+            BinaryOperator::FloatbvMod => IrepId::FloatbvMod,
             BinaryOperator::FloatbvRoundToIntegral => IrepId::FloatbvRoundToIntegral,
             BinaryOperator::Ge => IrepId::Ge,
             BinaryOperator::Gt => IrepId::Gt,
@@ -117,6 +118,8 @@ impl ToIrepId for UnaryOperator {
             UnaryOperator::CountTrailingZeros { .. } => IrepId::CountTrailingZeros,
             UnaryOperator::IsDynamicObject => IrepId::IsDynamicObject,
             UnaryOperator::IsFinite => IrepId::IsFinite,
+            UnaryOperator::IsInf => IrepId::Isinf,
+            UnaryOperator::IsNan => IrepId::Isnan,
             UnaryOperator::Not => IrepId::Not,
             UnaryOperator::ObjectSize => IrepId::ObjectSize,
             UnaryOperator::PointerObject => IrepId::PointerObject,
@@ -541,13 +544,6 @@ impl ToIrep for StmtBody {
                     code_irep(IrepId::Decl, vec![lhs.to_irep(mm)])
                 }
             }
-            StmtBody::Deinit(place) => {
-                // CBMC doesn't yet have a notion of poison (https://github.com/diffblue/cbmc/issues/7014)
-                // So we translate identically to `nondet` here, but add a comment noting we wish it were poison
-                // potentially for other backends to pick up and treat specially.
-                code_irep(IrepId::Assign, vec![place.to_irep(mm), place.typ().nondet().to_irep(mm)])
-                    .with_comment("deinit")
-            }
             StmtBody::Expression(e) => code_irep(IrepId::Expression, vec![e.to_irep(mm)]),
             StmtBody::For { init, cond, update, body } => code_irep(
                 IrepId::For,
@@ -561,7 +557,7 @@ impl ToIrep for StmtBody {
                     arguments_irep(arguments.iter(), mm),
                 ],
             ),
-            StmtBody::Goto { dest, loop_invariants, loop_modifies } => {
+            StmtBody::Goto { dest, loop_invariants, loop_modifies, loop_decreases } => {
                 let inv = loop_invariants
                     .clone()
                     .map(|inv| inv.clone().and(Expr::bool_true()).to_irep(mm));
@@ -570,10 +566,12 @@ impl ToIrep for StmtBody {
                         assigns.iter().map(|assign| assign.to_irep(mm)).collect(),
                     )])
                 });
+                let decreases = loop_decreases.clone().map(|dec| dec.to_irep(mm));
                 code_irep(IrepId::Goto, vec![])
                     .with_named_sub(IrepId::Destination, Irep::just_string_id(dest.to_string()))
                     .with_named_sub_option(IrepId::CSpecLoopInvariant, inv)
                     .with_named_sub_option(IrepId::CSpecAssigns, assigns.clone())
+                    .with_named_sub_option(IrepId::CSpecDecreases, decreases)
             }
             StmtBody::Ifthenelse { i, t, e } => code_irep(
                 IrepId::Ifthenelse,
@@ -702,12 +700,73 @@ impl goto_program::Symbol {
     }
 }
 
+impl goto_program::Symbol {
+    /// Build the dedicated `contract::<name>` symbol that CBMC's contract
+    /// instrumentation expects to exist for any function that carries a
+    /// contract.
+    ///
+    /// When CBMC processes C inputs, its ANSI-C typechecker creates this
+    /// symbol (see `c_typecheck_baset` in CBMC) and moves the contract clauses
+    /// (e.g. `c_spec_assigns`) onto it. Kani builds goto-programs directly and
+    /// thus never goes through that typechecker, so we synthesize the symbol
+    /// here. The symbol shares the function's (contract-bearing) type, has no
+    /// body, and is marked as a property.
+    ///
+    /// Historically CBMC would derive this symbol on the fly when it was
+    /// missing, but that fallback was removed for soundness in
+    /// <https://github.com/diffblue/cbmc/pull/8739>, turning the missing
+    /// symbol into a hard error during `--enforce-contract` /
+    /// `--replace-call-with-contract`.
+    ///
+    /// `function_irep` is this symbol already lowered to its `irep` form. We
+    /// reuse its (contract-bearing) type and metadata so the function body is
+    /// not serialized a second time — the contract symbol drops it anyway.
+    fn to_contract_irep(&self, function_irep: &super::Symbol) -> super::Symbol {
+        super::Symbol {
+            // Share the function's contract-bearing type; the contract symbol
+            // is a pure specification with no body.
+            typ: function_irep.typ.clone(),
+            value: Irep::nil(),
+            location: function_irep.location.clone(),
+            name: format!("contract::{}", self.name).into(),
+            is_property: true,
+            // Everything else is copied verbatim from the function symbol.
+            module: function_irep.module,
+            base_name: function_irep.base_name,
+            pretty_name: function_irep.pretty_name,
+            mode: function_irep.mode,
+            is_type: function_irep.is_type,
+            is_macro: function_irep.is_macro,
+            is_exported: function_irep.is_exported,
+            is_input: function_irep.is_input,
+            is_output: function_irep.is_output,
+            is_state_var: function_irep.is_state_var,
+            is_static_lifetime: function_irep.is_static_lifetime,
+            is_thread_local: function_irep.is_thread_local,
+            is_lvalue: function_irep.is_lvalue,
+            is_file_local: function_irep.is_file_local,
+            is_extern: function_irep.is_extern,
+            is_volatile: function_irep.is_volatile,
+            is_parameter: function_irep.is_parameter,
+            is_auxiliary: function_irep.is_auxiliary,
+            is_weak: function_irep.is_weak,
+        }
+    }
+}
+
 impl goto_program::SymbolTable {
     pub fn to_irep(&self) -> super::SymbolTable {
         let mm = self.machine_model();
         let mut st = super::SymbolTable::new();
         for (_key, value) in self.iter() {
-            st.insert(value.to_irep(mm))
+            let symbol_irep = value.to_irep(mm);
+            // Functions carrying a contract need a companion `contract::<name>`
+            // symbol so that CBMC's DFCC contract instrumentation can find it.
+            // See `goto_program::Symbol::to_contract_irep` for details.
+            if value.contract.is_some() {
+                st.insert(value.to_contract_irep(&symbol_irep));
+            }
+            st.insert(symbol_irep);
         }
         st
     }

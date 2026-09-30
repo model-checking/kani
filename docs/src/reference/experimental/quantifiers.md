@@ -54,3 +54,9 @@ fn vec_assert_forall_harness() {
 
 We now assume that all quantified variables are of type `usize`. This means that the range specified in the quantifier must be compatible with `usize`.
  We plan to support other types in the future, but for now, ensure that your quantifiers use `usize` ranges.
+
+#### Solver Backend Support
+
+The default SAT-based solver backend only supports quantifiers with constant bounds. A quantifier whose bound is symbolic (not known at compile time) cannot be encoded and would be silently replaced with an unconstrained value, which is unsound: a `kani::assume` containing such a quantifier would not be enforced, and a `kani::assert` containing one could fail spuriously.
+
+To keep results sound, Kani reports verification as `FAILED` when the backend drops a quantifier, and directs you to an SMT solver backend that supports quantifiers. Use `#[kani::solver(z3)]` on the harness (or `--solver z3` on the command line) to verify these quantifiers.

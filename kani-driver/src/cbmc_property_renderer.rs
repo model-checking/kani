@@ -10,6 +10,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use rustc_demangle::demangle;
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 type CbmcAltDescriptions = HashMap<&'static str, Vec<(&'static str, Option<&'static str>)>>;
 
@@ -165,12 +166,14 @@ impl ParserItem {
 /// filter and transform it into the format we expect.
 ///
 /// This will output "messages" live as they stream in if `output_format` is
-/// set to `regular` but will otherwise not print.
+/// set to `regular` but will otherwise not print. When a log file path is provided, output is
+/// redirected to the log file instead.
 pub fn kani_cbmc_output_filter(
     item: ParserItem,
     extra_ptr_checks: bool,
     quiet: bool,
     output_format: &OutputFormat,
+    log_file: Option<&PathBuf>,
 ) -> Option<ParserItem> {
     // Some items (e.g., messages) are skipped.
     // We could also process them and decide to skip later.
@@ -183,7 +186,17 @@ pub fn kani_cbmc_output_filter(
     if !quiet {
         let formatted_item = format_item(&processed_item, output_format);
         if let Some(fmt_item) = formatted_item {
-            println!("{fmt_item}");
+            if let Some(log_path) = log_file {
+                if let Err(e) = crate::log_file::append_line(log_path, &fmt_item) {
+                    eprintln!(
+                        "Failed to write CBMC output to log file {}: {}",
+                        log_path.display(),
+                        e
+                    );
+                }
+            } else {
+                println!("{fmt_item}");
+            }
         }
     }
     // TODO: Record processed items and dump them into a JSON file
@@ -261,13 +274,11 @@ pub fn format_result(
     let mut number_covers_unreachable = 0;
     let mut number_covers_unsatisfiable = 0;
 
-    let mut index = 1;
-
     if show_checks {
         result_str.push_str("\nRESULTS:\n");
     }
 
-    for prop in properties {
+    for (index, prop) in (1..).zip(properties) {
         let name = prop.property_name();
         let status = &prop.status;
         let description = &prop.description;
@@ -318,8 +329,6 @@ pub fn format_result(
             }
             result_str.push('\n');
         }
-
-        index += 1;
     }
 
     if show_checks {
@@ -395,6 +404,7 @@ pub fn format_result(
             FailedProperties::Other => {
                 " (encountered failures other than panics, which were unexpected)"
             }
+            FailedProperties::Error => " (encountered a solver error)",
         }
     } else {
         ""
@@ -461,13 +471,10 @@ fn build_failure_message(description: String, trace: &Option<Vec<TraceItem>>) ->
     }
     let failure_source = failure_source_wrap.unwrap();
 
-    if failure_source.file.is_some()
-        && failure_source.function.is_some()
-        && failure_source.line.is_some()
+    if let Some(failure_file) = failure_source.file
+        && let Some(failure_function) = failure_source.function
+        && let Some(failure_line) = failure_source.line
     {
-        let failure_file = failure_source.file.unwrap();
-        let failure_function = failure_source.function.unwrap();
-        let failure_line = failure_source.line.unwrap();
         return format!(
             "Failed Checks: {description}\n File: \"{failure_file}\", line {failure_line}, in {failure_function}\n"
         );

@@ -1,0 +1,6 @@
+error: `Wrapper::normalize` is used as a verified stub, but generating an arbitrary value of its return type `Wrapper` calls `Wrapper::normalize` again
+note: the contract replacement havocs its return value with `kani::any::<Wrapper>()`, so this forms an unbounded recursion:
+-> <stub_verified_arbitrary_cycle::Wrapper as kani::Arbitrary>::any
+-> stub_verified_arbitrary_cycle::Wrapper::new
+-> stub_verified_arbitrary_cycle::Wrapper::normalize
+help: derive `Arbitrary` for `Wrapper` instead of implementing it manually, or avoid calling `Wrapper::normalize` from the `Arbitrary` implementation

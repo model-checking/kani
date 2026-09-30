@@ -56,6 +56,8 @@ impl InitialTargetVisitor {
                     }
                 }
             }
+            // Runtime-check operands (rust-lang/rust#148766) carry no place or static.
+            Operand::RuntimeChecks(_) => {}
         }
     }
 }

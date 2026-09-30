@@ -18,9 +18,9 @@ fn main() {
     let ptr_a3: *const u8 = &a3;
 
     unsafe {
-        let x1 = atomic_load::<_, { AtomicOrdering::SeqCst }>(ptr_a1);
-        let x2 = atomic_load::<_, { AtomicOrdering::Acquire }>(ptr_a2);
-        let x3 = atomic_load::<_, { AtomicOrdering::Relaxed }>(ptr_a3);
+        let x1 = atomic_load::<_, { AtomicOrdering::SeqCst }, /* VOLATILE */ false>(ptr_a1);
+        let x2 = atomic_load::<_, { AtomicOrdering::Acquire }, /* VOLATILE */ false>(ptr_a2);
+        let x3 = atomic_load::<_, { AtomicOrdering::Relaxed }, /* VOLATILE */ false>(ptr_a3);
 
         assert!(x1 == 1);
         assert!(x2 == 1);

@@ -1,0 +1,9 @@
+| cargo_autoharness_assume_invariant | constrained_arbitrary                  | #[kani::proof]            | Success             |
+| cargo_autoharness_assume_invariant | invariant_behind_ref                   | #[kani::proof]            | Success             |
+| cargo_autoharness_assume_invariant | manual_invariant_derived_arbitrary     | #[kani::proof]            | Success             |
+| cargo_autoharness_assume_invariant | manual_invariant_synthesized_arbitrary | #[kani::proof]            | Success             |
+| cargo_autoharness_assume_invariant | nested_invariant                       | #[kani::proof]            | Success             |
+| cargo_autoharness_assume_invariant | nested_invariant_synthesized_arbitrary | #[kani::proof]            | Success             |
+| cargo_autoharness_assume_invariant | no_invariant_negative_control          | #[kani::proof]            | Failure             |
+| cargo_autoharness_assume_invariant | over_assume_negative_control           | #[kani::proof]            | Failure             |
+Complete - 6 successfully verified functions, 2 failures, 8 total.

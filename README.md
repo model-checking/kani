@@ -50,6 +50,38 @@ Use Kani in your CI with `model-checking/kani-github-action@VERSION`. See the
 book](https://model-checking.github.io/kani/install-github-ci.html)
 for details.
 
+## Citing Kani
+
+If you use Kani in your research, please cite our ASE 2026 paper.
+
+ACM Reference Format:
+
+> Rémi Delmas, Zyad Hassan, Qinheping Hu, Rahul Kumar, Felipe R. Monteiro, Thanh Nguyen, Adrián Palacios, Celina Val, Michael Tautschnig, Justus Adam, Daniel Schwartz-Narbonne, and Carolyn Zech. 2026. Kani: A Model Checker for Rust. In *Proceedings of the 41st IEEE/ACM International Conference on Automated Software Engineering (ASE '26), October 12–16, 2026, Munich, Germany*. ACM, New York, NY, USA, 13 pages. <https://doi.org/10.1145/3832783.3834499>
+
+BibTeX:
+
+```bibtex
+@inproceedings{kani-ase-2026,
+  author    = {Delmas, R{\'e}mi and Hassan, Zyad and Hu, Qinheping and Kumar, Rahul and
+               Monteiro, Felipe R. and Nguyen, Thanh and Palacios, Adri{\'a}n and
+               Val, Celina and Tautschnig, Michael and Adam, Justus and
+               Schwartz-Narbonne, Daniel and Zech, Carolyn},
+  title     = {{Kani}: A Model Checker for {Rust}},
+  year      = {2026},
+  publisher = {Association for Computing Machinery},
+  address   = {New York, NY, USA},
+  url       = {https://doi.org/10.1145/3832783.3834499},
+  doi       = {10.1145/3832783.3834499},
+  booktitle = {Proceedings of the 41st IEEE/ACM International Conference on Automated Software Engineering},
+  numpages  = {13},
+  location  = {Munich, Germany},
+  series    = {ASE '26}
+}
+```
+
+The same citation is available in machine-readable form in [CITATION.cff](CITATION.cff),
+which powers GitHub's *Cite this repository* button.
+
 ## Security
 See [SECURITY](https://github.com/model-checking/kani/security/policy) for more information.
 

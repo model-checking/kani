@@ -4,8 +4,9 @@
 //! Module containing multiple transformation passes that instrument the code to detect possible UB
 //! due to the accesses to uninitialized memory.
 
+use crate::kani_middle::nonnull_pointee;
 use crate::kani_middle::transform::body::{
-    CheckType, InsertPosition, MutableBody, SourceInstruction,
+    CheckType, InsertPosition, MutableBody, SourceInstruction, synthetic_source_info,
 };
 use relevant_instruction::{InitRelevantInstruction, MemoryInitOp};
 use rustc_public::{
@@ -20,6 +21,7 @@ use std::collections::HashMap;
 use crate::kani_middle::kani_functions::{KaniFunction, KaniModel};
 pub use delayed_ub::DelayedUbPass;
 pub use ptr_uninit::UninitPass;
+use rustc_public::mir::WithRetag;
 pub use ty_layout::{PointeeInfo, PointeeLayout};
 
 mod delayed_ub;
@@ -51,6 +53,19 @@ const KANI_COPY_INIT_STATE_SINGLE: KaniFunction =
     KaniFunction::Model(KaniModel::CopyInitStateSingle);
 const KANI_LOAD_ARGUMENT: KaniFunction = KaniFunction::Model(KaniModel::LoadArgument);
 const KANI_STORE_ARGUMENT: KaniFunction = KaniFunction::Model(KaniModel::StoreArgument);
+// The contract-clause-depth functions access the `CONTRACT_CLAUSE_DEPTH`
+// static. Instrumenting that access would inject memory-initialization shadow
+// writes that CBMC's contract write-set check then flags as illegal side
+// effects when a clause is evaluated during contract verification (e.g. a
+// `requires(can_dereference(..))` under `-Z uninit-checks`). The counter is
+// verifier-internal and always reset at harness entry, so skipping these is
+// sound, mirroring the mem-init functions above.
+const KANI_ENTER_CONTRACT_CLAUSE: KaniFunction =
+    KaniFunction::Model(KaniModel::EnterContractClause);
+const KANI_EXIT_CONTRACT_CLAUSE: KaniFunction = KaniFunction::Model(KaniModel::ExitContractClause);
+const KANI_IN_CONTRACT_CLAUSE: KaniFunction = KaniFunction::Model(KaniModel::InContractClause);
+const KANI_RESET_CONTRACT_CLAUSE_DEPTH: KaniFunction =
+    KaniFunction::Model(KaniModel::ResetContractClauseDepth);
 
 // Function bodies of those functions will not be instrumented as not to cause infinite recursion.
 const SKIPPED_ITEMS: &[KaniFunction] = &[
@@ -66,6 +81,10 @@ const SKIPPED_ITEMS: &[KaniFunction] = &[
     KANI_COPY_INIT_STATE_SINGLE,
     KANI_LOAD_ARGUMENT,
     KANI_STORE_ARGUMENT,
+    KANI_ENTER_CONTRACT_CLAUSE,
+    KANI_EXIT_CONTRACT_CLAUSE,
+    KANI_IN_CONTRACT_CLAUSE,
+    KANI_RESET_CONTRACT_CLAUSE_DEPTH,
 ];
 
 /// Instruments the code with checks for uninitialized memory, agnostic to the source of targets.
@@ -149,14 +168,18 @@ impl<'a> UninitInstrumenter<'a> {
             // Sanity check: since CBMC memory object primitives only accept pointers, need to
             // ensure the correct type.
             let ptr_operand_ty = operation.operand_ty(body);
-            let pointee_ty = match ptr_operand_ty.kind() {
-                TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) => pointee_ty,
-                _ => {
+            let pointee_ty =
+                if let TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) = ptr_operand_ty.kind() {
+                    pointee_ty
+                } else if let Some(pointee_ty) = nonnull_pointee(ptr_operand_ty) {
+                    // The allocation shims hand us a `NonNull<u8>`, which holds the same address as the
+                    // `*mut u8` they used to take.
+                    pointee_ty
+                } else {
                     unreachable!(
                         "Should only build checks for raw pointers, `{ptr_operand_ty}` encountered."
                     )
-                }
-            };
+                };
             // Calculate pointee layout for byte-by-byte memory initialization checks.
             match PointeeInfo::from_ty(pointee_ty) {
                 Ok(type_info) => type_info,
@@ -248,7 +271,7 @@ impl<'a> UninitInstrumenter<'a> {
                         target: Some(0), // The current value does not matter, since it will be overwritten in add_bb.
                         unwind: UnwindAction::Terminate,
                     },
-                    span: source.span(body.blocks()),
+                    source_info: synthetic_source_info(source.span(body.blocks())),
                 }
             }
             PointeeLayout::Slice { element_layout } => {
@@ -281,7 +304,7 @@ impl<'a> UninitInstrumenter<'a> {
                         target: Some(0), // The current value does not matter, since it will be overwritten in add_bb.
                         unwind: UnwindAction::Terminate,
                     },
-                    span: source.span(body.blocks()),
+                    source_info: synthetic_source_info(source.span(body.blocks())),
                 }
             }
             PointeeLayout::TraitObject => {
@@ -392,7 +415,7 @@ impl<'a> UninitInstrumenter<'a> {
                         target: Some(0), // this will be overriden in add_bb
                         unwind: UnwindAction::Terminate,
                     },
-                    span: source.span(body.blocks()),
+                    source_info: synthetic_source_info(source.span(body.blocks())),
                 }
             }
             PointeeLayout::Slice { element_layout } => {
@@ -433,7 +456,7 @@ impl<'a> UninitInstrumenter<'a> {
                         target: Some(0), // The current value does not matter, since it will be overwritten in add_bb.
                         unwind: UnwindAction::Terminate,
                     },
-                    span: source.span(body.blocks()),
+                    source_info: synthetic_source_info(source.span(body.blocks())),
                 }
             }
             PointeeLayout::TraitObject => {
@@ -487,7 +510,7 @@ impl<'a> UninitInstrumenter<'a> {
                         target: Some(0), // this will be overriden in add_bb
                         unwind: UnwindAction::Terminate,
                     },
-                    span: source.span(body.blocks()),
+                    source_info: synthetic_source_info(source.span(body.blocks())),
                 }
             }
         };
@@ -573,7 +596,7 @@ impl<'a> UninitInstrumenter<'a> {
                 target: Some(0), // this will be overriden in add_bb
                 unwind: UnwindAction::Terminate,
             },
-            span: source.span(body.blocks()),
+            source_info: synthetic_source_info(source.span(body.blocks())),
         };
 
         // Construct the basic block and insert it into the body.
@@ -612,7 +635,7 @@ impl<'a> UninitInstrumenter<'a> {
                 target: Some(0), // this will be overriden in add_bb
                 unwind: UnwindAction::Terminate,
             },
-            span: source.span(body.blocks()),
+            source_info: synthetic_source_info(source.span(body.blocks())),
         };
 
         // Construct the basic block and insert it into the body.
@@ -627,11 +650,14 @@ impl<'a> UninitInstrumenter<'a> {
         reason: &str,
     ) {
         let span = source.span(body.blocks());
-        let rvalue = Rvalue::Use(Operand::Constant(ConstOperand {
-            const_: MirConst::from_bool(false),
-            span,
-            user_ty: None,
-        }));
+        let rvalue = Rvalue::Use(
+            Operand::Constant(ConstOperand {
+                const_: MirConst::from_bool(false),
+                span,
+                user_ty: None,
+            }),
+            WithRetag::No,
+        );
         let result = body.insert_assignment(rvalue, source, position);
         body.insert_check(&self.safety_check_type, source, position, Some(result), reason);
     }
@@ -681,7 +707,10 @@ pub fn mk_layout_operand(
     );
     let ret_ty = rvalue.ty(body.locals()).unwrap();
     let result = body.new_local(ret_ty, span, Mutability::Not);
-    let stmt = Statement { kind: StatementKind::Assign(Place::from(result), rvalue), span };
+    let stmt = Statement {
+        kind: StatementKind::Assign(Place::from(result), rvalue),
+        source_info: synthetic_source_info(span),
+    };
     statements.push(stmt);
 
     Operand::Move(Place { local: result, projection: vec![] })

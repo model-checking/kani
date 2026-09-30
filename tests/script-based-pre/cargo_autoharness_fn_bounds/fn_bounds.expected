@@ -1,0 +1,11 @@
+	 - Status: SATISFIED
+| cargo_autoharness_fn_bounds | apply::<fn(u8) -> u8 {kani::arbitrary::nondet_fn1::<u8, u8>}>                      | #[kani::proof]            | Success             |
+| cargo_autoharness_fn_bounds | apply_generic::<i32, fn(i32) -> i32 {kani::arbitrary::nondet_fn1::<i32, i32>}>     | #[kani::proof]            | Success             |
+| cargo_autoharness_fn_bounds | branches::<fn(u8) -> bool {kani::arbitrary::nondet_fn1::<u8, bool>}>               | #[kani::proof]            | Success             |
+| cargo_autoharness_fn_bounds | inspect_with::<for<'a> fn(&'a u32) {kani::arbitrary::nondet_fn1_ref::<u32, ()>}>   | #[kani::proof]            | Success             |
+| cargo_autoharness_fn_bounds | packet_size                                                                        | #[kani::proof]            | Success             |
+| cargo_autoharness_fn_bounds | run_once::<fn() {kani::arbitrary::nondet_fn0::<()>}>                               | #[kani::proof]            | Success             |
+| cargo_autoharness_fn_bounds | scoped::<for<'a> fn(&'a u8) -> bool {kani::arbitrary::nondet_fn1_ref::<u8, bool>}> | #[kani::proof]            | Success             |
+| cargo_autoharness_fn_bounds | tuple_arg                                                                          | #[kani::proof]            | Success             |
+| cargo_autoharness_fn_bounds | apply_buggy::<fn(u8) -> u8 {kani::arbitrary::nondet_fn1::<u8, u8>}>                | #[kani::proof]            | Failure             |
+| cargo_autoharness_fn_bounds | fold2::<fn(u32, u32) -> u32 {kani::arbitrary::nondet_fn2::<u32, u32, u32>}>        | #[kani::proof]            | Failure             |

@@ -54,7 +54,7 @@ impl SymbolTable {
         assert!(
             self.lookup(symbol.name).is_none(),
             "Tried to insert symbol which already existed\n\t: {:?}\n\t",
-            &symbol
+            symbol
         );
         self.symbol_table.insert(symbol.name, symbol);
     }

@@ -10,7 +10,6 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::codegen_cprover_gotoc::codegen::ty_stable::pointee_type;
 use crate::codegen_cprover_gotoc::codegen::typ::std_pointee_type;
 use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
-use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{Expr, ExprValue, Location, Stmt, Type};
 use rustc_abi::{TagEncoding, Variants};
 use rustc_middle::ty::layout::LayoutOf;
@@ -187,8 +186,8 @@ impl ProjectedPlace {
         assert!(
             Self::check_fat_ptr_typ(&fat_ptr_goto_expr, &fat_ptr_mir_typ, ctx),
             "\n{:?}\n{:?}",
-            &fat_ptr_goto_expr,
-            &fat_ptr_mir_typ
+            fat_ptr_goto_expr,
+            fat_ptr_mir_typ
         );
         Ok(ProjectedPlace { goto_expr, mir_typ_or_variant, fat_ptr_goto_expr, fat_ptr_mir_typ })
     }
@@ -296,9 +295,17 @@ impl GotocCtx<'_, '_> {
                         )
                     }
                     TyKind::RigidTy(RigidTy::Pat(..)) => {
-                        // See https://github.com/rust-lang/types-team/issues/126
-                        // for what is currently supported.
-                        unreachable!("projection inside a pattern is not supported, only transmute")
+                        // Rust itself does not allow projecting inside a pattern type, only
+                        // transmuting it: see https://github.com/rust-lang/types-team/issues/126
+                        // for what is currently supported. Kani does synthesize such a projection to
+                        // see through the pattern type that `NonNull` wraps its address in, and
+                        // codegens a pattern type as a struct with a single tuple-like field
+                        // holding the constrained type, so read that field.
+                        assert_eq!(
+                            field_idx, 0,
+                            "a pattern type only has field 0, but found {field_idx}"
+                        );
+                        Ok(parent_expr.member(Self::tuple_fld_name(field_idx), &self.symbol_table))
                     }
                 }
             }
@@ -397,7 +404,27 @@ impl GotocCtx<'_, '_> {
 
         // Otherwise, simply look up the local by the var name.
         let vname = self.codegen_var_name(&l);
-        Expr::symbol_expression(vname, self.codegen_ty_stable(local_ty))
+        // Unsized-by-value arguments (`unsized_fn_params`, e.g. `fn f(self: [T])`) are
+        // represented as fat pointers rather than as the (incomplete) unsized type itself.
+        // See `fn_typ` and `codegen_declare_variables`.
+        let typ = if self.is_unsized_by_value_arg(l) {
+            self.codegen_ty_ref_stable(local_ty)
+        } else {
+            self.codegen_ty_stable(local_ty)
+        };
+        Expr::symbol_expression(vname, typ)
+    }
+
+    /// Returns true if `local` is a by-value function argument of an unsized type
+    /// (via the `unsized_fn_params` feature, e.g. `fn f(self: [T])` or `fn f(self: str)`).
+    ///
+    /// Such arguments cannot be represented directly (the unsized type codegens to an
+    /// incomplete `FlexibleArray`, which cannot be a function parameter or carry the
+    /// length/vtable metadata), so Kani represents them as fat pointers.
+    pub fn is_unsized_by_value_arg(&self, local: Local) -> bool {
+        local >= 1
+            && local <= self.current_fn().arg_count()
+            && self.is_unsized(rustc_internal::internal(self.tcx, self.local_ty_stable(local)))
     }
 
     /// A projection is an operation that translates an lvalue to another lvalue.
@@ -627,15 +654,13 @@ impl GotocCtx<'_, '_> {
                     self,
                 )
             }
-            ProjectionElem::OpaqueCast(ty) | ProjectionElem::Subtype(ty) => {
-                ProjectedPlace::try_new(
-                    before.goto_expr.cast_to(self.codegen_ty_stable(*ty)),
-                    TypeOrVariant::Type(*ty),
-                    before.fat_ptr_goto_expr,
-                    before.fat_ptr_mir_typ,
-                    self,
-                )
-            }
+            ProjectionElem::OpaqueCast(ty) => ProjectedPlace::try_new(
+                before.goto_expr.cast_to(self.codegen_ty_stable(*ty)),
+                TypeOrVariant::Type(*ty),
+                before.fat_ptr_goto_expr,
+                before.fat_ptr_mir_typ,
+                self,
+            ),
         }
     }
 
@@ -655,8 +680,22 @@ impl GotocCtx<'_, '_> {
     ///   and we need to take it's address and build the fat pointer.
     pub fn codegen_place_ref_stable(&mut self, place: &Place, loc: Location) -> Expr {
         let place_ty = self.place_ty_stable(place);
-        let projection =
-            unwrap_or_return_codegen_unimplemented!(self, self.codegen_place_stable(place, loc));
+        let projection = match self.codegen_place_stable(place, loc) {
+            Ok(projection) => projection,
+            Err(err) => {
+                // This function yields a *reference* to the place, so the stub that replaces an
+                // unsupported projection has to have the reference's type (thin or fat), not the
+                // place's own. `unwrap_or_return_codegen_unimplemented!` would return the latter
+                // and the caller would then assign a value to a pointer-typed local.
+                let ref_ty = self.codegen_ty_ref_stable(place_ty);
+                return self.codegen_unimplemented_expr(
+                    err.operation.as_str(),
+                    ref_ty,
+                    err.loc,
+                    err.bug_url.as_str(),
+                );
+            }
+        };
         if self.use_thin_pointer_stable(place_ty) {
             // For ZST objects rustc does not necessarily generate any actual objects.
             let need_not_be_an_object = self.is_zst_object(&projection.goto_expr);
@@ -686,7 +725,11 @@ impl GotocCtx<'_, '_> {
                 // Just return the address of the place dereferenced.
                 address_of
             }
-        } else if place_ty == pointee_type(self.local_ty_stable(place.local)).unwrap() {
+        } else if self.is_unsized_by_value_arg(place.local) && place.projection.is_empty() {
+            // `&self` where `self` is an unsized-by-value argument: the reference is the
+            // fat pointer that the argument is represented by (see `codegen_place_stable`).
+            projection.fat_ptr_goto_expr.unwrap()
+        } else if pointee_type(self.local_ty_stable(place.local)).is_some_and(|p| place_ty == p) {
             // Just return the fat pointer if this is a simple &(*local).
             projection.fat_ptr_goto_expr.unwrap()
         } else {
@@ -718,10 +761,21 @@ impl GotocCtx<'_, '_> {
     ) -> Result<ProjectedPlace, Box<UnimplementedData>> {
         debug!(?place, "codegen_place");
         let initial_expr = self.codegen_local(place.local, loc);
-        let initial_typ = TypeOrVariant::Type(self.local_ty_stable(place.local));
-        debug!(?initial_typ, ?initial_expr, "codegen_place");
-        let initial_projection =
-            ProjectedPlace::try_new(initial_expr, initial_typ, None, None, self);
+        let local_ty = self.local_ty_stable(place.local);
+        let initial_projection = if self.is_unsized_by_value_arg(place.local) {
+            // The local holds a fat pointer to the unsized value (see `codegen_local`).
+            // Model the place as the pointee of that fat pointer, i.e. `*(&local)`, by
+            // treating the local as a value of pointer type and applying a `Deref`
+            // projection. This reuses the existing fat-pointer projection logic so that
+            // reads, indexing, and `&self` recover the data pointer and length/vtable.
+            let ptr_ty = Ty::new_ptr(local_ty, Mutability::Not);
+            let base = ProjectedPlace::try_from_ty(initial_expr, ptr_ty, self);
+            self.codegen_projection(base, &ProjectionElem::Deref, loc)
+        } else {
+            let initial_typ = TypeOrVariant::Type(local_ty);
+            ProjectedPlace::try_new(initial_expr, initial_typ, None, None, self)
+        };
+        debug!(?local_ty, ?initial_projection, "codegen_place");
         let result = place
             .projection
             .iter()
@@ -791,7 +845,12 @@ impl GotocCtx<'_, '_> {
                 } else {
                     offset_e
                 };
-                let expr = before.goto_expr.plus(idxe).dereference();
+                // The base expression is a pointer to the data if the slice was reached by
+                // dereferencing a fat pointer, but it is a flexible array if the slice was
+                // reached by a field projection on an unsized ADT (e.g. the trailing
+                // `data: [T]` field of `ArcInner<[T]>`). `Expr::index` dispatches on the type,
+                // handling both.
+                let expr = before.goto_expr.index(idxe);
                 let typ = TypeOrVariant::Type(elemt);
                 ProjectedPlace::try_new(
                     expr,

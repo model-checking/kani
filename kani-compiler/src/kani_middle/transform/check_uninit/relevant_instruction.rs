@@ -4,7 +4,9 @@
 //! Module containing data structures used in identifying places that need instrumentation and the
 //! character of instrumentation needed.
 
-use crate::kani_middle::transform::body::{InsertPosition, MutableBody, SourceInstruction};
+use crate::kani_middle::transform::body::{
+    InsertPosition, MutableBody, SourceInstruction, synthetic_source_info,
+};
 use rustc_public::{
     mir::{FieldIdx, Mutability, Operand, Place, RawPtrKind, Rvalue, Statement, StatementKind},
     ty::{RigidTy, Ty},
@@ -121,7 +123,7 @@ impl MemoryInitOp {
             | MemoryInitOp::StoreArgument { operand, .. } => {
                 let place = match operand {
                     Operand::Copy(place) | Operand::Move(place) => place,
-                    Operand::Constant(_) => unreachable!(),
+                    Operand::Constant(_) | Operand::RuntimeChecks(_) => unreachable!(),
                 };
                 let rvalue = Rvalue::AddressOf(RawPtrKind::Const, place.clone());
                 rvalue.ty(body.locals()).unwrap()
@@ -269,12 +271,15 @@ fn mk_ref(
     let ref_local = {
         let place = match operand {
             Operand::Copy(place) | Operand::Move(place) => place,
-            Operand::Constant(_) => unreachable!(),
+            Operand::Constant(_) | Operand::RuntimeChecks(_) => unreachable!(),
         };
         let rvalue = Rvalue::AddressOf(RawPtrKind::Const, place.clone());
         let ret_ty = rvalue.ty(body.locals()).unwrap();
         let result = body.new_local(ret_ty, span, Mutability::Not);
-        let stmt = Statement { kind: StatementKind::Assign(Place::from(result), rvalue), span };
+        let stmt = Statement {
+            kind: StatementKind::Assign(Place::from(result), rvalue),
+            source_info: synthetic_source_info(span),
+        };
         statements.push(stmt);
         result
     };

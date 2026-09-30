@@ -5,8 +5,9 @@
 
 use std::fmt::Display;
 
+use rustc_public::CrateDefType;
 use rustc_public::{
-    abi::{FieldsShape, Scalar, TagEncoding, ValueAbi, VariantsShape},
+    abi::{FieldsShape, Scalar, TagEncoding, ValueRepr, VariantsShape},
     target::{MachineInfo, MachineSize},
     ty::{AdtKind, RigidTy, Ty, TyKind, UintTy, VariantIdx},
 };
@@ -183,11 +184,14 @@ fn data_bytes_for_ty(
     let layout = ty.layout().unwrap().shape();
 
     match layout.fields {
-        FieldsShape::Primitive => Ok(vec![match layout.abi {
-            ValueAbi::Scalar(Scalar::Initialized { value, .. }) => {
+        // A zero-sized primitive, e.g. the never type `!`, has no data bytes to track (its
+        // layout is not a scalar, so it must not reach the scalar case below).
+        FieldsShape::Primitive if layout.size.bytes() == 0 => Ok(vec![]),
+        FieldsShape::Primitive => Ok(vec![match layout.value_repr {
+            ValueRepr::Scalar(Scalar::Initialized { value, .. }) => {
                 DataBytes { offset: current_offset, size: value.size(machine_info) }
             }
-            _ => unreachable!("FieldsShape::Primitive with a different ABI than ValueAbi::Scalar"),
+            _ => unreachable!("FieldsShape::Primitive with a different ABI than ValueRepr::Scalar"),
         }]),
         FieldsShape::Array { stride, count } if count > 0 => {
             let TyKind::RigidTy(RigidTy::Array(elem_ty, _)) = ty.kind() else { unreachable!() };
@@ -259,14 +263,8 @@ fn data_bytes_for_ty(
                                     for (index, variant) in variants.iter().enumerate() {
                                         let mut field_data_bytes_for_variant = vec![];
                                         let fields = ty_variants[index].fields();
-                                        // Get offsets of all fields in a variant.
-                                        let FieldsShape::Arbitrary { offsets: field_offsets } =
-                                            variant.fields.clone()
-                                        else {
-                                            unreachable!()
-                                        };
-                                        for field_idx in variant.fields.fields_by_offset_order() {
-                                            let field_offset = field_offsets[field_idx].bytes();
+                                        for field_idx in variant.fields_by_offset_order() {
+                                            let field_offset = variant.offsets[field_idx].bytes();
                                             let field_ty = fields[field_idx].ty_with_args(args);
                                             field_data_bytes_for_variant.append(
                                                 &mut data_bytes_for_ty(
@@ -363,15 +361,16 @@ fn data_bytes_for_ty(
                 RigidTy::Str | RigidTy::Slice(_) | RigidTy::Array(_, _) => {
                     unreachable!("Expected array layout for {ty:?}")
                 }
-                RigidTy::RawPtr(_, _) | RigidTy::Ref(_, _, _) => Ok(match layout.abi {
-                    ValueAbi::Scalar(Scalar::Initialized { value, .. }) => {
+                RigidTy::RawPtr(_, _) | RigidTy::Ref(_, _, _) => Ok(match layout.value_repr {
+                    ValueRepr::Scalar(Scalar::Initialized { value, .. }) => {
                         // Thin pointer, ABI is a single scalar.
                         vec![DataBytes { offset: current_offset, size: value.size(machine_info) }]
                     }
-                    ValueAbi::ScalarPair(
-                        Scalar::Initialized { value: value_first, .. },
-                        Scalar::Initialized { value: value_second, .. },
-                    ) => {
+                    ValueRepr::ScalarPair {
+                        a: Scalar::Initialized { value: value_first, .. },
+                        b: Scalar::Initialized { value: value_second, .. },
+                        ..
+                    } => {
                         // Fat pointer, ABI is a scalar pair.
                         let FieldsShape::Arbitrary { offsets } = layout.fields else {
                             unreachable!()
@@ -398,7 +397,7 @@ fn data_bytes_for_ty(
                 | RigidTy::CoroutineClosure(_, _)
                 | RigidTy::CoroutineWitness(_, _)
                 | RigidTy::Foreign(_)
-                | RigidTy::Dynamic(_, _, _) => Err(LayoutComputationError::UnsupportedType(ty)),
+                | RigidTy::Dynamic(_, _) => Err(LayoutComputationError::UnsupportedType(ty)),
             }
         }
         FieldsShape::Union(_) => Err(LayoutComputationError::UnionAsField(ty)),

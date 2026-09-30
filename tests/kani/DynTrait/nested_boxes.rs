@@ -10,7 +10,7 @@
 #![feature(ptr_metadata)]
 
 use std::any::Any;
-use std::intrinsics::size_of;
+use std::mem::size_of;
 use std::ptr::DynMetadata;
 
 include!("../Helpers/vtable_utils_ignore.rs");

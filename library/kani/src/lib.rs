@@ -16,8 +16,13 @@
 // Required for `rustc_diagnostic_item` and `core_intrinsics`
 #![allow(internal_features)]
 // Required for implementing memory predicates.
-#![feature(layout_for_ptr)]
+// `core::mem::{size_of,align_of}_val_raw` are only reached by the `concrete_playback` paths of
+// the `kani_core` memory models this crate expands.
+#![cfg_attr(feature = "concrete_playback", feature(layout_for_ptr))]
+#![feature(bstr)]
+#![feature(wtf8_internals)]
 #![feature(ptr_metadata)]
+#![feature(formatting_options)]
 #![feature(f16)]
 #![feature(f128)]
 #![feature(convert_float_to_int)]
@@ -31,7 +36,6 @@ pub mod bounded_arbitrary;
 #[cfg(feature = "concrete_playback")]
 mod concrete_playback;
 pub mod futures;
-pub mod invariant;
 pub mod iter;
 pub mod shadow;
 pub mod vec;
@@ -40,7 +44,6 @@ mod models;
 
 #[cfg(feature = "concrete_playback")]
 pub use concrete_playback::concrete_playback_run;
-pub use invariant::Invariant;
 
 #[cfg(not(feature = "concrete_playback"))]
 /// NOP `concrete_playback` for type checking during verification mode.
@@ -56,6 +59,13 @@ pub use kani_macros::*;
 // Declare common Kani API such as assume, assert
 kani_core::kani_lib!(kani);
 
+/// Compatibility module: the `Invariant` trait is now defined at the crate root (its
+/// definition moved into `kani_core`), but it was previously importable as
+/// `kani::invariant::Invariant`; keep that path working.
+pub mod invariant {
+    pub use super::Invariant;
+}
+
 // Used to bind `core::assert` to a different name to avoid possible name conflicts if a
 // crate uses `extern crate std as core`. See
 // https://github.com/model-checking/kani/issues/1949 and https://github.com/model-checking/kani/issues/2187
@@ -65,15 +75,15 @@ pub use core::assert as __kani__workaround_core_assert;
 
 #[macro_export]
 macro_rules! cover {
-    () => {
+    () => {{
         kani::cover(true, "cover location");
-    };
-    ($cond:expr $(,)?) => {
+    }};
+    ($cond:expr $(,)?) => {{
         kani::cover($cond, concat!("cover condition: ", stringify!($cond)));
-    };
-    ($cond:expr, $msg:literal) => {
+    }};
+    ($cond:expr, $msg:literal) => {{
         kani::cover($cond, $msg);
-    };
+    }};
 }
 
 /// `implies!(premise => conclusion)` means that if the `premise` is true, so
@@ -85,6 +95,45 @@ macro_rules! cover {
 macro_rules! implies {
     ($premise:expr => $conclusion:expr) => {
         !($premise) || ($conclusion)
+    };
+}
+
+/// Define a reusable set of function stubs that can be applied to multiple proof harnesses.
+///
+/// # Example
+///
+/// ```ignore
+/// kani::stub_set!(my_stubs,
+///     stub(std::fs::read, my_read),
+///     stub(std::fs::write, my_write),
+/// );
+///
+/// #[kani::proof]
+/// #[kani::use_stub_set(my_stubs)]
+/// fn my_harness() { /* ... */ }
+/// ```
+///
+/// Stub sets can also include other stub sets:
+///
+/// ```ignore
+/// kani::stub_set!(all_stubs,
+///     use_stub_set(my_stubs),
+///     stub(other::func, my_func),
+/// );
+/// ```
+#[macro_export]
+macro_rules! stub_set {
+    (pub $name:ident, $($entry:tt)*) => {
+        /// A Kani stub set definition.
+        #[allow(non_upper_case_globals)]
+        #[kanitool::stub_set($($entry)*)]
+        pub const $name: () = ();
+    };
+    ($vis:vis $name:ident, $($entry:tt)*) => {
+        #[doc(hidden)]
+        #[allow(non_upper_case_globals)]
+        #[kanitool::stub_set($($entry)*)]
+        $vis const $name: () = ();
     };
 }
 

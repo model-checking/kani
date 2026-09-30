@@ -219,7 +219,7 @@ mod test {
     #[test]
     #[should_panic(expected = "Masks values should either be 0 or -1")]
     fn test_invalid_bitmask() {
-        let invalid_mask = unsafe { mask32x16::from_int_unchecked(i32x16::splat(10)) };
+        let invalid_mask = unsafe { mask32x16::from_simd_unchecked(i32x16::splat(10)) };
         assert_eq!(
             unsafe { kani_intrinsic::simd_bitmask::<_, u16, i32, 16>(invalid_mask) },
             u16::MAX
@@ -262,7 +262,6 @@ mod test {
     fn check_portable_bitmask<T, E, const LANES: usize, M>(mask: Mask<T, LANES>)
     where
         T: std::simd::MaskElement,
-        LaneCount<LANES>: SupportedLaneCount,
         E: kani_intrinsic::MaskElement,
         [u8; kani_intrinsic::mask_len(LANES)]: Sized,
         u64: From<M>,

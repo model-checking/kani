@@ -85,7 +85,12 @@ impl GotocCtx<'_, '_> {
         // supported to access the raw pointer. If either rustc or Kani changes how boxed types are
         // represented, this will need to be updated.
         self.assert_is_rust_box_like(box_expr.typ());
-        RAW_PTR_FROM_BOX.iter().fold(box_expr, |expr, name| expr.member(name, &self.symbol_table))
+        let expr = RAW_PTR_FROM_BOX
+            .iter()
+            .fold(box_expr, |expr, name| expr.member(name, &self.symbol_table));
+        // `NonNull`'s `pointer` field holds a `pattern_type!(*const T is !null)`, which is itself
+        // codegenned as a struct, so the chain above stops one level above the raw pointer.
+        self.peel_ptr_wrappers(expr)
     }
 
     /// `Box<T>` initializer
@@ -105,6 +110,10 @@ impl GotocCtx<'_, '_> {
                 (*name, outer_type)
             })
             .collect::<Vec<_>>();
+
+        // `inner_type` is now the innermost field's type, which wraps the raw pointer in a
+        // pattern-type struct. Rebuild that wrapping so the value matches the field.
+        let boxed_value = self.codegen_ptr_in_wrappers(inner_type, boxed_value);
 
         type_members.iter().rfold(boxed_value, |value, (name, typ)| {
             Expr::struct_expr_with_nondet_fields(
@@ -131,6 +140,57 @@ impl GotocCtx<'_, '_> {
         assert!(t.is_struct_like());
         let components = t.lookup_components(&self.symbol_table).unwrap();
         assert_eq!(components.len(), 0);
+    }
+
+    /// Rebuild the chain of single-field struct wrappers described by `typ` around `ptr_expr`,
+    /// casting the pointer to the type found at the innermost level.
+    ///
+    /// A `NonNull<T>` holds a `pattern_type!(*const T is !null)`, and Kani codegens both the
+    /// `NonNull` and the pattern type as single-field structs, so the raw pointer sits two levels
+    /// deep. Recursing keeps this independent of how many wrappers the standard library uses.
+    pub fn codegen_ptr_in_wrappers(&self, typ: Type, ptr_expr: Expr) -> Expr {
+        // A fat pointer is itself a two-field struct; it is the pointer, not a wrapper around one.
+        if !typ.is_struct_like() || typ.is_rust_fat_ptr(&self.symbol_table) {
+            return ptr_expr.cast_to(typ);
+        }
+        let components = typ.lookup_components(&self.symbol_table).unwrap();
+        let fields: Vec<_> = components.iter().filter(|c| !c.is_padding()).collect();
+        assert_eq!(
+            fields.len(),
+            1,
+            "Expected a single-field struct wrapping a pointer, but found {typ:?}"
+        );
+        let inner = self.codegen_ptr_in_wrappers(fields[0].typ(), ptr_expr);
+        Expr::struct_expr_from_values(typ, vec![inner], &self.symbol_table)
+    }
+
+    /// Extract the vtable pointer that `metadata_expr`, a `DynMetadata`, holds in its
+    /// `_vtable_ptr` field, and cast it to `vtable_typ`.
+    ///
+    /// This is the inverse of [`Self::codegen_ptr_in_wrappers`]: peel off the single-field struct
+    /// wrappers until the raw pointer is reached.
+    pub fn codegen_ptr_out_of_wrappers(&self, metadata_expr: Expr, vtable_typ: Type) -> Expr {
+        let expr = self.peel_ptr_wrappers(metadata_expr.member("_vtable_ptr", &self.symbol_table));
+        expr.cast_to(vtable_typ)
+    }
+
+    /// Peel off the single-field struct wrappers around `expr` until the pointer is reached.
+    ///
+    /// Returns `expr` unchanged when it is already a pointer, so this is a no-op for layouts
+    /// that do not wrap.
+    fn peel_ptr_wrappers(&self, mut expr: Expr) -> Expr {
+        while expr.typ().is_struct_like() && !expr.typ().is_rust_fat_ptr(&self.symbol_table) {
+            let components = expr.typ().lookup_components(&self.symbol_table).unwrap();
+            let fields: Vec<_> = components.iter().filter(|c| !c.is_padding()).collect();
+            assert_eq!(
+                fields.len(),
+                1,
+                "Expected a single-field struct wrapping a pointer, but found {:?}",
+                expr.typ()
+            );
+            expr = expr.member(fields[0].name(), &self.symbol_table);
+        }
+        expr
     }
 
     /// Best effort check if the struct represents a Rust `Box`. May return false positives.
@@ -175,21 +235,47 @@ impl GotocCtx<'_, '_> {
         }
     }
 
+    /// Whether `t` is a pointer, or a chain of single-field struct wrappers around one.
+    ///
+    /// Recursing keeps this independent of how many wrappers the standard library uses, and
+    /// mirrors the chain that [`Self::codegen_ptr_in_wrappers`] rebuilds.
+    fn is_wrapped_pointer(&self, t: &Type) -> bool {
+        if t.is_pointer() || t.is_rust_fat_ptr(&self.symbol_table) {
+            return true;
+        }
+        if !t.is_struct_like() {
+            return false;
+        }
+        let Some(components) = t.lookup_components(&self.symbol_table) else {
+            return false;
+        };
+        let fields: Vec<_> = components.iter().filter(|c| !c.is_padding()).collect();
+        fields.len() == 1 && self.is_wrapped_pointer(&fields[0].typ())
+    }
+
     /// Best effort check if the struct represents a `std::ptr::NonNull<T>`.
     ///
     /// This assumes the following structure. Any changes to this will break this code.
     /// ```
     /// pub struct NonNull<T: ?Sized> {
-    ///    pointer: *const T,
+    ///    pointer: pattern_type!(*const T is !null),
     /// }
     /// ```
+    /// The `pointer` field is not a bare pointer: the pattern type is itself codegenned as a
+    /// single-field struct, so the pointer sits one level further down, c.f.
+    /// [`Self::codegen_ptr_in_wrappers`].
     fn assert_is_non_null_like(&self, t: &Type) {
         assert!(t.is_struct_like());
         let components = t.lookup_components(&self.symbol_table).unwrap();
-        assert_eq!(components.len(), 1);
-        let component = components.first().unwrap();
+        let fields: Vec<_> = components.iter().filter(|c| !c.is_padding()).collect();
+        assert_eq!(fields.len(), 1);
+        let component = fields[0];
         assert_eq!(component.name().to_string().as_str(), "pointer");
-        assert!(component.typ().is_pointer() || component.typ().is_rust_fat_ptr(&self.symbol_table))
+        assert!(
+            self.is_wrapped_pointer(&component.typ()),
+            "Expected the `pointer` field of {t:?} to hold a pointer, but found {:?}",
+            component.typ()
+        )
     }
 }
 

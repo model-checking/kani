@@ -148,6 +148,12 @@ fn build_kani_lib(
         "always-encode-mir",
         "-Z",
         "mir-enable-passes=-RemoveStorageMarkers",
+        // Kani copies these rlibs into its sysroot and later compiles against them on their own,
+        // so they must carry full metadata. Without this the rlib holds only a metadata stub and
+        // the full `.rmeta` is left behind in the build directory, which fails as
+        // "only metadata stub found for `rlib` dependency".
+        "-Z",
+        "embed-metadata=yes",
     ];
     rustc_args.extend_from_slice(extra_rustc_args);
     let mut cmd = Command::new("cargo")

@@ -55,8 +55,8 @@ impl KaniSession {
                         for generated_unit_test in unit_tests.iter() {
                             println!(
                                 "Concrete playback unit test for `{}`:\n```\n{}\n```",
-                                &harness.pretty_name,
-                                &generated_unit_test.code.join("\n")
+                                harness.pretty_name,
+                                generated_unit_test.code.join("\n")
                             );
                         }
 
@@ -75,7 +75,7 @@ impl KaniSession {
                                     .iter()
                                     .map(|generated_unit_test| format!(
                                         "\n  - {}",
-                                        &generated_unit_test.name
+                                        generated_unit_test.name
                                     ))
                                     .collect::<Vec<String>>()
                                     .join("")
@@ -89,7 +89,7 @@ impl KaniSession {
                         .unwrap_or_else(|_| {
                             panic!(
                                 "Failed to modify source code for the file `{}`",
-                                &harness.original_file
+                                harness.original_file
                             )
                         });
                     }
