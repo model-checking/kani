@@ -491,6 +491,17 @@ impl GotocCtx<'_, '_> {
                 }
                 self.codegen_expr_to_place_stable(place, acc.cast_to(cbmc_ret_ty), loc)
             }
+            Intrinsic::SimdReduceMax => {
+                self.codegen_simd_reduce_max_min(true, fargs, place, farg_types, intrinsic_str, loc)
+            }
+            Intrinsic::SimdReduceMin => self.codegen_simd_reduce_max_min(
+                false,
+                fargs,
+                place,
+                farg_types,
+                intrinsic_str,
+                loc,
+            ),
             Intrinsic::SimdExtract => {
                 self.codegen_intrinsic_simd_extract(fargs, place, farg_types, ret_ty, span)
             }
@@ -1501,6 +1512,40 @@ impl GotocCtx<'_, '_> {
             ],
             loc,
         )
+    }
+
+    /// `simd_reduce_max` (`is_max`) or `simd_reduce_min` over integer lanes. Float lanes have
+    /// IEEE `maxNum`/`minNum` semantics, which this does not model, so they are reported as
+    /// unsupported.
+    fn codegen_simd_reduce_max_min(
+        &mut self,
+        is_max: bool,
+        mut fargs: Vec<Expr>,
+        place: &Place,
+        farg_types: &[Ty],
+        intrinsic_str: &str,
+        loc: Location,
+    ) -> Stmt {
+        let (size, lane_ty) = self.simd_size_and_type(farg_types[0]);
+        if lane_ty.kind().is_float() {
+            return self.codegen_unimplemented_stmt(
+                &format!("`{intrinsic_str}` on floating-point lanes"),
+                loc,
+                "https://github.com/model-checking/kani/issues/new/choose",
+            );
+        }
+        let arg = fargs.remove(0);
+        let (simd, simd_decl) = self.decl_temp_variable(arg.typ().clone(), Some(arg), loc);
+        let lane = |i: u64| simd.clone().index_array(Expr::int_constant(i, Type::size_t()));
+        // Folding into a variable keeps the expression linear in the number of lanes.
+        let (acc, acc_decl) = self.decl_temp_variable(lane(0).typ().clone(), Some(lane(0)), loc);
+        let mut stmts = vec![simd_decl, acc_decl];
+        for i in 1..size {
+            let keep = if is_max { acc.clone().ge(lane(i)) } else { acc.clone().le(lane(i)) };
+            stmts.push(acc.clone().assign(keep.ternary(acc.clone(), lane(i)), loc));
+        }
+        stmts.push(self.codegen_expr_to_place_stable(place, acc, loc));
+        Stmt::block(stmts, loc)
     }
 
     /// Generates code for a SIMD vector comparison intrinsic.
