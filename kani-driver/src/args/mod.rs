@@ -885,6 +885,24 @@ impl ValidateArgs for VerificationArgs {
                     "Conflicting options: --sarif isn't compatible with --only-codegen.",
                 ));
             }
+            // The LLBC backend stops after codegen too (see `uses_llbc_backend`), so the same
+            // holds for it: nothing would write the requested file.
+            if self.uses_llbc_backend() {
+                for (requested, option) in [
+                    (self.sarif.is_some(), "--sarif"),
+                    (self.export_json.is_some(), "--export-json"),
+                ] {
+                    if requested {
+                        return Err(Error::raw(
+                            ErrorKind::ArgumentConflict,
+                            format!(
+                                "Conflicting options: {option} isn't compatible with {}.",
+                                UnstableFeature::Lean.as_argument_string()
+                            ),
+                        ));
+                    }
+                }
+            }
             // Neither code-generation-only mode runs verification, so there is nothing to export.
             // `--only-codegen` would otherwise succeed without writing the file the user asked for,
             // and `--no-codegen` would write a document describing a run that never happened.
@@ -1266,6 +1284,10 @@ mod tests {
             "kani file.rs -Z unstable-options --export-json out.json --no-codegen",
             ErrorKind::ArgumentConflict,
         );
+        expect_validation_error(
+            "kani file.rs -Z unstable-options -Z lean --export-json out.json",
+            ErrorKind::ArgumentConflict,
+        );
     }
 
     #[test]
@@ -1362,6 +1384,10 @@ mod tests {
         );
         expect_validation_error(
             "kani file.rs --sarif out.sarif --only-codegen",
+            ErrorKind::ArgumentConflict,
+        );
+        expect_validation_error(
+            "kani file.rs -Z lean --sarif out.sarif",
             ErrorKind::ArgumentConflict,
         );
     }
