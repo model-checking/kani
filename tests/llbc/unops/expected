@@ -1,29 +1,60 @@
-pub fn test::lnot(@1: bool) -> bool\
+// Full name: test::not\
+pub fn not(a: u8) -> u8\
 {\
-    let @0: bool; // return\
-    let a@1: bool; // arg #1\
+    let _0: u8; // return\
+    let a: u8; // arg #1\
 \
-    @0 := ~(copy (a@1))\
+    storage_live(_0)\
+    _0 = ~(copy a)\
+    storage_dead(a)\
     return\
 }
 
-pub fn test::neg(@1: i32) -> i32\
+// Full name: test::neg\
+pub fn neg(a: i32) -> i32\
 {\
-    let @0: i32; // return\
-    let a@1: i32; // arg #1\
-    let @2: bool; // anonymous local\
+    let _0: i32; // return\
+    let a: i32; // arg #1\
 \
-    nop\
-    nop\
-    @0 := -(copy (a@1))\
+    storage_live(_0)\
+    _0 = panic.-(copy a)\
+    storage_dead(a)\
     return\
 }
 
-pub fn test::not(@1: u8) -> u8\
+// Full name: test::lnot\
+pub fn lnot(a: bool) -> bool\
 {\
-    let @0: u8; // return\
-    let a@1: u8; // arg #1\
+    let _0: bool; // return\
+    let a: bool; // arg #1\
 \
-    @0 := ~(copy (a@1))\
+    storage_live(_0)\
+    _0 = ~(copy a)\
+    storage_dead(a)\
+    return\
+}
+
+// Full name: test::main\
+pub fn main()\
+{\
+    let _0: (); // return\
+    let _1: i32; // anonymous local\
+    let _2: u8; // anonymous local\
+    let _3: bool; // anonymous local\
+\
+    storage_live(_0)\
+    storage_live(_1)\
+    storage_live(_2)\
+    storage_live(_3)\
+    _0 = ()\
+    _1 = neg(const 3i32)\
+    ↳⚡ undefined_behavior\
+    storage_dead(_1)\
+    _2 = not(const 1u8)\
+    ↳⚡ undefined_behavior\
+    storage_dead(_2)\
+    _3 = lnot(const true)\
+    ↳⚡ undefined_behavior\
+    storage_dead(_3)\
     return\
 }

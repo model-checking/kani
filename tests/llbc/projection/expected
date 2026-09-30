@@ -1,78 +1,141 @@
-pub enum test::MyEnum =\
-|  A(0: @Adt\
-|  B(0: (i32, i32))
+// Full name: test::MyStruct\
+pub struct MyStruct {\
+  a: i32,\
+  b: i32,\
+}
 
-pub enum test::MyEnum0 =\
-|  A(0: @Adt\
-|  B()
+// Full name: test::MyEnum0\
+pub enum MyEnum0 {\
+  A { _0: MyStruct, _1: i32 },\
+  B,\
+}
 
-pub fn test::enum_match(@1: @Adt\
+// Full name: test::MyEnum\
+pub enum MyEnum {\
+  A { _0: MyStruct, _1: MyEnum0 },\
+  B { _0: (i32, i32) },\
+}
+
+// Full name: test::enum_match\
+pub fn enum_match(e: MyEnum) -> i32\
 {\
-    let @0: i32; // return\
-    let e@1: @Adt\
-    let @2: isize; // anonymous local\
-    let s@3: @Adt\
-    let e0@4: @Adt\
-    let @5: isize; // anonymous local\
-    let s1@6: @Adt\
-    let b@7: i32; // local\
-    let @8: i32; // anonymous local\
-    let @9: (i32, bool); // anonymous local\
-    let @10: i32; // anonymous local\
-    let @11: i32; // anonymous local\
-    let @12: (i32, bool); // anonymous local\
-    let a@13: i32; // local\
-    let b@14: i32; // local\
-    let @15: (i32, bool); // anonymous local\
+    let _0: i32; // return\
+    let e: MyEnum; // arg #1\
+    let s: MyStruct; // local\
+    let e0: MyEnum0; // local\
+    let s1: MyStruct; // local\
+    let b_5: i32; // local\
+    let _6: i32; // anonymous local\
+    let _7: i32; // anonymous local\
+    let _8: i32; // anonymous local\
+    let _9: i32; // anonymous local\
+    let _10: i32; // anonymous local\
+    let a: i32; // local\
+    let b_12: i32; // local\
+    let _13: i32; // anonymous local\
 \
-    nop\
-    match e@1 {\
-        test::MyEnum::A => {\
-            s@3 := move ((e@1 as variant @0).0)\
-            e0@4 := move ((e@1 as variant @0).1)\
-            nop\
-            match e0@4 {\
-                test::MyEnum0::A => {\
-                    s1@6 := move ((e0@4 as variant @0).0)\
-                    b@7 := copy ((e0@4 as variant @0).1)\
-                    @8 := copy ((s1@6).a)\
-                    nop\
-                    nop\
-                    @0 := copy (@8) + copy (b@7)\
-                    storage_dead(@8)\
-                    storage_dead(s1@6)\
-                    storage_dead(e0@4)\
-                    storage_dead(s@3)\
+    storage_live(_0)\
+    storage_live(s)\
+    storage_live(e0)\
+    storage_live(s1)\
+    storage_live(b_5)\
+    storage_live(_6)\
+    storage_live(_7)\
+    storage_live(_8)\
+    storage_live(_9)\
+    storage_live(_10)\
+    storage_live(a)\
+    storage_live(b_12)\
+    storage_live(_13)\
+    match e {\
+        MyEnum::A => {\
+            s = move (e as variant MyEnum::A)._0\
+            e0 = move (e as variant MyEnum::A)._1\
+            match e0 {\
+                MyEnum0::A => {\
+                    s1 = move (e0 as variant MyEnum0::A)._0\
+                    b_5 = copy (e0 as variant MyEnum0::A)._1\
+                    _6 = copy s1.a\
+                    _7 = copy _6 panic.+ copy b_5\
+                    _0 = move _7\
+                    storage_dead(_6)\
+                    storage_dead(s1)\
+                    storage_dead(e0)\
+                    storage_dead(s)\
+                    storage_dead(_13)\
+                    storage_dead(b_12)\
+                    storage_dead(a)\
+                    storage_dead(_10)\
+                    storage_dead(_7)\
+                    storage_dead(b_5)\
+                    storage_dead(e)\
                     return\
                 },\
-                test::MyEnum0::B => {\
-                    @10 := copy ((s@3).a)\
-                    @11 := copy ((s@3).b)\
-                    nop\
-                    nop\
-                    @0 := copy (@10) + copy (@11)\
-                    storage_dead(@11)\
-                    storage_dead(@10)\
-                    storage_dead(e0@4)\
-                    storage_dead(s@3)\
+                MyEnum0::B => {\
+                    _8 = copy s.a\
+                    _9 = copy s.b\
+                    _10 = copy _8 panic.+ copy _9\
+                    _0 = move _10\
+                    storage_dead(_9)\
+                    storage_dead(_8)\
+                    storage_dead(e0)\
+                    storage_dead(s)\
+                    storage_dead(_13)\
+                    storage_dead(b_12)\
+                    storage_dead(a)\
+                    storage_dead(_10)\
+                    storage_dead(_7)\
+                    storage_dead(b_5)\
+                    storage_dead(e)\
                     return\
                 },\
             }\
         },\
-        test::MyEnum::B => {\
-            a@13 := copy (((e@1 as variant @1).0).0)\
-            b@14 := copy (((e@1 as variant @1).0).1)\
-            nop\
-            nop\
-            @0 := copy (a@13) + copy (b@14)\
+        MyEnum::B => {\
+            a = copy (e as variant MyEnum::B)._0.0\
+            b_12 = copy (e as variant MyEnum::B)._0.1\
+            _13 = copy a panic.+ copy b_12\
+            _0 = move _13\
+            storage_dead(_13)\
+            storage_dead(b_12)\
+            storage_dead(a)\
+            storage_dead(_10)\
+            storage_dead(_7)\
+            storage_dead(b_5)\
+            storage_dead(e)\
             return\
         },\
     }\
     undefined_behavior\
 }
 
-pub struct test::MyStruct =\
+// Full name: test::main\
+pub fn main()\
 {\
-  a: i32,\
-  b: i32,\
+    let _0: (); // return\
+    let s: MyStruct; // local\
+    let s0: MyStruct; // local\
+    let e: MyEnum; // local\
+    let _4: MyEnum0; // anonymous local\
+    let i: i32; // local\
+\
+    storage_live(_0)\
+    storage_live(s)\
+    storage_live(s0)\
+    storage_live(e)\
+    storage_live(_4)\
+    storage_live(i)\
+    _0 = ()\
+    s = MyStruct { a: const 1i32, b: const 2i32 }\
+    s0 = MyStruct { a: const 1i32, b: const 2i32 }\
+    _4 = MyEnum0::A { _0: copy s0, _1: const 1i32 }\
+    e = MyEnum::A { _0: copy s, _1: move _4 }\
+    storage_dead(_4)\
+    i = enum_match(copy e)\
+    ↳⚡ undefined_behavior\
+    storage_dead(i)\
+    storage_dead(e)\
+    storage_dead(s0)\
+    storage_dead(s)\
+    return\
 }
