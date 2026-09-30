@@ -55,7 +55,8 @@ impl GotocCtx<'_, '_> {
     /// allows writes through it.
     pub fn codegen_object_upto(&self, ptr: Expr, size: Expr) -> Expr {
         let void_ptr = Type::empty().to_pointer();
-        let ptr = size.clone().is_zero().ternary(void_ptr.null(), ptr.cast_to(void_ptr.clone()));
+        let effective_ptr =
+            size.clone().is_zero().ternary(void_ptr.null(), ptr.cast_to(void_ptr.clone()));
         Expr::symbol_expression(
             "__CPROVER_object_upto",
             Type::code(
@@ -66,7 +67,7 @@ impl GotocCtx<'_, '_> {
                 Type::empty(),
             ),
         )
-        .call(vec![ptr, size])
+        .call(vec![effective_ptr, size])
     }
 
     pub fn rvalue_to_assign_targets(&mut self, rvalue: &Rvalue, location: Location) -> Vec<Expr> {
