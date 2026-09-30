@@ -1,0 +1,5 @@
+| comptime | plain             |
+| comptime | guarded          | Can only be called at compile time
+| comptime | guarded_const_fn | Generic Function: the function has a `const {}` block that may constrain its const generic parameter(s), and the value autoharness substitutes (2) is not guaranteed to satisfy it |
+| comptime | size_of          | Can only be called at compile time
+| comptime | with_body        | Can only be called at compile time
