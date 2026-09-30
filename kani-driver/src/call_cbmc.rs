@@ -500,9 +500,12 @@ quantifier are NOT enforced (a successful result would not cover the intended pr
 ///
 /// CBMC exits with 0 when all properties pass and with 10 when some property fails. It exits
 /// with 6 when some property has status ERROR (e.g., a solver error), which the results already
-/// report as a failure. Any other status means CBMC failed along the way: for instance, when it
-/// runs out of memory while writing a trace, it still closes the JSON output (exit status 6), but
-/// the result array is truncated and may be missing failed properties.
+/// report as a failure. It exits with 5 when some property is UNKNOWN or NOT_CHECKED; Kani's
+/// verdict does not count those as failures, so such results are rejected. Any other status means
+/// CBMC failed along the way: for instance, when it runs out of memory while writing a trace, it
+/// still closes the JSON output (exit status 6), but the result array is truncated and may be
+/// missing failed properties. A truncated array can even contain an ERROR property, so callers
+/// check for an out-of-memory message first (see `cbmc_reported_out_of_memory`).
 /// See <https://github.com/model-checking/kani/issues/4905>.
 fn cbmc_completed_results(process_status: i32, results: &[Property]) -> bool {
     match process_status {
@@ -548,6 +551,7 @@ impl VerificationResult {
         let cbmc_stats = if collect_cbmc_stats { merge_cbmc_stats(&remaining_items) } else { None };
 
         if let Some(results) = results
+            && !cbmc_reported_out_of_memory(&remaining_items)
             && cbmc_completed_results(output.process_status, &results)
         {
             let (mut status, mut failed_properties) =
@@ -941,10 +945,21 @@ mod tests {
         assert_eq!(result.status, VerificationStatus::Failure);
         assert!(matches!(result.results, Err(ExitStatus::Other(6))));
 
+        // A truncated array can contain an ERROR property from before the truncation point.
+        let result = verify(mock_cbmc_output(6, "ERROR", &["Out of memory"]));
+        assert_eq!(result.status, VerificationStatus::Failure);
+        assert!(matches!(result.results, Err(ExitStatus::OutOfMemory)));
+
         // Killed by a signal (here SIGSEGV) after writing some results.
         let result = verify(mock_cbmc_output(139, "SUCCESS", &[]));
         assert_eq!(result.status, VerificationStatus::Failure);
         assert!(matches!(result.results, Err(ExitStatus::Other(139))));
+
+        // CBMC exits with 5 when some property is UNKNOWN or NOT_CHECKED. Kani's verdict logic
+        // does not treat UNKNOWN as a failure, so these results must not be used.
+        let result = verify(mock_cbmc_output(5, "UNKNOWN", &[]));
+        assert_eq!(result.status, VerificationStatus::Failure);
+        assert!(matches!(result.results, Err(ExitStatus::Other(5))));
     }
 
     #[test]
