@@ -178,6 +178,10 @@ pub fn check_crate_items(tcx: TyCtxt, ignore_asm: bool) {
 /// per target (`rustc_target::spec::abi_map`).
 pub fn is_unsupported_variadic(tcx: TyCtxt, instance: Instance) -> bool {
     use rustc_middle::ty::TypingEnv;
+    // Almost no instance is variadic, so check the (stable) signature before the ABI query.
+    if !instance.ty().kind().fn_sig().is_some_and(|sig| sig.value.c_variadic) {
+        return false;
+    }
     let internal_instance = rustc_internal::internal(tcx, instance);
     let Ok(fn_abi) = tcx.fn_abi_of_instance(
         TypingEnv::fully_monomorphized()
@@ -191,6 +195,9 @@ pub fn is_unsupported_variadic(tcx: TyCtxt, instance: Instance) -> bool {
 /// The same check for a call through a function pointer, which has a signature but no instance.
 pub fn is_unsupported_variadic_fn_ptr(tcx: TyCtxt, fn_sig: PolyFnSig) -> bool {
     use rustc_middle::ty::TypingEnv;
+    if !fn_sig.value.c_variadic {
+        return false;
+    }
     let internal_sig = rustc_internal::internal(tcx, fn_sig);
     let Ok(fn_abi) = tcx.fn_abi_of_fn_ptr(
         TypingEnv::fully_monomorphized()
