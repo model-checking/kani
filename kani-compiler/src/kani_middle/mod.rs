@@ -1157,6 +1157,30 @@ fn pat_base_is_derivable(
         || can_derive_arbitrary(base_ty, kani_any_def, ty_arbitrary_cache)
 }
 
+/// Whether `ty` is `NonNull<T>`, matched by crate and name: the path match in `nonnull_pointee`
+/// misses it while `core` itself is compiled, which is the `verify-std` case that matters here.
+fn is_nonnull(ty: Ty) -> bool {
+    let TyKind::RigidTy(RigidTy::Adt(def, _)) = ty.kind() else { return false };
+    def.krate().name == "core" && def.trimmed_name() == "NonNull"
+}
+
+/// Whether `ty` is `NonNull<T>` or holds one through a type argument, tuple element or array
+/// element. A field of such a type (e.g. `Option<NonNull<T>>`) is built by its own `Arbitrary`
+/// impl, which builds the `NonNull` through the same `NonNull` impl.
+fn contains_nonnull(ty: Ty) -> bool {
+    if is_nonnull(ty) {
+        return true;
+    }
+    match ty.kind() {
+        TyKind::RigidTy(RigidTy::Adt(_, args)) => {
+            args.0.iter().any(|arg| matches!(arg, GenericArgKind::Type(t) if contains_nonnull(*t)))
+        }
+        TyKind::RigidTy(RigidTy::Tuple(tys)) => tys.iter().any(|t| contains_nonnull(*t)),
+        TyKind::RigidTy(RigidTy::Array(t, _) | RigidTy::Slice(t)) => contains_nonnull(t),
+        _ => false,
+    }
+}
+
 /// Is `ty` a struct or enum whose fields/variants implement Arbitrary, or a reference to such a
 /// type?
 fn can_derive_arbitrary(
@@ -1169,7 +1193,14 @@ fn can_derive_arbitrary(
             let fields = variant.fields();
             let mut fields_impl_arbitrary = true;
             for ty in fields.iter().map(|field| field.ty_with_args(&args)) {
-                if let TyKind::RigidTy(RigidTy::Adt(..)) = ty.kind() {
+                if contains_nonnull(ty) {
+                    // A `NonNull` field, or one holding a `NonNull` (see `contains_nonnull`), is
+                    // not synthesized, even where `NonNull` implements `Arbitrary`
+                    // (verify-rust-std's impl casts an arbitrary integer): the derived value would
+                    // point to no allocation, as with the raw-pointer pattern bases refused in
+                    // `pat_base_is_derivable`.
+                    fields_impl_arbitrary = false;
+                } else if let TyKind::RigidTy(RigidTy::Adt(..)) = ty.kind() {
                     // Prefer the field type's own `Arbitrary` implementation: a hand-written
                     // impl can exist even for a type that itself contains references (and so is
                     // not compiler-derivable), and the synthesized `any()` would call it via
