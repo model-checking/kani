@@ -1,0 +1,14 @@
+pub fn test::struct_project(@1: @Adt0) -> i32\
+{\
+    let @0: i32; // return\
+    let s@1: @Adt0; // arg #1\
+\
+    @0 := copy ((s@1).a)\
+    return\
+}
+
+pub struct test::MyStruct =\
+{\
+  a: i32,\
+  b: bool,\
+}

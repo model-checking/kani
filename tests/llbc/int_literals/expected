@@ -1,0 +1,15 @@
+pub fn test::signed() -> (i8, i16, i32, i64, i128, isize)\
+{\
+    let @0: (i8, i16, i32, i64, i128, isize); // return\
+\
+    @0 := (const (-1 : i8), const (-2 : i16), const (-3 : i32), const (-4 : i64), const (-5 : i128), const (-6 : isize))\
+    return\
+}
+
+pub fn test::unsigned() -> (u8, u16, u32, u64, u128, usize)\
+{\
+    let @0: (u8, u16, u32, u64, u128, usize); // return\
+\
+    @0 := (const (1 : u8), const (2 : u16), const (3 : u32), const (4 : u64), const (5 : u128), const (6 : usize))\
+    return\
+}

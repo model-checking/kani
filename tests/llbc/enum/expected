@@ -1,0 +1,26 @@
+pub enum test::MyEnum =\
+|  A(0: i32)\
+|  B()
+
+pub fn test::enum_match(@1: @Adt0) -> i32\
+{\
+    let @0: i32; // return\
+    let e@1: @Adt0; // arg #1\
+    let @2: isize; // anonymous local\
+    let i@3: i32; // local\
+\
+    nop\
+    match e@1 {\
+        test::MyEnum::A => {\
+            nop\
+        },\
+        test::MyEnum::B => {\
+            @0 := const (0 : i32)\
+            return\
+        },\
+    }\
+    i@3 := copy ((e@1 as variant @0).0)\
+    @0 := copy (i@3)\
+    storage_dead(i@3)\
+    return\
+}

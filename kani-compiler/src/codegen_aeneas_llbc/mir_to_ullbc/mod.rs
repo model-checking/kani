@@ -810,98 +810,13 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         crate_name.starts_with("core") && marker.starts_with("marker")
     }
 
+    /// Retrieve an item name from a [DefId].
+    /// This function is adapted from Charon:
+    /// https://github.com/AeneasVerif/charon/blob/53530427db2941ce784201e64086766504bc5642/charon/src/bin/charon-driver/translate/translate_ctx.rs#L344
     fn defid_to_name(&mut self, defid: DefId) -> Result<CharonName, CharonError> {
         let tcx = self.tcx();
         let def_id = rustc_internal::internal(self.tcx(), defid);
         let span: CharonSpan = self.translate_span(rustc_internal::stable(tcx.def_span(def_id)));
-        let mut found_crate_name = false;
-        let mut name: Vec<CharonPathElem> = Vec::new();
-
-        let def_path = tcx.def_path(def_id);
-        let crate_name = tcx.crate_name(def_path.krate).to_string();
-
-        let parents: Vec<_> = {
-            let mut parents = vec![def_id];
-            let mut cur_id = def_id;
-            while let Some(parent) = tcx.opt_parent(cur_id) {
-                parents.push(parent);
-                cur_id = parent;
-            }
-            parents.into_iter().rev().collect()
-        };
-
-        for cur_id in parents {
-            let data = tcx.def_key(cur_id).disambiguated_data;
-            // Match over the key data
-            let disambiguator = CharonDisambiguator::new(data.disambiguator as usize);
-            use rustc_hir::definitions::DefPathData;
-            match &data.data {
-                DefPathData::TypeNs(symbol) => {
-                    error_assert!(self, span, data.disambiguator == 0); // Sanity check
-                    name.push(CharonPathElem::Ident(symbol.to_string(), disambiguator));
-                }
-                DefPathData::ValueNs(symbol) => {
-                    // I think `disambiguator != 0` only with names introduced by macros (though
-                    // not sure).
-                    name.push(CharonPathElem::Ident(symbol.to_string(), disambiguator));
-                }
-                DefPathData::CrateRoot => {
-                    // Sanity check
-                    error_assert!(self, span, data.disambiguator == 0);
-
-                    // This should be the beginning of the path
-                    error_assert!(self, span, name.is_empty());
-                    found_crate_name = true;
-                    name.push(CharonPathElem::Ident(crate_name.clone(), disambiguator));
-                }
-                DefPathData::Impl => {} //will check
-                DefPathData::OpaqueTy => {
-                    // TODO: do nothing for now
-                }
-                DefPathData::MacroNs(symbol) => {
-                    error_assert!(self, span, data.disambiguator == 0); // Sanity check
-
-                    // There may be namespace collisions between, say, function
-                    // names and macros (not sure). However, this isn't much
-                    // of an issue here, because for now we don't expose macros
-                    // in the AST, and only use macro names in [register], for
-                    // instance to filter opaque modules.
-                    name.push(CharonPathElem::Ident(symbol.to_string(), disambiguator));
-                }
-                DefPathData::Closure => {
-                    // TODO: this is not very satisfactory, but on the other hand
-                    // we should be able to extract closures in local let-bindings
-                    // (i.e., we shouldn't have to introduce top-level let-bindings).
-                    name.push(CharonPathElem::Ident("closure".to_string(), disambiguator))
-                }
-                DefPathData::ForeignMod => {
-                    // Do nothing, functions in `extern` blocks are in the same namespace as the
-                    // block.
-                }
-                _ => {
-                    raise_error!(self, span, "Unexpected DefPathData: {:?}", data);
-                }
-            }
-        }
-
-        // We always add the crate name
-        if !found_crate_name {
-            name.push(CharonPathElem::Ident(crate_name, CharonDisambiguator::new(0)));
-        }
-
-        trace!("{:?}", name);
-        Ok(CharonName { name })
-    }
-
-    /// Retrieve an item name from a [DefId].
-    /// This function is adapted from Charon:
-    /// https://github.com/AeneasVerif/charon/blob/53530427db2941ce784201e64086766504bc5642/charon/src/bin/charon-driver/translate/translate_ctx.rs#L344
-    fn def_to_name(&mut self, def: InstanceDef) -> Result<CharonName, CharonError> {
-        let def_id = def.def_id();
-        trace!("{:?}", def_id);
-        let tcx = self.tcx();
-        let span: CharonSpan = self.translate_span(def.span());
-        let def_id = rustc_internal::internal(self.tcx(), def_id);
 
         // We have to be a bit careful when retrieving names from def ids. For instance,
         // due to reexports, [`TyCtxt::def_path_str`](TyCtxt::def_path_str) might give
@@ -969,10 +884,6 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             parents.into_iter().rev().collect()
         };
 
-        // Rk.: below we try to be as tight as possible with regards to sanity
-        // checks, to make sure we understand what happens with def paths, and
-        // fail whenever we get something which is even slightly outside what
-        // we expect.
         for cur_id in parents {
             let data = tcx.def_key(cur_id).disambiguated_data;
             // Match over the key data
@@ -1032,117 +943,40 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             name.push(CharonPathElem::Ident(crate_name, CharonDisambiguator::new(0)));
         }
 
-        if let Some(impl_defid_internal) = self.tcx.impl_of_assoc(def_id) {
-            let traitref = self
-                .tcx
-                .impl_trait_ref(impl_defid_internal)
-                .skip_binder()
-                .args
-                .first()
-                .unwrap()
-                .to_string();
-            let impl_defid = DefId::to_val(impl_defid_internal.index.as_usize());
-            let _impl_id = self.register_trait_impl_id(impl_defid);
-            let funcname = match name.pop().unwrap() {
-                CharonPathElem::Ident(name, _) => name + traitref.as_str(),
-                _ => panic!("Expected ident"),
-            };
-            name.push(CharonPathElem::Ident(funcname, CharonDisambiguator::new(0)));
-        };
         trace!("{:?}", name);
         Ok(CharonName { name })
+    }
+
+    /// The name of a function instance: its path, with the method name suffixed by the
+    /// implementing type when it is defined in an `impl` block.
+    fn def_to_name(&mut self, def: InstanceDef) -> Result<CharonName, CharonError> {
+        let mut name = self.defid_to_name(def.def_id())?;
+        let def_id = rustc_internal::internal(self.tcx(), def.def_id());
+        if let Some(impl_defid_internal) = self.tcx.impl_of_assoc(def_id) {
+            // `{impl}` path elements are skipped, so methods of different impls share a path
+            // (`core::num::wrapping_add` for every integer type); tell them apart by the
+            // implementing type. That is the impl's self type for inherent and trait impls
+            // alike -- only trait impls have a trait ref, and asking an inherent impl for one
+            // aborted the compiler on any inherent method call.
+            let self_ty = self.tcx.type_of(impl_defid_internal).skip_binder().to_string();
+            if self.tcx.impl_is_of_trait(impl_defid_internal) {
+                let impl_defid = DefId::to_val(impl_defid_internal.index.as_usize());
+                let _impl_id = self.register_trait_impl_id(impl_defid);
+            }
+            let funcname = match name.name.pop().unwrap() {
+                CharonPathElem::Ident(name, _) => name + self_ty.as_str(),
+                _ => panic!("Expected ident"),
+            };
+            name.name.push(CharonPathElem::Ident(funcname, CharonDisambiguator::new(0)));
+        };
+        trace!("{:?}", name);
+        Ok(name)
     }
 
     fn adtdef_to_name(&mut self, def: AdtDef) -> Result<CharonName, CharonError> {
-        let def_id = def.def_id();
-        trace!("{:?}", def_id);
-        let tcx = self.tcx();
-        let span: CharonSpan = self.translate_span(def.span());
-        let def_id = rustc_internal::internal(self.tcx(), def_id);
-        let mut found_crate_name = false;
-        let mut name: Vec<CharonPathElem> = Vec::new();
-
-        let def_path = tcx.def_path(def_id);
-        let crate_name = tcx.crate_name(def_path.krate).to_string();
-
-        let parents: Vec<_> = {
-            let mut parents = vec![def_id];
-            let mut cur_id = def_id;
-            while let Some(parent) = tcx.opt_parent(cur_id) {
-                parents.push(parent);
-                cur_id = parent;
-            }
-            parents.into_iter().rev().collect()
-        };
-
-        // Rk.: below we try to be as tight as possible with regards to sanity
-        // checks, to make sure we understand what happens with def paths, and
-        // fail whenever we get something which is even slightly outside what
-        // we expect.
-        for cur_id in parents {
-            let data = tcx.def_key(cur_id).disambiguated_data;
-            // Match over the key data
-            let disambiguator = CharonDisambiguator::new(data.disambiguator as usize);
-            use rustc_hir::definitions::DefPathData;
-            match &data.data {
-                DefPathData::TypeNs(symbol) => {
-                    error_assert!(self, span, data.disambiguator == 0); // Sanity check
-                    name.push(CharonPathElem::Ident(symbol.to_string(), disambiguator));
-                }
-                DefPathData::ValueNs(symbol) => {
-                    // I think `disambiguator != 0` only with names introduced by macros (though
-                    // not sure).
-                    name.push(CharonPathElem::Ident(symbol.to_string(), disambiguator));
-                }
-                DefPathData::CrateRoot => {
-                    // Sanity check
-                    error_assert!(self, span, data.disambiguator == 0);
-
-                    // This should be the beginning of the path
-                    error_assert!(self, span, name.is_empty());
-                    found_crate_name = true;
-                    name.push(CharonPathElem::Ident(crate_name.clone(), disambiguator));
-                }
-                DefPathData::Impl => todo!(),
-                DefPathData::OpaqueTy => {
-                    // TODO: do nothing for now
-                }
-                DefPathData::MacroNs(symbol) => {
-                    error_assert!(self, span, data.disambiguator == 0); // Sanity check
-
-                    // There may be namespace collisions between, say, function
-                    // names and macros (not sure). However, this isn't much
-                    // of an issue here, because for now we don't expose macros
-                    // in the AST, and only use macro names in [register], for
-                    // instance to filter opaque modules.
-                    name.push(CharonPathElem::Ident(symbol.to_string(), disambiguator));
-                }
-                DefPathData::Closure => {
-                    // TODO: this is not very satisfactory, but on the other hand
-                    // we should be able to extract closures in local let-bindings
-                    // (i.e., we shouldn't have to introduce top-level let-bindings).
-                    name.push(CharonPathElem::Ident("closure".to_string(), disambiguator))
-                }
-                DefPathData::ForeignMod => {
-                    // Do nothing, functions in `extern` blocks are in the same namespace as the
-                    // block.
-                }
-                _ => {
-                    raise_error!(self, span, "Unexpected DefPathData: {:?}", data);
-                }
-            }
-        }
-
-        // We always add the crate name
-        if !found_crate_name {
-            name.push(CharonPathElem::Ident(crate_name, CharonDisambiguator::new(0)));
-        }
-
-        trace!("{:?}", name);
-        Ok(CharonName { name })
+        self.defid_to_name(def.def_id())
     }
 
-    /// Compute the span information for the given instance
     fn translate_instance_span(&mut self, instance: Instance) -> CharonSpan {
         self.translate_span(instance.def.span())
     }
@@ -1665,7 +1499,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 self.translate_operand(rhs),
             ),
             Rvalue::CheckedBinaryOp(bin_op, lhs, rhs) => CharonRvalue::BinaryOp(
-                translate_bin_op(*bin_op),
+                translate_checked_bin_op(*bin_op),
                 self.translate_operand(lhs),
                 self.translate_operand(rhs),
             ),
@@ -1796,27 +1630,14 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     fn translate_allocation(&self, alloc: &Allocation, ty: Ty) -> CharonRawConstantExpr {
         match ty.kind() {
             TyKind::RigidTy(RigidTy::Int(it)) => {
-                let value = alloc.read_int().unwrap();
-                let scalar_value = match it {
-                    IntTy::I8 => CharonScalarValue::I8(value as i8),
-                    IntTy::I16 => CharonScalarValue::I16(value as i16),
-                    IntTy::I32 => CharonScalarValue::I32(value as i32),
-                    IntTy::I64 => CharonScalarValue::I64(value as i64),
-                    IntTy::I128 => CharonScalarValue::I128(value),
-                    IntTy::Isize => CharonScalarValue::Isize(value as i64),
-                };
+                // `as u128` keeps the two's-complement bits, which `scalar_value` truncates.
+                let bits = alloc.read_int().unwrap() as u128;
+                let scalar_value = scalar_value(translate_int_ty(it), bits);
                 CharonRawConstantExpr::Literal(CharonLiteral::Scalar(scalar_value))
             }
             TyKind::RigidTy(RigidTy::Uint(uit)) => {
-                let value = alloc.read_uint().unwrap();
-                let scalar_value = match uit {
-                    UintTy::U8 => CharonScalarValue::U8(value as u8),
-                    UintTy::U16 => CharonScalarValue::U16(value as u16),
-                    UintTy::U32 => CharonScalarValue::U32(value as u32),
-                    UintTy::U64 => CharonScalarValue::U64(value as u64),
-                    UintTy::U128 => CharonScalarValue::U128(value),
-                    UintTy::Usize => CharonScalarValue::Usize(value as u64),
-                };
+                let bits = alloc.read_uint().unwrap();
+                let scalar_value = scalar_value(translate_uint_ty(uit), bits);
                 CharonRawConstantExpr::Literal(CharonLiteral::Scalar(scalar_value))
             }
             TyKind::RigidTy(RigidTy::Bool) => {
@@ -1861,23 +1682,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             };
             let branches = targets
                 .branches()
-                .map(|(value, bb)| {
-                    let scalar_val = match int_ty {
-                        CharonIntegerTy::I8 => CharonScalarValue::I8(value as i8),
-                        CharonIntegerTy::I16 => CharonScalarValue::I16(value as i16),
-                        CharonIntegerTy::I32 => CharonScalarValue::I32(value as i32),
-                        CharonIntegerTy::I64 => CharonScalarValue::I64(value as i64),
-                        CharonIntegerTy::I128 => CharonScalarValue::I128(value as i128),
-                        CharonIntegerTy::Isize => CharonScalarValue::Isize(value as i64),
-                        CharonIntegerTy::U8 => CharonScalarValue::U8(value as u8),
-                        CharonIntegerTy::U16 => CharonScalarValue::U16(value as u16),
-                        CharonIntegerTy::U32 => CharonScalarValue::U32(value as u32),
-                        CharonIntegerTy::U64 => CharonScalarValue::U64(value as u64),
-                        CharonIntegerTy::U128 => CharonScalarValue::U128(value),
-                        CharonIntegerTy::Usize => CharonScalarValue::Usize(value as u64),
-                    };
-                    (scalar_val, CharonBlockId::from_usize(bb))
-                })
+                .map(|(value, bb)| (scalar_value(*int_ty, value), CharonBlockId::from_usize(bb)))
                 .collect();
             let otherwise = CharonBlockId::from_usize(targets.otherwise());
             CharonSwitchTargets::SwitchInt(*int_ty, branches, otherwise)
@@ -2011,14 +1816,48 @@ fn translate_uint_ty(uint_ty: UintTy) -> CharonIntegerTy {
     }
 }
 
+/// The Charon integer value of type `int_ty` whose two's-complement bits are the low bits of
+/// `bits`. MIR hands out both switch values and constant integers as such bit patterns.
+fn scalar_value(int_ty: CharonIntegerTy, bits: u128) -> CharonScalarValue {
+    match int_ty {
+        CharonIntegerTy::I8 => CharonScalarValue::I8(bits as i8),
+        CharonIntegerTy::I16 => CharonScalarValue::I16(bits as i16),
+        CharonIntegerTy::I32 => CharonScalarValue::I32(bits as i32),
+        CharonIntegerTy::I64 => CharonScalarValue::I64(bits as i64),
+        CharonIntegerTy::I128 => CharonScalarValue::I128(bits as i128),
+        // TODO: assumes 64-bit platform, as `translate_int_ty` does.
+        CharonIntegerTy::Isize => CharonScalarValue::Isize(bits as i64),
+        CharonIntegerTy::U8 => CharonScalarValue::U8(bits as u8),
+        CharonIntegerTy::U16 => CharonScalarValue::U16(bits as u16),
+        CharonIntegerTy::U32 => CharonScalarValue::U32(bits as u32),
+        CharonIntegerTy::U64 => CharonScalarValue::U64(bits as u64),
+        CharonIntegerTy::U128 => CharonScalarValue::U128(bits),
+        CharonIntegerTy::Usize => CharonScalarValue::Usize(bits as u64),
+    }
+}
+
+/// The operator of a MIR `CheckedBinaryOp`, which yields `(result, overflowed)`. Charon folds it with
+/// the overflow `Assert` that follows into a panicking operator (`remove_dynamic_checks`).
+fn translate_checked_bin_op(bin_op: BinOp) -> CharonBinOp {
+    match bin_op {
+        BinOp::Add => CharonBinOp::CheckedAdd,
+        BinOp::Sub => CharonBinOp::CheckedSub,
+        BinOp::Mul => CharonBinOp::CheckedMul,
+        _ => translate_bin_op(bin_op),
+    }
+}
+
+/// The operator of a plain MIR `BinaryOp`. MIR's `Add`/`Sub`/`Mul` wrap on overflow -- checked
+/// arithmetic is a separate `CheckedBinaryOp` -- so they must not become Charon's `Checked*`
+/// operators, which produce a `(result, overflowed)` pair.
 fn translate_bin_op(bin_op: BinOp) -> CharonBinOp {
     match bin_op {
         BinOp::AddUnchecked => CharonBinOp::Add,
-        BinOp::Add => CharonBinOp::CheckedAdd,
+        BinOp::Add => CharonBinOp::WrappingAdd,
         BinOp::SubUnchecked => CharonBinOp::Sub,
-        BinOp::Sub => CharonBinOp::CheckedSub,
+        BinOp::Sub => CharonBinOp::WrappingSub,
         BinOp::MulUnchecked => CharonBinOp::Mul,
-        BinOp::Mul => CharonBinOp::CheckedMul,
+        BinOp::Mul => CharonBinOp::WrappingMul,
         BinOp::Div => CharonBinOp::Div,
         BinOp::Rem => CharonBinOp::Rem,
         BinOp::BitXor => CharonBinOp::BitXor,
