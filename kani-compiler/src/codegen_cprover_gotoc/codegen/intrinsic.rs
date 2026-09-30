@@ -256,6 +256,44 @@ impl GotocCtx<'_, '_> {
 
         let intrinsic = Intrinsic::from_instance(&instance);
 
+        // A SIMD intrinsic operates on SIMD vectors: `simd_splat` returns one, the others take one
+        // as their first argument. rustc rejects any other instantiation, but autoharness can
+        // instantiate a generic function with a scalar (e.g. stdarch's `simd_imin::<T>` with
+        // `T = i32`), so report it as unsupported rather than panic in the codegen below.
+        let simd_ty = match &intrinsic {
+            Intrinsic::SimdSplat => Some(ret_ty),
+            Intrinsic::SimdAdd
+            | Intrinsic::SimdAnd
+            | Intrinsic::SimdDiv
+            | Intrinsic::SimdReduceAll
+            | Intrinsic::SimdRem
+            | Intrinsic::SimdEq
+            | Intrinsic::SimdExtract
+            | Intrinsic::SimdGe
+            | Intrinsic::SimdGt
+            | Intrinsic::SimdInsert
+            | Intrinsic::SimdLe
+            | Intrinsic::SimdLt
+            | Intrinsic::SimdMul
+            | Intrinsic::SimdNe
+            | Intrinsic::SimdOr
+            | Intrinsic::SimdShl
+            | Intrinsic::SimdShr
+            | Intrinsic::SimdShuffle(_)
+            | Intrinsic::SimdSub
+            | Intrinsic::SimdXor => farg_types.first().copied(),
+            _ => None,
+        };
+        if let Some(ty) = simd_ty
+            && !ty.kind().is_simd()
+        {
+            return self.codegen_unimplemented_stmt(
+                &format!("`{intrinsic_str}` on non-SIMD type `{ty}`"),
+                loc,
+                "https://github.com/model-checking/kani/issues/4921",
+            );
+        }
+
         match intrinsic {
             Intrinsic::AddWithOverflow => {
                 self.codegen_op_with_overflow(BinaryOperator::OverflowResultPlus, fargs, place, loc)
