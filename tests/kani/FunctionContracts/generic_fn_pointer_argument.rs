@@ -7,8 +7,9 @@
 // non-variadic; lifetimes erased like every other path argument), so these resolve and
 // verify:
 //   * a plain fn-pointer argument (`fn(u8) -> u8`),
-//   * a reference-carrying fn pointer (`fn(&u8) -> u8`) — the impl's stored type is
-//     late-bound (`for<'a> fn(&'a u8) -> u8`); the erased argument still matches it,
+//   * a reference-carrying fn pointer (`fn(&u8) -> u8`), whose impl's stored type is
+//     late-bound (`for<'a> fn(&'a u8) -> u8`); the erased argument matches it when no
+//     `fn(&'static u8) -> u8` sibling impl exists (see generic_fn_pointer_higher_ranked.rs),
 //   * an `unsafe` fn pointer (safety carried through the built signature).
 // The two safe impls have distinct postconditions, so each harness only verifies if
 // resolution picks *its* fn-pointer instantiation, not merely one of them.

@@ -88,8 +88,10 @@ pub fn resolve_ty<'tcx>(
         Type::Never(_) => Ok(Ty::from_rigid_kind(RigidTy::Never)),
         Type::BareFn(bare_fn) => {
             // Rust-ABI, non-variadic fn pointers; lifetimes are erased like everywhere
-            // else in this resolver, so `fn(&u8) -> u8` and `for<'a> fn(&'a u8) -> u8`
-            // resolve to the same erased signature.
+            // else in this resolver. A higher-ranked argument (`fn(&u8) -> u8`)
+            // therefore matches an erased impl; if a `fn(&'static u8) -> u8` sibling
+            // impl also exists, it resolves to that one instead (binding the late-bound
+            // regions is a follow-up; see https://github.com/model-checking/kani/issues/4933).
             if bare_fn.variadic.is_some() {
                 return unsupported("variadic bare function");
             }
