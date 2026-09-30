@@ -72,27 +72,6 @@ impl GotocCtx<'_, '_> {
 const RAW_PTR_FROM_BOX: [&str; 3] = ["0", "pointer", "pointer"];
 
 impl GotocCtx<'_, '_> {
-    /// Dereference a boxed type `std::boxed::Box<T>` to get a `*T`.
-    ///
-    /// WARNING: This is based on a manual inspection of how boxed types are currently
-    /// a) implemented by the rust standard library
-    /// b) codegenned by Kani.
-    /// If either of those change, this will almost certainly stop working.
-    pub fn deref_box(&self, box_expr: Expr) -> Expr {
-        // Internally, a Boxed type is stored as a chain of structs.
-        //
-        // This code has to match the exact structure from the std library version that is
-        // supported to access the raw pointer. If either rustc or Kani changes how boxed types are
-        // represented, this will need to be updated.
-        self.assert_is_rust_box_like(box_expr.typ());
-        let expr = RAW_PTR_FROM_BOX
-            .iter()
-            .fold(box_expr, |expr, name| expr.member(name, &self.symbol_table));
-        // `NonNull`'s `pointer` field holds a `pattern_type!(*const T is !null)`, which is itself
-        // codegenned as a struct, so the chain above stops one level above the raw pointer.
-        self.peel_ptr_wrappers(expr)
-    }
-
     /// `Box<T>` initializer
     ///
     /// Traverse over the Box representation and only initialize the raw_ptr field. All other
