@@ -444,7 +444,9 @@ impl GotocCtx<'_, '_> {
             ProjectionElem::Deref => {
                 let base_type = before.mir_typ();
                 // rustc's `ElaborateBoxDerefs` pass replaces every deref of a `Box` with a deref
-                // of its raw pointer.
+                // of its raw pointer. Shims skip that pass, but the ones that touch a `Box` reach
+                // its contents through the raw pointer themselves; drop elaboration does so
+                // explicitly.
                 assert!(!base_type.kind().is_box(), "Unexpected deref of {base_type:?}");
                 let inner_goto_expr = before.goto_expr;
 
