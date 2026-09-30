@@ -1,0 +1,15 @@
+[without --bounded-arguments]
+| cargo_autoharness_byte_str | byte_str_cover   | Requires --bounded-arguments for argument(s) s: &std::bstr::ByteStr      |
+[with --bounded-arguments]
+| cargo_autoharness_byte_str | nested           | Missing Arbitrary implementation for argument(s) s: &&std::bstr::ByteStr |
+Failed Checks: index out of bounds: the length is less than or equal to the given index
+Status: SATISFIED\
+Description: "empty byte string"
+Status: SATISFIED\
+Description: "maximum-length byte string"
+Status: SATISFIED\
+Description: "byte string "ab""
+| cargo_autoharness_byte_str | byte_str_cover    | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_byte_str | len               | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_byte_str | first             | #[kani::proof] (bounded)  | Failure             |
+Complete - 2 successfully verified functions, 1 failures, 3 total.

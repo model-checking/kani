@@ -35,3 +35,12 @@ rustflags = [ # Global lints/warnings. Need to use underscore instead of -.
     "-Aclippy::needless-borrow",
     "-Aclippy::bool-to-int-with-if",
 ]
+
+# Doctests are compiled by rustdoc, not through Kani's driver, so they miss the
+# `-Znext-solver=coherence` that `base_rustc_flags` passes to every crate Kani compiles.
+# `kani::pointer_generator`'s return type uses `generic_const_exprs`, which the
+# next-generation trait solver (on by default since nightly-2026-09-22) cannot handle, so the
+# doctests that call it need the same setting.
+# Tracked for removal in https://github.com/model-checking/kani/issues/4832.
+[build]
+rustdocflags = ["-Znext-solver=coherence"]

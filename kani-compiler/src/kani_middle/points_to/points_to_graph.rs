@@ -154,7 +154,11 @@ impl<'tcx> PointsToGraph<'tcx> {
             HashSet::from([MemLoc::new_stack_allocation(instance, place_without_projections)]);
         for projection in place.projection {
             match projection {
-                ProjectionElem::Deref => {
+                // A `PhantomDeref` is the borrow checker's symbolic dereference of a
+                // `Reborrow` type (rust-lang/rust#159103). Treat it as a dereference: it
+                // reaches an indirect place, so following the pointer keeps the aliasing
+                // information conservative.
+                ProjectionElem::Deref | ProjectionElem::PhantomDeref => {
                     node_set = self.successors(&node_set);
                 }
                 ProjectionElem::Field(..)
