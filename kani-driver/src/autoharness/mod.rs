@@ -114,7 +114,11 @@ fn postprocess_project(
             session.args.common_args.quiet,
         );
     }
-    if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
+    if session.args.only_codegen || session.args.uses_llbc_backend() {
+        Ok(())
+    } else {
+        verify_project(project, session)
+    }
 }
 
 /// Print automatic harness metadata to the terminal.

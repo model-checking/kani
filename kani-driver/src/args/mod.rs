@@ -471,6 +471,12 @@ impl NumThreads {
 }
 
 impl VerificationArgs {
+    /// Whether the LLBC backend (`-Z lean`) replaces the CBMC one. It writes no goto program, so
+    /// there is nothing to link or verify: Kani stops once the compiler has run.
+    pub fn uses_llbc_backend(&self) -> bool {
+        self.common_args.unstable_features.contains(UnstableFeature::Lean)
+    }
+
     pub fn restrict_vtable(&self) -> bool {
         self.common_args.unstable_features.contains(UnstableFeature::RestrictVtable)
             && !self.no_restrict_vtable

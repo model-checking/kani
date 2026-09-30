@@ -118,7 +118,11 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     }
 
     let project = project::cargo_project(&mut session, false)?;
-    if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
+    if session.args.only_codegen || session.args.uses_llbc_backend() {
+        Ok(())
+    } else {
+        verify_project(project, session)
+    }
 }
 
 /// The main function for the `kani` command.
@@ -164,7 +168,11 @@ fn standalone_main() -> Result<()> {
             (session, project)
         }
     };
-    if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
+    if session.args.only_codegen || session.args.uses_llbc_backend() {
+        Ok(())
+    } else {
+        verify_project(project, session)
+    }
 }
 
 /// Run verification on the given project.
