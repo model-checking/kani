@@ -34,8 +34,10 @@ echo "-----------------------------"
 suite="llbc"
 mode="expected"
 echo "Check compiletest suite=$suite mode=$mode"
+# `--require-success`: the LLBC tests only pin output, and Kani can print the expected LLBC and
+# still fail afterwards (e.g. when Charon reports errors), which would otherwise go unnoticed.
 cargo run -p compiletest --quiet -- --suite $suite --mode $mode \
-    --quiet --no-fail-fast
+    --quiet --no-fail-fast --require-success
 
 echo
 echo "All Kani llbc regression tests completed successfully."

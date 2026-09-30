@@ -494,6 +494,9 @@ impl TestCx<'_> {
             self.testpaths.file.parent().unwrap().join("expected")
         };
         self.verify_output(&proc_res, &expected_path);
+        if self.config.require_success && !proc_res.status.success() {
+            self.fatal_proc_rec("test failed: Kani exited unsuccessfully", &proc_res);
+        }
     }
 
     /// Runs Kani in coverage mode on the test file specified by `self.testpaths.file`.
