@@ -399,7 +399,17 @@ impl MirVisitor for MonoItemsFnCollector<'_, '_> {
         let allocation = match constant.const_.kind() {
             ConstantKind::Allocated(allocation) => allocation,
             ConstantKind::Unevaluated(_) => {
-                unreachable!("Instance with polymorphic constant: `{constant:?}`")
+                // Instance bodies are monomorphic, so their constants are evaluated when the
+                // body is built. A constant is only left unevaluated if its evaluation failed,
+                // e.g., a type too big for the target architecture, in which case the error
+                // has already been reported. Skip the constant and let
+                // `collect_reachable_items` abort compilation once collection finishes.
+                // See <https://github.com/model-checking/kani/issues/4814>.
+                assert!(
+                    self.tcx.dcx().has_errors().is_some(),
+                    "Instance with polymorphic constant: `{constant:?}`"
+                );
+                return;
             }
             ConstantKind::Param(_) => unreachable!("Unexpected parameter constant: {constant:?}"),
             ConstantKind::ZeroSized => {
