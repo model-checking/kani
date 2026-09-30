@@ -118,7 +118,13 @@ fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     }
 
     let project = project::cargo_project(&mut session, false)?;
-    if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
+    if session.args.only_codegen {
+        Ok(())
+    } else if session.args.uses_llbc_backend() {
+        codegen_llbc_only(&project, &session)
+    } else {
+        verify_project(project, session)
+    }
 }
 
 /// The main function for the `kani` command.
@@ -164,7 +170,21 @@ fn standalone_main() -> Result<()> {
             (session, project)
         }
     };
-    if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
+    if session.args.only_codegen {
+        Ok(())
+    } else if session.args.uses_llbc_backend() {
+        codegen_llbc_only(&project, &session)
+    } else {
+        verify_project(project, session)
+    }
+}
+
+/// Finish a run of the LLBC backend (`-Z lean`), which stops after codegen: there is nothing to
+/// link or verify. Still reject `--harness` filters that match nothing, as `verify_project` does:
+/// the compiler only filters its metadata and would silently translate no harness.
+pub(crate) fn codegen_llbc_only(project: &Project, session: &KaniSession) -> Result<()> {
+    session.determine_targets(project.get_all_harnesses())?;
+    Ok(())
 }
 
 /// Run verification on the given project.

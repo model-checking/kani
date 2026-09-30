@@ -16,7 +16,7 @@ use crate::list::output::output_list_results;
 use crate::project::{Project, standalone_project, std_project};
 use crate::session::KaniSession;
 use crate::util::warning;
-use crate::{InvocationType, print_kani_version, project, verify_project};
+use crate::{InvocationType, codegen_llbc_only, print_kani_version, project, verify_project};
 use anyhow::Result;
 use comfy_table::Table as PrettyTable;
 use kani_metadata::{AutoHarnessSkipReason, HarnessMetadata, KaniMetadata};
@@ -114,7 +114,13 @@ fn postprocess_project(
             session.args.common_args.quiet,
         );
     }
-    if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
+    if session.args.only_codegen {
+        Ok(())
+    } else if session.args.uses_llbc_backend() {
+        codegen_llbc_only(&project, &session)
+    } else {
+        verify_project(project, session)
+    }
 }
 
 /// Print automatic harness metadata to the terminal.
