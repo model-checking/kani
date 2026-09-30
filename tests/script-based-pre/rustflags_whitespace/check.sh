@@ -14,7 +14,7 @@ echo "empty RUSTFLAGS works"
 RUSTFLAGS="   " kani standalone.rs --output-format terse
 echo "blank RUSTFLAGS works"
 
-RUSTFLAGS="--cfg=first  --cfg=second" kani cfgs.rs --output-format terse
+RUSTFLAGS="--cfg=first  --cfg=second --check-cfg=cfg(first,second)" kani cfgs.rs --output-format terse
 echo "repeated spaces keep both flags"
 
 RUSTFLAGS="" cargo kani --output-format terse

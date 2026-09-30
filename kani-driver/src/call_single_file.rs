@@ -299,7 +299,7 @@ pub fn base_rustc_flags(lib_config: LibConfig) -> Vec<RustcArg> {
         // Split on whitespace rather than on a single space: `RUSTFLAGS=""` would otherwise
         // contribute one empty argument, which rustc reads as a second input filename
         // ("multiple input filenames provided"), and repeated or trailing spaces would do the
-        // same. Cargo parses the space-separated form the same way.
+        // same. This is close to how cargo parses the variable (split on ' ', trim, drop empties).
         flags.extend(str.split_whitespace().map(RustcArg::from));
     }
 
