@@ -122,21 +122,29 @@ impl Project {
         cargo_metadata: Option<cargo_metadata::Metadata>,
     ) -> Result<Self> {
         // For each harness (test or proof) from each metadata, read the path for the goto
-        // SymTabGoto file. Use that path to find all the other artifacts.
-        let link_jobs = metadata
-            .iter()
-            .flat_map(|crate_metadata| {
-                crate_metadata.test_harnesses.iter().chain(crate_metadata.proof_harnesses.iter())
-            })
-            .map(|harness| {
-                let model_path = harness.goto_file.as_ref().expect("Expected a model file");
-                let input = model_path.canonicalize().with_context(|| {
-                    format!("Failed to canonicalize harness model {}", model_path.display())
-                })?;
-                let output = convert_type(&input, SymTabGoto, Goto);
-                Ok(LinkJob { input, output })
-            })
-            .collect::<Result<Vec<_>>>()?;
+        // SymTabGoto file. Use that path to find all the other artifacts. The LLBC backend writes
+        // no goto files, so there is nothing to link.
+        let link_jobs = if session.args.uses_llbc_backend() {
+            vec![]
+        } else {
+            metadata
+                .iter()
+                .flat_map(|crate_metadata| {
+                    crate_metadata
+                        .test_harnesses
+                        .iter()
+                        .chain(crate_metadata.proof_harnesses.iter())
+                })
+                .map(|harness| {
+                    let model_path = harness.goto_file.as_ref().expect("Expected a model file");
+                    let input = model_path.canonicalize().with_context(|| {
+                        format!("Failed to canonicalize harness model {}", model_path.display())
+                    })?;
+                    let output = convert_type(&input, SymTabGoto, Goto);
+                    Ok(LinkJob { input, output })
+                })
+                .collect::<Result<Vec<_>>>()?
+        };
 
         let build_artifacts = |link_job: &LinkJob| -> Result<Vec<Artifact>> {
             let symtab_out = Artifact { path: link_job.input.clone(), typ: SymTabGoto };

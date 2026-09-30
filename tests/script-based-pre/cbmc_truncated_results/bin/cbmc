@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+# A fake `cbmc` that simulates CBMC running out of memory while it writes its `--json-ui`
+# results: it cuts the result array off at the first failed assertion, drops what follows, and
+# ends with the error message and exit status CBMC reports for `std::bad_alloc`.
+
+if [[ " $* " != *" --json-ui "* ]]; then
+    exec "${REAL_CBMC}" "$@"
+fi
+
+"${REAL_CBMC}" "$@" | jq --monochrome-output '
+    (map(has("result")) | index(true)) as $r
+    | .[:$r + 1]
+    | (.[$r].result | map(.status == "FAILURE" and (.property | contains(".assertion.")))
+       | index(true)) as $failed
+    | .[$r].result |= .[:$failed]
+    | . + [{"messageText": "Out of memory", "messageType": "ERROR"}]'
+exit 6
