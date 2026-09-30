@@ -290,7 +290,7 @@ impl GotocCtx<'_, '_> {
             return self.codegen_unimplemented_stmt(
                 &format!("`{intrinsic_str}` on non-SIMD type `{ty}`"),
                 loc,
-                "https://github.com/model-checking/kani/issues/4921",
+                "https://github.com/model-checking/kani/issues/new/choose",
             );
         }
 
