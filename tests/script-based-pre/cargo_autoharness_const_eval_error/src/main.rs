@@ -6,6 +6,9 @@
 //! and finds a constant whose evaluation failed with E0080. This used to trigger an ICE
 //! ("Instance with polymorphic constant"). See
 //! <https://github.com/model-checking/kani/issues/4814>.
+//!
+//! This has to be a Cargo project: single-file `kani autoharness` on the same code reports the
+//! E0080 without reaching the collector, so it could not catch the ICE.
 
 struct S<T> {
     x: [T; !0],
