@@ -171,7 +171,7 @@
 //!     const fn kani_register_contract<T, F: FnOnce() -> T>(f: F) -> T {
 //!         unreachable!()
 //!     }
-//!     #[inline(never)]
+//!     #[inline]
 //!     #[kanitool::fn_marker = "kani_contract_mode"]
 //!     const fn kani_contract_mode() -> kani::internal::Mode {
 //!         kani::internal::ORIGINAL
@@ -341,7 +341,7 @@
 //!     const fn kani_register_contract<T, F: FnOnce() -> T>(f: F) -> T {
 //!         unreachable!()
 //!     }
-//!     #[inline(never)]
+//!     #[inline]
 //!     #[kanitool::fn_marker = "kani_contract_mode"]
 //!     const fn kani_contract_mode() -> kani::internal::Mode {
 //!         kani::internal::ORIGINAL
