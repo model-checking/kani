@@ -32,8 +32,8 @@ def _get_metrics():
         },
         # CBMC solves a harness in several calls, and the number of calls is not stable across
         # runs of the same code (https://github.com/model-checking/kani/issues/4821). Counting
-        # them makes that visible, and turns `solver_runtime` -- a sum over a varying number of
-        # calls -- into something comparable: see `solver_runtime_per_call` below.
+        # them, and deriving `solver_runtime_per_call` in `main`, explains a differing
+        # `solver_runtime`, which sums over all calls.
         "solver_calls": {
             "pat": re.compile(r"Solving with (?P<value>.+)"),
             "parse": lambda _: 1,

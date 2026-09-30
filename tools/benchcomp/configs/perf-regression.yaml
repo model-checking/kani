@@ -113,12 +113,22 @@ visualize:
       # harnesses involved (https://github.com/model-checking/kani/issues/4822).
       #
       # So the threshold depends on whether the SAT instance moved. When the VCC and step counts
-      # and the size of the first solver call's instance all match, the two sides are very
-      # likely solving the same problem, and only a slowdown well past the observed noise (4x)
-      # counts: that still catches, e.g., a change to the solver options Kani passes. Otherwise
-      # the original 1.5x applies. Both compare the *total* solver time, so a change that adds
-      # solver calls is caught even if each call is as fast as before; `solver_calls` and
-      # `solver_runtime_per_call` are in the results table to explain a differing total.
+      # and the size of the first solver call's instance all match (CBMC prints that size only
+      # for its built-in solvers, so for an external solver such as kissat it is absent on both
+      # sides), the two sides are likely, not certainly, solving the same instance, and only a
+      # slowdown well past the observed noise (4x) counts: that still catches a large slowdown
+      # from, e.g., a change to the solver options Kani passes. Otherwise the original 1.5x
+      # applies. Both compare the *total* solver time, so a change that adds solver calls is
+      # caught even if each call is as fast as before; `solver_calls` and
+      # `solver_runtime_per_call` are in the results table to explain a differing total. A
+      # harness that newly needs 10s or more of solver time also counts.
+      #
+      # What this gives up: a slowdown between 1.5x and 4x on an instance of unchanged size
+      # passes. Much of the noise comes from symbol names that depend on rustc allocation
+      # order, which changes the variable order the solver sees
+      # (https://github.com/model-checking/kani/issues/4821). Fixing that, or re-running a
+      # tripped harness on both sides (https://github.com/model-checking/kani/issues/4918),
+      # would let the 4x come down.
       - metric: solver_runtime
         all_metrics: true
         test: >
