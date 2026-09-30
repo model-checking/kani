@@ -431,7 +431,7 @@ pub fn setup_cargo_command() -> Result<Command> {
 pub fn setup_cargo_command_inner(profiling_out_path: Option<String>) -> Result<Command> {
     let install_type = InstallType::new()?;
 
-    let cmd = match install_type {
+    let mut cmd = match install_type {
         InstallType::DevRepo(_) => {
             // check if we should instrument the compiler for a flamegraph
             let instrument_compiler = matches!(
@@ -471,7 +471,48 @@ pub fn setup_cargo_command_inner(profiling_out_path: Option<String>) -> Result<C
         }
     };
 
+    drop_rustc_wrappers(&mut cmd);
+
     Ok(cmd)
+}
+
+/// Keep a `rustc` wrapper (`sccache` and friends) out of Kani's build.
+///
+/// We point `RUSTC` at `kani-compiler`, which is not a `rustc` a wrapper can serve: it takes
+/// Kani-specific arguments, and its output is a goto program rather than the object files a
+/// compilation cache expects. With `RUSTC_WRAPPER=sccache` exported, `cargo kani` fails before it
+/// compiles anything with `sccache: caused by: Compiler not supported`, c.f.
+/// <https://github.com/model-checking/kani/issues/2233>. Caching would not have helped us anyway,
+/// so drop the wrapper and say so rather than failing.
+///
+/// A wrapper can also come from `build.rustc-wrapper` / `build.rustc-workspace-wrapper` in a
+/// `.cargo/config.toml` (the setup sccache recommends) or their `CARGO_BUILD_*` environment
+/// forms. Setting `RUSTC_WRAPPER` and `RUSTC_WORKSPACE_WRAPPER` to the empty string, rather than
+/// removing them, overrides all of those: cargo documents that the empty string "overwrites the
+/// config and resets cargo to not use a wrapper".
+fn drop_rustc_wrappers(cmd: &mut Command) {
+    // This runs once per verification target; warn only once per Kani run.
+    static WARNED: std::sync::Once = std::sync::Once::new();
+    WARNED.call_once(|| {
+        for var in [
+            "RUSTC_WRAPPER",
+            "RUSTC_WORKSPACE_WRAPPER",
+            "CARGO_BUILD_RUSTC_WRAPPER",
+            "CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER",
+        ] {
+            if let Ok(wrapper) = std::env::var(var)
+                && !wrapper.is_empty()
+            {
+                crate::util::warning(&format!(
+                    "ignoring `{var}={wrapper}` for this run: Kani compiles with \
+                     `kani-compiler`, which a `rustc` wrapper cannot handle"
+                ));
+            }
+        }
+    });
+    for var in ["RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER"] {
+        cmd.env(var, "");
+    }
 }
 
 // Get the cargo path corresponding to the toolchain version in rust-toolchain.toml.
