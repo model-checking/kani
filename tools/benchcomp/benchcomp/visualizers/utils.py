@@ -24,10 +24,14 @@ class SingleRegressionCheck:
 
     metric: str
     test: typing.Callable
+    all_metrics: bool
 
 
-    def __init__(self, metric, test_program):
+    def __init__(self, metric, test_program, all_metrics=False):
         self.metric = metric
+        # When set, the test receives the two variants' whole metric dicts instead of a single
+        # metric's values, so it can judge one metric in the light of the others.
+        self.all_metrics = all_metrics
         try:
             self.test = eval(test_program)
         except SyntaxError:
@@ -79,10 +83,20 @@ class AnyBenchmarkRegressedChecker:
                             bench_name, self.metric, variant)
                         continue
 
-                old = bench["variants"][old_variant]["metrics"][self.metric]
-                new = bench["variants"][new_variant]["metrics"][self.metric]
+                old_metrics = bench["variants"][old_variant]["metrics"]
+                new_metrics = bench["variants"][new_variant]["metrics"]
+                if has_regressed.all_metrics:
+                    # `metric` only labels the warning here, so a benchmark that lacks it is
+                    # still judged: the test decides what the absence of a metric means.
+                    old = old_metrics.get(self.metric)
+                    new = new_metrics.get(self.metric)
+                    regressed = has_regressed(old_metrics, new_metrics)
+                else:
+                    old = old_metrics[self.metric]
+                    new = new_metrics[self.metric]
+                    regressed = has_regressed(old, new)
 
-                if has_regressed(old, new):
+                if regressed:
                     logging.warning(
                         "Benchmark '%s' regressed on metric '%s' (%s -> %s)",
                         bench_name, self.metric, old, new)

@@ -82,6 +82,13 @@ visualize:
           + "%.3f%%" % ((b["kani_new"] - b["kani_old"]) * 100 / b["kani_old"])
           + ("**" if abs((b["kani_new"]-b["kani_old"])/b["kani_old"]) > 0.5 else "")
 
+      solver_calls:
+      - column_name: diff old → new
+        text: >
+          lambda b: "" if b["kani_new"] == b["kani_old"]
+          else ("+" if b["kani_new"] > b["kani_old"] else "")
+          + str(b["kani_new"] - b["kani_old"])
+
       # For success metric, display some text if success has changed
       success:
       - column_name: change
@@ -97,7 +104,41 @@ visualize:
         # Compare the old and new variants of each benchmark. The
         # benchmark has regressed if the lambda returns true.
         test: "lambda old, new: False if not old else not new"
+
+      # Solver time on the perf suite's heavy harnesses is noisy even when nothing changed: over
+      # seven `main` runs, 910 (benchmark, run) pairs with identical VCC *and* step counts had a
+      # median old→new ratio of 0.99x but a range of 0.41x to 2.41x, and
+      # `inet::checksum::tests::differential` alone ranged 38.8s to 116.0s on the `main` side.
+      # A flat 1.5x therefore tripped on #4801, #4804 and #4820, none of which touched the
+      # harnesses involved (https://github.com/model-checking/kani/issues/4822).
+      #
+      # So the threshold depends on whether the SAT instance moved. When the VCC and step counts
+      # and the size of the first solver call's instance all match (CBMC prints that size only
+      # for its built-in solvers, so for an external solver such as kissat it is absent on both
+      # sides), the two sides are likely, not certainly, solving the same instance, and only a
+      # slowdown well past the observed noise (4x) counts: that still catches a large slowdown
+      # from, e.g., a change to the solver options Kani passes. Otherwise the original 1.5x
+      # applies. Both compare the *total* solver time, so a change that adds solver calls is
+      # caught even if each call is as fast as before; `solver_calls` and
+      # `solver_runtime_per_call` are in the results table to explain a differing total. A
+      # harness that newly needs 10s or more of solver time also counts.
+      #
+      # What this gives up: a slowdown between 1.5x and 4x on an instance of unchanged size
+      # passes. Much of the noise comes from symbol names that depend on rustc allocation
+      # order, which changes the variable order the solver sees
+      # (https://github.com/model-checking/kani/issues/4821). Fixing that, or re-running a
+      # tripped harness on both sides (https://github.com/model-checking/kani/issues/4918),
+      # would let the 4x come down.
       - metric: solver_runtime
-        test: "lambda old, new: False if new < 10 else new/old > 1.5"
+        all_metrics: true
+        test: >
+          lambda old, new: new.get("solver_runtime", 0) >= 10 and (
+            not old.get("solver_runtime")
+            or new["solver_runtime"] / old["solver_runtime"] > (
+              4 if all(old.get(k) == new.get(k) for k in (
+                "number_vccs", "number_program_steps", "solver_variables", "solver_clauses"))
+              else 1.5))
+
+      # Symex time is deterministic given the formula, so it keeps the simple rule.
       - metric: symex_runtime
         test: "lambda old, new: False if new < 10 else new/old > 1.5"
