@@ -312,7 +312,6 @@ pub fn transform_for_to_loop(
     loop_id: &str,
 ) -> (Stmt, Option<ForLoopExtraStmts>) {
     // Extract components from the for loop
-    let attrs = for_loop.attrs;
     let label = for_loop.label;
     let pat = *for_loop.pat;
     let expr = for_loop.expr;
@@ -378,10 +377,8 @@ pub fn transform_for_to_loop(
     new_body_stmts.extend(body.stmts.iter().cloned());
 
     // Create the final expression with the iterator initialization.
-    // Keep the label and the remaining attributes of the loop (e.g., a `#[kani::loop_modifies]`
-    // or `#[kani::loop_decreases]` written after `#[kani::loop_invariant]`).
+    // Keep the label of the loop.
     let loop_loop: Stmt = parse_quote! {
-            #(#attrs)*
             #label while (#kani_index < #kani_iter_len) {
                 #(#new_body_stmts)*
             }
