@@ -545,8 +545,9 @@ impl VerificationResult {
     ///   2. Positively checking for the presence of results.
     ///      (Do not mistake lack of results for success: report it as failure.)
     ///
-    /// The exit status is only used to reject results that CBMC did not finish reporting
-    /// (see `cbmc_completed_results`).
+    /// Results are only used if CBMC finished reporting them: it must have printed its overall
+    /// status after the result array (see `cbmc_reported_prover_status`), must not have run out
+    /// of memory, and its exit status must agree (see `cbmc_completed_results`).
     fn from(
         output: VerificationOutput,
         should_panic: bool,
