@@ -179,12 +179,12 @@ impl Intrinsic {
     /// The operand that must be a SIMD vector for this intrinsic to have a meaning, given the
     /// monomorphized argument and return types of a call to it; `None` for a non-SIMD intrinsic.
     ///
-    /// rustc checks this when it monomorphizes and rejects a violation with `E0511` (`invalid
-    /// monomorphization of `simd_lt` intrinsic: expected SIMD input type, found non-SIMD `i32``),
-    /// so no call site written in source code reaches codegen with a scalar here. A *synthesized*
-    /// instantiation can: `-Z autoharness` monomorphizes a generic function itself, and nothing
-    /// bounds the parameter of a helper like `fn imin<T: Copy>(a: T, b: T) -> T` whose body calls
-    /// `simd_lt` to the SIMD types. See <https://github.com/model-checking/kani/issues/4919>.
+    /// rustc's codegen backends reject a violation with `E0511` (`invalid monomorphization of
+    /// `simd_lt` intrinsic: expected SIMD input type, found non-SIMD `i32``). Kani replaces the
+    /// backend, so it sees such calls: from a harness that calls `imin::<i32>` directly, and from
+    /// instantiations that `-Z autoharness` picks for a helper like
+    /// `fn imin<T: Copy>(a: T, b: T) -> T` whose body calls `simd_lt`, since nothing bounds `T` to
+    /// the SIMD types. See <https://github.com/model-checking/kani/issues/4919>.
     pub fn simd_vector_operand(&self, arg_tys: &[Ty], ret_ty: Ty) -> Option<Ty> {
         match self {
             // `simd_splat<T, U>(value: U) -> T` broadcasts a scalar, so its vector is the return

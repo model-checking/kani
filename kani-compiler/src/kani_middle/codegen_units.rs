@@ -902,8 +902,8 @@ fn resolve_deferred_fn_slots<'tcx>(
 /// The SIMD intrinsic call in `instance`'s body whose vector operand this instantiation turned
 /// into a non-SIMD type, if there is one, as `(intrinsic name, operand type)`.
 ///
-/// rustc rejects such a monomorphization with `E0511`, so the call site cannot appear in a program
-/// that compiles: nothing bounds the parameter of a helper like
+/// rustc's codegen backends reject such a monomorphization with `E0511`, so the call site cannot
+/// appear in a program that `cargo build` accepts: nothing bounds the parameter of a helper like
 /// `fn imin<T: Copy>(a: T, b: T) -> T { simd_lt(a, b) }` to the SIMD types, but every real caller
 /// passes one. Autoharness picks its own instantiation, though, so it has to make that check
 /// itself, or the harness it generates is one rustc would not accept. `core` has exactly this

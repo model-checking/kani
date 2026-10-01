@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 //! A generic helper whose body calls a SIMD intrinsic, but whose type parameter is not bound to
-//! the SIMD types. rustc rejects `imin::<i32>` when it monomorphizes it (`E0511`), so no program
-//! that compiles contains that call; autoharness synthesizes its own instantiation, though, and
+//! the SIMD types. rustc's codegen backends reject `imin::<i32>` (`E0511`), so no program that
+//! `cargo build` accepts contains that call; autoharness synthesizes its own instantiation, though, and
 //! used to pick `i32` and crash the SIMD codegen on the vector length of a scalar:
 //! <https://github.com/model-checking/kani/issues/4919>. `core_arch::simd::simd_imin` has exactly
 //! this shape, which is what blocked autoharness over the standard library.
