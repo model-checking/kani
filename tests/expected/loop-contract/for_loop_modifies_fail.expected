@@ -1,0 +1,17 @@
+- Status: FAILURE\
+- Description: "Check that j is assignable"\
+in function invariant_then_modifies
+
+- Status: FAILURE\
+- Description: "Check that j is assignable"\
+in function modifies_then_invariant
+
+- Status: FAILURE\
+- Description: "Check that *p is assignable"\
+in function write_through_loop_local
+
+- Status: FAILURE\
+- Description: "Check that out[\
+in function indexed_place_other_element
+
+Complete - 0 successfully verified harnesses, 4 failures, 4 total.

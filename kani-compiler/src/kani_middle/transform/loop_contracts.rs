@@ -10,7 +10,7 @@ use crate::kani_middle::codegen_units::CodegenUnit;
 use crate::kani_middle::kani_functions::KaniModel;
 use crate::kani_middle::transform::TransformationType;
 use crate::kani_middle::transform::body::{
-    InsertPosition, MutableBody, SourceInstruction, synthetic_source_info,
+    InsertPosition, MutMirVisitor, MutableBody, SourceInstruction, synthetic_source_info,
 };
 use crate::kani_queries::QueryDb;
 use crate::rustc_public::CrateDef;
@@ -18,10 +18,11 @@ use itertools::Itertools;
 use rustc_middle::ty::TyCtxt;
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::{
-    AggregateKind, BasicBlock, BasicBlockIdx, Body, ConstOperand, Operand, Place, Rvalue,
-    Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, VarDebugInfoContents,
-    WithRetag,
+    AggregateKind, BasicBlock, BasicBlockIdx, Body, ConstOperand, Local, Operand, Place,
+    ProjectionElem, Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
+    VarDebugInfoContents, WithRetag,
 };
+use rustc_public::rustc_internal;
 use rustc_public::ty::{FnDef, GenericArgKind, MirConst, RigidTy, TyKind, UintTy};
 use rustc_span::Symbol;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -34,6 +35,18 @@ pub struct LoopContractPass {
     /// The map from original loop head to the new loop latch.
     /// We use this map to redirect all original loop latches to a new single loop latch.
     new_loop_latches: HashMap<usize, usize>,
+    /// The map from original loop head to the locals that this transformation (together with
+    /// the rewrite of the loop by `#[kani::loop_invariant]`) makes live across iterations of
+    /// that loop, although they are not visible to the user at the loop contract: the
+    /// pattern of a `for` loop, and the variables declared in the loop body (and the
+    /// temporaries) whose initialization is copied to the loop head.
+    /// See [LoopContractPass::add_generated_loop_modifies].
+    generated_loop_locals: HashMap<usize, HashSet<usize>>,
+    /// The locals to add to the loop modifies clause of each loop of the last transformed body,
+    /// by the instance of the register function that the loop latch calls. Taken by
+    /// [BodyTransformation](super::BodyTransformation) after each transformation, which keys
+    /// them by the instance of the body as well.
+    generated_loop_modifies: Vec<(Instance, Vec<Local>)>,
 }
 
 impl TransformPass for LoopContractPass {
@@ -98,6 +111,8 @@ impl TransformPass for LoopContractPass {
     ///    ```
     fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         self.new_loop_latches = HashMap::new();
+        self.generated_loop_locals = HashMap::new();
+        self.generated_loop_modifies = Vec::new();
         match instance.ty().kind().rigid().unwrap() {
             RigidTy::FnDef(_func, args) => {
                 if KaniAttributes::for_instance(tcx, instance).fn_marker()
@@ -117,6 +132,54 @@ impl TransformPass for LoopContractPass {
             }
         }
     }
+
+    fn take_generated_loop_modifies(&mut self) -> Vec<(Instance, Vec<Local>)> {
+        std::mem::take(&mut self.generated_loop_modifies)
+    }
+}
+
+/// Replaces the uses of the locals of the first pattern of a `for` loop by the corresponding
+/// locals of the nth pattern, see [LoopContractPass::replace_first_pat_by_nth_pat].
+/// The assigned places of statements and the dropped places are not changed: renaming the drop
+/// of the first pattern at the end of its scope would drop the value of the nth pattern, which
+/// the loop body has already dropped.
+struct FirstPatRenamer<'a> {
+    firstprj_nthprj: &'a HashMap<usize, usize>,
+}
+
+impl FirstPatRenamer<'_> {
+    fn rename(&self, place: &mut Place) {
+        if let Some(nthlocal) = self.firstprj_nthprj.get(&place.local) {
+            place.local = *nthlocal;
+        }
+        for elem in place.projection.iter_mut() {
+            if let ProjectionElem::Index(local) = elem
+                && let Some(nthlocal) = self.firstprj_nthprj.get(local)
+            {
+                *local = *nthlocal;
+            }
+        }
+    }
+}
+
+impl MutMirVisitor for FirstPatRenamer<'_> {
+    fn visit_operand(&mut self, operand: &mut Operand) {
+        if let Operand::Copy(place) | Operand::Move(place) = operand {
+            self.rename(place);
+        }
+    }
+
+    fn visit_rvalue(&mut self, rvalue: &mut Rvalue) {
+        match rvalue {
+            Rvalue::Ref(_, _, place)
+            | Rvalue::AddressOf(_, place)
+            | Rvalue::CopyForDeref(place)
+            | Rvalue::Discriminant(place)
+            | Rvalue::Len(place) => self.rename(place),
+            _ => {}
+        }
+        self.super_rvalue(rvalue)
+    }
 }
 
 impl LoopContractPass {
@@ -125,7 +188,12 @@ impl LoopContractPass {
             let run_contract_fn =
                 queries.kani_functions().get(&KaniModel::RunLoopContract.into()).copied();
             assert!(run_contract_fn.is_some(), "Failed to find Kani run contract function");
-            LoopContractPass { run_contract_fn, new_loop_latches: HashMap::new() }
+            LoopContractPass {
+                run_contract_fn,
+                new_loop_latches: HashMap::new(),
+                generated_loop_locals: HashMap::new(),
+                generated_loop_modifies: Vec::new(),
+            }
         } else {
             // If reachability mode is PubFns or Tests, we just remove any contract logic.
             // Note that in this path there is no proof harness.
@@ -266,9 +334,37 @@ impl LoopContractPass {
 
     // Replace the "firstpat" vars with its corresponding "nthpat" vars
     // See the comments in kani/library/kani_macros/src/sysroot/loop_contracts/mod.rs
-    fn replace_first_pat_by_nth_pat(&self, body: &mut MutableBody) {
+    // Return `false` if the loop head of one of these `for` loops could not be found. An error
+    // has been emitted in that case, and the body must not be transformed further.
+    fn replace_first_pat_by_nth_pat(&mut self, tcx: TyCtxt, body: &mut MutableBody) -> bool {
         let first_nth_list = self.get_first_pats_and_nth_pats(body);
         for (firstvar, nthvar, first_blockid, nth_blockid) in first_nth_list {
+            let span = body.blocks()[first_blockid].terminator.source_info.span;
+            // The blocks that the calls to "kani::KaniIter::first" and "kani::KaniIter::nth" return
+            // to, which destructure the pattern.
+            let (Some(first_target), Some(nth_target)) =
+                (Self::call_target(body, first_blockid), Self::call_target(body, nth_blockid))
+            else {
+                Self::emit_for_loop_head_error(tcx, span);
+                return false;
+            };
+            // Find the loop head and the blocks between the "kani::KaniIter::first" call and the
+            // loop head, before changing the body.
+            let Some((loop_head, blocks_before_head)) =
+                self.find_for_loop_head(body, tcx, first_target, nth_blockid)
+            else {
+                Self::emit_for_loop_head_error(tcx, span);
+                return false;
+            };
+            // The loop head ends with a borrow of the loop invariant closure.
+            if !matches!(
+                body.blocks()[loop_head].statements.last().map(|s| &s.kind),
+                Some(StatementKind::Assign(_, Rvalue::Ref(..)))
+            ) {
+                Self::emit_for_loop_head_error(tcx, span);
+                return false;
+            }
+
             // Replace firstpat by nthpat in the destination of "kani::KaniIter::first" function call
             let old_terminator = body.blocks()[first_blockid].terminator.clone();
             let new_terminator = Self::terminator_of_new_destination(old_terminator, nthvar);
@@ -276,7 +372,6 @@ impl LoopContractPass {
                 &SourceInstruction::Terminator { bb: first_blockid },
                 new_terminator,
             );
-            let span = body.blocks()[first_blockid].statements.first().unwrap().source_info.span;
             // Add the StorageLive(nthpat) statement at the begining of the same block
             let storagelive_stmt = Statement {
                 kind: StatementKind::StorageLive(nthvar),
@@ -302,8 +397,8 @@ impl LoopContractPass {
             }
 
             // Construct the HashMap of the firstpat projections with  nthpat projections
-            let firstprj_stmts_copy = body.blocks()[first_blockid + 1].statements.clone();
-            let nthprj_stmts_copy = body.blocks()[nth_blockid + 1].statements.clone();
+            let firstprj_stmts_copy = body.blocks()[first_target].statements.clone();
+            let nthprj_stmts_copy = body.blocks()[nth_target].statements.clone();
             let mut firstprj_nthprj: HashMap<usize, usize> = HashMap::new();
             firstprj_nthprj.insert(firstvar, nthvar);
 
@@ -412,81 +507,17 @@ impl LoopContractPass {
             }
 
             body.replace_statements(
-                &SourceInstruction::Statement { idx: 0, bb: first_blockid + 1 },
+                &SourceInstruction::Statement { idx: 0, bb: first_target },
                 new_stmts,
             );
 
-            // Second, in the loophead block right after that
-            let loophead_stmts_copy = body.blocks()[first_blockid + 2].statements.clone();
-            let mut new_loophead_stmts = Vec::new();
-            if let StatementKind::Assign(_, Rvalue::Ref(_, _, Place { local: closurelocal, .. })) =
-                loophead_stmts_copy.last().unwrap().kind
-            {
-                for stmt in loophead_stmts_copy.iter() {
-                    // In the Operands of the loop invariant closure
-                    if let StatementKind::Assign(lhs, Rvalue::Aggregate(aggrkind, operands)) =
-                        &stmt.kind
-                        && lhs.local == closurelocal
-                    {
-                        let mut new_operands = Vec::new();
-                        for operand in operands.iter() {
-                            if let Operand::Move(Place { local: operandlocal, projection: proj }) =
-                                operand
-                                && let Some(nthprj) = firstprj_nthprj.get(operandlocal)
-                            {
-                                let new_operand = Operand::Move(Place {
-                                    local: *nthprj,
-                                    projection: proj.clone(),
-                                });
-                                new_operands.push(new_operand);
-                            } else if let Operand::Copy(Place {
-                                local: operandlocal,
-                                projection: proj,
-                            }) = operand
-                                && let Some(nthprj) = firstprj_nthprj.get(operandlocal)
-                            {
-                                let new_operand = Operand::Copy(Place {
-                                    local: *nthprj,
-                                    projection: proj.clone(),
-                                });
-                                new_operands.push(new_operand);
-                            } else {
-                                new_operands.push(operand.clone());
-                            }
-                        }
-                        let new_rval = Rvalue::Aggregate(aggrkind.clone(), new_operands);
-                        new_loophead_stmts.push(Statement {
-                            kind: StatementKind::Assign(lhs.clone(), new_rval),
-                            source_info: synthetic_source_info(stmt.source_info.span),
-                        });
-                    } else if let StatementKind::Assign(
-                        lhs,
-                        Rvalue::Ref(region, borrowkind, Place { local: firstlocal, projection }),
-                    ) = &stmt.kind
-                         // In the borrow statements 
-                        && let Some(nthlocal) = firstprj_nthprj.get(firstlocal)
-                    {
-                        let new_rval = Rvalue::Ref(
-                            region.clone(),
-                            *borrowkind,
-                            Place { local: *nthlocal, projection: projection.clone() },
-                        );
-                        new_loophead_stmts.push(Statement {
-                            kind: StatementKind::Assign(lhs.clone(), new_rval),
-                            source_info: synthetic_source_info(stmt.source_info.span),
-                        });
-                    } else {
-                        new_loophead_stmts.push(stmt.clone());
-                    }
-                }
-            } else {
-                panic!("not a loop head")
+            // Second, in the blocks between that block and the loop head (e.g., the `on_entry`
+            // variables, or the clauses of a `#[kani::loop_modifies]` or `#[kani::loop_decreases]`
+            // written after `#[kani::loop_invariant]`), and in the loop head itself, which
+            // creates the loop invariant closure.
+            for block in blocks_before_head.into_iter().chain(std::iter::once(loop_head)) {
+                Self::redirect_first_pat_uses(body, block, &firstprj_nthprj);
             }
-
-            body.replace_statements(
-                &SourceInstruction::Statement { idx: 0, bb: first_blockid + 2 },
-                new_loophead_stmts,
-            );
 
             // Remove the StorageDead statements of nthpat and its projections
             let mut new_blocks = Vec::new();
@@ -500,8 +531,7 @@ impl LoopContractPass {
                             }
                         }
                         StatementKind::StorageLive(local) => {
-                            if !(firstprj_nthprj.values().contains(local)
-                                && block_id == nth_blockid + 1)
+                            if !(firstprj_nthprj.values().contains(local) && block_id == nth_target)
                             {
                                 new_stmts.push(stmt.clone())
                             }
@@ -518,7 +548,111 @@ impl LoopContractPass {
                     stmts,
                 );
             }
+
+            // The nthpat and its projections are assigned both before the loop and in each
+            // iteration.
+            self.generated_loop_locals
+                .entry(loop_head)
+                .or_default()
+                .extend(firstprj_nthprj.values().copied());
         }
+        true
+    }
+
+    /// The block that the call terminating `block` returns to, if `block` ends with a call.
+    fn call_target(body: &MutableBody, block: usize) -> Option<usize> {
+        match &body.blocks()[block].terminator.kind {
+            TerminatorKind::Call { target, .. } => *target,
+            _ => None,
+        }
+    }
+
+    fn emit_for_loop_head_error(tcx: TyCtxt, span: rustc_public::ty::Span) {
+        tcx.dcx()
+            .struct_span_err(
+                rustc_internal::internal(tcx, span),
+                "Kani could not find the loop head of this `for` loop with a loop contract",
+            )
+            .with_note(
+                "this can happen when an expression of the loop contract, \
+                 e.g. in `#[kani::loop_modifies]`, diverges",
+            )
+            .emit();
+    }
+
+    /// Collect the blocks reachable from `starts` without going through a loop head (a block
+    /// that ends with a call to the register function of a loop contract).
+    /// Return the visited blocks that are not loop heads, and the loop heads that were reached,
+    /// both in breadth-first order.
+    fn reachable_before_loop_heads(
+        &self,
+        body: &MutableBody,
+        tcx: TyCtxt,
+        starts: Vec<usize>,
+    ) -> (Vec<usize>, Vec<usize>) {
+        let mut visited: HashSet<usize> = starts.iter().copied().collect();
+        let mut queue: VecDeque<usize> = starts.into_iter().collect();
+        let mut blocks = Vec::new();
+        let mut loop_heads = Vec::new();
+        while let Some(block) = queue.pop_front() {
+            if self.is_loop_head(body, tcx, block) {
+                loop_heads.push(block);
+                continue;
+            }
+            blocks.push(block);
+            for succ in body.blocks()[block].terminator.successors() {
+                if visited.insert(succ) {
+                    queue.push_back(succ);
+                }
+            }
+        }
+        (blocks, loop_heads)
+    }
+
+    /// Find the loop head of the `for` loop whose pattern is first assigned by the call to
+    /// "kani::KaniIter::first" that returns to `first_target`, and whose body calls
+    /// "kani::KaniIter::nth" in `nth_blockid`.
+    ///
+    /// The loop head is not necessarily right after `first_target`: the `for` loop rewrite (see
+    /// library/kani_macros/src/sysroot/loop_contracts/mod.rs) evaluates the `on_entry` variables,
+    /// the `prev` variables and the first iteration, and the clauses of the attributes that
+    /// follow `#[kani::loop_invariant]` (e.g., `#[kani::loop_modifies(&a[i])]`, whose bounds
+    /// check needs a block of its own) between the two.
+    /// Return the loop head and the blocks visited before reaching it, or `None` if no loop head
+    /// can be reached from `first_target`.
+    fn find_for_loop_head(
+        &self,
+        body: &MutableBody,
+        tcx: TyCtxt,
+        first_target: usize,
+        nth_blockid: usize,
+    ) -> Option<(usize, Vec<usize>)> {
+        let (blocks_before_head, loop_heads) =
+            self.reachable_before_loop_heads(body, tcx, vec![first_target]);
+        // With `prev`, other loops may be reachable as well (after the loop, through the branch
+        // that does not enter the loop). The loop head of this `for` loop is the one whose body
+        // calls "kani::KaniIter::nth".
+        let loop_head = loop_heads.into_iter().find(|loop_head| {
+            let successors = body.blocks()[*loop_head].terminator.successors();
+            self.reachable_before_loop_heads(body, tcx, successors).0.contains(&nth_blockid)
+        })?;
+        Some((loop_head, blocks_before_head))
+    }
+
+    /// Replace the first pattern (and its projections) by the nth pattern (and its projections)
+    /// in the operands, borrows and index projections of `block`.
+    fn redirect_first_pat_uses(
+        body: &mut MutableBody,
+        block: usize,
+        firstprj_nthprj: &HashMap<usize, usize>,
+    ) {
+        let mut new_block = body.blocks()[block].clone();
+        FirstPatRenamer { firstprj_nthprj }.visit_basic_block(&mut new_block);
+        body.replace_statements(
+            &SourceInstruction::Statement { idx: 0, bb: block },
+            new_block.statements,
+        );
+        body.replace_terminator(&SourceInstruction::Terminator { bb: block }, new_block.terminator);
     }
 
     // Get all the kaniiter variables of for loops
@@ -619,7 +753,7 @@ impl LoopContractPass {
     ///then CBMC cannot infer the assign clause for the inner-loop after the loop-contract transformation.
     //Move all variables initiation using assign inside the loop body to the loop-head
     fn move_storagelive_assign_to_loophead(
-        &self,
+        &mut self,
         body: &mut MutableBody,
         loop_head_map: &HashMap<usize, usize>,
     ) -> Vec<usize> {
@@ -651,6 +785,7 @@ impl LoopContractPass {
                         if matches!(next_stmt.kind.clone(), StatementKind::Assign(lhs,_) if lhs.local == local)
                         {
                             found_local_list.push(local);
+                            self.record_generated_loop_local(closest_loop_head, local);
                             add_assign_list.push((closest_loop_head, stmt.clone()));
                             add_assign_list.push((closest_loop_head, next_stmt.clone()));
                             new_stmts.push(next_stmt.clone());
@@ -668,6 +803,10 @@ impl LoopContractPass {
                             && matches!(fifth_stmt.kind.clone(), StatementKind::StorageDead(dead_local) if dead_local == temp_local)
                         {
                             found_local_list.push(local);
+                            self.record_generated_loop_local(closest_loop_head, local);
+                            if temp_local > body.arg_count() && !localvars.contains(&temp_local) {
+                                self.record_generated_loop_local(closest_loop_head, temp_local);
+                            }
                             add_assign_list.push((closest_loop_head, stmt.clone()));
                             add_assign_list.push((closest_loop_head, next_stmt.clone()));
                             add_assign_list.push((closest_loop_head, third_stmt.clone()));
@@ -701,6 +840,12 @@ impl LoopContractPass {
             );
         }
         found_local_list
+    }
+
+    /// Record that `local` is made live across the iterations of the loop with head `loop_head`
+    /// by this transformation, see [LoopContractPass::generated_loop_locals].
+    fn record_generated_loop_local(&mut self, loop_head: usize, local: usize) {
+        self.generated_loop_locals.entry(loop_head).or_default().insert(local);
     }
 
     fn terminator_of_new_target(old: Terminator, new_target: usize) -> Terminator {
@@ -777,7 +922,7 @@ impl LoopContractPass {
 
     //Move all variables initiation using function-call inside the loop body to the loop-head
     fn move_storagelive_call_to_loophead(
-        &self,
+        &mut self,
         body: &mut MutableBody,
         loop_head_map: &HashMap<usize, usize>,
         found_local_list: Vec<usize>,
@@ -786,8 +931,11 @@ impl LoopContractPass {
         let localvars = self.get_storage_moving_variables(body);
         let forloopvars = self.get_kaniiter_variables(body);
         let mut current_user_local = 0;
+        // The loop head of the block that declares `current_user_local`.
+        let mut current_user_local_loop_head = 0;
         let mut current_local_decl_blocks: Vec<BasicBlock> = Vec::new();
         let mut move_call_list: Vec<(usize, Vec<BasicBlock>)> = Vec::new();
+        let mut moved_locals: Vec<(usize, usize, Vec<BasicBlock>)> = Vec::new();
         let mut kaniiter_blocks: Vec<usize> = Vec::new();
         for (block_idx, block) in body.blocks().iter().enumerate() {
             let mut decl_current_user_local = false;
@@ -804,6 +952,7 @@ impl LoopContractPass {
                     && current_user_local == 0
                 {
                     current_user_local = local;
+                    current_user_local_loop_head = closest_loop_head;
                     found_local_list.push(local);
                     decl_current_user_local = true;
                 }
@@ -826,6 +975,16 @@ impl LoopContractPass {
                 && dest.local == current_user_local
                 && current_user_local != 0
             {
+                // Only a local that is declared in the body of this loop only exists for the
+                // loop (a local declared in an outer loop, e.g. `let x;`, can be named in the
+                // clause of this loop).
+                if current_user_local_loop_head == closest_loop_head {
+                    moved_locals.push((
+                        closest_loop_head,
+                        current_user_local,
+                        current_local_decl_blocks.clone(),
+                    ));
+                }
                 move_call_list.push((closest_loop_head, current_local_decl_blocks.clone()));
                 current_local_decl_blocks = Vec::new();
                 current_user_local = 0;
@@ -835,6 +994,32 @@ impl LoopContractPass {
                 && forloopvars.contains(&dest.local)
             {
                 kaniiter_blocks.push(block_idx);
+            }
+        }
+
+        // The moved user variables, and the temporaries assigned by the moved blocks, are now
+        // assigned at the loop head as well as in the loop body.
+        let user_vars = self.get_user_defined_variables(body);
+        for (loophead, user_local, blocks) in moved_locals {
+            self.record_generated_loop_local(loophead, user_local);
+            for block in &blocks {
+                let assigned = block
+                    .statements
+                    .iter()
+                    .filter_map(|stmt| match &stmt.kind {
+                        StatementKind::Assign(place, _) => Some(place.local),
+                        _ => None,
+                    })
+                    .chain(match &block.terminator.kind {
+                        TerminatorKind::Call { destination, .. } => Some(destination.local),
+                        _ => None,
+                    });
+                for local in assigned {
+                    // Temporaries only, not the return place or the arguments.
+                    if local > body.arg_count() && !user_vars.contains(&local) {
+                        self.record_generated_loop_local(loophead, local);
+                    }
+                }
             }
         }
 
@@ -938,7 +1123,12 @@ impl LoopContractPass {
     /// It is the core of fn transform, and is separated just to avoid code repetition.
     fn transform_body_with_loop(&mut self, tcx: TyCtxt, body: Body) -> (bool, Body) {
         let mut new_body = MutableBody::from(body);
-        self.replace_first_pat_by_nth_pat(&mut new_body);
+        if !self.replace_first_pat_by_nth_pat(tcx, &mut new_body) {
+            // An error has been emitted, so compilation fails. Do not transform the loops.
+            return (false, new_body.into());
+        }
+        // The original loop positions, before new blocks are added to the body.
+        let loop_positions = self.get_loop_positions(&new_body, tcx);
         let loop_head_map = self.get_associated_loop_head_hashmap(&new_body, tcx);
         let found_local_list =
             self.move_storagelive_assign_to_loophead(&mut new_body, &loop_head_map);
@@ -972,7 +1162,131 @@ impl LoopContractPass {
             }
         }
         self.move_storagelive_call_to_loophead(&mut new_body, &loop_head_map, found_local_list);
+        self.add_generated_loop_modifies(&new_body, tcx, &loop_positions);
         (contain_loop_contracts, new_body.into())
+    }
+
+    /// Record the locals in [LoopContractPass::generated_loop_locals], and the variables that
+    /// `#[kani::loop_invariant]` generates for the loop, in
+    /// [LoopContractPass::generated_loop_modifies], so that codegen adds them to the loop
+    /// modifies clause of their loop if the user wrote one.
+    ///
+    /// Such a local is written both before the loop (by the `for` loop rewrite, or by the
+    /// initialization that this pass copies to the loop head) and in the loop, so CBMC requires
+    /// it to be in the loop's write set. The user cannot name it in a `#[kani::loop_modifies]`
+    /// clause: it is the index, a pattern binding or a temporary of the `for` loop rewrite, a
+    /// variable generated for `prev`, or a variable or temporary declared in the loop body.
+    /// Allowing the loop to write to these locals does not allow it to write to any memory
+    /// that is visible outside of the loop, which is still checked against the user's clause.
+    ///
+    /// The locals are keyed by the instance of the register function that the new loop latch
+    /// calls, which is unique to the loop and is what the codegen hook of that call receives
+    /// (see `LoopInvariantRegister` in codegen_cprover_gotoc/overrides/hooks.rs), and by the
+    /// instance of the body (in case MIR inlining copies the loop into another body). This needs
+    /// no change to the body, so later passes do not instrument anything for it, and it does not
+    /// depend on the name of a local that MIR optimizations could remove.
+    fn add_generated_loop_modifies(
+        &mut self,
+        body: &MutableBody,
+        tcx: TyCtxt,
+        loop_positions: &[(usize, usize)],
+    ) {
+        let mut new_latches: Vec<(usize, usize)> =
+            self.new_loop_latches.iter().map(|(head, latch)| (*head, *latch)).collect();
+        new_latches.sort();
+        for (loop_head, new_latch) in new_latches {
+            let Some((register_fn, loop_id)) = self.register_fn(body, tcx, new_latch) else {
+                continue;
+            };
+            let Some((_, loop_latch)) = loop_positions.iter().find(|(head, _)| *head == loop_head)
+            else {
+                continue;
+            };
+            // The variables generated by `#[kani::loop_invariant]` for this loop that are
+            // assigned before the loop and in each iteration: the index of a `for` loop, and the
+            // variables for `prev`. Their names start with the loop id, which is unique to the
+            // loop. These are the names of the variables, which, unlike the bindings of
+            // `#[kani::loop_modifies]` or `#[kani::loop_decreases]`, are borrowed by the loop
+            // invariant closure or assigned in the loop, so MIR optimizations keep them.
+            let index_name = format!("kani_index{loop_id}");
+            let prev_prefix = format!("__kani_prev_var{loop_id}_");
+            let mut candidates: Vec<usize> = body
+                .var_debug_info()
+                .iter()
+                .filter(|info| info.name == index_name || info.name.starts_with(&prev_prefix))
+                .filter_map(|info| info.local())
+                .collect();
+            if let Some(locals) = self.generated_loop_locals.get(&loop_head) {
+                candidates.extend(locals.iter().copied());
+            }
+            // Only keep the locals that the loop writes to, e.g., not a `kaniiter` whose
+            // initialization was moved to the head of an outer loop.
+            let written = Self::locals_written_in(body, loop_head + 1..=*loop_latch);
+            let mut generated: Vec<usize> = candidates
+                .into_iter()
+                .filter(|local| written.contains(local))
+                // Zero-sized locals cannot be modified, and CBMC does not support them as targets.
+                .filter(|local| {
+                    !body.locals()[*local]
+                        .ty
+                        .layout()
+                        .is_ok_and(|layout| layout.shape().size.bytes() == 0)
+                })
+                .collect();
+            generated.sort();
+            generated.dedup();
+            if !generated.is_empty() {
+                self.generated_loop_modifies.push((register_fn, generated));
+            }
+        }
+    }
+
+    /// The instance of the register function called at the end of `block`, and the suffix
+    /// `_<line>_<col>_<line>_<col>` that `#[kani::loop_invariant]` appends to the register
+    /// function and to the other names it generates for the loop.
+    fn register_fn(
+        &self,
+        body: &MutableBody,
+        tcx: TyCtxt,
+        block: usize,
+    ) -> Option<(Instance, String)> {
+        let TerminatorKind::Call { func, .. } = &body.blocks()[block].terminator.kind else {
+            return None;
+        };
+        let RigidTy::FnDef(fn_def, args) = func.ty(body.locals()).ok()?.kind().rigid()?.clone()
+        else {
+            return None;
+        };
+        if KaniAttributes::for_def_id(tcx, fn_def.def_id()).fn_marker()
+            != Some(Symbol::intern("kani_register_loop_contract"))
+        {
+            return None;
+        }
+        let name = fn_def.name();
+        let loop_id = name.rsplit("::").next()?.strip_prefix("kani_register_loop_contract")?;
+        Some((Instance::resolve(fn_def, &args).ok()?, loop_id.to_string()))
+    }
+
+    /// The locals that are assigned (as the root of the assigned place, or as the destination
+    /// of a call) in the given blocks. A write through a pointer, e.g. `(*p).f = ..`, counts as
+    /// a write to `p`, which is fine to filter the candidates of a loop.
+    fn locals_written_in(
+        body: &MutableBody,
+        blocks: std::ops::RangeInclusive<usize>,
+    ) -> HashSet<usize> {
+        let mut written = HashSet::new();
+        for block in blocks {
+            let Some(block) = body.blocks().get(block) else { continue };
+            for stmt in &block.statements {
+                if let StatementKind::Assign(place, _) = &stmt.kind {
+                    written.insert(place.local);
+                }
+            }
+            if let TerminatorKind::Call { destination, .. } = &block.terminator.kind {
+                written.insert(destination.local);
+            }
+        }
+        written
     }
 
     /// Transform loops with contracts from

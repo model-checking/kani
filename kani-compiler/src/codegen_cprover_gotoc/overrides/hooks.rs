@@ -880,9 +880,17 @@ impl GotocHook for LoopInvariantRegister {
 
             let mut stmt = Stmt::goto(bb_label(target.unwrap()), loc)
                 .with_loop_contracts(func_exp.call(fargs).cast_to(Type::CInteger(CIntType::Bool)));
-            let assigns = gcx.current_loop_modifies.clone();
+            let mut assigns = gcx.current_loop_modifies.clone();
             if !assigns.is_empty() {
-                stmt = stmt.with_loop_modifies(assigns.clone());
+                // The user wrote a loop modifies clause. Add the locals that the loop contract
+                // transformation makes live across iterations of this loop, which the user
+                // cannot name (without a user clause, CBMC infers the clause instead).
+                let generated = gcx
+                    .transformer
+                    .generated_loop_modifies(gcx.current_fn().instance_stable(), instance)
+                    .to_vec();
+                assigns.extend(generated.into_iter().map(|local| gcx.codegen_local(local, loc)));
+                stmt = stmt.with_loop_modifies(assigns);
                 gcx.current_loop_modifies.clear();
             }
             if let Some(decreases) = gcx.current_loop_decreases.take() {

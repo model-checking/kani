@@ -312,6 +312,7 @@ pub fn transform_for_to_loop(
     loop_id: &str,
 ) -> (Stmt, Option<ForLoopExtraStmts>) {
     // Extract components from the for loop
+    let attrs = for_loop.attrs;
     let label = for_loop.label;
     let pat = *for_loop.pat;
     let expr = for_loop.expr;
@@ -377,8 +378,10 @@ pub fn transform_for_to_loop(
     new_body_stmts.extend(body.stmts.iter().cloned());
 
     // Create the final expression with the iterator initialization.
-    // Keep the label of the loop.
+    // Keep the label and the remaining attributes of the loop (e.g., a `#[kani::loop_modifies]`
+    // or `#[kani::loop_decreases]` written after `#[kani::loop_invariant]`).
     let loop_loop: Stmt = parse_quote! {
+            #(#attrs)*
             #label while (#kani_index < #kani_iter_len) {
                 #(#new_body_stmts)*
             }
@@ -790,4 +793,46 @@ pub fn loop_decreases(attr: TokenStream, item: TokenStream) -> TokenStream {
     })
     .into();
     ret
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn attr_paths(attrs: &[syn::Attribute]) -> Vec<String> {
+        attrs
+            .iter()
+            .map(|attr| {
+                attr.path()
+                    .segments
+                    .iter()
+                    .map(|seg| seg.ident.to_string())
+                    .collect::<Vec<_>>()
+                    .join("::")
+            })
+            .collect()
+    }
+
+    /// The `while` loop that replaces a `for` loop keeps the label and the attributes that follow
+    /// `#[kani::loop_invariant]`, so that they still expand on the rewritten loop.
+    #[test]
+    fn for_loop_rewrite_keeps_label_and_attributes() {
+        let for_loop: ExprForLoop = parse_quote! {
+            #[kani::loop_modifies(&s)]
+            #[kani::loop_decreases(n)]
+            'outer: for x in a {
+                s += x;
+            }
+        };
+        let (stmt, extras) = transform_for_to_loop(for_loop, "_1_2_3_4");
+        assert!(extras.is_some());
+        let Stmt::Expr(Expr::While(while_loop), _) = stmt else {
+            panic!("the `for` loop should be rewritten into a `while` loop")
+        };
+        assert_eq!(
+            while_loop.label.map(|label| label.name.ident.to_string()),
+            Some("outer".into())
+        );
+        assert_eq!(attr_paths(&while_loop.attrs), ["kani::loop_modifies", "kani::loop_decreases"]);
+    }
 }
