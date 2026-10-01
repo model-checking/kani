@@ -693,7 +693,9 @@ impl VerificationResult {
                     or use stubbing to reduce the size of the code the verifier reasons about.\n",
                     ),
                     ExitStatus::IncompleteResults(exit_status) => (
-                        format!("CBMC failed with status {exit_status}"),
+                        format!(
+                            "CBMC did not finish reporting its results (exit status {exit_status})"
+                        ),
                         "CBMC's output ended before its overall verification status, so the \
                     results it reported may be incomplete and were not used.\n",
                     ),
@@ -1002,6 +1004,10 @@ mod tests {
         let result = verify(mock_cbmc_output(0, "SUCCESS", &[], None));
         assert_eq!(result.status, VerificationStatus::Failure);
         assert!(matches!(result.results, Err(ExitStatus::IncompleteResults(0))));
+        // The message must not call an exit status of 0 a failure.
+        let message = result.render(&OutputFormat::Regular, false);
+        assert!(message.contains("CBMC did not finish reporting its results (exit status 0)"));
+        assert!(!message.contains("CBMC failed with status"));
 
         let result = verify(mock_cbmc_output(10, "FAILURE", &[], None));
         assert_eq!(result.status, VerificationStatus::Failure);
