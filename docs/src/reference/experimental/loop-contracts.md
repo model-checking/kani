@@ -299,6 +299,25 @@ fn main() {
 }
 ```
 
+The `loop_modifies` clause only needs to list memory that exists outside of the loop.
+Kani adds the variables that it generates for the loop to the clause
+(the variables for `prev` and, for `for` loops, the pattern bindings and the loop index `kani::index`),
+as well as the variables declared in the loop body that it initializes before the loop.
+For example, the following loop verifies with a clause that only lists `sum`:
+```Rust
+#[kani::proof]
+fn main() {
+    let a: [u8; 10] = kani::any();
+    let mut sum: u32 = 0;
+    #[kani::loop_invariant(sum <= kani::index as u32 * 255)]
+    #[kani::loop_modifies(&sum)]
+    for (_i, x) in a.iter().enumerate() {
+        let y = *x as u32;
+        sum = sum + y;
+    }
+}
+```
+
 ## Decreases clauses (Termination proofs)
 
 ### Why termination matters

@@ -31,8 +31,8 @@ use automatic::{AutomaticArbitraryPass, AutomaticHarnessPass};
 use dump_mir_pass::DumpMirPass;
 use rustc_hir::def::DefKind;
 use rustc_middle::ty::{EarlyBinder, TyCtxt, TypingEnv};
-use rustc_public::mir::Body;
 use rustc_public::mir::mono::{Instance, MonoItem};
+use rustc_public::mir::{Body, Local};
 use rustc_public::rustc_internal;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -91,6 +91,10 @@ pub struct BodyTransformation {
     inst_passes: Vec<Box<dyn ClonableTransformPass>>,
     /// Cache transformation results.
     cache: HashMap<Instance, TransformationResult>,
+    /// The locals to add to the loop modifies clause of a loop, by the instance of the body that
+    /// contains the loop and the instance of the register function that the loop latch calls, as
+    /// recorded by the passes (see [TransformPass::take_generated_loop_modifies]).
+    generated_loop_modifies: HashMap<(Instance, Instance), Vec<Local>>,
 }
 
 impl BodyTransformation {
@@ -99,6 +103,7 @@ impl BodyTransformation {
             stub_passes: vec![],
             inst_passes: vec![],
             cache: Default::default(),
+            generated_loop_modifies: Default::default(),
         };
         let safety_check_type = CheckType::new_safety_check_assert_assume(queries);
         let unsupported_check_type = CheckType::new_unsupported_check_assert_assume_false(queries);
@@ -152,11 +157,23 @@ impl BodyTransformation {
                     let result = pass.transform(tcx, body, instance);
                     modified |= result.0;
                     body = result.1;
+                    self.generated_loop_modifies.extend(
+                        pass.take_generated_loop_modifies()
+                            .into_iter()
+                            .map(|(register_fn, locals)| ((instance, register_fn), locals)),
+                    );
                 }
 
                 TransformationResult(body, modified)
             })
             .0
+    }
+
+    /// The locals of the transformed body of `instance` that codegen adds to the loop modifies
+    /// clause written by the user for the loop whose latch calls the register function
+    /// `register_fn`. The body of `instance` must have been transformed already.
+    pub fn generated_loop_modifies(&self, instance: Instance, register_fn: Instance) -> &[Local] {
+        self.generated_loop_modifies.get(&(instance, register_fn)).map_or(&[], Vec::as_slice)
     }
 
     /// Retrieve the body of an instance. This does not apply global passes, but will retrieve the
@@ -200,6 +217,13 @@ pub(crate) trait TransformPass: Debug {
 
     /// Run a transformation pass in the function body.
     fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body);
+
+    /// Take the locals that codegen must add to the loop modifies clause of the loops of the body
+    /// that this pass last transformed, by the instance of the register function that each
+    /// loop latch calls. See `LoopContractPass::add_generated_loop_modifies`.
+    fn take_generated_loop_modifies(&mut self) -> Vec<(Instance, Vec<Local>)> {
+        Vec::new()
+    }
 }
 
 /// A trait to represent transformation passes that operate on the whole codegen unit.
