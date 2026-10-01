@@ -80,16 +80,40 @@ impl Display for CoverageRegion {
 }
 
 impl CoverageRegion {
-    pub fn from_str(str: String) -> Self {
-        let blank_splits: Vec<&str> = str.split_whitespace().map(|s| s.trim()).collect();
-        assert!(blank_splits[1] == "-");
-        let str_splits1: Vec<&str> = blank_splits[0].split([':']).collect();
-        let str_splits2: Vec<&str> = blank_splits[2].split([':']).collect();
-        assert_eq!(str_splits1.len(), 3, "{str:?}");
-        assert_eq!(str_splits2.len(), 2, "{str:?}");
-        let file = str_splits1[0].to_string();
-        let start = (str_splits1[1].parse().unwrap(), str_splits1[2].parse().unwrap());
-        let end = (str_splits2[0].parse().unwrap(), str_splits2[1].parse().unwrap());
-        Self { file, start, end }
+    pub fn from_str(input: String) -> Self {
+        // Split from the right: filenames may contain spaces, colons, or even " - ".
+        let (start, end) = input.rsplit_once(" - ").unwrap();
+        let (file_and_line, start_col) = start.rsplit_once(':').unwrap();
+        let (file, start_line) = file_and_line.rsplit_once(':').unwrap();
+        let (end_line, end_col) = end.split_once(':').unwrap();
+        Self {
+            file: file.to_owned(),
+            start: (start_line.parse().unwrap(), start_col.parse().unwrap()),
+            end: (end_line.parse().unwrap(), end_col.parse().unwrap()),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::CoverageRegion;
+
+    #[test]
+    fn parse_coverage_region_paths() {
+        for file in [
+            "main.rs",
+            "a a.rs",
+            "dir with spaces/a a.rs",
+            "dir:name/a - b.rs",
+            "a:a:a:a2333::::::a.rs",
+            "a - b - c.rs",
+            " a.rs ",
+        ] {
+            let region = CoverageRegion::from_str(format!("{file}:12:3 - 14:5"));
+            assert_eq!(
+                region,
+                CoverageRegion { file: file.to_owned(), start: (12, 3), end: (14, 5) }
+            );
+        }
     }
 }
