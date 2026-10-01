@@ -59,6 +59,17 @@ where
     assert!(items.next().is_none());
 }
 
+pub trait OnlyUsize {}
+impl OnlyUsize for usize {}
+pub trait OnlyU32 {}
+impl OnlyU32 for u32 {}
+pub trait OnlyU64 {}
+impl OnlyU64 for u64 {}
+
+// TEST NOTE: verified as `three_params::<usize, u32, u64>`. Near the attempt cap;
+// must keep this instantiation if the fallback changes (see #4880).
+pub fn three_params<A: OnlyUsize, B: OnlyU32, C: OnlyU64>(_a: A, _b: B, _c: C) {}
+
 // TEST NOTE: verified as `first::<i32>`; lifetime parameters are erased.
 pub fn first<'a, T: Copy>(x: &'a T) -> T {
     *x
