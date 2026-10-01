@@ -256,19 +256,18 @@ impl GotocCtx<'_, '_> {
 
         let intrinsic = Intrinsic::from_instance(&instance);
 
-        // A SIMD intrinsic whose vector operand was monomorphized to a scalar cannot be
-        // translated: every SIMD codegen path below reads a lane count or an element type that a
-        // scalar does not have. rustc rejects these instantiations, so they only reach us when
-        // something else synthesizes them (`-Z autoharness` does, for a generic helper whose
-        // parameter carries no SIMD bound). Report it against the harness that reached it instead
-        // of unwrapping a `None` length, which crashed the whole run.
-        if let Some(operand_ty) = intrinsic.simd_vector_operand(farg_types, ret_ty)
-            && !operand_ty.kind().is_simd()
+        // A SIMD intrinsic operates on SIMD vectors (see `Intrinsic::simd_vector_operand`). rustc's
+        // codegen backends reject any other instantiation, but Kani replaces those backends, so a
+        // scalar can reach this point (e.g. autoharness instantiating stdarch's `simd_imin::<T>`
+        // with `T = i32`, or a harness calling such a helper directly). Report it as unsupported
+        // rather than panic in the codegen below.
+        if let Some(ty) = intrinsic.simd_vector_operand(farg_types, ret_ty)
+            && !ty.kind().is_simd()
         {
             return self.codegen_unimplemented_stmt(
-                &format!("`{intrinsic_str}` with the non-SIMD type `{operand_ty}`"),
+                &format!("`{intrinsic_str}` on non-SIMD type `{ty}`"),
                 loc,
-                "https://github.com/model-checking/kani/issues/4919",
+                "https://github.com/model-checking/kani/issues/new/choose",
             );
         }
 

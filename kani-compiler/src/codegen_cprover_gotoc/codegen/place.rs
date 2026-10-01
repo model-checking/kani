@@ -362,34 +362,17 @@ impl GotocCtx<'_, '_> {
         }
     }
 
-    /// If a local is a function definition, ignore the local variable name and
-    /// generate a function call based on the def id.
+    /// If a local is a function definition, use the function item's singleton instead of the
+    /// named variable.
     ///
-    /// Note that this is finicky. A local might be a function definition, a
-    /// pointer to one, or a boxed pointer to one. For example, the
-    /// auto-generated code for Fn::call_once uses a local FnDef to call the
-    /// wrapped function, while the auto-generated code for Fn::call and
-    /// Fn::call_mut both use pointers to a FnDef. In these cases, we need to
-    /// generate an expression that references the existing FnDef rather than
-    /// a named variable.
+    /// For example, the auto-generated code for Fn::call_once uses a local FnDef to call the
+    /// wrapped function. A function item is zero-sized, so every value of it is the same.
     ///
-    /// Recursively finds the actual FnDef from a pointer or box.
+    /// A pointer to a function item, or a `Box` of one, is not zero-sized: it is an ordinary
+    /// variable that holds whatever address was assigned to it.
     fn codegen_local_fndef(&mut self, ty: Ty, loc: Location) -> Option<Expr> {
         match ty.kind() {
-            // A local that is itself a FnDef, like Fn::call_once
             TyKind::RigidTy(RigidTy::FnDef(def, args)) => Some(self.codegen_fndef(def, &args, loc)),
-            // A local can be pointer to a FnDef, like Fn::call and Fn::call_mut
-            TyKind::RigidTy(RigidTy::RawPtr(inner, _)) => self
-                .codegen_local_fndef(inner, loc)
-                .map(|f| if f.can_take_address_of() { f.address_of() } else { f }),
-            // A local can be a boxed function pointer
-            TyKind::RigidTy(RigidTy::Adt(def, args)) if def.is_box() => {
-                let boxed_ty = self.codegen_ty_stable(ty);
-                // The type of `T` for `Box<T>` can be derived from the first definition args.
-                let inner_ty = args.0[0].ty().unwrap();
-                self.codegen_local_fndef(*inner_ty, loc)
-                    .map(|f| self.box_value(f.address_of(), boxed_ty))
-            }
             _ => None,
         }
     }
@@ -443,11 +426,12 @@ impl GotocCtx<'_, '_> {
         match proj {
             ProjectionElem::Deref => {
                 let base_type = before.mir_typ();
-                let inner_goto_expr = if base_type.kind().is_box() {
-                    self.deref_box(before.goto_expr)
-                } else {
-                    before.goto_expr
-                };
+                // rustc's `ElaborateBoxDerefs` pass replaces every deref of a `Box` with a deref
+                // of its raw pointer. Shims skip that pass, but the ones that touch a `Box` reach
+                // its contents through the raw pointer themselves; drop elaboration does so
+                // explicitly.
+                assert!(!base_type.kind().is_box(), "Unexpected deref of {base_type:?}");
+                let inner_goto_expr = before.goto_expr;
 
                 let inner_mir_typ_internal =
                     std_pointee_type(rustc_internal::internal(self.tcx, base_type)).unwrap();

@@ -19,7 +19,7 @@ grep -qE '^\| simd_generic +\| imin::<I32x2>' out.log
 absent '^\| simd_generic +\| imin::<i32>'
 
 echo "--- reaching the invalid instantiation through a call reports it, rather than crashing"
-grep -q '`simd_lt` with the non-SIMD type `i32` is not currently supported' out.log
+grep -q '`simd_lt` on non-SIMD type `i32` is not currently supported' out.log
 grep -q 'in imin::<i32>' out.log
 grep -qE '^\| simd_generic +\| calls_imin::<i32> .*Failure' out.log
 
