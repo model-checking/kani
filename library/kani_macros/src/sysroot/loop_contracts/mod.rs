@@ -192,19 +192,98 @@ fn transform_function_calls(
     TransformationResult { transformed_expr, declarations_block, assignments_block }
 }
 
-struct BreakContinueReplacer;
+/// Rewrites the body of the loop that has `prev` into the body of a closure that runs one
+/// iteration (see the comment at the top of this file): a `break` or `continue` of that loop
+/// becomes a `return` from the closure, saying whether the loop goes on, and a `return` from the
+/// enclosing function becomes a `return` that carries its value out of the closure.
+///
+/// Only jumps that leave the loop body are rewritten. A `break` or `continue` that targets a loop
+/// nested in the body (unlabeled inside that loop, or naming its label) stays as it is, as does
+/// everything inside a nested closure or `async` block, whose `return`s belong to that closure.
+/// Rewriting those made, e.g., an unlabeled `break` of an inner loop end the outer loop after its
+/// first iteration, so the rest of the outer loop was never checked.
+struct BreakContinueReplacer {
+    /// The label of the loop whose body is being rewritten, if it has one.
+    loop_label: Option<syn::Lifetime>,
+    /// The loops between the loop body and the expression being visited: `None` for an unlabeled
+    /// loop, otherwise its label.
+    nested_loops: Vec<Option<syn::Lifetime>>,
+    /// A `break` or `continue` that targets a loop enclosing the rewritten one. The closure that
+    /// runs the first iteration cannot express it, so it is reported as unsupported.
+    enclosing_jump: Option<proc_macro2::Span>,
+}
+
+impl BreakContinueReplacer {
+    /// Whether a `break`/`continue` with the given label leaves the loop body, i.e. targets the
+    /// loop that is being rewritten rather than one nested in its body.
+    fn targets_rewritten_loop(&self, label: &Option<syn::Lifetime>) -> bool {
+        match label {
+            // An unlabeled jump targets the innermost loop.
+            None => self.nested_loops.is_empty(),
+            Some(label) => {
+                !self.targets_nested_loop(label) && self.loop_label.as_ref() == Some(label)
+            }
+        }
+    }
+
+    fn targets_nested_loop(&self, label: &syn::Lifetime) -> bool {
+        self.nested_loops.iter().any(|nested| nested.as_ref() == Some(label))
+    }
+
+    /// Record a labeled jump that targets neither the rewritten loop nor one nested in it.
+    fn check_enclosing_jump(&mut self, label: &Option<syn::Lifetime>, span: proc_macro2::Span) {
+        if let Some(name) = label
+            && !self.targets_nested_loop(name)
+            && self.loop_label.as_ref() != Some(name)
+            && self.enclosing_jump.is_none()
+        {
+            self.enclosing_jump = Some(span);
+        }
+    }
+
+    fn visit_nested_loop(&mut self, label: Option<syn::Lifetime>, expr: &mut Expr) {
+        self.nested_loops.push(label);
+        syn::visit_mut::visit_expr_mut(self, expr);
+        self.nested_loops.pop();
+    }
+}
 
 impl VisitMut for BreakContinueReplacer {
     fn visit_expr_mut(&mut self, expr: &mut Expr) {
+        match expr {
+            // A nested closure or `async` block has its own `return`s, and cannot `break` or
+            // `continue` an enclosing loop.
+            Expr::Closure(_) | Expr::Async(_) => return,
+            Expr::ForLoop(e) => {
+                let label = e.label.as_ref().map(|l| l.name.clone());
+                return self.visit_nested_loop(label, expr);
+            }
+            Expr::Loop(e) => {
+                let label = e.label.as_ref().map(|l| l.name.clone());
+                return self.visit_nested_loop(label, expr);
+            }
+            Expr::While(e) => {
+                let label = e.label.as_ref().map(|l| l.name.clone());
+                return self.visit_nested_loop(label, expr);
+            }
+            _ => {}
+        }
+
         // Visit nested expressions first
         syn::visit_mut::visit_expr_mut(self, expr);
 
+        match expr {
+            Expr::Break(b) => self.check_enclosing_jump(&b.label, b.span()),
+            Expr::Continue(c) => self.check_enclosing_jump(&c.label, c.span()),
+            _ => {}
+        }
+
         // Replace the expression
         *expr = match expr {
-            Expr::Break(_) => {
+            Expr::Break(b) if self.targets_rewritten_loop(&b.label) => {
                 syn::parse_quote!(return (false, None))
             }
-            Expr::Continue(_) => {
+            Expr::Continue(c) if self.targets_rewritten_loop(&c.label) => {
                 syn::parse_quote!(return (true, None))
             }
             Expr::Return(rexpr) => match rexpr.expr.clone() {
@@ -214,11 +293,18 @@ impl VisitMut for BreakContinueReplacer {
             _ => return,
         };
     }
+
+    // An item (e.g. a nested `fn`) has its own `return`s and loops.
+    fn visit_item_mut(&mut self, _item: &mut syn::Item) {}
 }
 
 // This function replace the break/continue statements inside a loop body with return statements
-fn transform_break_continue(block: &mut Block) {
-    let mut replacer = BreakContinueReplacer;
+fn transform_break_continue(
+    block: &mut Block,
+    loop_label: Option<syn::Lifetime>,
+) -> Option<proc_macro2::Span> {
+    let mut replacer =
+        BreakContinueReplacer { loop_label, nested_loops: Vec::new(), enclosing_jump: None };
     replacer.visit_block_mut(block);
     let return_stmt: Stmt = syn::parse_quote! {
         return (true, None);
@@ -230,6 +316,7 @@ fn transform_break_continue(block: &mut Block) {
         *semi = Some(Default::default());
     }
     block.stmts.push(return_stmt);
+    replacer.enclosing_jump
 }
 
 fn while_let_rewrite(loopexpr: Stmt) -> Stmt {
@@ -503,17 +590,32 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     let has_prev = !transform_inv.declarations_block.stmts.is_empty();
     let prev_decl_stms = transform_inv.declarations_block.stmts.clone();
     let mut assign_stms = transform_inv.assignments_block.stmts.clone();
-    let (mut loop_body, loop_guard) = match loop_stmt {
+    let (mut loop_body, loop_guard, loop_label) = match loop_stmt {
         Stmt::Expr(ref mut e, _) => match e {
-            Expr::While(ew) => (ew.body.clone(), ew.cond.clone()),
-            Expr::Loop(el) => (el.body.clone(), parse_quote!(true)),
+            Expr::While(ew) => {
+                (ew.body.clone(), ew.cond.clone(), ew.label.as_ref().map(|l| l.name.clone()))
+            }
+            Expr::Loop(el) => {
+                (el.body.clone(), parse_quote!(true), el.label.as_ref().map(|l| l.name.clone()))
+            }
             _ => panic!(),
         },
         _ => panic!(),
     };
     let loop_body_stms = loop_body.stmts.clone();
     assign_stms.extend(loop_body_stms);
-    transform_break_continue(&mut loop_body);
+    let enclosing_jump = transform_break_continue(&mut loop_body, loop_label);
+    if has_prev && let Some(span) = enclosing_jump {
+        return Diagnostic::spanned(
+            span,
+            Level::Error,
+            "`break` or `continue` to a loop enclosing a loop whose `#[kani::loop_invariant]` \
+             uses `prev` is not supported"
+                .to_string(),
+        )
+        .emit_as_item_tokens()
+        .into();
+    }
     let mut loop_body_closure_name: String = "__kani_loop_body_closure".to_owned();
     loop_body_closure_name.push_str(&loop_id);
     let loop_body_closure = format_ident!("{}", loop_body_closure_name);
