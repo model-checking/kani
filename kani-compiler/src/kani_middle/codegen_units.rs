@@ -470,8 +470,6 @@ fn generic_instantiation_candidates() -> Vec<Ty> {
         Ty::from_rigid_kind(RigidTy::Float(FloatTy::F32)),
         Ty::from_rigid_kind(RigidTy::Bool),
         Ty::from_rigid_kind(RigidTy::Char),
-        // Try `()` for item parameters paired with `Extend<()>` / `FromIterator<()>` impls.
-        Ty::new_tuple(&[]),
     ]
 }
 
@@ -1054,8 +1052,23 @@ fn choose_generic_instantiation(
             }
         }
     }
+    // Keep the original candidate order and search budget intact. Only after
+    // that search fails, try one additional choice with every type set to unit.
+    // This supports the tuple Extend methods without displacing existing results.
+    let search_limited = attempts.get() >= GENERIC_INSTANTIATION_ATTEMPT_LIMIT;
+    if !type_slots.is_empty() {
+        if let Some(instance) = try_choice(&vec![Ty::new_tuple(&[]); type_slots.len()]) {
+            return Ok(instance);
+        }
+    }
+    if search_limited {
+        return Err(format!(
+            "generic instantiation search reached the limit of \
+             {GENERIC_INSTANTIATION_ATTEMPT_LIMIT} attempts; the uniform unit fallback also failed"
+        ));
+    }
     Err(format!(
-        "no candidate type ({}{}) satisfies the function's trait bounds",
+        "no candidate type ({}{}) satisfies the function's trait bounds; the uniform unit fallback also failed",
         generic_instantiation_candidates()
             .iter()
             .map(|ty| ty.to_string())

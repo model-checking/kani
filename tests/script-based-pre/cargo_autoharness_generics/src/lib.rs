@@ -37,7 +37,7 @@ pub fn pair<T: Copy, U: Default>(x: T, _y: U) -> (T, U) {
 
 // TEST NOTE: verified as `extend_unit::<()>`. The collection type is fixed to (),
 // whose Extend implementation requires unit items. Trait-impl discovery does not
-// infer T from this bound's concrete Self type, so () must be a base candidate.
+// infer T from this bound's concrete Self type, so the unit fallback supplies T.
 pub fn extend_unit<T>(value: T)
 where
     (): Extend<T>,
