@@ -116,12 +116,12 @@ fn instantiate_path_args<'tcx>(
     ty: Ty,
 ) -> Ty {
     // No generic arguments (`Wrapper`) is an empty list; parenthesized args keep `ty`.
-    let syn_args: Vec<&syn::GenericArgument> =
-        match path.segments.last().map(|seg| &seg.arguments) {
-            Some(syn::PathArguments::AngleBracketed(args)) => args.args.iter().collect(),
-            Some(syn::PathArguments::None) => Vec::new(),
-            _ => return ty,
-        };
+    let syn_args: Vec<&syn::GenericArgument> = match path.segments.last().map(|seg| &seg.arguments)
+    {
+        Some(syn::PathArguments::AngleBracketed(args)) => args.args.iter().collect(),
+        Some(syn::PathArguments::None) => Vec::new(),
+        _ => return ty,
+    };
     let TyKind::RigidTy(RigidTy::Adt(adt_def, identity_args)) = ty.kind() else {
         return ty;
     };
