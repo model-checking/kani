@@ -86,7 +86,19 @@ impl GotocCtx<'_, '_> {
                 }
                 ptr_exprs
             }
-            _ => vec![assigns.dereference()],
+            // A single target, e.g. `#[kani::loop_modifies(&x)]`. Like above, a pointer to a ZST
+            // is not a target, and neither is the unit value of an empty clause
+            // (`#[kani::loop_modifies()]`).
+            _ => {
+                let rvalue_ty = self.rvalue_ty_stable(rvalue);
+                if self.is_zst_stable(rvalue_ty)
+                    || pointee_type_stable(rvalue_ty).is_some_and(|ty| self.is_zst_stable(ty))
+                {
+                    vec![]
+                } else {
+                    vec![assigns.dereference()]
+                }
+            }
         }
     }
 
@@ -148,8 +160,10 @@ impl GotocCtx<'_, '_> {
                 let rty = self.rvalue_ty_stable(rhs);
                 let localname = self.codegen_var_name(&lhs.local);
                 if localname.contains("kani_loop_modifies") {
+                    // The user wrote a clause, even if no target is left (e.g. an empty clause, or
+                    // only targets of zero size).
                     let assigns = self.rvalue_to_assign_targets(rhs, location);
-                    self.current_loop_modifies = assigns.clone();
+                    self.current_loop_modifies = Some(assigns);
                     return Stmt::skip(location);
                 }
                 if localname.contains("kani_loop_decreases") {
