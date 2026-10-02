@@ -35,6 +35,41 @@ pub fn pair<T: Copy, U: Default>(x: T, _y: U) -> (T, U) {
     (x, U::default())
 }
 
+// TEST NOTE: verified as `extend_unit::<()>`. The collection type is fixed to (),
+// whose Extend implementation requires unit items. Trait-impl discovery does not
+// infer T from this bound's concrete Self type, so the unit fallback supplies T.
+pub fn extend_unit<T>(value: T)
+where
+    (): Extend<T>,
+{
+    let mut items = core::iter::once(value);
+    ().extend(&mut items);
+    assert!(items.next().is_none());
+}
+
+// TEST NOTE: verified as `extend_unit_pair::<(), ()>`. Exercise the standard
+// library's tuple Extend implementation with two unit item parameters, and
+// check that extending the pair actually consumes the input iterator.
+pub fn extend_unit_pair<A, B>(a: A, b: B)
+where
+    (): Extend<A> + Extend<B>,
+{
+    let mut items = core::iter::once((a, b));
+    ((), ()).extend(&mut items);
+    assert!(items.next().is_none());
+}
+
+pub trait OnlyUsize {}
+impl OnlyUsize for usize {}
+pub trait OnlyU32 {}
+impl OnlyU32 for u32 {}
+pub trait OnlyU64 {}
+impl OnlyU64 for u64 {}
+
+// TEST NOTE: verified as `three_params::<usize, u32, u64>`. Near the attempt cap;
+// must keep this instantiation if the fallback changes (see #4880).
+pub fn three_params<A: OnlyUsize, B: OnlyU32, C: OnlyU64>(_a: A, _b: B, _c: C) {}
+
 // TEST NOTE: verified as `first::<i32>`; lifetime parameters are erased.
 pub fn first<'a, T: Copy>(x: &'a T) -> T {
     *x
