@@ -1,5 +1,6 @@
 TERSE: yes
 PARALLEL: yes
+PREFIXED RESULTS: yes
 SERIAL: yes
 EQUIVALENT: yes
 | f1 | #[kani::proof] | Success
