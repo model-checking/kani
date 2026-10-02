@@ -1555,9 +1555,9 @@ impl GotocCtx<'_, '_> {
     }
 
     /// Generates code for a SIMD vector comparison intrinsic, after checking that the result type
-    /// is a valid mask for the operands (see [Self::simd_cmp_result_problem]). The argument types
-    /// have already been checked to have the same length, so comparing the result against the
-    /// first one is enough.
+    /// is a valid mask for the operands (see [crate::intrinsics::simd_mask_problem]). The argument
+    /// types have already been checked to have the same length, so comparing the result against
+    /// the first one is enough.
     #[allow(clippy::too_many_arguments)]
     fn codegen_simd_cmp<F: FnOnce(Expr, Expr, Type) -> Expr>(
         &mut self,
@@ -1575,7 +1575,9 @@ impl GotocCtx<'_, '_> {
         // an invalid instantiation that no caller in the crate makes (e.g. a generic helper
         // instantiated through another generic function; see #4926 and #4950). As an unsupported
         // construct it fails only the harnesses that reach it.
-        if let Some(problem) = self.simd_cmp_result_problem(rust_arg_types[0], rust_ret_type) {
+        if let Some(problem) =
+            crate::intrinsics::simd_mask_problem(self.tcx, rust_arg_types[0], rust_ret_type)
+        {
             return self.codegen_unimplemented_stmt(
                 &format!("`{intrinsic}` with the result type `{rust_ret_type}` ({problem})"),
                 loc,
@@ -1589,31 +1591,6 @@ impl GotocCtx<'_, '_> {
         // Create the vector comparison expression
         let e = f(arg1, arg2, ret_typ);
         self.codegen_expr_to_place_stable(p, e, loc)
-    }
-
-    /// Why `ret_ty` cannot be the result of a SIMD comparison over `arg_ty`, if it cannot: the
-    /// result must be a vector with integer lanes and as many lanes as the operand.
-    ///
-    /// An example of each:
-    /// ```rust
-    /// let x = u64x2(0, 0);
-    /// let y = u64x2(0, 1);
-    /// // Two lanes compared, four lanes stored.
-    /// unsafe { let invalid_simd: u32x4 = simd_eq(x, y); }
-    /// // A mask of `f32` lanes.
-    /// unsafe { let invalid_simd: f32x2 = simd_eq(x, y); }
-    /// ```
-    fn simd_cmp_result_problem(&self, arg_ty: Ty, ret_ty: Ty) -> Option<String> {
-        if !ret_ty.kind().is_simd() {
-            return Some("not a SIMD type".to_string());
-        }
-        let (arg_lanes, _) = self.simd_size_and_type(arg_ty);
-        let (ret_lanes, ret_lane_ty) = self.simd_size_and_type(ret_ty);
-        if !ret_lane_ty.kind().is_integral() {
-            return Some(format!("non-integer `{ret_lane_ty}` lanes"));
-        }
-        (ret_lanes != arg_lanes)
-            .then(|| format!("{ret_lanes} lanes, while the input `{arg_ty}` has {arg_lanes}"))
     }
 
     /// Codegen for `simd_div` and `simd_rem` intrinsics.

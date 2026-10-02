@@ -15,13 +15,13 @@ absent() {
 kani autoharness -Z autoharness simd_cmp.rs --output-format=terse > out.log 2>&1 || true
 
 echo "--- an instantiation with float mask lanes is skipped, with the reason"
-grep -qE '^\| simd_cmp +\| float_only +\| Generic Function: the body calls the SIMD comparison `simd_gt`, which rustc rejects when its result `f32x4` has non-integer `f32` lanes' out.log
+grep -qE '^\| simd_cmp +\| float_only +\| Generic Function: the body calls the SIMD comparison `simd_gt`, which rustc rejects for the result type `f32x4` \(non-integer `f32` lanes\)' out.log
 
 echo "--- a comparison result that is a scalar, not a mask, is skipped"
-grep -qE '^\| simd_cmp +\| scalar_result +\| Generic Function: the body calls the SIMD comparison `simd_gt`, which rustc rejects when its result `i32` is not a SIMD type' out.log
+grep -qE '^\| simd_cmp +\| scalar_result +\| Generic Function: the body calls the SIMD comparison `simd_gt`, which rustc rejects for the result type `i32` \(not a SIMD type\)' out.log
 
 echo "--- an integer mask with the wrong lane count is skipped"
-grep -qE '^\| simd_cmp +\| wrong_lane_count +\| Generic Function: the body calls the SIMD comparison `simd_gt`, which rustc rejects when its result `i64x2` has 2 lanes while the operands have 4' out.log
+grep -qE '^\| simd_cmp +\| wrong_lane_count +\| Generic Function: the body calls the SIMD comparison `simd_gt`, which rustc rejects for the result type `i64x2` \(2 lanes for a 4-lane comparison\)' out.log
 
 echo "--- where an integer vector also fits, autoharness picks it and verifies"
 grep -qE '^\| simd_cmp +\| int_available::<i32x4> .*Success' out.log

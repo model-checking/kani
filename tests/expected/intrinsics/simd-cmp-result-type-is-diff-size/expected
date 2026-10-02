@@ -1,3 +1,3 @@
 Status: FAILURE\
-Description: "`simd_eq` with the result type `u32x4` (4 lanes, while the input `u64x2` has 2) is not currently supported by Kani
+Description: "`simd_eq` with the result type `u32x4` (4 lanes for a 2-lane comparison) is not currently supported by Kani
 VERIFICATION:- FAILED

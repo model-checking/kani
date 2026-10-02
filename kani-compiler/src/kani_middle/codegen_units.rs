@@ -8,7 +8,7 @@
 //! according to their stub configuration.
 
 use crate::args::{Arguments, ReachabilityType};
-use crate::intrinsics::Intrinsic;
+use crate::intrinsics::{Intrinsic, simd_mask_problem};
 use crate::kani_middle::attributes::{KaniAttributes, is_proof_harness};
 use crate::kani_middle::kani_functions::{KaniHook, KaniIntrinsic, KaniModel};
 use crate::kani_middle::metadata::{
@@ -942,35 +942,13 @@ fn invalid_simd_instantiation(tcx: TyCtxt, instance: Instance) -> Option<String>
             && let Some(problem) = simd_mask_problem(tcx, operand_ty, sig.output())
         {
             return Some(format!(
-                "the body calls the SIMD comparison `{name}`, which rustc rejects when its result \
-                 `{}` {problem}",
+                "the body calls the SIMD comparison `{name}`, which rustc rejects for the result \
+                 type `{}` ({problem})",
                 sig.output()
             ));
         }
         None
     })
-}
-
-/// Why `ret_ty` cannot be the result of a SIMD comparison over `operand_ty`, if it cannot: the
-/// result must be a mask with integer lanes and as many lanes as the operand. This is what
-/// autoharness gets wrong for `core_arch::simd::simd_imax<T: Copy>`, whose comparison result is
-/// declared as `T` itself: `T = __m128` satisfies `Copy` and is a SIMD type, but its lanes are
-/// `f32`. See <https://github.com/model-checking/kani/issues/4950>.
-///
-/// `operand_ty` must be a SIMD type. `rustc_public` does not expose a SIMD type's lane count or
-/// lane type, so ask rustc for them.
-fn simd_mask_problem(tcx: TyCtxt, operand_ty: Ty, ret_ty: Ty) -> Option<String> {
-    let ret = rustc_internal::internal(tcx, ret_ty);
-    if !ret.is_simd() {
-        return Some("is not a SIMD type".to_string());
-    }
-    let (operand_lanes, _) = rustc_internal::internal(tcx, operand_ty).simd_size_and_type(tcx);
-    let (ret_lanes, ret_lane_ty) = ret.simd_size_and_type(tcx);
-    if !ret_lane_ty.is_integral() {
-        return Some(format!("has non-integer `{ret_lane_ty}` lanes"));
-    }
-    (ret_lanes != operand_lanes)
-        .then(|| format!("has {ret_lanes} lanes while the operands have {operand_lanes}"))
 }
 
 /// Try to find a monomorphic instantiation of the generic function `fn_item` for which we can
