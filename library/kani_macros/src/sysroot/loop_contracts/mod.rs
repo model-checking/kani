@@ -234,15 +234,19 @@ fn transform_break_continue(block: &mut Block) {
 
 fn while_let_rewrite(loopexpr: Stmt) -> Stmt {
     if let Stmt::Expr(ref expr, _) = loopexpr
-        && let Expr::While(ExprWhile { cond, body, .. }) = expr
+        && let Expr::While(ExprWhile { attrs, label, cond, body, .. }) = expr
         && let Expr::Let(ref let_expr) = **cond
     {
         let pat = &let_expr.pat;
         let scrutinee = &let_expr.expr;
 
-        // Transform to loop with match
+        // Transform to loop with match.
+        // Keep the label and the remaining attributes of the loop (e.g., a
+        // `#[kani::loop_modifies]` or `#[kani::loop_decreases]` written after
+        // `#[kani::loop_invariant]`).
         return parse_quote! {
-            loop {
+            #(#attrs)*
+            #label loop {
                 match #scrutinee {
                     #pat => #body,
                     _ => break,
@@ -308,6 +312,7 @@ pub fn transform_for_to_loop(
     loop_id: &str,
 ) -> (Stmt, Option<ForLoopExtraStmts>) {
     // Extract components from the for loop
+    let label = for_loop.label;
     let pat = *for_loop.pat;
     let expr = for_loop.expr;
     let body = for_loop.body;
@@ -371,9 +376,11 @@ pub fn transform_for_to_loop(
     // Add the original loop body statements
     new_body_stmts.extend(body.stmts.iter().cloned());
 
-    // Create the final expression with the iterator initialization
+    // Create the final expression with the iterator initialization.
+    // Keep the label of the loop. Attributes after the invariant are intentionally not carried
+    // over yet: see #4929 (and #4940 for why a loop_modifies clause would then fail).
     let loop_loop: Stmt = parse_quote! {
-            while (#kani_index < #kani_iter_len) {
+            #label while (#kani_index < #kani_iter_len) {
                 #(#new_body_stmts)*
             }
     };
