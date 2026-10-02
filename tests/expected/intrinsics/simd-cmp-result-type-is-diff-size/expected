@@ -1,2 +1,3 @@
-expected return type with length 2 (same as input type `u64x2`), found `u32x4` with length 4
-error: aborting due to 1 previous error
+Status: FAILURE\
+Description: "`simd_eq` with the result type `u32x4` (4 lanes for a 2-lane comparison) is not currently supported by Kani
+VERIFICATION:- FAILED

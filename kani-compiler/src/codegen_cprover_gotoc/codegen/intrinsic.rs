@@ -485,9 +485,15 @@ impl GotocCtx<'_, '_> {
             Intrinsic::SimdDiv | Intrinsic::SimdRem => {
                 self.codegen_simd_div_with_overflow(fargs, intrinsic_str, place, loc)
             }
-            Intrinsic::SimdEq => {
-                self.codegen_simd_cmp(Expr::vector_eq, fargs, place, span, farg_types, ret_ty)
-            }
+            Intrinsic::SimdEq => self.codegen_simd_cmp(
+                Expr::vector_eq,
+                fargs,
+                place,
+                farg_types,
+                ret_ty,
+                intrinsic_str,
+                loc,
+            ),
             Intrinsic::SimdReduceAll => {
                 // Boolean AND-reduction: returns whether every lane is "true". The
                 // argument is a mask-like integer vector (lanes are 0 or all-ones),
@@ -509,21 +515,45 @@ impl GotocCtx<'_, '_> {
             Intrinsic::SimdExtract => {
                 self.codegen_intrinsic_simd_extract(fargs, place, farg_types, ret_ty, span)
             }
-            Intrinsic::SimdGe => {
-                self.codegen_simd_cmp(Expr::vector_ge, fargs, place, span, farg_types, ret_ty)
-            }
-            Intrinsic::SimdGt => {
-                self.codegen_simd_cmp(Expr::vector_gt, fargs, place, span, farg_types, ret_ty)
-            }
+            Intrinsic::SimdGe => self.codegen_simd_cmp(
+                Expr::vector_ge,
+                fargs,
+                place,
+                farg_types,
+                ret_ty,
+                intrinsic_str,
+                loc,
+            ),
+            Intrinsic::SimdGt => self.codegen_simd_cmp(
+                Expr::vector_gt,
+                fargs,
+                place,
+                farg_types,
+                ret_ty,
+                intrinsic_str,
+                loc,
+            ),
             Intrinsic::SimdInsert => {
                 self.codegen_intrinsic_simd_insert(fargs, place, cbmc_ret_ty, farg_types, span, loc)
             }
-            Intrinsic::SimdLe => {
-                self.codegen_simd_cmp(Expr::vector_le, fargs, place, span, farg_types, ret_ty)
-            }
-            Intrinsic::SimdLt => {
-                self.codegen_simd_cmp(Expr::vector_lt, fargs, place, span, farg_types, ret_ty)
-            }
+            Intrinsic::SimdLe => self.codegen_simd_cmp(
+                Expr::vector_le,
+                fargs,
+                place,
+                farg_types,
+                ret_ty,
+                intrinsic_str,
+                loc,
+            ),
+            Intrinsic::SimdLt => self.codegen_simd_cmp(
+                Expr::vector_lt,
+                fargs,
+                place,
+                farg_types,
+                ret_ty,
+                intrinsic_str,
+                loc,
+            ),
             Intrinsic::SimdMul => self.codegen_simd_op_with_overflow(
                 Expr::mul,
                 Expr::mul_overflow_p,
@@ -532,9 +562,15 @@ impl GotocCtx<'_, '_> {
                 place,
                 loc,
             ),
-            Intrinsic::SimdNe => {
-                self.codegen_simd_cmp(Expr::vector_neq, fargs, place, span, farg_types, ret_ty)
-            }
+            Intrinsic::SimdNe => self.codegen_simd_cmp(
+                Expr::vector_neq,
+                fargs,
+                place,
+                farg_types,
+                ret_ty,
+                intrinsic_str,
+                loc,
+            ),
             Intrinsic::SimdOr => codegen_intrinsic_binop!(bitor),
             Intrinsic::SimdShl | Intrinsic::SimdShr => {
                 self.codegen_simd_shift_with_distance_check(fargs, intrinsic_str, place, loc)
@@ -1518,71 +1554,42 @@ impl GotocCtx<'_, '_> {
         )
     }
 
-    /// Generates code for a SIMD vector comparison intrinsic.
-    ///
-    /// We perform some typechecks here for two reasons:
-    ///  * In the case of SIMD intrinsics, these checks depend on the backend.
-    ///  * We can emit a friendly error here, but not in `cprover_bindings`.
-    ///
-    /// We check the following:
-    ///  1. The return type must be the same length as the input types. The
-    ///     argument types have already been checked to ensure they have the same
-    ///     length (an error would've been emitted otherwise), so we can compare
-    ///     the return type against any of the argument types.
-    ///
-    ///     An example that triggers this error:
-    ///     ```rust
-    ///     let x = u64x2(0, 0);
-    ///     let y = u64x2(0, 1);
-    ///     unsafe { let invalid_simd: u32x4 = simd_eq(x, y); }
-    ///     ```
-    ///     We compare two `u64x2` vectors but try to store the result in a `u32x4`.
-    ///  2. The return type must have an integer base type.
-    ///
-    ///     An example that triggers this error:
-    ///     ```rust
-    ///     let x = u64x2(0, 0);
-    ///     let y = u64x2(0, 1);
-    ///     unsafe { let invalid_simd: f32x2 = simd_eq(x, y); }
-    ///     ```
-    ///     We compare two `u64x2` vectors but try to store the result in a `f32x4`,
-    ///     which is composed of `f32` values.
+    /// Generates code for a SIMD vector comparison intrinsic, after checking that the result type
+    /// is a valid mask for the operands (see [crate::intrinsics::simd_mask_problem]). The argument
+    /// types have already been checked to have the same length, so comparing the result against
+    /// the first one is enough.
+    #[allow(clippy::too_many_arguments)]
     fn codegen_simd_cmp<F: FnOnce(Expr, Expr, Type) -> Expr>(
         &mut self,
         f: F,
         mut fargs: Vec<Expr>,
         p: &Place,
-        span: Span,
         rust_arg_types: &[Ty],
         rust_ret_type: Ty,
+        intrinsic: &str,
+        loc: Location,
     ) -> Stmt {
+        // rustc's codegen backends reject these result types with `E0511`, but Kani replaces the
+        // backend, so the check is ours. Report a violation as an unsupported construct rather
+        // than a compile error: a compile error aborts the whole crate, and autoharness can reach
+        // an invalid instantiation that no caller in the crate makes (e.g. a generic helper
+        // instantiated through another generic function; see #4926 and #4950). As an unsupported
+        // construct it fails only the harnesses that reach it.
+        if let Some(problem) =
+            crate::intrinsics::simd_mask_problem(self.tcx, rust_arg_types[0], rust_ret_type)
+        {
+            return self.codegen_unimplemented_stmt(
+                &format!("`{intrinsic}` with the result type `{rust_ret_type}` ({problem})"),
+                loc,
+                "https://github.com/model-checking/kani/issues/4950",
+            );
+        }
         let arg1 = fargs.remove(0);
         let arg2 = fargs.remove(0);
         let ret_typ = self.codegen_ty_stable(rust_ret_type);
 
-        if arg1.typ().len().unwrap() != ret_typ.len().unwrap() {
-            let err_msg = format!(
-                "expected return type with length {} (same as input type `{}`), \
-                found `{rust_ret_type}` with length {}",
-                arg1.typ().len().unwrap(),
-                rust_arg_types[0],
-                ret_typ.len().unwrap()
-            );
-            utils::span_err(self.tcx, span, err_msg);
-        }
-
-        if !ret_typ.base_type().unwrap().is_integer() {
-            let (_, rust_base_type) = self.simd_size_and_type(rust_ret_type);
-            let err_msg = format!(
-                "expected return type with integer elements, found `{rust_ret_type}` with non-integer `{rust_base_type}`"
-            );
-            utils::span_err(self.tcx, span, err_msg);
-        }
-        self.tcx.dcx().abort_if_errors();
-
         // Create the vector comparison expression
         let e = f(arg1, arg2, ret_typ);
-        let loc = self.codegen_span_stable(span);
         self.codegen_expr_to_place_stable(p, e, loc)
     }
 
