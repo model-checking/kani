@@ -885,13 +885,23 @@ pub fn loop_modifies(attr: TokenStream, item: TokenStream) -> TokenStream {
         .collect::<Vec<Expr>>();
     let loop_assign_name: String = "kani_loop_modifies".to_owned();
     let loop_assign_ident = format_ident!("{}", loop_assign_name);
-    let loop_assign_stmt: Stmt = parse_quote! {
-        let #loop_assign_ident = (#(#assigns),*);
+    let loop_assign_stmts: Vec<Stmt> = if assigns.is_empty() {
+        // An empty clause: the loop modifies nothing outside of it. Bind a reference to a local
+        // of zero size, which codegen does not use as a target, rather than `()`, which MIR
+        // optimizations remove, so that codegen still sees that the loop has a clause.
+        parse_quote! {
+            let __kani_empty_loop_clause = ();
+            let #loop_assign_ident = &__kani_empty_loop_clause;
+        }
+    } else {
+        parse_quote! {
+            let #loop_assign_ident = (#(#assigns),*);
+        }
     };
     let loop_stmt: Stmt = syn::parse(item.clone()).unwrap();
     let ret: TokenStream = quote!(
     {
-        #loop_assign_stmt
+        #(#loop_assign_stmts)*
         #loop_stmt
     })
     .into();

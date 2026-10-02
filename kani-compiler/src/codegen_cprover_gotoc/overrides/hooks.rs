@@ -880,18 +880,29 @@ impl GotocHook for LoopInvariantRegister {
 
             let mut stmt = Stmt::goto(bb_label(target.unwrap()), loc)
                 .with_loop_contracts(func_exp.call(fargs).cast_to(Type::CInteger(CIntType::Bool)));
-            let mut assigns = gcx.current_loop_modifies.clone();
-            if !assigns.is_empty() {
-                // The user wrote a loop modifies clause. Add the locals that the loop contract
-                // transformation makes live across iterations of this loop, which the user
-                // cannot name (without a user clause, CBMC infers the clause instead).
+            if let Some(mut assigns) = gcx.current_loop_modifies.take() {
+                // The user wrote a loop modifies clause, possibly without any target. Add the
+                // locals that the loop contract transformation makes live across iterations of
+                // this loop, which the user cannot name (without a user clause, CBMC infers the
+                // clause instead).
                 let generated = gcx
                     .transformer
                     .generated_loop_modifies(gcx.current_fn().instance_stable(), instance)
                     .to_vec();
                 assigns.extend(generated.into_iter().map(|local| gcx.codegen_local(local, loc)));
+                if assigns.is_empty() {
+                    // The clause has no target (e.g. `#[kani::loop_modifies()]`, or only targets
+                    // of zero size). CBMC infers the write set of a loop whose assigns clause has
+                    // no target, so use an object that no code writes as the only target instead.
+                    let nothing = gcx.ensure_global_var(
+                        "__kani_loop_assigns_nothing",
+                        false,
+                        Type::unsigned_int(8),
+                        loc,
+                    );
+                    assigns.push(nothing.to_expr());
+                }
                 stmt = stmt.with_loop_modifies(assigns);
-                gcx.current_loop_modifies.clear();
             }
             if let Some(decreases) = gcx.current_loop_decreases.take() {
                 stmt = stmt.with_loop_decreases(decreases);
@@ -915,6 +926,7 @@ impl GotocHook for LoopInvariantRegister {
             // Discard any decreases clause since it won't be checked without
             // the loop-contracts flag.
             gcx.current_loop_decreases = None;
+            gcx.current_loop_modifies = None;
             Stmt::block(
                 vec![
                     unwrap_or_return_codegen_unimplemented_stmt!(
