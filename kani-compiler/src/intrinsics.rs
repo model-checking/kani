@@ -217,6 +217,21 @@ impl Intrinsic {
         }
     }
 
+    /// Whether this is a SIMD lane-wise comparison. Its result is a mask: a vector with as many
+    /// lanes as the operands, whose lanes are integers (all ones for true, zero for false). rustc
+    /// rejects any other result type with `E0511`, and Kani's codegen relies on the same shape.
+    pub fn is_simd_comparison(&self) -> bool {
+        matches!(
+            self,
+            Intrinsic::SimdEq
+                | Intrinsic::SimdGe
+                | Intrinsic::SimdGt
+                | Intrinsic::SimdLe
+                | Intrinsic::SimdLt
+                | Intrinsic::SimdNe
+        )
+    }
+
     /// Create an intrinsic enum from a given intrinsic instance, shallowly validating the argument types.
     pub fn from_instance(intrinsic_instance: &Instance) -> Self {
         let intrinsic_str = intrinsic_instance.intrinsic_name().unwrap();

@@ -1,0 +1,3 @@
+--- an instantiation with float mask lanes is skipped, with the reason
+--- where an integer vector also fits, autoharness picks it and verifies
+--- an invalid comparison one level down fails its harness, not the run

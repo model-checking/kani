@@ -1,8 +1,10 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Checks that storing the result of a vector operation in a vector of
-//! size different to the operands' sizes causes an error.
+//! Checks that storing the result of a vector comparison in a vector of
+//! size different to the operands' sizes is reported as an unsupported
+//! construct. rustc's codegen backends reject it with E0511; Kani reports it
+//! per harness rather than aborting the crate (see #4950).
 #![feature(repr_simd, core_intrinsics)]
 use std::intrinsics::simd::simd_eq;
 
