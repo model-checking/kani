@@ -15,10 +15,13 @@ fn stale_measure_harness() {
     let mut x: u16 = kani::any_where(|i| *i >= 2 && *i <= 100);
     let y: u16 = x;
 
-    #[kani::loop_invariant(x >= 2)]
+    #[kani::loop_invariant(x >= 1 && x <= y)]
     #[kani::loop_decreases(y)]
     while x > 1 {
         // x decreases, but the measure (y) never changes.
         x = x - 1;
     }
+
+    // `y` keeps its value.
+    assert!(x == 1 && y >= 2);
 }

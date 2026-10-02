@@ -1,0 +1,17 @@
+variable_measure_harness.loop_decreases.1\
+	 - Status: SUCCESS\
+	 - Description: "Check variant decreases after step for loop variable_measure_harness.0"
+
+variable_measure_for_loop_harness.loop_decreases.1\
+	 - Status: SUCCESS\
+	 - Description: "Check variant decreases after step for loop variable_measure_for_loop_harness.0"
+
+variable_measure_with_prev_harness.loop_decreases.1\
+	 - Status: SUCCESS\
+	 - Description: "Check variant decreases after step for loop variable_measure_with_prev_harness.0"
+
+count_down.loop_decreases.1\
+	 - Status: SUCCESS\
+	 - Description: "Check variant decreases after step for loop count_down.0"
+
+VERIFICATION:- SUCCESSFUL

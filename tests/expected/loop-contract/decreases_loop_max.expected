@@ -1,1 +1,5 @@
+loop_max.loop_decreases.1\
+	 - Status: SUCCESS\
+	 - Description: "Check variant decreases after step for loop loop_max.0"
+
 VERIFICATION:- SUCCESSFUL
