@@ -5,6 +5,7 @@
 Loop contracts are used to specify invariants for loops for the sake of extending Kani's *bounded proofs* to *unbounded proofs*.
 A [loop invariant](https://en.wikipedia.org/wiki/Loop_invariant) is an expression that holds upon entering a loop and after every execution of the loop body.
 Loop contracts are composed of one or more loop invariants as well as optional `loop_modifies` attributes.
+A loop with several `#[kani::loop_invariant]` attributes has the conjunction (`&&`) of their invariants as its invariant.
 It captures something that does not change about every step of the loop.
 
 It is worth revisiting the discussion about [bounded proof](../../tutorial-loop-unwinding.md#bounded-proof) and
@@ -295,6 +296,25 @@ fn main() {
     while i < 20 {
         a[i] = 1;
         i = i + 1;
+    }
+}
+```
+
+The `loop_modifies` clause only needs to list memory that exists outside of the loop.
+Kani adds the variables that it generates for the loop to the clause
+(the variables for `prev` and, for `for` loops, the pattern bindings and the loop index `kani::index`),
+as well as the variables declared in the loop body that it initializes before the loop.
+For example, the following loop verifies with a clause that only lists `sum`:
+```Rust
+#[kani::proof]
+fn main() {
+    let a: [u8; 10] = kani::any();
+    let mut sum: u32 = 0;
+    #[kani::loop_invariant(sum <= kani::index as u32 * 255)]
+    #[kani::loop_modifies(&sum)]
+    for (_i, x) in a.iter().enumerate() {
+        let y = *x as u32;
+        sum = sum + y;
     }
 }
 ```

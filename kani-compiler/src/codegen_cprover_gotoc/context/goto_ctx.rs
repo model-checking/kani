@@ -94,8 +94,9 @@ pub struct GotocCtx<'tcx, 'r> {
     pub transformer: &'r mut BodyTransformation,
     /// If there exist some usage of loop contracts int context.
     pub has_loop_contracts: bool,
-    /// Track loop assign clause
-    pub current_loop_modifies: Vec<Expr>,
+    /// Track loop assign clause: `None` if the user did not write one for the current loop,
+    /// which is not the same as a clause without targets.
+    pub current_loop_modifies: Option<Vec<Expr>>,
     /// Track loop decreases clause
     pub current_loop_decreases: Option<Expr>,
 }
@@ -128,7 +129,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             concurrent_constructs: FxHashMap::default(),
             transformer,
             has_loop_contracts: false,
-            current_loop_modifies: Vec::new(),
+            current_loop_modifies: None,
             current_loop_decreases: None,
         }
     }
