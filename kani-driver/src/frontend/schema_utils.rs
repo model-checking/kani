@@ -162,8 +162,11 @@ fn write_json_atomically<T: Serialize + ?Sized>(path: &Path, value: &T) -> Resul
     // Short fixed prefix, not the destination's name: a near-255-byte destination plus
     // `NamedTempFile`'s random suffix would overflow the filesystem's per-component limit.
     builder.prefix(".kani-export-");
-    // `NamedTempFile` defaults to mode 0o600; create the file as `std::fs::write` would (0o666
-    // minus the umask).
+    // Give the file the mode `std::fs::write` would: an existing target keeps its mode, a new one
+    // gets 0o666 minus the umask (`NamedTempFile` defaults to 0o600).
+    #[cfg(unix)]
+    let existing_permissions =
+        std::fs::metadata(path).ok().filter(|m| m.is_file()).map(|m| m.permissions());
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -180,6 +183,10 @@ fn write_json_atomically<T: Serialize + ?Sized>(path: &Path, value: &T) -> Resul
             tmp_path.display()
         )
     };
+    #[cfg(unix)]
+    if let Some(permissions) = existing_permissions {
+        tmp.as_file().set_permissions(permissions).with_context(write_error)?;
+    }
     {
         let mut writer = BufWriter::new(&mut tmp);
         serde_json::to_writer_pretty(&mut writer, value).with_context(write_error)?;
@@ -2406,6 +2413,23 @@ mod tests {
 
         let mode = |path: &Path| std::fs::metadata(path).unwrap().permissions().mode();
         assert_eq!(mode(&target), mode(&reference));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn write_json_atomically_keeps_the_mode_of_an_existing_target() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("export.json");
+        for mode in [0o600, 0o640, 0o666] {
+            std::fs::write(&target, b"stale").unwrap();
+            std::fs::set_permissions(&target, std::fs::Permissions::from_mode(mode)).unwrap();
+
+            write_json_atomically(&target, &serde_json::json!({})).unwrap();
+
+            let actual = std::fs::metadata(&target).unwrap().permissions().mode() & 0o7777;
+            assert_eq!(actual, mode, "mode {mode:o} of the existing target was not kept");
+        }
     }
 
     #[test]
