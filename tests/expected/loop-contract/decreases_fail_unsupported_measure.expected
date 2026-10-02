@@ -1,0 +1,13 @@
+if_measure_harness.loop_decreases.1\
+	 - Status: FAILURE\
+	 - Description: "Check variant decreases after step for loop if_measure_harness.0"
+
+call_measure_harness.loop_decreases.1\
+	 - Status: FAILURE\
+	 - Description: "Check variant decreases after step for loop call_measure_harness.0"
+
+index_measure_harness.loop_decreases.1\
+	 - Status: FAILURE\
+	 - Description: "Check variant decreases after step for loop index_measure_harness.0"
+
+VERIFICATION:- FAILED

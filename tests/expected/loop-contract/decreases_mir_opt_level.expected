@@ -1,0 +1,14 @@
+variable_measure_harness.loop_decreases.1\
+	 - Status: SUCCESS\
+	 - Description: "Check variant decreases after step for loop variable_measure_harness.0"
+
+stale_measure_harness.loop_decreases.1\
+	 - Status: FAILURE\
+	 - Description: "Check variant decreases after step for loop stale_measure_harness.0"
+
+	 - Status: SUCCESS\
+	 - Description: "assertion failed: x == 1 && y >= 2"
+
+count_up_to.loop_decreases.1\
+	 - Status: FAILURE\
+	 - Description: "Check variant decreases after step for loop count_up_to.0"

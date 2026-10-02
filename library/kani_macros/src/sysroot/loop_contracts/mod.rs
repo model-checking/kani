@@ -764,6 +764,15 @@ pub fn loop_decreases(attr: TokenStream, item: TokenStream) -> TokenStream {
     let loop_decreases_stmt: Stmt = parse_quote! {
         let #loop_decreases_ident = (#(#decreases),*);
     };
+    // Pass a reference to the binding to a function, so that the MIR optimizations of rustc keep
+    // the assignment of the binding, which codegen needs to find the measure. Otherwise, if the
+    // measure is a variable that is assigned only once, copy propagation replaces the binding by
+    // that variable, and if the measure is a constant, the binding is replaced by the constant.
+    let loop_decreases_keep_stmts: Vec<Stmt> = parse_quote! {
+        #[inline(never)]
+        const fn kani_keep_loop_decreases_binding<T>(_binding: &T) {}
+        kani_keep_loop_decreases_binding(&#loop_decreases_ident);
+    };
     let loop_stmt: Stmt = syn::parse(item.clone()).unwrap();
     // Validate that the attribute is applied to a loop statement.
     match &loop_stmt {
@@ -780,6 +789,7 @@ pub fn loop_decreases(attr: TokenStream, item: TokenStream) -> TokenStream {
     let ret: TokenStream = quote!(
     {
         #loop_decreases_stmt
+        #(#loop_decreases_keep_stmts)*
         #loop_stmt
     })
     .into();
