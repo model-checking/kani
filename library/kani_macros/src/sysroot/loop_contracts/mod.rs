@@ -377,7 +377,8 @@ pub fn transform_for_to_loop(
     new_body_stmts.extend(body.stmts.iter().cloned());
 
     // Create the final expression with the iterator initialization.
-    // Keep the label of the loop.
+    // Keep the label of the loop. Attributes after the invariant are intentionally not carried
+    // over yet: see #4929 (and #4940 for why a loop_modifies clause would then fail).
     let loop_loop: Stmt = parse_quote! {
             #label while (#kani_index < #kani_iter_len) {
                 #(#new_body_stmts)*
