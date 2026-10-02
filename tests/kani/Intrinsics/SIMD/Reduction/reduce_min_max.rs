@@ -17,6 +17,16 @@ pub struct u8x16([u8; 16]);
 #[derive(Clone, Copy)]
 pub struct i32x4([i32; 4]);
 
+#[repr(simd)]
+#[allow(non_camel_case_types)]
+#[derive(Clone, Copy)]
+pub struct usizex2([usize; 2]);
+
+#[repr(simd)]
+#[allow(non_camel_case_types)]
+#[derive(Clone, Copy)]
+pub struct isizex4([isize; 4]);
+
 #[kani::proof]
 #[kani::unwind(17)]
 fn check_reduce_max_u8() {
@@ -46,5 +56,21 @@ fn check_reduce_max_i32() {
 fn check_reduce_min_i32() {
     let lanes: [i32; 4] = kani::any();
     let min: i32 = unsafe { simd_reduce_min(i32x4(lanes)) };
+    assert_eq!(min, *lanes.iter().min().unwrap());
+}
+
+#[kani::proof]
+#[kani::unwind(3)]
+fn check_reduce_max_usize() {
+    let lanes: [usize; 2] = kani::any();
+    let max: usize = unsafe { simd_reduce_max(usizex2(lanes)) };
+    assert_eq!(max, *lanes.iter().max().unwrap());
+}
+
+#[kani::proof]
+#[kani::unwind(5)]
+fn check_reduce_min_isize() {
+    let lanes: [isize; 4] = kani::any();
+    let min: isize = unsafe { simd_reduce_min(isizex4(lanes)) };
     assert_eq!(min, *lanes.iter().min().unwrap());
 }

@@ -1595,7 +1595,8 @@ impl GotocCtx<'_, '_> {
             let keep = if is_max { acc.clone().ge(lane(i)) } else { acc.clone().le(lane(i)) };
             stmts.push(acc.clone().assign(keep.ternary(acc.clone(), lane(i)), loc));
         }
-        stmts.push(self.codegen_expr_to_place_stable(place, acc, loc));
+        let ret_typ = self.codegen_ty_stable(self.place_ty_stable(place));
+        stmts.push(self.codegen_expr_to_place_stable(place, acc.cast_to(ret_typ), loc));
         Stmt::block(stmts, loc)
     }
 
