@@ -198,42 +198,60 @@ fn transform_function_calls(
 /// enclosing function becomes a `return` that carries its value out of the closure.
 ///
 /// Only jumps that leave the loop body are rewritten. A `break` or `continue` that targets a loop
-/// nested in the body (unlabeled inside that loop, or naming its label) stays as it is, as does
-/// everything inside a nested closure or `async` block, whose `return`s belong to that closure.
+/// nested in the body (unlabeled inside that loop, or naming its label), or a `break` out of a
+/// labeled block in the body, stays as it is, as does everything inside a nested closure or `async`
+/// block, whose `return`s belong to that closure.
 /// Rewriting those made, e.g., an unlabeled `break` of an inner loop end the outer loop after its
 /// first iteration, so the rest of the outer loop was never checked.
 struct BreakContinueReplacer {
     /// The label of the loop whose body is being rewritten, if it has one.
     loop_label: Option<syn::Lifetime>,
-    /// The loops between the loop body and the expression being visited: `None` for an unlabeled
-    /// loop, otherwise its label.
-    nested_loops: Vec<Option<syn::Lifetime>>,
+    /// The loops and labeled blocks between the loop body and the expression being visited,
+    /// innermost last.
+    nested: Vec<JumpTarget>,
     /// A `break` or `continue` that targets a loop enclosing the rewritten one. The closure that
     /// runs the first iteration cannot express it, so it is reported as unsupported.
     enclosing_jump: Option<proc_macro2::Span>,
 }
 
+/// Something nested in the loop body that a `break` or `continue` can target.
+enum JumpTarget {
+    /// A loop, with its label if it has one.
+    Loop(Option<syn::Lifetime>),
+    /// A labeled block (`'a: { .. }`), which only a `break` naming it can target.
+    Block(syn::Lifetime),
+}
+
+impl JumpTarget {
+    fn label(&self) -> Option<&syn::Lifetime> {
+        match self {
+            JumpTarget::Loop(label) => label.as_ref(),
+            JumpTarget::Block(label) => Some(label),
+        }
+    }
+}
+
 impl BreakContinueReplacer {
     /// Whether a `break`/`continue` with the given label leaves the loop body, i.e. targets the
-    /// loop that is being rewritten rather than one nested in its body.
+    /// loop that is being rewritten rather than something nested in its body.
     fn targets_rewritten_loop(&self, label: &Option<syn::Lifetime>) -> bool {
         match label {
-            // An unlabeled jump targets the innermost loop.
-            None => self.nested_loops.is_empty(),
-            Some(label) => {
-                !self.targets_nested_loop(label) && self.loop_label.as_ref() == Some(label)
-            }
+            // An unlabeled jump targets the innermost loop; a block is never its target.
+            None => !self.nested.iter().any(|target| matches!(target, JumpTarget::Loop(_))),
+            // A labeled jump targets the innermost loop or block with that label, so a nested one
+            // that reuses the rewritten loop's label takes precedence over it.
+            Some(label) => !self.targets_nested(label) && self.loop_label.as_ref() == Some(label),
         }
     }
 
-    fn targets_nested_loop(&self, label: &syn::Lifetime) -> bool {
-        self.nested_loops.iter().any(|nested| nested.as_ref() == Some(label))
+    fn targets_nested(&self, label: &syn::Lifetime) -> bool {
+        self.nested.iter().any(|target| target.label() == Some(label))
     }
 
     /// Record a labeled jump that targets neither the rewritten loop nor one nested in it.
     fn check_enclosing_jump(&mut self, label: &Option<syn::Lifetime>, span: proc_macro2::Span) {
         if let Some(name) = label
-            && !self.targets_nested_loop(name)
+            && !self.targets_nested(name)
             && self.loop_label.as_ref() != Some(name)
             && self.enclosing_jump.is_none()
         {
@@ -241,10 +259,10 @@ impl BreakContinueReplacer {
         }
     }
 
-    fn visit_nested_loop(&mut self, label: Option<syn::Lifetime>, expr: &mut Expr) {
-        self.nested_loops.push(label);
+    fn visit_nested(&mut self, target: JumpTarget, expr: &mut Expr) {
+        self.nested.push(target);
         syn::visit_mut::visit_expr_mut(self, expr);
-        self.nested_loops.pop();
+        self.nested.pop();
     }
 }
 
@@ -256,15 +274,19 @@ impl VisitMut for BreakContinueReplacer {
             Expr::Closure(_) | Expr::Async(_) => return,
             Expr::ForLoop(e) => {
                 let label = e.label.as_ref().map(|l| l.name.clone());
-                return self.visit_nested_loop(label, expr);
+                return self.visit_nested(JumpTarget::Loop(label), expr);
             }
             Expr::Loop(e) => {
                 let label = e.label.as_ref().map(|l| l.name.clone());
-                return self.visit_nested_loop(label, expr);
+                return self.visit_nested(JumpTarget::Loop(label), expr);
             }
             Expr::While(e) => {
                 let label = e.label.as_ref().map(|l| l.name.clone());
-                return self.visit_nested_loop(label, expr);
+                return self.visit_nested(JumpTarget::Loop(label), expr);
+            }
+            Expr::Block(syn::ExprBlock { label: Some(label), .. }) => {
+                let label = label.name.clone();
+                return self.visit_nested(JumpTarget::Block(label), expr);
             }
             _ => {}
         }
@@ -304,7 +326,7 @@ fn transform_break_continue(
     loop_label: Option<syn::Lifetime>,
 ) -> Option<proc_macro2::Span> {
     let mut replacer =
-        BreakContinueReplacer { loop_label, nested_loops: Vec::new(), enclosing_jump: None };
+        BreakContinueReplacer { loop_label, nested: Vec::new(), enclosing_jump: None };
     replacer.visit_block_mut(block);
     let return_stmt: Stmt = syn::parse_quote! {
         return (true, None);
