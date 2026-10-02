@@ -1,0 +1,9 @@
+- Status: FAILURE\
+- Description: "Check that y is assignable"\
+in function outer_written_before_read
+
+- Status: FAILURE\
+- Description: "dereference failure: dead object"\
+in function body_local_used_after_scope
+
+Complete - 0 successfully verified harnesses, 2 failures, 2 total.
