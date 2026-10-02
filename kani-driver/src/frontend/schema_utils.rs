@@ -369,6 +369,12 @@ impl From<&ExitStatus> for Outcome {
         match status {
             ExitStatus::Timeout => Outcome::Timeout,
             ExitStatus::OutOfMemory => Outcome::OutOfMemory,
+            ExitStatus::IncompleteResults(code) => Outcome::Crashed {
+                code: Some(*code),
+                message: Some(format!(
+                    "CBMC did not finish reporting its results (exit status {code})"
+                )),
+            },
             ExitStatus::Other(code) => Outcome::Crashed {
                 code: Some(*code),
                 message: Some(format!("CBMC failed with status {code}")),
@@ -1229,26 +1235,35 @@ mod tests {
         assert_not_completed_matrix_fields(&crashed_v["harnesses"][0]);
     }
 
-    /// The exported outcome for a CBMC run with one reported property, by exit status and by
-    /// whether CBMC reported `Out of memory` after the result array.
+    /// The exported outcome for a CBMC run with one reported property, by exit status, by
+    /// whether CBMC reported `Out of memory`, and by whether it printed its overall status
+    /// (`cProverStatus`) after the result array.
     #[test]
     fn export_outcome_follows_cbmc_exit_status_and_results() {
         use crate::cbmc_output_parser::{ParserItem, VerificationOutput};
         use std::time::Instant;
 
-        // (status, property status, `Out of memory` reported, kind, code, failure_kind)
+        // (status, property status, `Out of memory` reported, prover status reported, kind, code,
+        // failure_kind)
         let cases = [
-            (0, CheckStatus::Success, false, "COMPLETED", None, Some("NONE")),
-            (10, CheckStatus::Failure, false, "COMPLETED", None, Some("PANICS_ONLY")),
-            (6, CheckStatus::Error, false, "COMPLETED", None, Some("ERROR")),
-            (6, CheckStatus::Success, true, "OUT_OF_MEMORY", None, None),
-            (6, CheckStatus::Error, true, "OUT_OF_MEMORY", None, None),
-            (137, CheckStatus::Success, false, "OUT_OF_MEMORY", None, None),
-            (6, CheckStatus::Success, false, "CRASHED", Some(6), None),
-            (5, CheckStatus::Unknown, false, "CRASHED", Some(5), None),
-            (139, CheckStatus::Success, false, "CRASHED", Some(139), None),
+            (0, CheckStatus::Success, false, true, "COMPLETED", None, Some("NONE")),
+            (10, CheckStatus::Failure, false, true, "COMPLETED", None, Some("PANICS_ONLY")),
+            (6, CheckStatus::Error, false, true, "COMPLETED", None, Some("ERROR")),
+            (6, CheckStatus::Success, true, false, "OUT_OF_MEMORY", None, None),
+            (6, CheckStatus::Error, true, false, "OUT_OF_MEMORY", None, None),
+            (137, CheckStatus::Success, false, false, "OUT_OF_MEMORY", None, None),
+            (6, CheckStatus::Success, false, false, "CRASHED", Some(6), None),
+            (5, CheckStatus::Unknown, false, true, "CRASHED", Some(5), None),
+            (139, CheckStatus::Success, false, false, "CRASHED", Some(139), None),
+            // Results CBMC did not follow with its overall status are not used, whatever the exit
+            // status says (upstream #4928).
+            (0, CheckStatus::Success, false, false, "CRASHED", Some(0), None),
+            (10, CheckStatus::Failure, false, false, "CRASHED", Some(10), None),
+            (6, CheckStatus::Error, false, false, "CRASHED", Some(6), None),
         ];
-        for (status, property_status, reported_oom, kind, code, failure_kind) in cases {
+        for (status, property_status, reported_oom, prover_status, kind, code, failure_kind) in
+            cases
+        {
             let mut processed_items = vec![ParserItem::Result {
                 result: vec![property("assertion", 1, property_status)],
             }];
@@ -1258,13 +1273,20 @@ mod tests {
                     message_type: "ERROR".to_string(),
                 });
             }
+            if prover_status {
+                processed_items
+                    .push(ParserItem::ProverStatus { _c_prover_status: "success".to_string() });
+            }
             let output = VerificationOutput { process_status: status, processed_items };
             let result = VerificationResult::from(output, false, Instant::now());
             let h = harness("h");
             let v =
                 serde_json::to_value(export_one(HarnessResult { harness: &h, result })).unwrap();
             let hj = &v["harnesses"][0];
-            let case = format!("status {status}, {property_status:?}, oom {reported_oom}: {hj}");
+            let case = format!(
+                "status {status}, {property_status:?}, oom {reported_oom}, \
+                 prover status {prover_status}: {hj}"
+            );
             assert_eq!(hj["outcome"]["kind"], kind, "{case}");
             assert_eq!(hj["outcome"].get("code").and_then(|c| c.as_i64()), code, "{case}");
             assert_eq!(hj.get("failure_kind").and_then(|f| f.as_str()), failure_kind, "{case}");
@@ -1274,11 +1296,14 @@ mod tests {
                 assert_not_completed_matrix_fields(hj);
             }
             if kind == "CRASHED" {
-                assert_eq!(
-                    hj["outcome"]["message"],
-                    format!("CBMC failed with status {status}"),
-                    "{case}"
-                );
+                // Results without CBMC's overall status get upstream's own headline, so the
+                // message does not call an exit status of 0 a failure.
+                let message = if prover_status {
+                    format!("CBMC failed with status {status}")
+                } else {
+                    format!("CBMC did not finish reporting its results (exit status {status})")
+                };
+                assert_eq!(hj["outcome"]["message"], message, "{case}");
             }
         }
     }

@@ -594,9 +594,10 @@ outcome; `[]` means none retained, not proof that CBMC emitted none.
 
 Harness `OUT_OF_MEMORY` is inferred from CBMC-child status 137 (including SIGKILL mapped to `128 + 9`)
 or from CBMC's own `Out of memory` report, even when a property array exists; it is not measured memory.
-A property array counts only when CBMC's exit status shows it finished reporting: 0, 10, or 6 with an
-`ERROR` property. Otherwise the harness is not `COMPLETED`: it is `OUT_OF_MEMORY` as above, else `CRASHED`
-with that status as `code`. `TIMEOUT` arises only under `--harness-timeout`.
+A property array counts only when CBMC printed its overall status (`cProverStatus`) after it and its
+exit status shows it finished reporting: 0, 10, or 6 with an `ERROR` property. Otherwise the harness is
+not `COMPLETED`: it is `OUT_OF_MEMORY` as above, else `CRASHED` with that status as `code`. `TIMEOUT`
+arises only under `--harness-timeout`.
 Read `attributes.should_panic` before interpreting the computed `failure_kind` classification:
 
 | `attributes.should_panic` | `failure_kind` | `outcome.verdict` |

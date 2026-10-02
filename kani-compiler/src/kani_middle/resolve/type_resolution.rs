@@ -6,10 +6,12 @@ use crate::kani_middle::resolve::{ResolveError, resolve_path, validate_kind};
 use quote::ToTokens;
 use rustc_hir::def::DefKind;
 use rustc_middle::ty::TyCtxt;
+use rustc_public::CrateDef;
 use rustc_public::mir::Mutability;
 use rustc_public::rustc_internal;
 use rustc_public::ty::{
-    FloatTy, GenericArgKind, GenericArgs, IntTy, Region, RegionKind, RigidTy, Ty, TyKind, UintTy,
+    AdtDef, FloatTy, GenericArgKind, GenericArgs, IntTy, Region, RegionKind, RigidTy, Ty, TyKind,
+    UintTy,
 };
 use rustc_span::def_id::LocalDefId;
 use std::str::FromStr;
@@ -141,18 +143,23 @@ pub fn resolve_ty<'tcx>(
 /// If `path`'s final segment carries angle-bracketed generic arguments, instantiate `ty`
 /// (the definition's identity type, e.g. `Wrap<T>`) with those arguments resolved to
 /// concrete types (e.g. `Wrap<u8>`), so trait-implementation lookups can match a concrete
-/// impl. Returns `ty` unchanged when there are no arguments or when any argument cannot
-/// be resolved — preserving the previous behavior for everything that resolved before.
+/// impl. An omitted trailing parameter with a declared default is filled from the
+/// default, also when the path has no generic arguments at all (`Wrapper` for
+/// `struct Wrapper<T = u8>`). Returns `ty` unchanged when any argument cannot be
+/// resolved or a parameter without a default is missing, preserving the previous
+/// behavior for everything that resolved before.
 fn instantiate_path_args<'tcx>(
     tcx: TyCtxt<'tcx>,
     current_module: LocalDefId,
     path: &syn::Path,
     ty: Ty,
 ) -> Ty {
-    let Some(syn::PathArguments::AngleBracketed(syn_args)) =
-        path.segments.last().map(|seg| &seg.arguments)
-    else {
-        return ty;
+    // No generic arguments (`Wrapper`) is an empty list; parenthesized args keep `ty`.
+    let syn_args: Vec<&syn::GenericArgument> = match path.segments.last().map(|seg| &seg.arguments)
+    {
+        Some(syn::PathArguments::AngleBracketed(args)) => args.args.iter().collect(),
+        Some(syn::PathArguments::None) => Vec::new(),
+        _ => return ty,
     };
     let TyKind::RigidTy(RigidTy::Adt(adt_def, identity_args)) = ty.kind() else {
         return ty;
@@ -160,7 +167,7 @@ fn instantiate_path_args<'tcx>(
     // Resolve the user-written type arguments; lifetimes are erased below, and anything
     // else (const arguments, associated-type bindings) keeps the uninstantiated type.
     let mut user_tys = Vec::new();
-    for arg in &syn_args.args {
+    for arg in syn_args {
         match arg {
             syn::GenericArgument::Type(syn_ty) => match resolve_ty(tcx, current_module, syn_ty) {
                 Ok(t) => user_tys.push(t),
@@ -171,16 +178,22 @@ fn instantiate_path_args<'tcx>(
         }
     }
     // Substitute the definition's type parameters in declaration order; erase lifetime
-    // parameters. A count mismatch (e.g. defaulted parameters the user omitted) keeps
-    // the uninstantiated type.
+    // parameters; fill an omitted trailing parameter that has a declared default from
+    // that default, instantiated with the arguments so far — what rustc does for omitted
+    // arguments. A missing parameter without a default keeps the uninstantiated type.
     let mut user_iter = user_tys.into_iter();
     let mut new_args = Vec::new();
-    for arg in &identity_args.0 {
+    for (param_index, arg) in identity_args.0.iter().enumerate() {
         match arg {
-            GenericArgKind::Type(_) => match user_iter.next() {
-                Some(t) => new_args.push(GenericArgKind::Type(t)),
-                None => return ty,
-            },
+            GenericArgKind::Type(_) => {
+                let filled = user_iter
+                    .next()
+                    .or_else(|| default_type_arg(tcx, &adt_def, param_index, &new_args));
+                match filled {
+                    Some(t) => new_args.push(GenericArgKind::Type(t)),
+                    None => return ty,
+                }
+            }
             GenericArgKind::Lifetime(_) => {
                 new_args.push(GenericArgKind::Lifetime(Region { kind: RegionKind::ReErased }))
             }
@@ -191,6 +204,31 @@ fn instantiate_path_args<'tcx>(
         return ty;
     }
     Ty::from_rigid_kind(RigidTy::Adt(adt_def, GenericArgs(new_args)))
+}
+
+/// The declared default of `adt_def`'s `param_index`-th generic parameter, instantiated
+/// with the arguments already substituted before it — how rustc fills an omitted trailing
+/// argument (a default may only reference earlier parameters). `None` when the parameter
+/// has no default or the default is not a type; the caller then keeps the uninstantiated
+/// type.
+fn default_type_arg<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    adt_def: &AdtDef,
+    param_index: usize,
+    args_so_far: &[GenericArgKind],
+) -> Option<Ty> {
+    let def_id = rustc_internal::internal(tcx, adt_def.def_id());
+    let default = tcx.generics_of(def_id).own_params.get(param_index)?.default_value(tcx)?;
+    let internal_args: Vec<rustc_middle::ty::GenericArg<'tcx>> = args_so_far
+        .iter()
+        .map(|arg| match arg {
+            GenericArgKind::Type(t) => Some(rustc_internal::internal(tcx, *t).into()),
+            GenericArgKind::Lifetime(_) => Some(tcx.lifetimes.re_erased.into()),
+            GenericArgKind::Const(_) => None,
+        })
+        .collect::<Option<_>>()?;
+    let filled = default.instantiate(tcx, &internal_args[..]).skip_normalization().as_type()?;
+    Some(rustc_internal::stable(filled))
 }
 
 /// Enumeration of existing primitive types that are not parametric.

@@ -128,6 +128,9 @@ pub enum FailedProperties {
 pub enum ExitStatus {
     Timeout,
     OutOfMemory,
+    /// CBMC printed a result array but not the overall status that follows the complete array,
+    /// so the results may be truncated; the integer is the process exit status
+    IncompleteResults(i32),
     /// the integer is the process exit status
     Other(i32),
 }
@@ -457,6 +460,14 @@ fn cbmc_reported_out_of_memory(items: &[ParserItem]) -> bool {
     })
 }
 
+/// Whether CBMC reported its overall status (`cProverStatus`). When CBMC prints a result array,
+/// it prints its overall status only after the complete array (`output_overall_result` in
+/// `goto-checker/report_util.cpp`), so a result array without it may be truncated, whatever
+/// stopped CBMC.
+fn cbmc_reported_prover_status(items: &[ParserItem]) -> bool {
+    items.iter().any(|item| matches!(item, ParserItem::ProverStatus { .. }))
+}
+
 impl VerificationResult {
     /// Computes a `VerificationResult` (kani-driver's notion of the result of a CBMC call) from a
     /// `VerificationOutput` (cbmc_output_parser's idea of CBMC results).
@@ -467,8 +478,9 @@ impl VerificationResult {
     ///   2. Positively checking for the presence of results.
     ///      (Do not mistake lack of results for success: report it as failure.)
     ///
-    /// The exit status is only used to reject results that CBMC did not finish reporting
-    /// (see `cbmc_completed_results`).
+    /// Results are only used if CBMC finished reporting them: it must have printed its overall
+    /// status after the result array (see `cbmc_reported_prover_status`), must not have run out
+    /// of memory, and its exit status must agree (see `cbmc_completed_results`).
     pub(crate) fn from(
         output: VerificationOutput,
         should_panic: bool,
@@ -477,8 +489,10 @@ impl VerificationResult {
         let runtime = start_time.elapsed();
         let ignored_quantifiers = count_ignored_quantifiers(&output.processed_items);
         let (remaining_items, results) = extract_results(output.processed_items);
+        let reported_results = results.is_some();
 
         if let Some(results) = results
+            && cbmc_reported_prover_status(&remaining_items)
             && !cbmc_reported_out_of_memory(&remaining_items)
             && cbmc_completed_results(output.process_status, &results)
         {
@@ -510,6 +524,8 @@ impl VerificationResult {
             let exit_status =
                 if output.process_status == 137 || cbmc_reported_out_of_memory(&remaining_items) {
                     ExitStatus::OutOfMemory
+                } else if reported_results && !cbmc_reported_prover_status(&remaining_items) {
+                    ExitStatus::IncompleteResults(output.process_status)
                 } else {
                     ExitStatus::Other(output.process_status)
                 };
@@ -607,6 +623,13 @@ impl VerificationResult {
                         String::from("CBMC failed"),
                         "CBMC timed out. You may want to rerun your proof with a larger timeout \
                     or use stubbing to reduce the size of the code the verifier reasons about.\n",
+                    ),
+                    ExitStatus::IncompleteResults(exit_status) => (
+                        format!(
+                            "CBMC did not finish reporting its results (exit status {exit_status})"
+                        ),
+                        "CBMC's output ended before its overall verification status, so the \
+                    results it reported may be incomplete and were not used.\n",
                     ),
                     ExitStatus::Other(exit_status) => {
                         (format!("CBMC failed with status {exit_status}"), "")
@@ -853,6 +876,7 @@ mod tests {
                     message_type: "WARNING".to_string(),
                 },
                 ParserItem::Result { result: vec![property("assertion", 1, CheckStatus::Success)] },
+                ParserItem::ProverStatus { _c_prover_status: "success".to_string() },
             ],
         };
         let vr = VerificationResult::from(output, false, Instant::now());
@@ -865,9 +889,10 @@ mod tests {
     fn verification_result_from_without_ignored_quantifiers_does_not_override() {
         let output = VerificationOutput {
             process_status: 0,
-            processed_items: vec![ParserItem::Result {
-                result: vec![property("assertion", 1, CheckStatus::Success)],
-            }],
+            processed_items: vec![
+                ParserItem::Result { result: vec![property("assertion", 1, CheckStatus::Success)] },
+                ParserItem::ProverStatus { _c_prover_status: "success".to_string() },
+            ],
         };
         let vr = VerificationResult::from(output, false, Instant::now());
         assert_eq!(vr.ignored_quantifiers, 0);
@@ -1032,11 +1057,13 @@ mod tests {
     }
 
     /// The output of a CBMC run that reported a single property with the given status, followed
-    /// by the given error messages, and exited with `process_status`.
+    /// by the given error messages and, if CBMC finished reporting, its overall `prover_status`,
+    /// and exited with `process_status`.
     fn mock_cbmc_output(
         process_status: i32,
         property_status: &str,
         errors: &[&str],
+        prover_status: Option<&str>,
     ) -> VerificationOutput {
         let result = format!(
             r#"{{
@@ -1055,6 +1082,10 @@ mod tests {
             message_text: text.to_string(),
             message_type: "ERROR".to_string(),
         }));
+        if let Some(status) = prover_status {
+            let item = format!(r#"{{ "cProverStatus": "{status}" }}"#);
+            processed_items.push(serde_json::from_str(&item).unwrap());
+        }
         VerificationOutput { process_status, processed_items }
     }
 
@@ -1065,16 +1096,16 @@ mod tests {
     /// CBMC's exit status for complete results must not change the verdict the properties give.
     #[test]
     fn check_complete_results_decide_verdict() {
-        let result = verify(mock_cbmc_output(0, "SUCCESS", &[]));
+        let result = verify(mock_cbmc_output(0, "SUCCESS", &[], Some("success")));
         assert_eq!(result.status, VerificationStatus::Success);
         assert!(result.results.is_ok());
 
-        let result = verify(mock_cbmc_output(10, "FAILURE", &[]));
+        let result = verify(mock_cbmc_output(10, "FAILURE", &[], Some("failure")));
         assert_eq!(result.status, VerificationStatus::Failure);
         assert!(result.results.is_ok());
 
         // CBMC exits with status 6 when a property has status ERROR, e.g. on a solver error.
-        let result = verify(mock_cbmc_output(6, "ERROR", &[]));
+        let result = verify(mock_cbmc_output(6, "ERROR", &[], Some("error")));
         assert_eq!(result.status, VerificationStatus::Failure);
         assert!(matches!(result.failed_properties, FailedProperties::Error));
         assert!(result.results.is_ok());
@@ -1085,29 +1116,52 @@ mod tests {
     /// See <https://github.com/model-checking/kani/issues/4905>.
     #[test]
     fn check_truncated_results_fail() {
-        let result = verify(mock_cbmc_output(6, "SUCCESS", &["Out of memory"]));
+        let result = verify(mock_cbmc_output(6, "SUCCESS", &["Out of memory"], None));
         assert_eq!(result.status, VerificationStatus::Failure);
         assert!(matches!(result.results, Err(ExitStatus::OutOfMemory)));
 
-        let result = verify(mock_cbmc_output(6, "SUCCESS", &["some internal error"]));
+        let result = verify(mock_cbmc_output(6, "SUCCESS", &["some internal error"], None));
         assert_eq!(result.status, VerificationStatus::Failure);
-        assert!(matches!(result.results, Err(ExitStatus::Other(6))));
+        assert!(matches!(result.results, Err(ExitStatus::IncompleteResults(6))));
 
         // A truncated array can contain an ERROR property from before the truncation point.
-        let result = verify(mock_cbmc_output(6, "ERROR", &["Out of memory"]));
+        let result = verify(mock_cbmc_output(6, "ERROR", &["Out of memory"], None));
         assert_eq!(result.status, VerificationStatus::Failure);
         assert!(matches!(result.results, Err(ExitStatus::OutOfMemory)));
 
         // Killed by a signal (here SIGSEGV) after writing some results.
-        let result = verify(mock_cbmc_output(139, "SUCCESS", &[]));
+        let result = verify(mock_cbmc_output(139, "SUCCESS", &[], None));
         assert_eq!(result.status, VerificationStatus::Failure);
-        assert!(matches!(result.results, Err(ExitStatus::Other(139))));
+        assert!(matches!(result.results, Err(ExitStatus::IncompleteResults(139))));
 
         // CBMC exits with 5 when some property is UNKNOWN or NOT_CHECKED. Kani's verdict logic
         // does not treat UNKNOWN as a failure, so these results must not be used.
-        let result = verify(mock_cbmc_output(5, "UNKNOWN", &[]));
+        let result = verify(mock_cbmc_output(5, "UNKNOWN", &[], Some("inconclusive")));
         assert_eq!(result.status, VerificationStatus::Failure);
         assert!(matches!(result.results, Err(ExitStatus::Other(5))));
+    }
+
+    /// CBMC prints its overall status only after the complete result array, so results without
+    /// it must not be used, whatever the exit status.
+    #[test]
+    fn check_results_without_prover_status_fail() {
+        // An exception other than `std::bad_alloc` while writing the results: the truncated array
+        // may contain an ERROR property from before the truncation point.
+        let result = verify(mock_cbmc_output(6, "ERROR", &["some internal error"], None));
+        assert_eq!(result.status, VerificationStatus::Failure);
+        assert!(matches!(result.results, Err(ExitStatus::IncompleteResults(6))));
+
+        let result = verify(mock_cbmc_output(0, "SUCCESS", &[], None));
+        assert_eq!(result.status, VerificationStatus::Failure);
+        assert!(matches!(result.results, Err(ExitStatus::IncompleteResults(0))));
+        // The message must not call an exit status of 0 a failure.
+        let message = result.render(&OutputFormat::Regular, false);
+        assert!(message.contains("CBMC did not finish reporting its results (exit status 0)"));
+        assert!(!message.contains("CBMC failed with status"));
+
+        let result = verify(mock_cbmc_output(10, "FAILURE", &[], None));
+        assert_eq!(result.status, VerificationStatus::Failure);
+        assert!(matches!(result.results, Err(ExitStatus::IncompleteResults(10))));
     }
 
     #[test]
