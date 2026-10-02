@@ -7,7 +7,6 @@ use super::{PropertyClass, bb_label};
 use crate::codegen_cprover_gotoc::codegen::function::rustc_public_bridge::region_from_coverage_opaque;
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
-use cbmc::goto_program::ExprValue;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
 use rustc_abi::Size;
 use rustc_abi::{FieldsShape, Primitive, TagEncoding, Variants};
@@ -71,17 +70,16 @@ impl GotocCtx<'_, '_> {
     }
 
     pub fn rvalue_to_assign_targets(&mut self, rvalue: &Rvalue, location: Location) -> Vec<Expr> {
-        let assigns = self.codegen_rvalue_stable(rvalue, location);
-        let assigns_value = assigns.value().clone();
-        let assign_exprs = if let ExprValue::Struct { values } = assigns_value {
-            values.clone()
-        } else {
-            vec![assigns.clone()]
-        };
         match rvalue {
             Rvalue::Aggregate(_agg_kind, operands) => {
+                // Codegen each operand on its own rather than reading the fields off the codegen'd
+                // tuple: a tuple's struct layout may order fields by offset rather than by source
+                // position, so the tuple's field values do not line up one-to-one with `operands`
+                // (e.g. a `loop_modifies` clause whose first target is a fat pointer followed by
+                // thin references). Codegen'ing each operand keeps the target aligned with its own
+                // type.
                 let mut ptr_exprs = Vec::new();
-                for (operand, expr) in operands.iter().zip(assign_exprs.iter()) {
+                for operand in operands.iter() {
                     let operand_ty = self.operand_ty_stable(operand);
                     debug!("Ty {:?}", operand_ty);
                     // Do not emit an assigns target for a pointer to a ZST. Havocking a
@@ -94,12 +92,16 @@ impl GotocCtx<'_, '_> {
                     if pointee_type_stable(operand_ty).is_some_and(|ty| self.is_zst_stable(ty)) {
                         continue;
                     }
-                    let ptr_expr = self.ty_to_assign_target(operand_ty, expr);
+                    let expr = self.codegen_operand_stable(operand);
+                    let ptr_expr = self.ty_to_assign_target(operand_ty, &expr);
                     ptr_exprs.push(ptr_expr)
                 }
                 ptr_exprs
             }
-            _ => vec![assigns.dereference()],
+            _ => {
+                let assigns = self.codegen_rvalue_stable(rvalue, location);
+                vec![assigns.dereference()]
+            }
         }
     }
 
