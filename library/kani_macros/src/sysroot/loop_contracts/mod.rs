@@ -578,9 +578,36 @@ impl VisitMut for KaniIterLenReplacer {
     }
 }
 
+/// Whether `attr` is a `#[kani::loop_invariant]` attribute.
+fn is_loop_invariant_attr(attr: &syn::Attribute) -> bool {
+    let path: Vec<String> = attr.path().segments.iter().map(|seg| seg.ident.to_string()).collect();
+    path == ["kani", "loop_invariant"] || path == ["loop_invariant"]
+}
+
+/// Remove the other `#[kani::loop_invariant]` attributes of the loop, and return their
+/// invariants. The invariant of a loop with several `#[kani::loop_invariant]` attributes is the
+/// conjunction of their invariants.
+fn take_other_loop_invariants(loop_stmt: &mut Stmt) -> syn::Result<Vec<Expr>> {
+    let attrs = match loop_stmt {
+        Stmt::Expr(Expr::While(ExprWhile { attrs, .. }), _)
+        | Stmt::Expr(Expr::ForLoop(ExprForLoop { attrs, .. }), _)
+        | Stmt::Expr(Expr::Loop(syn::ExprLoop { attrs, .. }), _) => attrs,
+        _ => return Ok(Vec::new()),
+    };
+    let (invariant_attrs, other_attrs): (Vec<_>, Vec<_>) =
+        std::mem::take(attrs).into_iter().partition(is_loop_invariant_attr);
+    *attrs = other_attrs;
+    invariant_attrs.iter().map(|attr| attr.parse_args::<Expr>()).collect()
+}
+
 pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     // parse the stmt of the loop
     let mut loop_stmt: Stmt = syn::parse(item.clone()).unwrap();
+    // The invariants of the other `#[kani::loop_invariant]` attributes of the loop, if any.
+    let other_invariants = match take_other_loop_invariants(&mut loop_stmt) {
+        Ok(invariants) => invariants,
+        Err(err) => return err.to_compile_error().into(),
+    };
     loop_stmt = while_let_rewrite(loop_stmt);
     let loop_id = generate_unique_id_from_span(&loop_stmt);
     //We use Option to mark if the loop is a for loop.
@@ -597,6 +624,9 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     // expr of the loop invariant
     let mut inv_expr: Expr = syn::parse(attr).unwrap();
     let original_span = inv_expr.span();
+    for other_invariant in other_invariants {
+        inv_expr = parse_quote! { (#inv_expr) && (#other_invariant) };
+    }
     if let Some(ForLoopExtraStmts { ref kani_index, ref kani_iter_len, .. }) = for_loop_extras {
         let mut index_replacer = KaniIndexReplacer { kani_index: kani_index.clone() };
         index_replacer.visit_expr_mut(&mut inv_expr);
@@ -958,5 +988,26 @@ mod tests {
             Some("outer".into())
         );
         assert_eq!(attr_paths(&while_loop.attrs), ["kani::loop_modifies", "kani::loop_decreases"]);
+    }
+
+    /// The other `#[kani::loop_invariant]` attributes of a loop are taken out of the loop, so
+    /// that their invariants are combined with the first one, and the other attributes are kept.
+    #[test]
+    fn other_loop_invariants_are_taken() {
+        let mut loop_stmt: Stmt = parse_quote! {
+            #[kani::loop_invariant(a)]
+            #[kani::loop_modifies(&s)]
+            #[kani::loop_invariant(b)]
+            for x in v {
+                s += x;
+            }
+        };
+        let invariants = take_other_loop_invariants(&mut loop_stmt).unwrap();
+        let expected: [Expr; 2] = [parse_quote!(a), parse_quote!(b)];
+        assert!(invariants == expected);
+        let Stmt::Expr(Expr::ForLoop(for_loop), _) = loop_stmt else {
+            panic!("the statement should still be a `for` loop")
+        };
+        assert_eq!(attr_paths(&for_loop.attrs), ["kani::loop_modifies"]);
     }
 }
