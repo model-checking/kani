@@ -32,29 +32,42 @@ impl GotocCtx<'_, '_> {
             | TyKind::RigidTy(RigidTy::RawPtr(unref_ty, _)) => match unref_ty.kind() {
                 TyKind::RigidTy(RigidTy::Slice(slice_ty)) => {
                     let size = slice_ty.layout().unwrap().shape().size.bytes();
-                    Expr::symbol_expression(
-                        "__CPROVER_object_upto",
-                        Type::code(
-                            vec![
-                                Type::empty().to_pointer().as_parameter(None, Some("ptr".into())),
-                                Type::size_t().as_parameter(None, Some("size".into())),
-                            ],
-                            Type::empty(),
-                        ),
-                    )
-                    .call(vec![
-                        expr.clone()
-                            .member("data", &self.symbol_table)
-                            .cast_to(Type::empty().to_pointer()),
+                    self.codegen_object_upto(
+                        expr.clone().member("data", &self.symbol_table),
                         expr.clone()
                             .member("len", &self.symbol_table)
                             .mul(Expr::size_constant(size.try_into().unwrap(), &self.symbol_table)),
-                    ])
+                    )
                 }
                 _ => expr.clone().dereference(),
             },
             _ => expr.clone().dereference(),
         }
+    }
+
+    /// Generate the assigns target `__CPROVER_object_upto(ptr, size)` for the `size` bytes
+    /// starting at `ptr`.
+    ///
+    /// CBMC requires the pointer of such a target to be null or writable up to `size` bytes,
+    /// even when `size` is zero. The data pointer of an empty slice is often dangling (e.g., the
+    /// one of an empty `Vec`), which CBMC does not consider writable. A zero-sized target covers
+    /// no memory, so we use a null pointer for it instead: CBMC neither havocs a null target nor
+    /// allows writes through it.
+    pub fn codegen_object_upto(&self, ptr: Expr, size: Expr) -> Expr {
+        let void_ptr = Type::empty().to_pointer();
+        let effective_ptr =
+            size.clone().is_zero().ternary(void_ptr.null(), ptr.cast_to(void_ptr.clone()));
+        Expr::symbol_expression(
+            "__CPROVER_object_upto",
+            Type::code(
+                vec![
+                    void_ptr.as_parameter(None, Some("ptr".into())),
+                    Type::size_t().as_parameter(None, Some("size".into())),
+                ],
+                Type::empty(),
+            ),
+        )
+        .call(vec![effective_ptr, size])
     }
 
     pub fn rvalue_to_assign_targets(&mut self, rvalue: &Rvalue, location: Location) -> Vec<Expr> {

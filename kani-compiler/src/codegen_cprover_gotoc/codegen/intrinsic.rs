@@ -256,35 +256,12 @@ impl GotocCtx<'_, '_> {
 
         let intrinsic = Intrinsic::from_instance(&instance);
 
-        // A SIMD intrinsic operates on SIMD vectors: `simd_splat` returns one, the others take one
-        // as their first argument. rustc rejects any other instantiation, but autoharness can
-        // instantiate a generic function with a scalar (e.g. stdarch's `simd_imin::<T>` with
-        // `T = i32`), so report it as unsupported rather than panic in the codegen below.
-        let simd_ty = match &intrinsic {
-            Intrinsic::SimdSplat => Some(ret_ty),
-            Intrinsic::SimdAdd
-            | Intrinsic::SimdAnd
-            | Intrinsic::SimdDiv
-            | Intrinsic::SimdReduceAll
-            | Intrinsic::SimdRem
-            | Intrinsic::SimdEq
-            | Intrinsic::SimdExtract
-            | Intrinsic::SimdGe
-            | Intrinsic::SimdGt
-            | Intrinsic::SimdInsert
-            | Intrinsic::SimdLe
-            | Intrinsic::SimdLt
-            | Intrinsic::SimdMul
-            | Intrinsic::SimdNe
-            | Intrinsic::SimdOr
-            | Intrinsic::SimdShl
-            | Intrinsic::SimdShr
-            | Intrinsic::SimdShuffle(_)
-            | Intrinsic::SimdSub
-            | Intrinsic::SimdXor => farg_types.first().copied(),
-            _ => None,
-        };
-        if let Some(ty) = simd_ty
+        // A SIMD intrinsic operates on SIMD vectors (see `Intrinsic::simd_vector_operand`). rustc's
+        // codegen backends reject any other instantiation, but Kani replaces those backends, so a
+        // scalar can reach this point (e.g. autoharness instantiating stdarch's `simd_imin::<T>`
+        // with `T = i32`, or a harness calling such a helper directly). Report it as unsupported
+        // rather than panic in the codegen below.
+        if let Some(ty) = intrinsic.simd_vector_operand(farg_types, ret_ty)
             && !ty.kind().is_simd()
         {
             return self.codegen_unimplemented_stmt(
