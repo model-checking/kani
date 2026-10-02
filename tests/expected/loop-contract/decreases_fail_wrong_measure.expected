@@ -1,3 +1,9 @@
-Status: FAILURE
+wrong_decreases_harness.loop_decreases.1\
+	 - Status: FAILURE\
+	 - Description: "Check variant decreases after step for loop wrong_decreases_harness.0"
+
+wrong_decreases_for_loop_harness.loop_decreases.1\
+	 - Status: FAILURE\
+	 - Description: "Check variant decreases after step for loop wrong_decreases_for_loop_harness.0"
 
 VERIFICATION:- FAILED
