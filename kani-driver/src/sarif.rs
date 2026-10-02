@@ -242,6 +242,9 @@ fn exit_status_rule(exit_status: &ExitStatus) -> (&'static str, &'static str) {
     match exit_status {
         ExitStatus::Timeout => ("kani.cbmc.timeout", "CBMC timed out"),
         ExitStatus::OutOfMemory => ("kani.cbmc.oom", "CBMC ran out of memory"),
+        ExitStatus::IncompleteResults(_) => {
+            ("kani.cbmc.incomplete", "CBMC did not finish reporting its results")
+        }
         ExitStatus::Other(_) => ("kani.cbmc.failed", "CBMC failed"),
     }
 }

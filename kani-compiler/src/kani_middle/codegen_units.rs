@@ -1109,11 +1109,29 @@ fn choose_generic_instantiation(
             }
         }
     }
+    // Keep the original candidate order and search budget intact. Only after
+    // that search fails, try one additional choice with every type set to unit.
+    // This supports the tuple Extend methods without displacing existing results.
+    let search_limited = attempts.get() >= GENERIC_INSTANTIATION_ATTEMPT_LIMIT;
+    if !type_slots.is_empty()
+        && let Some(instance) = try_choice(&vec![Ty::new_tuple(&[]); type_slots.len()])
+    {
+        return Ok(instance);
+    }
+    // A candidate that satisfied the bounds but would make a SIMD intrinsic call invalid is the
+    // more specific reason, so report it ahead of the generic ones below.
     if let Some(reason) = simd_rejection.take() {
         return Err(reason);
     }
+    if search_limited {
+        return Err(format!(
+            "generic instantiation search reached the limit of \
+             {GENERIC_INSTANTIATION_ATTEMPT_LIMIT} attempts{}",
+            if type_slots.is_empty() { "" } else { "; the uniform unit fallback also failed" }
+        ));
+    }
     Err(format!(
-        "no candidate type ({}{}) satisfies the function's trait bounds",
+        "no candidate type ({}{}{}) satisfies the function's trait bounds",
         generic_instantiation_candidates()
             .iter()
             .map(|ty| ty.to_string())
@@ -1123,7 +1141,8 @@ fn choose_generic_instantiation(
             format!(" and {n_impl_derived} types implementing the required traits")
         } else {
             String::new()
-        }
+        },
+        if type_slots.is_empty() { "" } else { ", or () for every parameter" }
     ))
 }
 
