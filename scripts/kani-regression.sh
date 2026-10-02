@@ -38,6 +38,7 @@ cargo test -p cprover_bindings
 cargo test -p kani-compiler
 cargo test -p kani-driver
 cargo test -p kani_metadata
+cargo test -p compiletest
 # Use concrete playback to enable assertions failure
 cargo test -p kani --features concrete_playback
 # Test the actual macros, skipping doc tests and enabling extra traits for "syn"
