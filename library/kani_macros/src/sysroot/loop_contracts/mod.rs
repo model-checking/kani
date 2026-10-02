@@ -12,8 +12,7 @@ use syn::spanned::Spanned;
 use syn::token::AndAnd;
 use syn::{
     BinOp, Block, Expr, ExprBinary, ExprForLoop, ExprLoop, ExprWhile, Ident, Stmt, Token,
-    parse_macro_input,
-    parse_quote, visit_mut::VisitMut,
+    parse_macro_input, parse_quote, visit_mut::VisitMut,
 };
 
 /*

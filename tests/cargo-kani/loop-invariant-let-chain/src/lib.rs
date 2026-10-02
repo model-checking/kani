@@ -12,7 +12,9 @@ fn chain_basic() {
     let mut remaining: usize = kani::any();
     kani::assume(remaining <= 4);
     #[kani::loop_invariant(remaining <= 4)]
-    while remaining > 0 && let Some(next) = remaining.checked_sub(1) {
+    while remaining > 0
+        && let Some(next) = remaining.checked_sub(1)
+    {
         remaining = next;
     }
     assert!(remaining <= 4);
@@ -23,7 +25,10 @@ fn chain_multi_let() {
     let mut n: u8 = kani::any();
     kani::assume(n <= 10);
     #[kani::loop_invariant(n <= 10)]
-    while n > 0 && let Some(m) = n.checked_sub(1) && let Some(k) = m.checked_add(0) {
+    while n > 0
+        && let Some(m) = n.checked_sub(1)
+        && let Some(k) = m.checked_add(0)
+    {
         n = k;
     }
     assert!(n <= 10);
@@ -45,8 +50,7 @@ fn chain_short_circuits() {
             polled = true;
             it.next()
         }
-    {
-    }
+    {}
     assert!(!polled);
 }
 
@@ -55,7 +59,9 @@ fn chain_labeled() {
     let mut n: u8 = kani::any();
     kani::assume(n <= 4);
     #[kani::loop_invariant(n <= 4)]
-    'outer: while n > 0 && let Some(next) = n.checked_sub(1) {
+    'outer: while n > 0
+        && let Some(next) = n.checked_sub(1)
+    {
         n = next;
         if n == 1 {
             break 'outer;
@@ -73,7 +79,9 @@ fn chain_cfg_attr() {
     let mut remaining: usize = kani::any();
     kani::assume(remaining <= 4);
     #[cfg_attr(kani, kani::loop_invariant(remaining <= 4))]
-    while remaining > 0 && let Some(next) = remaining.checked_sub(1) {
+    while remaining > 0
+        && let Some(next) = remaining.checked_sub(1)
+    {
         remaining = next;
     }
     assert!(remaining <= 4);
@@ -87,7 +95,9 @@ fn chain_invariant_violated() {
     let mut n: u8 = kani::any();
     kani::assume(n <= 4);
     #[kani::loop_invariant(n == 4)]
-    while n > 0 && let Some(next) = n.checked_sub(1) {
+    while n > 0
+        && let Some(next) = n.checked_sub(1)
+    {
         n = next;
     }
     assert!(n <= 4);
