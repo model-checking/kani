@@ -81,11 +81,12 @@ impl Display for CoverageRegion {
 
 impl CoverageRegion {
     pub fn from_str(input: String) -> Self {
+        let malformed = || panic!("malformed coverage region: {input:?}");
         // Split from the right: filenames may contain spaces, colons, or even " - ".
-        let (start, end) = input.rsplit_once(" - ").unwrap();
-        let (file_and_line, start_col) = start.rsplit_once(':').unwrap();
-        let (file, start_line) = file_and_line.rsplit_once(':').unwrap();
-        let (end_line, end_col) = end.split_once(':').unwrap();
+        let (start, end) = input.rsplit_once(" - ").unwrap_or_else(malformed);
+        let (file_and_line, start_col) = start.rsplit_once(':').unwrap_or_else(malformed);
+        let (file, start_line) = file_and_line.rsplit_once(':').unwrap_or_else(malformed);
+        let (end_line, end_col) = end.split_once(':').unwrap_or_else(malformed);
         Self {
             file: file.to_owned(),
             start: (start_line.parse().unwrap(), start_col.parse().unwrap()),
@@ -114,6 +115,20 @@ mod tests {
                 region,
                 CoverageRegion { file: file.to_owned(), start: (12, 3), end: (14, 5) }
             );
+        }
+    }
+
+    #[test]
+    fn malformed_coverage_regions_include_input() {
+        for input in ["a.rs:12:3", "a.rs - 14:5", "a.rs:3 - 14:5", "a.rs:12:3 - 14"] {
+            let panic = std::panic::catch_unwind(|| CoverageRegion::from_str(input.to_owned()))
+                .expect_err("malformed coverage region should panic");
+            let message = panic
+                .downcast_ref::<String>()
+                .map(String::as_str)
+                .or_else(|| panic.downcast_ref::<&str>().copied())
+                .unwrap();
+            assert_eq!(message, format!("malformed coverage region: {input:?}"));
         }
     }
 }
