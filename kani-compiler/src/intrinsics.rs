@@ -111,6 +111,8 @@ pub enum Intrinsic {
     SimdAnd,
     SimdDiv,
     SimdReduceAll,
+    SimdReduceMax,
+    SimdReduceMin,
     SimdRem,
     SimdEq,
     SimdExtract,
@@ -624,6 +626,14 @@ fn try_match_simd(intrinsic_instance: &Instance) -> Option<Intrinsic> {
         "simd_reduce_all" => {
             assert_sig_matches!(sig, _ => RigidTy::Bool);
             Some(Intrinsic::SimdReduceAll)
+        }
+        "simd_reduce_max" => {
+            assert_sig_matches!(sig, _ => _);
+            Some(Intrinsic::SimdReduceMax)
+        }
+        "simd_reduce_min" => {
+            assert_sig_matches!(sig, _ => _);
+            Some(Intrinsic::SimdReduceMin)
         }
         "simd_rem" => {
             assert_sig_matches!(sig, _, _ => _);

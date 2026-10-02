@@ -1,0 +1,5 @@
+Status: FAILURE\
+Description: "`simd_reduce_max` on floating-point lanes is not currently supported by Kani
+Status: FAILURE\
+Description: "`simd_reduce_min` on floating-point lanes is not currently supported by Kani
+Complete - 0 successfully verified harnesses, 2 failures, 2 total.
