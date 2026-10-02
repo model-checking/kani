@@ -29,7 +29,7 @@ normalized_results() {
 }
 
 # Terse output omits the per-check detail that `--output-format=regular` prints.
-if echo "$parallel_output" | grep -qE '^Check [0-9]+:'; then
+if echo "$parallel_output" | grep -qE '^(Thread [0-9]+: )?Check [0-9]+:'; then
     echo "TERSE: no"
     echo "$parallel_output"
 else
@@ -42,6 +42,21 @@ if echo "$parallel_output" | grep -q "Thread [0-9]*:"; then
     echo "PARALLEL: yes"
 else
     echo "PARALLEL: no"
+    echo "$parallel_output"
+fi
+
+# Regression for #4438: every nonempty line in the parallel harness output must identify
+# its thread, including the verification result and timing, not just the first line.
+if echo "$parallel_output" | awk '
+    /^Thread [0-9]+:/ { in_harness_output = 1 }
+    /^Manual Harness Summary:/ { in_harness_output = 0 }
+    in_harness_output && NF && $0 !~ /^Thread [0-9]+:/ { missing_prefix = 1 }
+    /^Thread [0-9]+: VERIFICATION:- SUCCESSFUL$/ { results++ }
+    END { exit (missing_prefix || results != 4) }
+'; then
+    echo "PREFIXED RESULTS: yes"
+else
+    echo "PREFIXED RESULTS: no"
     echo "$parallel_output"
 fi
 

@@ -92,6 +92,15 @@ fn run_until_abort<I: Sync, T: Send>(
     Ok((payloads, aborted.load(Ordering::Relaxed)))
 }
 
+/// Identify the worker on every line of a rendered verification result.
+fn prefix_thread_lines(output: &str, thread_index: usize) -> String {
+    output
+        .lines()
+        .map(|line| format!("Thread {thread_index}: {line}"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 impl<'pr> HarnessRunner<'_, 'pr> {
     /// Given a [`HarnessRunner`] (to abstract over how these harnesses were generated), this runs
     /// the proof-checking process for each harness in `harnesses`.
@@ -177,7 +186,7 @@ impl KaniSession {
             let output = result.render(&self.args.output_format(), harness.attributes.should_panic);
 
             if rayon::current_num_threads() > 1 {
-                self.emit_line(&format!("Thread {thread_index}: {output}"));
+                self.emit_line(&prefix_thread_lines(&output, thread_index));
             } else {
                 self.emit_line(&output);
             }
@@ -219,7 +228,7 @@ impl KaniSession {
         let mut file_output =
             result.render(&OutputFormat::Regular, harness.attributes.should_panic);
         if rayon::current_num_threads() > 1 {
-            file_output = format!("Thread {thread_index}:\n{file_output}");
+            file_output = prefix_thread_lines(&file_output, thread_index);
         }
 
         if let Err(e) = writeln!(file, "{file_output}") {
