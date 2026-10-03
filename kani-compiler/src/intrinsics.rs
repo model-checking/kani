@@ -209,6 +209,8 @@ impl Intrinsic {
             | Intrinsic::SimdNe
             | Intrinsic::SimdOr
             | Intrinsic::SimdReduceAll
+            | Intrinsic::SimdReduceMax
+            | Intrinsic::SimdReduceMin
             | Intrinsic::SimdRem
             | Intrinsic::SimdShl
             | Intrinsic::SimdShr
