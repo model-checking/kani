@@ -1,0 +1,9 @@
+Status: FAILURE\
+Description: "`simd_splat` with the argument type `i32` (the output `i64x2` has `i64` lanes) is not currently supported by Kani
+Status: FAILURE\
+Description: "`simd_extract` with the result type `i32` (the input `i64x2` has `i64` lanes) is not currently supported by Kani
+Status: FAILURE\
+Description: "`simd_insert` with the inserted type `i32` (the input `i64x2` has `i64` lanes) is not currently supported by Kani
+Status: FAILURE\
+Description: "`simd_shuffle` with the index type `i32x2` (not a SIMD vector of `u32`) is not currently supported by Kani
+Complete - 4 successfully verified harnesses, 4 failures, 8 total.

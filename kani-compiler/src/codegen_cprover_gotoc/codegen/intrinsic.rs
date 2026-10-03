@@ -534,7 +534,7 @@ impl GotocCtx<'_, '_> {
                 loc,
             ),
             Intrinsic::SimdInsert => {
-                self.codegen_intrinsic_simd_insert(fargs, place, cbmc_ret_ty, farg_types, span, loc)
+                self.codegen_intrinsic_simd_insert(fargs, place, cbmc_ret_ty, farg_types, loc)
             }
             Intrinsic::SimdLe => self.codegen_simd_cmp(
                 Expr::vector_le,
@@ -576,7 +576,18 @@ impl GotocCtx<'_, '_> {
                 self.codegen_simd_shift_with_distance_check(fargs, intrinsic_str, place, loc)
             }
             Intrinsic::SimdShuffle(stripped) => {
-                let n: u64 = self.simd_shuffle_length(stripped.as_str(), farg_types, span);
+                let Some(n) = self.simd_shuffle_length(stripped.as_str(), farg_types, span) else {
+                    // An error here would abort the whole crate; as an unsupported construct it
+                    // fails only the harnesses that reach it.
+                    return self.codegen_unimplemented_stmt(
+                        &format!(
+                            "`{intrinsic_str}` with the index type `{}` (not a SIMD vector of `u32`)",
+                            farg_types[2]
+                        ),
+                        loc,
+                        "https://github.com/model-checking/kani/issues/new/choose",
+                    );
+                };
                 self.codegen_intrinsic_simd_shuffle(fargs, place, farg_types, ret_ty, n, span)
             }
             Intrinsic::SimdSplat => {
@@ -585,16 +596,20 @@ impl GotocCtx<'_, '_> {
                 let (size, ret_base_type) = self.simd_size_and_type(ret_ty);
                 // `simd_splat<T, U>(value: U) -> T` has independent generic parameters,
                 // so a monomorphization where `U` is not `T`'s element type can reach
-                // codegen. Emit an error like rustc's backends (and like `simd_extract`
-                // and `simd_insert` above) rather than silently casting the value.
+                // codegen. Report it as unsupported (like `simd_extract` and `simd_insert`
+                // above) rather than silently casting the value. An error here would abort
+                // the whole crate; as an unsupported construct it fails only the harnesses
+                // that reach it.
                 if farg_types[0] != ret_base_type {
-                    let err_msg = format!(
-                        "expected argument type `{ret_base_type}` (element of output `{ret_ty}`), found `{}`",
-                        farg_types[0]
+                    return self.codegen_unimplemented_stmt(
+                        &format!(
+                            "`{intrinsic_str}` with the argument type `{}` (the output `{ret_ty}` has `{ret_base_type}` lanes)",
+                            farg_types[0]
+                        ),
+                        loc,
+                        "https://github.com/model-checking/kani/issues/new/choose",
                     );
-                    utils::span_err(self.tcx, span, err_msg);
                 }
-                self.tcx.dcx().abort_if_errors();
                 let elem_ty = cbmc_ret_ty.base_type().unwrap().clone();
                 let elems = vec![val.cast_to(elem_ty); size as usize];
                 self.codegen_expr_to_place_stable(place, Expr::vector_expr(cbmc_ret_ty, elems), loc)
@@ -1336,7 +1351,14 @@ impl GotocCtx<'_, '_> {
     ///     (e.g., `simd_shuffle4`).
     ///  2. `simd_shuffle`, where `N` isn't specified and must be computed from
     ///     the length of the indexes SIMD vector (the third argument).
-    fn simd_shuffle_length(&mut self, stripped: &str, farg_types: &[Ty], span: Span) -> u64 {
+    ///
+    /// Returns `None` if the indexes of a `simd_shuffle` are not a SIMD vector of `u32`.
+    fn simd_shuffle_length(
+        &mut self,
+        stripped: &str,
+        farg_types: &[Ty],
+        span: Span,
+    ) -> Option<u64> {
         let n = if stripped.is_empty() {
             // Make sure that this is an SIMD vector, since only the
             // length-suffixed version of `simd_shuffle` (e.g.,
@@ -1349,13 +1371,7 @@ impl GotocCtx<'_, '_> {
             {
                 self.simd_size_and_type(farg_types[2]).0
             } else {
-                let err_msg = format!(
-                    "simd_shuffle index must be a SIMD vector of `u32`, got `{}`",
-                    farg_types[2]
-                );
-                utils::span_err(self.tcx, span, err_msg);
-                // Return a dummy value
-                u64::MIN
+                return None;
             }
         } else {
             stripped.parse().unwrap_or_else(|_| {
@@ -1369,7 +1385,7 @@ impl GotocCtx<'_, '_> {
             })
         };
         self.tcx.dcx().abort_if_errors();
-        n
+        Some(n)
     }
 
     /// This function computes the size and alignment of a dynamically-sized type.
@@ -1487,22 +1503,26 @@ impl GotocCtx<'_, '_> {
         let vec = fargs.remove(0);
         let index = fargs.remove(0);
 
+        let loc = self.codegen_span_stable(span);
         let (_, vector_base_type) = self.simd_size_and_type(rust_arg_types[0]);
         if rust_ret_type != vector_base_type {
-            let err_msg = format!(
-                "expected return type `{vector_base_type}` (element of input `{}`), found `{rust_ret_type}`",
-                rust_arg_types[0]
+            // An error here would abort the whole crate; as an unsupported construct it fails
+            // only the harnesses that reach it.
+            return self.codegen_unimplemented_stmt(
+                &format!(
+                    "`simd_extract` with the result type `{rust_ret_type}` (the input `{}` has `{vector_base_type}` lanes)",
+                    rust_arg_types[0]
+                ),
+                loc,
+                "https://github.com/model-checking/kani/issues/new/choose",
             );
-            utils::span_err(self.tcx, span, err_msg);
         }
-        self.tcx.dcx().abort_if_errors();
 
         // A pointer lane is modeled as an integer of the same width (see `codegen_vector`), so the
         // extracted lane has to be cast back to the return type. `simd_insert` and `simd_splat`
         // cast in the other direction for the same reason. This is a no-op for every other element
         // type, where the lane type already is the return type.
         let ret_typ = self.codegen_ty_stable(rust_ret_type);
-        let loc = self.codegen_span_stable(span);
         self.codegen_expr_to_place_stable(p, vec.index_array(index).cast_to(ret_typ), loc)
     }
 
@@ -1523,7 +1543,6 @@ impl GotocCtx<'_, '_> {
         p: &Place,
         cbmc_ret_ty: Type,
         rust_arg_types: &[Ty],
-        span: Span,
         loc: Location,
     ) -> Stmt {
         assert!(fargs.len() == 3, "`simd_insert` had unexpected arguments {fargs:?}");
@@ -1533,13 +1552,17 @@ impl GotocCtx<'_, '_> {
 
         let (_, vector_base_type) = self.simd_size_and_type(rust_arg_types[0]);
         if vector_base_type != rust_arg_types[2] {
-            let err_msg = format!(
-                "expected inserted type `{vector_base_type}` (element of input `{}`), found `{}`",
-                rust_arg_types[0], rust_arg_types[2],
+            // An error here would abort the whole crate; as an unsupported construct it fails
+            // only the harnesses that reach it.
+            return self.codegen_unimplemented_stmt(
+                &format!(
+                    "`simd_insert` with the inserted type `{}` (the input `{}` has `{vector_base_type}` lanes)",
+                    rust_arg_types[2], rust_arg_types[0],
+                ),
+                loc,
+                "https://github.com/model-checking/kani/issues/new/choose",
             );
-            utils::span_err(self.tcx, span, err_msg);
         }
-        self.tcx.dcx().abort_if_errors();
 
         // Type checker should have ensured it's a vector type
         let elem_ty = cbmc_ret_ty.base_type().unwrap().clone();
@@ -1765,21 +1788,29 @@ impl GotocCtx<'_, '_> {
         // [u32; n]: translated wrapped in a struct
         let indexes = fargs.remove(0);
 
+        let loc = self.codegen_span_stable(span);
         let (_, vec_subtype) = self.simd_size_and_type(rust_arg_types[0]);
         let (ret_type_len, ret_type_subtype) = self.simd_size_and_type(rust_ret_type);
+        // An error here would abort the whole crate; as an unsupported construct it fails only the
+        // harnesses that reach it.
         if ret_type_len != n {
-            let err_msg = format!(
-                "expected return type of length {n}, found `{rust_ret_type}` with length {ret_type_len}"
+            return self.codegen_unimplemented_stmt(
+                &format!(
+                    "`simd_shuffle` with the result type `{rust_ret_type}` ({ret_type_len} lanes for a {n}-lane shuffle)"
+                ),
+                loc,
+                "https://github.com/model-checking/kani/issues/new/choose",
             );
-            utils::span_err(self.tcx, span, err_msg);
         }
         if vec_subtype != ret_type_subtype {
-            let err_msg = format!(
-                "expected return element type `{vec_subtype}` (element of input `{}`), \
-                 found `{rust_ret_type}` with element type `{ret_type_subtype}`",
-                rust_arg_types[0]
+            return self.codegen_unimplemented_stmt(
+                &format!(
+                    "`simd_shuffle` with the result type `{rust_ret_type}` (the input `{}` has `{vec_subtype}` lanes)",
+                    rust_arg_types[0]
+                ),
+                loc,
+                "https://github.com/model-checking/kani/issues/new/choose",
             );
-            utils::span_err(self.tcx, span, err_msg);
         }
 
         // An unsigned type here causes an invariant violation in CBMC.
@@ -1793,9 +1824,7 @@ impl GotocCtx<'_, '_> {
                 self.codegen_idx_array(indexes.clone(), idx).cast_to(st_rep.clone())
             })
             .collect();
-        self.tcx.dcx().abort_if_errors();
         let cbmc_ret_ty = self.codegen_ty_stable(rust_ret_type);
-        let loc = self.codegen_span_stable(span);
         let shuffle_vector = Expr::shuffle_vector(vec1, vec2, elems);
         assert_eq!(*shuffle_vector.typ(), cbmc_ret_ty);
         self.codegen_expr_to_place_stable(p, shuffle_vector, loc)
