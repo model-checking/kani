@@ -1,0 +1,33 @@
+[TEST] --target needs -Z unstable-options
+error: The `--target` option is unstable and requires `-Z unstable-options` to be used.
+
+[TEST] single file on the host: the riscv64 harnesses are compiled out
+No proof harnesses (functions with #[kani::proof]) were found to verify.
+
+[TEST] single file for riscv64
+Checking harness riscv64::target_is_riscv64gc...
+VERIFICATION:- SUCCESSFUL
+Checking harness riscv64::overflow_is_found...
+attempt to add with overflow
+VERIFICATION:- FAILED
+Complete - 1 successfully verified harnesses, 1 failures, 2 total.
+
+[TEST] cargo kani for riscv64
+Checking harness verify::elapsed_never_panics...
+Complete - 1 successfully verified harnesses, 0 failures, 1 total.
+
+[TEST] --concrete-playback is refused for another target
+error: Conflicting options: --concrete-playback runs on the host, so it isn't compatible with --target for another platform.
+
+Usage: kani [OPTIONS] [INPUT]
+       kani <COMMAND>
+
+For more information, try '--help'.
+
+[TEST] verify-std is refused with --target
+error: The `verify-std` subcommand does not support `--target`
+
+Usage: kani [OPTIONS] [INPUT]
+       kani <COMMAND>
+
+For more information, try '--help'.

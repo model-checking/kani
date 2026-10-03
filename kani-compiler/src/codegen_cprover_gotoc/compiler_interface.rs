@@ -309,6 +309,12 @@ impl CodegenBackend for GotocCodegenBackend {
                 // AArch64 mandates Neon support
                 _ => vec![sym::neon],
             }
+        } else if sess.target.arch == Arch::RiscV64 && sess.target.os != Os::None {
+            // The features of `riscv64gc` (`+m,+a,+f,+d,+c,+zicsr,+zifencei`), with the features
+            // each implies. The LP64D ABI requires `d`, and rustc warns when it is missing.
+            ["a", "c", "d", "f", "m", "zaamo", "zalrsc", "zca", "zicsr", "zifencei", "zmmul"]
+                .map(Symbol::intern)
+                .to_vec()
         } else {
             vec![]
         };
@@ -604,20 +610,31 @@ fn check_target(session: &Session) {
     let is_x86_64_linux_target = session.target.llvm_target == "x86_64-unknown-linux-gnu";
     let is_arm64_linux_target = session.target.llvm_target == "aarch64-unknown-linux-gnu";
     // Comparison with `x86_64-apple-darwin` does not work well because the LLVM
-    // target may become `x86_64-apple-macosx10.7.0` (or similar) and fail
-    let is_x86_64_darwin_target = session.target.llvm_target.starts_with("x86_64-apple-");
+    // target may become `x86_64-apple-macosx10.7.0` (or similar) and
+    // fail. Other Apple targets (iOS, tvOS and so on) share these prefixes, so also match the OS.
+    let is_x86_64_darwin_target =
+        session.target.llvm_target.starts_with("x86_64-apple-") && session.target.os == Os::MacOs;
     // looking for `arm64-apple-*`
-    let is_arm64_darwin_target = session.target.llvm_target.starts_with("arm64-apple-");
+    let is_arm64_darwin_target =
+        session.target.llvm_target.starts_with("arm64-apple-") && session.target.os == Os::MacOs;
+    // `riscv64gc-unknown-linux-gnu`, whose LLVM target drops the `gc`.
+    // `riscv64a23-unknown-linux-gnu` and `riscv64-wrs-vxworks` share that LLVM target, so also
+    // match the OS and the features that `target_config` hardcodes.
+    let is_riscv64_linux_target = session.target.llvm_target == "riscv64-unknown-linux-gnu"
+        && session.target.os == Os::Linux
+        && session.target.features == "+m,+a,+f,+d,+c,+zicsr,+zifencei";
 
     if !is_x86_64_linux_target
         && !is_arm64_linux_target
         && !is_x86_64_darwin_target
         && !is_arm64_darwin_target
+        && !is_riscv64_linux_target
     {
         let err_msg = format!(
             "Kani requires the target platform to be `x86_64-unknown-linux-gnu`, \
-            `aarch64-unknown-linux-gnu`, `x86_64-apple-*` or `arm64-apple-*`, but \
-            it is {}",
+            `aarch64-unknown-linux-gnu`, `riscv64gc-unknown-linux-gnu`, `x86_64-apple-darwin` \
+            or `aarch64-apple-darwin`, but it is `{}` (LLVM target `{}`)",
+            session.opts.target_triple.tuple(),
             session.target.llvm_target
         );
         session.dcx().err(err_msg);
@@ -801,8 +818,9 @@ impl GotoCodegenResults {
 
 /// Builds a machine model which is required by CBMC
 fn new_machine_model(sess: &Session) -> MachineModel {
-    // The model assumes a `x86_64-unknown-linux-gnu`, `x86_64-apple-darwin`
-    // or `aarch64-apple-darwin` platform. We check the target platform in function
+    // The model assumes a `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`,
+    // `riscv64gc-unknown-linux-gnu`, `x86_64-apple-darwin` or `aarch64-apple-darwin` platform.
+    // We check the target platform in function
     // `check_target` from src/kani-compiler/src/codegen_cprover_gotoc/compiler_interface.rs
     // and error if it is not any of the ones we expect.
     let architecture = &sess.target.arch;
@@ -895,6 +913,49 @@ fn new_machine_model(sess: &Session) -> MachineModel {
             MachineModel {
                 // CBMC calls it arm64, not aarch64
                 architecture: "arm64".to_string(),
+                alignment,
+                bool_width,
+                char_is_unsigned,
+                char_width,
+                double_width,
+                float_width,
+                int_width,
+                is_big_endian,
+                long_double_width,
+                long_int_width,
+                long_long_int_width,
+                memory_operand_size: int_width / 8,
+                null_is_zero: true,
+                pointer_width,
+                rounding_mode: RoundingMode::ToNearest,
+                short_int_width,
+                single_width,
+                wchar_t_is_unsigned,
+                wchar_t_width,
+                word_size: int_width,
+            }
+        }
+        Arch::RiscV64 => {
+            // The RISC-V psABI's LP64D data model, which is also what CBMC's
+            // `set_arch_spec_riscv64` assumes: `char` is unsigned, `wchar_t` is a signed `int`,
+            // and `long double` is IEEE binary128.
+            // https://github.com/riscv-non-isa/riscv-elf-psabi-doc/blob/master/riscv-cc.adoc
+            let bool_width = 8;
+            let char_is_unsigned = true;
+            let char_width = 8;
+            let double_width = 64;
+            let float_width = 32;
+            let int_width = 32;
+            let long_double_width = 128;
+            let long_int_width = 64;
+            let long_long_int_width = 64;
+            let short_int_width = 16;
+            let single_width = 32;
+            let wchar_t_is_unsigned = false;
+            let wchar_t_width = 32;
+
+            MachineModel {
+                architecture: "riscv64".to_string(),
                 alignment,
                 bool_width,
                 char_is_unsigned,

@@ -11,7 +11,8 @@ mod parser;
 mod sysroot;
 
 use crate::sysroot::{
-    build_bin, build_lib, build_tools, kani_no_core_lib, kani_playback_lib, kani_sysroot_lib,
+    build_bin, build_lib, build_target_lib, build_tools, kani_no_core_lib, kani_playback_lib,
+    kani_sysroot_lib,
 };
 use anyhow::{Result, bail};
 use clap::Parser;
@@ -25,6 +26,9 @@ fn main() -> Result<()> {
             let bin_folder = &build_bin(&build_parser.args)?;
             if !build_parser.skip_libs {
                 build_lib(bin_folder)?;
+                for target in &build_parser.lib_targets {
+                    build_target_lib(bin_folder, target)?;
+                }
             }
             Ok(())
         }
