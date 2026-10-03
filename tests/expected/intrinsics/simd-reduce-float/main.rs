@@ -1,8 +1,8 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Checks that `simd_reduce_max` and `simd_reduce_min` on floating-point lanes, whose NaN handling
-//! Kani does not model, are reported as unsupported.
+//! Checks that `simd_reduce_max` and `simd_reduce_min` on floating-point lanes, which the intrinsics
+//! do not accept, are reported as unsupported.
 #![feature(repr_simd, core_intrinsics)]
 use std::intrinsics::simd::{simd_reduce_max, simd_reduce_min};
 

@@ -1565,9 +1565,9 @@ impl GotocCtx<'_, '_> {
         )
     }
 
-    /// `simd_reduce_max` (`is_max`) or `simd_reduce_min` over integer lanes. Float lanes have
-    /// IEEE `maxNum`/`minNum` semantics, which this does not model, so they are reported as
-    /// unsupported.
+    /// `simd_reduce_max` (`is_max`) or `simd_reduce_min`. Both take integer vectors only (portable
+    /// SIMD's float `reduce_max`/`reduce_min` fold with `max`/`min` instead), so any other lane type
+    /// is reported as unsupported.
     fn codegen_simd_reduce_max_min(
         &mut self,
         is_max: bool,
@@ -1578,9 +1578,9 @@ impl GotocCtx<'_, '_> {
         loc: Location,
     ) -> Stmt {
         let (size, lane_ty) = self.simd_size_and_type(farg_types[0]);
-        if lane_ty.kind().is_float() {
+        if !lane_ty.kind().is_integral() {
             return self.codegen_unimplemented_stmt(
-                &format!("`{intrinsic_str}` on floating-point lanes"),
+                &format!("`{intrinsic_str}` on non-integer lane type `{lane_ty}`"),
                 loc,
                 "https://github.com/model-checking/kani/issues/new/choose",
             );
