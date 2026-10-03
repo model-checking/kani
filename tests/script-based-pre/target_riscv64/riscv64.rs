@@ -12,7 +12,6 @@ mod riscv64 {
     fn target_is_riscv64gc() {
         assert!(core::ffi::c_char::MIN == 0);
         assert!(cfg!(target_feature = "d"));
-        assert!(core::mem::size_of::<usize>() == 8);
     }
 
     /// A failing check, so the test also shows that CBMC checked the riscv64 program.

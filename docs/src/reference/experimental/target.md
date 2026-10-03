@@ -52,9 +52,10 @@ cargo kani --target riscv64gc-unknown-linux-gnu -Z unstable-options
   Kani wrote. When `goto-cc` links goto binaries, the first input's architecture symbols win, and
   Kani currently passes `kani_lib.c` to the link as a C source, which `goto-cc` compiles with the
   host's configuration. On macOS a cross-target run therefore reports the host's `arm64` and
-  `char_is_unsigned = 0` there. The Rust side of the goto program spells out its own widths and
-  signedness, which is what the proof checks, and every target Kani accepts has the same C type
-  widths as every supported host. Compiling `kani_lib.c` to a goto object ahead of time and
+  `char_is_unsigned = 0` there, and a 64-bit `long double` where riscv64's is 128-bit. The Rust
+  side of the goto program spells out its own widths and signedness, which is what the proof
+  checks, so this matters only where CBMC interprets C: `kani_lib.c`, its C library models, and
+  any C code a harness reaches. Compiling `kani_lib.c` to a goto object ahead of time and
   linking it after the Rust inputs would keep the model Kani wrote.
 * Inline assembly is unsupported on every target, as it is on the host. Code behind
   `core::arch::asm!` has to be [stubbed](stubbing.md) to be verified.

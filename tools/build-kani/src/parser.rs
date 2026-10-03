@@ -23,7 +23,7 @@ pub struct BuildDevParser {
     pub skip_libs: bool,
     /// Also build Kani's verification libraries for this target triple, so that
     /// `kani --target <TRIPLE> -Z unstable-options` can verify for it. May be repeated.
-    #[clap(long = "lib-target", value_name = "TRIPLE")]
+    #[clap(long = "lib-target", value_name = "TRIPLE", conflicts_with = "skip_libs")]
     pub lib_targets: Vec<String>,
 }
 
