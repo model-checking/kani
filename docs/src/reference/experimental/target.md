@@ -48,12 +48,14 @@ cargo kani --target riscv64gc-unknown-linux-gnu -Z unstable-options
 * `--concrete-playback` is rejected with a non-host `--target`, because the generated test runs
   on the host.
 * The `verify-std` subcommand does not support `--target`.
-* After linking, `goto-cc` configures itself for the host, so the `__CPROVER_architecture_*`
-  symbols in the final `.out` are the host's rather than the ones Kani wrote; on macOS a
-  cross-target run reports the host's `arm64` and `char_is_unsigned = 0` there. The Rust side of
-  the goto program spells out its own widths and signedness, which is what the proof checks. This
-  is [#2086](https://github.com/model-checking/kani/issues/2086)'s problem in general form, and
-  `goto-cc`'s `-march` table has no entry for most Kani targets.
+* The `__CPROVER_architecture_*` symbols in the final `.out` are the host's rather than the ones
+  Kani wrote. When `goto-cc` links goto binaries, the first input's architecture symbols win, and
+  Kani currently passes `kani_lib.c` to the link as a C source, which `goto-cc` compiles with the
+  host's configuration. On macOS a cross-target run therefore reports the host's `arm64` and
+  `char_is_unsigned = 0` there. The Rust side of the goto program spells out its own widths and
+  signedness, which is what the proof checks, and every target Kani accepts has the same C type
+  widths as every supported host. Compiling `kani_lib.c` to a goto object ahead of time and
+  linking it after the Rust inputs would keep the model Kani wrote.
 * Inline assembly is unsupported on every target, as it is on the host. Code behind
   `core::arch::asm!` has to be [stubbed](stubbing.md) to be verified.
 * Only 64-bit little-endian targets are supported. A 32-bit target needs `goto-cc -m32` and a
