@@ -251,7 +251,7 @@ pub struct VerificationArgs {
     pub default_unwind: Option<u32>,
 
     /// Output the verification results to a JSON file at the specified path.
-    /// This feature is unstable and it requires `-Z unstable-options` to be used
+    /// This feature is unstable and it requires `-Z export-json` to be used
     #[arg(long)]
     pub export_json: Option<PathBuf>,
 
@@ -817,7 +817,7 @@ impl ValidateArgs for VerificationArgs {
             self.common_args.check_unstable(
                 self.export_json.is_some(),
                 "export-json",
-                UnstableFeature::UnstableOptions,
+                UnstableFeature::ExportJson,
             )?;
 
             Ok(())
@@ -1006,20 +1006,22 @@ impl ValidateArgs for VerificationArgs {
                 ),
             ));
         }
-        if let Some(out_file) = &self.sarif
-            && out_file.exists()
-            && out_file.is_dir()
-        {
-            return Err(Error::raw(
-                ErrorKind::InvalidValue,
-                format!(
-                    "Invalid argument: `--sarif` argument `{}` is a directory",
-                    out_file.display()
-                ),
-            ));
-        }
+        reject_existing_dir("--sarif", self.sarif.as_deref())?;
+        reject_existing_dir("--export-json", self.export_json.as_deref())?;
 
         Ok(())
+    }
+}
+
+/// An output-file flag must not point at a directory: the write would fail only after
+/// verification has run.
+fn reject_existing_dir(flag: &str, path: Option<&Path>) -> Result<(), Error> {
+    match path {
+        Some(path) if path.is_dir() => Err(Error::raw(
+            ErrorKind::InvalidValue,
+            format!("Invalid argument: `{flag}` argument `{}` is a directory", path.display()),
+        )),
+        _ => Ok(()),
     }
 }
 
@@ -1273,21 +1275,39 @@ mod tests {
     #[test]
     fn check_export_json_conflicts() {
         expect_validation_error(
-            "kani file.rs -Z unstable-options --export-json out.json --output-format=old",
+            "kani file.rs -Z export-json --export-json out.json --output-format=old",
             ErrorKind::ArgumentConflict,
         );
         expect_validation_error(
-            "kani file.rs -Z unstable-options --export-json out.json --only-codegen",
+            "kani file.rs -Z export-json --export-json out.json --only-codegen",
             ErrorKind::ArgumentConflict,
         );
         expect_validation_error(
-            "kani file.rs -Z unstable-options --export-json out.json --no-codegen",
+            "kani file.rs -Z export-json -Z unstable-options --export-json out.json --no-codegen",
             ErrorKind::ArgumentConflict,
         );
         expect_validation_error(
-            "kani file.rs -Z unstable-options -Z lean --export-json out.json",
+            "kani file.rs -Z export-json -Z lean --export-json out.json",
             ErrorKind::ArgumentConflict,
         );
+    }
+
+    #[test]
+    fn check_output_file_flags_reject_existing_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("dir with spaces");
+        std::fs::create_dir(&target).unwrap();
+        for flags in [&["--sarif"][..], &["-Z", "export-json", "--export-json"][..]] {
+            let mut args = vec![OsString::from("kani"), OsString::from("file.rs")];
+            args.extend(flags.iter().map(OsString::from));
+            args.push(target.as_os_str().to_os_string());
+            let verify_opts = StandaloneArgs::try_parse_from(args).unwrap().verify_opts;
+            assert_eq!(
+                verify_opts.validate().unwrap_err().kind(),
+                ErrorKind::InvalidValue,
+                "{flags:?}"
+            );
+        }
     }
 
     #[test]
@@ -1331,10 +1351,18 @@ mod tests {
     fn check_export_json_unstable() {
         check_opt!(
             "--export-json results.json",
-            Some(UnstableFeature::UnstableOptions),
+            Some(UnstableFeature::ExportJson),
             export_json,
             Some(PathBuf::from("results.json"))
         );
+    }
+
+    #[test]
+    fn check_export_json_unstable_options_alone_is_not_sufficient() {
+        let err =
+            parse_unstable_enabled("--export-json results.json", UnstableFeature::UnstableOptions)
+                .unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::MissingRequiredArgument);
     }
 
     #[test]

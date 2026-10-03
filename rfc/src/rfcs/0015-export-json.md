@@ -525,10 +525,17 @@ except for UTF-8 conversion* (captured with `to_string_lossy`, so a non-UTF-8 ar
 than round-tripped byte-for-byte): sufficient as a comparability signal, but not an exact argv to replay.
 Future flags must be assessed under this policy in the PR adding them.
 `--randomize-layout [seed]` changes the program's type layout; its seed is excluded here for a future subject/provenance block.
-`resolved_unwind` precedence is CLI `--unwind` > harness `#[kani::unwind]` > `--default-unwind`.
+`resolved_unwind` is the bound CBMC uses: Kani's own bound (CLI `--unwind` > harness `#[kani::unwind]` >
+`--default-unwind`) when there is one, otherwise the first `--unwind` in `--cbmc-args`. Kani's flags come first
+on CBMC's command line and CBMC takes the first occurrence.
 Requested attributes come verbatim from `.kani-metadata.json`; resolved solver/unwind are scalars or null.
-Solver precedence is last solver-selecting `--cbmc-args` override > CLI `--solver` > attribute > default;
-CBMC arguments follow Kani's flags. Bare `--smt2` lets CBMC choose and yields `resolved_solver: null`.
+`resolved_solver` is the solver CBMC selects from Kani's own solver flags (CLI `--solver` > attribute > default)
+followed by `--cbmc-args`, by CBMC's own rules: a named SMT solver flag wins over SAT flags, several named SMT
+flags resolve by CBMC's fixed priority whatever their order, and a repeated `--sat-solver`,
+`--external-sat-solver` or external SMT path takes its first occurrence, so `--cbmc-args --sat-solver X` does not
+replace the SAT solver Kani passes. With `--external-smt2-solver <path>` (or, without a named SMT flag,
+`--incremental-smt2-solver <path>`) the exported value is `<path>`. Bare `--smt2` lets CBMC choose and yields
+`resolved_solver: null`.
 
 ### Failure scenarios
 
@@ -583,10 +590,15 @@ outcome; `[]` means none retained, not proof that CBMC emitted none.
 | `…[].status` (in `failed_properties`, `unsupported_constructs`, `checks.other`, `covers.other`) | `SUCCESS`, `FAILURE`, `SATISFIED`, `UNSATISFIABLE`, `UNREACHABLE`, `UNDETERMINED`, `ERROR`, `UNKNOWN`, `COVERED`, `UNCOVERED` | closed |
 | `harnesses[].attributes.kind` | `"Proof"`, `"Test"`, `{"ProofForContract": {...}}` | closed (`HarnessKind`, 3 variants) |
 | `harnesses[].attributes.solver` | `"Cadical"`, `"Bitwuzla"`, `"Cvc5"`, `"Kissat"`, `"Minisat"`, `"Z3"`, or `{"Binary": "<path>"}` | **explicitly open** — see below |
-| `harnesses[].resolved_solver` | the lowercase spellings of the same six names, or an arbitrary binary-path string | **explicitly open** — see below |
+| `harnesses[].resolved_solver` | the lowercase solver names (the six above, plus other CBMC solver names such as `boolector`, `mathsat`, `yices`, `cprover-smt2`), or an arbitrary binary-path string | **explicitly open** — see below |
 
 Harness `OUT_OF_MEMORY` is inferred from CBMC-child status 137 (including SIGKILL mapped to `128 + 9`)
-when no property array exists; it is not measured memory. `TIMEOUT` arises only under `--harness-timeout`.
+or from CBMC's own `Out of memory` report, even when a property array exists; it is not measured memory.
+A property array counts only when CBMC printed its overall status (`cProverStatus`) after it and its
+exit status shows it finished reporting: 0, 10, or 6 with an `ERROR` property. Otherwise the harness is
+not `COMPLETED`: it is `OUT_OF_MEMORY` as above, else `CRASHED` with that status as `code`. So `code`
+can be `0` on `CRASHED`: CBMC exited 0 but did not print `cProverStatus`. `TIMEOUT` arises only under
+`--harness-timeout`.
 Read `attributes.should_panic` before interpreting the computed `failure_kind` classification:
 
 | `attributes.should_panic` | `failure_kind` | `outcome.verdict` |

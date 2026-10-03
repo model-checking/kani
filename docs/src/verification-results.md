@@ -175,3 +175,12 @@ In GitHub Actions, upload the SARIF file:
   with:
     sarif_file: kani.sarif
 ```
+
+## JSON output
+
+Kani can write the results of a run to a JSON file:
+```bash
+cargo kani -Z export-json --export-json kani.json
+```
+
+The file describes the tool versions, the configuration and the outcome of every harness. The format is unstable and may change between releases; see [RFC 0015](https://model-checking.github.io/kani/rfc/rfcs/0015-export-json.html) for the schema. The flag requires `-Z export-json`; `-Z unstable-options` alone is no longer enough.
