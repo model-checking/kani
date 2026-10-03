@@ -139,7 +139,16 @@ macro_rules! generate_iter {
                         true
                     }
                     fn len(&self) -> usize {
-                        (self.end - self.start) as usize
+                        // A `Range` with `start >= end` is empty (zero iterations). Otherwise use
+                        // `abs_diff` so the span never overflows the element type (the macro also
+                        // instantiates signed types, where a wide `end - start` would overflow).
+                        // Without this, the unchecked subtraction overflows when loop-contract
+                        // havoc produces `start > end` ("attempt to subtract with overflow").
+                        if self.end > self.start {
+                            self.end.abs_diff(self.start) as usize
+                        } else {
+                            0
+                        }
                     }
                 }
             };
