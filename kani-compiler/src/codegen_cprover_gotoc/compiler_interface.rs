@@ -610,12 +610,19 @@ fn check_target(session: &Session) {
     let is_x86_64_linux_target = session.target.llvm_target == "x86_64-unknown-linux-gnu";
     let is_arm64_linux_target = session.target.llvm_target == "aarch64-unknown-linux-gnu";
     // Comparison with `x86_64-apple-darwin` does not work well because the LLVM
-    // target may become `x86_64-apple-macosx10.7.0` (or similar) and fail
-    let is_x86_64_darwin_target = session.target.llvm_target.starts_with("x86_64-apple-");
+    // target may become `x86_64-apple-macosx10.7.0` (or similar) and
+    // fail. Other Apple targets (iOS, tvOS and so on) share these prefixes, so also match the OS.
+    let is_x86_64_darwin_target =
+        session.target.llvm_target.starts_with("x86_64-apple-") && session.target.os == Os::MacOs;
     // looking for `arm64-apple-*`
-    let is_arm64_darwin_target = session.target.llvm_target.starts_with("arm64-apple-");
+    let is_arm64_darwin_target =
+        session.target.llvm_target.starts_with("arm64-apple-") && session.target.os == Os::MacOs;
     // `riscv64gc-unknown-linux-gnu`, whose LLVM target drops the `gc`.
-    let is_riscv64_linux_target = session.target.llvm_target == "riscv64-unknown-linux-gnu";
+    // `riscv64a23-unknown-linux-gnu` and `riscv64-wrs-vxworks` share that LLVM target, so also
+    // match the OS and the features that `target_config` hardcodes.
+    let is_riscv64_linux_target = session.target.llvm_target == "riscv64-unknown-linux-gnu"
+        && session.target.os == Os::Linux
+        && session.target.features == "+m,+a,+f,+d,+c,+zicsr,+zifencei";
 
     if !is_x86_64_linux_target
         && !is_arm64_linux_target
@@ -625,8 +632,9 @@ fn check_target(session: &Session) {
     {
         let err_msg = format!(
             "Kani requires the target platform to be `x86_64-unknown-linux-gnu`, \
-            `aarch64-unknown-linux-gnu`, `riscv64gc-unknown-linux-gnu`, `x86_64-apple-*` \
-            or `arm64-apple-*`, but it is {}",
+            `aarch64-unknown-linux-gnu`, `riscv64gc-unknown-linux-gnu`, `x86_64-apple-darwin` \
+            or `aarch64-apple-darwin`, but it is `{}` (LLVM target `{}`)",
+            session.opts.target_triple.tuple(),
             session.target.llvm_target
         );
         session.dcx().err(err_msg);
@@ -811,7 +819,8 @@ impl GotoCodegenResults {
 /// Builds a machine model which is required by CBMC
 fn new_machine_model(sess: &Session) -> MachineModel {
     // The model assumes a `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`,
-    // `riscv64gc-unknown-linux-gnu`, `x86_64-apple-darwin` or `aarch64-apple-darwin` platform. We check the target platform in function
+    // `riscv64gc-unknown-linux-gnu`, `x86_64-apple-darwin` or `aarch64-apple-darwin` platform.
+    // We check the target platform in function
     // `check_target` from src/kani-compiler/src/codegen_cprover_gotoc/compiler_interface.rs
     // and error if it is not any of the ones we expect.
     let architecture = &sess.target.arch;
