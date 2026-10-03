@@ -1,0 +1,10 @@
+	 - Status: SUCCESS\
+	 - Description: "Check invariant before entry for loop search::<{closure@
+
+	 - Status: SUCCESS\
+	 - Description: "Check invariant after step for loop search::<{closure@
+
+<usize as std::slice::SliceIndex<[u8]>>::get_unchecked.assume.1\
+	 - Status: SUCCESS
+
+Complete - 3 successfully verified harnesses, 0 failures, 3 total.
