@@ -1,0 +1,841 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>0015-export-json - Kani RFC Book</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Design documents for Kani Rust Verifier">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-c118b845.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-ec82370f.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Kani RFC Book</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/model-checking/kani" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/model-checking/kani/edit/main/rfc/src/rfcs/0015-export-json.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <ul>
+<li><strong>Feature Name:</strong> Structured Verification Results (<code>export-json</code>)</li>
+<li><strong>Feature Request Issue:</strong> <a href="https://github.com/model-checking/kani/issues/942">#942</a></li>
+<li><strong>RFC PR:</strong> <a href="https://github.com/model-checking/kani/pull/4727">#4727</a></li>
+<li><strong>Status:</strong> Under Review</li>
+<li><strong>Version:</strong> 0</li>
+<li><strong>Proof-of-concept:</strong> Implemented; the example below is the proposed schema, not a verbatim
+dump of the proof-of-concept’s own output (see the note at the start of “Example”).</li>
+</ul>
+<hr>
+<h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
+<p>Specify the machine-readable file that Kani’s <code>--export-json &lt;path&gt;</code> flag writes. The flag shipped
+in <a href="https://github.com/model-checking/kani/pull/4472">#4472</a> and is unstable. The file describes one
+verification run: per-harness outcome, failed properties, check and cover outcomes by status,
+resource cost, and run-result evidence (tool versions, configuration, harness selection) for
+interpreting that outcome. It is evidence about the run, not enough to reproduce it byte-for-byte
+(<code>cbmc_args</code> is recorded verbatim but is not a replayable argv). Whether this schema supersedes the
+shipped v1 shape is the first open question.</p>
+<p>This RFC is the complete normative reference. Informative-only explanations, implementation notes and rationale are collected in the accompanying PR’s “Extended reference (informative)” and add no normative requirements.</p>
+<h2 id="user-impact"><a class="header" href="#user-impact">User Impact</a></h2>
+<p>Issue <a href="https://github.com/model-checking/kani/issues/942">#942</a>, cited by a <code>kani-driver</code> TODO, requests
+machine-readable output. Kani’s <code>tools/benchcomp/benchcomp/parsers/kani_perf.py</code> regex-parses stdout for
+<code>Runtime Solver</code>, <code>Runtime Symex</code> and <code>Generated N VCC(s)</code>; other consumers grep verdicts, cover counts
+and verification time. Formatting changes can silently make these matches disappear.
+This helps CI dashboards detect regressions, large verification efforts identify meaningless proofs,
+industrial pipelines collect cost/outcome, and Kani’s own tooling stop scraping.</p>
+<h3 id="the-specific-gap-a-proof-can-pass-while-proving-nothing"><a class="header" href="#the-specific-gap-a-proof-can-pass-while-proving-nothing">The specific gap: a proof can pass while proving nothing</a></h3>
+<p>A contradictory <code>kani::assume</code> makes subsequent assertions unreachable, yet the harness reports
+<code>VERIFICATION:- SUCCESSFUL</code> and exits 0, even for <code>assert!(x != x)</code>. Text reports unreachable checks;
+exit-code-only consumers cannot distinguish a non-vacuous proof. Default reachability checking demotes
+unreachable assertions from <code>Success</code> to <code>Unreachable</code>. <strong>Shipped JSON already carries these processed
+statuses and an unreachable count</strong> through <code>VerificationResult.results</code>; this RFC defines property
+identities, vacuity predicates and completeness.
+<strong>Downside.</strong> A schema limits change; the unstable flag and explicit version allow consumer-driven corrections.</p>
+<h3 id="relationship-to-the-shipped-implementation-4472"><a class="header" href="#relationship-to-the-shipped-implementation-4472">Relationship to the shipped implementation (#4472)</a></h3>
+<p><a href="https://github.com/model-checking/kani/pull/4472">PR #4472</a>, merged 2026-08-12, ships the flag behind
+<code>-Z unstable-options</code>, with count summaries and detail arrays joined by <code>harness_id == pretty_name</code>
+and Rust <code>Debug</code>-cased statuses. This RFC assumes migration to the proposed shape; superseding the
+shipped shape remains open. Number <code>0015</code> is free: #4472 merged without an RFC file.</p>
+<h2 id="user-experience"><a class="header" href="#user-experience">User Experience</a></h2>
+<pre><code>cargo kani -Z export-json --export-json results.json
+</code></pre>
+<p>This command uses the dedicated gate proposed by this RFC. The shipped flag uses
+<code>-Z unstable-options</code>; see “Name and gate” below.</p>
+<p>The flag is additive: existing rendered output is unchanged and the file is written in addition to
+it; omitting the flag changes nothing. One combination is rejected: <code>--output-format=old</code>
+bypasses CBMC’s structured JSON entirely (<code>run_terminal_timeout</code> mocks a success/failure result with
+zero properties and treats a timeout as success), so <code>--export-json</code> under it would produce a
+well-formed file indistinguishable from the results of an actual successful verification run, even for a run that timed out. The argument
+parser rejects the combination with an explicit error before verification starts.</p>
+<h3 id="interaction-with-other-flags"><a class="header" href="#interaction-with-other-flags">Interaction with other flags</a></h3>
+<ul>
+<li><strong><code>--only-codegen</code>:</strong> rejected, like <code>--sarif</code>; no verification results exist.</li>
+<li><strong><code>--jobs N</code>:</strong> allowed. Sort <code>harnesses[]</code> by <code>(crate_name, file, line, name)</code>, not completion order.
+Determinism covers structure and ordering; timestamps, wall and verification times remain volatile.</li>
+<li><strong><code>--output-into-files</code>:</strong> independent; rendered text and the JSON file have separate destinations.</li>
+<li><strong>Multi-crate <code>cargo kani</code>:</strong> one file per invocation covering every harness in the run, distinguished
+by <code>crate_name</code>; later crates do not overwrite earlier results.</li>
+<li><strong>Path <code>-</code>:</strong> a literal filename. Stdout streaming is deferred because it has no atomic-rename target.</li>
+<li><strong>Existing directory as path:</strong> reject at argument parsing, as <code>--sarif</code> does; shipped code fails at write time.</li>
+</ul>
+<p><strong>Name and gate.</strong> <code>--results-json</code> would identify the artifact more clearly; <code>--export-json</code> stays
+provisional to match the PoC and #942. This RFC proposes dedicated <code>-Z export-json</code> gating so the
+artifact can stabilize or be dropped independently. Migration must register <code>ExportJson</code> in
+<code>kani_metadata::UnstableFeature</code>, change argument validation, and update tests and documentation.</p>
+<h3 id="example"><a class="header" href="#example">Example</a></h3>
+<p>This proposed-schema example is illustrative, not a measured run or verbatim PoC output.
+The PoC’s synthetic test supports the illustrated semantics.</p>
+<pre><code class="language-rust">#[kani::proof]
+fn check_contradictory_assume() {
+    let x: u8 = kani::any();
+    kani::assume(x &gt; 10 &amp;&amp; x &lt; 5); // contradictory: never true
+    assert!(x &lt; 5);
+    assert!(x &gt; 10);
+}</code></pre>
+<pre><code>kani-driver src/main.rs -Z export-json --export-json out.json
+</code></pre>
+<pre><code class="language-json">{
+  "schema_version": "0.1.0",
+  "kani_commit": "7b125f1b47e36ca4cc50c4041abeca01912f80f9",
+  "kani_commit_dirty": false,
+  "tools": {
+    "kani": "0.67.0",
+    "rustc": "1.98.0-nightly (14210df0e 2026-05-31)",
+    "cbmc": "6.10.0 (cbmc-6.10.0)"
+  },
+  "enabled_unstable_features": ["export-json"],
+  "harness_selection": {
+    "requested_filters": [],
+    "exact": false,
+    "unmatched_filters": [],
+    "matched_count": 1
+  },
+  "harness_timeout_s": null,
+  "configuration": {
+    "checks": {
+      "memory_safety": true,
+      "overflow": true,
+      "unwinding": true,
+      "undefined_function": true,
+      "assertion_reach_checks": true,
+      "ignore_global_asm": false,
+      "extra_pointer_checks": false,
+      "assert_contracts": true,
+      "prove_safety_only": false
+    },
+    "coverage_enabled": false,
+    "cbmc_args": []
+  },
+  "outcome": { "kind": "COMPLETED" },
+  "run_state": "COMPLETE",
+  "target": "x86_64-unknown-linux-gnu",
+  "started_at": "2026-08-07T06:53:13Z",
+  "wall_time_s": 0.04466111,
+  "harnesses": [
+    {
+      "name": "check_contradictory_assume",
+      "crate_name": "main",
+      "file": "src/main.rs",
+      "line": 2,
+      "contract": null,
+      "is_automatically_generated": false,
+      "has_loop_contracts": false,
+      "is_bounded": false,
+      "attributes": {
+        "kind": "Proof",
+        "should_panic": false,
+        "solver": null,
+        "unwind_value": null,
+        "stubs": [],
+        "verified_stubs": []
+      },
+      "outcome": { "kind": "COMPLETED", "verdict": "SUCCESS" },
+      "resolved_solver": "cadical",
+      "resolved_unwind": null,
+      "generated_concrete_test": false,
+      "resources": {
+        "verification_time_s": 0.010809311
+      },
+      "n_properties": 2,
+      "n_failed": 0,
+      "failure_kind": "NONE",
+      "failed_properties": [],
+      "unsupported_constructs": [],
+      "warnings": [],
+      "warnings_truncated": 0,
+      "checks": {
+        "total": 2,
+        "success": 0,
+        "failure": [],
+        "unreachable": [
+          "check_contradictory_assume.assertion.1",
+          "check_contradictory_assume.assertion.2"
+        ],
+        "undetermined": [],
+        "error": [],
+        "unknown": [],
+        "other": []
+      },
+      "covers": {
+        "total": 0,
+        "satisfied": [],
+        "unsatisfiable": [],
+        "unreachable": [],
+        "undetermined": [],
+        "error": [],
+        "unknown": [],
+        "other": []
+      }
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "successful": 1,
+    "failed": 0,
+    "checks_total": 2,
+    "checks_success": 0,
+    "covers_total": 0,
+    "covers_satisfied": 0
+  }
+}
+</code></pre>
+<p><code>outcome.verdict</code> is <code>SUCCESS</code> and the exit code is <code>0</code>; <code>checks.unreachable</code> identifies both
+properties that could not be exercised.</p>
+<h3 id="reading-the-results"><a class="header" href="#reading-the-results">Reading the results</a></h3>
+<p><strong>Selection.</strong> <code>name</code> is the fully qualified <code>pretty_name</code> (module path included; bare name at crate root).
+Join on <code>(crate_name, name)</code>: names are unique only within a crate. Rerun with
+<code>-p &lt;package&gt; --harness --exact &lt;name&gt;</code>; plain <code>--harness</code> matches substrings. The underscored rustc
+<code>crate_name</code> needs mapping to the Cargo package name when they differ. Generated harnesses cannot be
+selected by these flags: never use their name as <code>--harness</code>. Contract-proof harnesses are selectable
+by their own function path, not their contract target.</p>
+<p><strong>Bounded results.</strong> Mandatory <code>is_bounded</code> is true exactly when autoharness generated the harness and
+bounded at least one argument because <code>--autoharness-bounded-arguments</code> was passed and its type lacked
+an unbounded <code>Arbitrary</code> strategy. Success then proves only inputs within that bound. Manual harnesses
+and generated ones needing no bounded argument report false. This is independent of <code>is_ctor_based</code>;
+<code>is_bounded == false</code> alone does not establish unrestricted inputs.</p>
+<p>The predicates use abbreviated per-harness <code>outcome.verdict</code> and <code>checks.*</code>; both are inapplicable
+when <code>configuration.checks.assertion_reach_checks</code> is false:</p>
+<ul>
+<li><strong>Vacuous pass (normative).</strong> <code>verdict == "SUCCESS" &amp;&amp; checks.total &gt; 0 &amp;&amp; checks.unreachable.len() == checks.total</code>: every check in a passing harness is unreachable, so the proof examined nothing.
+(<code>success == 0</code> would be unsound — a passing <code>#[kani::should_panic]</code> harness has a <code>FAILURE</code> panic
+check; <code>checks.total &gt; 0</code> excludes a checkless harness; the <code>SUCCESS</code> guard excludes failing ones.)</li>
+<li><strong>Vacuity-suspect (advisory).</strong> <code>verdict == "SUCCESS" &amp;&amp; !checks.unreachable.is_empty()</code>: a passing
+harness with <em>any</em> unreachable check, catching <em>partial</em> vacuity the normative rule misses. Advisory
+because it can flag deliberate unreachability (a deliberately dead assertion satisfies it). It reads
+only <code>checks.unreachable</code>; an unreachable <em>cover</em> is recorded in <code>covers.unreachable</code> and does not satisfy it.</li>
+</ul>
+<p>With reach-checks off, contradictory assumptions can leave assertions in <code>checks.success</code>: this run
+cannot report vacuity through <code>checks.unreachable</code>. For cover-only vacuity, consumers should additionally
+apply <code>covers.total &gt; 0 &amp;&amp; covers.unreachable.len() == covers.total</code> per harness; this schema does not.
+Mandatory <code>configuration.coverage_enabled</code> records whether <code>--coverage</code> generated excluded <code>code_coverage</code> properties.</p>
+<p><strong>Completeness.</strong> Proposed <code>run_state</code> replaces PoC <code>run_complete</code>; marker versus deletion remains open.
+Each write puts full JSON in a temporary file in the target directory, then atomically renames it onto
+the target (same-filesystem POSIX rename). A mid-write kill leaves the previous target and possibly an
+orphaned temp file, never a partially written target. After building and selecting harnesses, when
+verification begins, an atomic <code>INCOMPLETE</code> marker replaces any earlier file. It contains known
+pre-verification fields, without <code>outcome</code>, <code>wall_time_s</code>, <code>summary</code> or <code>harnesses[]</code>.
+First check <code>schema_version</code> (refuse unsupported major or, pre-1.0, minor), then <code>run_state</code>:</p>
+<ul>
+<li>Only <code>COMPLETE</code> is complete verification evidence: every selected harness has an entry, regardless of outcome.</li>
+<li><code>PARTIAL</code>/<code>NO_HARNESSES_SELECTED</code> are trustworthy finished exports of missing results/empty selection, not complete evidence.</li>
+<li><code>INCOMPLETE</code> or a missing file means export did not finish (write failure or abnormal termination).</li>
+</ul>
+<p>Compilation errors/rejected filters precede the marker and leave existing files untouched; stale results
+are invalidated only from the marker onward. Existence-only consumers fail open on a verdict-less marker;
+deletion fails closed on <code>ENOENT</code>. Concurrent writers to one path are unsupported; last rename wins.
+<code>NO_HARNESSES_SELECTED</code> means an unfiltered project/workspace with no selectable proof harness or eligible
+autoharness function: <code>requested_filters == []</code>, <code>unmatched_filters == []</code>, <code>matched_count == 0</code>.
+A wholly unmatched filter set, or any unmatched <code>--exact</code> filter, errors non-zero before export (#4743).
+Nonempty <code>unmatched_filters</code> occurs only without <code>--exact</code> in <code>COMPLETE</code>/<code>PARTIAL</code> when another filter matched.</p>
+<h2 id="rationale-and-alternatives"><a class="header" href="#rationale-and-alternatives">Rationale and alternatives</a></h2>
+<h3 id="why-not-extend---sarif"><a class="header" href="#why-not-extend---sarif">Why not extend <code>--sarif</code>?</a></h3>
+<p>Stable, ungated SARIF could carry this data; skipping covers/successes is Kani’s writer choice.
+Separation avoids coupling stable SARIF to unstable schema changes and keeps proof/cover/vacuity rows
+for CI while scanners retain empty results on success. SARIF has no native vacuity representation, only property bags.
+<code>--sarif</code> stays unchanged. Both writers project upstream <code>VerificationResult</code>/<code>Vec&lt;Property&gt;</code>, not a shared
+results object. Shared path/solver/unwind/failure interpretation and cross-artifact tests should keep
+them consistent; these are development practices, since shared inputs do not guarantee shared interpretation.</p>
+<h3 id="summary-summary"><a class="header" href="#summary-summary">Summary (<code>summary.*</code>)</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Field</th><th>Definition</th></tr>
+</thead>
+<tbody>
+<tr><td><code>total</code></td><td><code>harnesses.len()</code>.</td></tr>
+<tr><td><code>successful</code></td><td>Count of harnesses with <code>outcome.kind == "COMPLETED" &amp;&amp; outcome.verdict == "SUCCESS"</code>.</td></tr>
+<tr><td><code>failed</code></td><td>Count of harnesses with <code>outcome.kind == "COMPLETED" &amp;&amp; outcome.verdict == "FAILURE"</code>.</td></tr>
+<tr><td><code>checks_total</code></td><td>Sum of <code>harnesses[].checks.total</code> over <code>COMPLETED</code> harnesses only.</td></tr>
+<tr><td><code>checks_success</code></td><td>Sum of <code>harnesses[].checks.success</code> over <code>COMPLETED</code> harnesses only.</td></tr>
+<tr><td><code>covers_total</code></td><td>Sum of <code>harnesses[].covers.total</code> over <code>COMPLETED</code> harnesses only.</td></tr>
+<tr><td><code>covers_satisfied</code></td><td>Sum of <code>len(harnesses[].covers.satisfied)</code> over <code>COMPLETED</code> harnesses only.</td></tr>
+</tbody>
+</table>
+</div>
+<p>Non-<code>COMPLETED</code> harnesses count in neither <code>successful</code> nor <code>failed</code>: <code>successful + failed &lt;= total</code>,
+with the gap exactly their count. They contribute nothing to check/cover sums; null is not counted as zero.
+Reported <code>summary.total</code> and pre-verification <code>harness_selection.matched_count</code> obey:</p>
+<ul>
+<li><code>COMPLETE</code> ⇒ <code>total == matched_count</code>; <code>PARTIAL</code> ⇒ <code>total &lt; matched_count</code>.
+Missing entries are not crash/timeout placeholders and do not establish whether harnesses ran (#4744).</li>
+<li><code>NO_HARNESSES_SELECTED</code> ⇒ <code>matched_count == 0 == total</code> and <code>requested_filters == []</code>.</li>
+<li><code>INCOMPLETE</code> has no <code>summary</code>; these identities do not apply.</li>
+</ul>
+<h3 id="compatibility-policy"><a class="header" href="#compatibility-policy">Compatibility policy</a></h3>
+<p><code>schema_version</code> is a semantic version:</p>
+<ul>
+<li><strong>Minor:</strong> add fields or explicitly open solver names (<code>attributes.solver</code>, <code>resolved_solver</code>).
+Consumers must accept unfamiliar solver names as valid; every other enum is closed.</li>
+<li><strong>Major:</strong> rename/remove fields, change meaning/type, add closed-enum variants (<code>outcome.kind</code>,
+<code>verdict</code>, <code>failure_kind</code>, <code>run_state</code>, <code>status</code>, <code>attributes.kind</code>), or move statuses from <code>other</code>
+into named buckets. Closed-enum additions wait for a major bump; default arms remain encouraged.</li>
+<li><strong>Ignore unknown fields:</strong> rejecting them forfeits forward compatibility within a major version.</li>
+<li><strong>Refuse unknown majors:</strong> existing fields may have changed meaning.</li>
+<li><strong>Warnings:</strong> presence/shape are contractual; contents, wording and size are outside these guarantees.</li>
+</ul>
+<p>Consumer needs can add fields in minor versions without redesign or a competing artifact.
+<strong>Semver-zero:</strong> while <code>-Z</code> gated, <code>0.x</code> minor/major distinctions express intent, not a promise.
+Breaking changes may land in minor bumps. Assert an exact minor (e.g. <code>== "0.1.0"</code> or a small verified
+allow-list); refuse other <code>0.x</code> values as unknown majors. Backward compatibility starts at <code>1.0</code>.
+Check <code>schema_version</code> first.</p>
+<p>Before leaving <code>-Z</code> (see <code>rfc/src/template.md</code>):</p>
+<ol>
+<li>Resolve every open question, particularly processed versus raw view.</li>
+<li>Obtain at least one release cycle of feedback from a real verdict-level consumer, in-tree or out-of-tree.
+<code>benchcomp</code>’s <code>kani_perf</code> parser is not that consumer; its migration is not a prerequisite. It needs
+solver/symex time, VCC counts and program-step figures, excluded here, and moves only in the
+follow-up adding structured CBMC statistics.</li>
+<li>Settle whether to ship a JSON Schema document (<code>schemars</code>).</li>
+</ol>
+<h3 id="why-a-new-artifact-rather-than-extending-an-existing-one"><a class="header" href="#why-a-new-artifact-rather-than-extending-an-existing-one">Why a new artifact rather than extending an existing one?</a></h3>
+<p><code>kani list --format json</code> is pre-verification metadata; coverage output is per-region data;
+<code>--output-into-files</code> writes the same rendered text, split per harness; <code>.kani-metadata.json</code> is the
+compiler-to-driver channel. The per-harness text files do carry verification outcomes, but none of
+these artifacts provides the structured run-and-verdict contract proposed here.</p>
+<h3 id="why-is-cbmc-statistics-data-excluded"><a class="header" href="#why-is-cbmc-statistics-data-excluded">Why is CBMC statistics data excluded?</a></h3>
+<p>Symex time, VCC counts and solver time require parsing CBMC free text. <code>benchcomp</code> needs structured
+CBMC statistics; moving that scraping into Kani would retain the same fragility.
+<code>warnings</code> carries <code>WARNING</code>-typed <code>--json-ui</code> messages as opaque display/log text; consumers must not
+pattern-match it. #4719 interprets ignored-quantifier warnings internally, but does not version their text.
+Each message has a fixed implementation-defined character-boundary cap, with <code>truncated: bool</code> and
+<code>original_chars: integer | null</code> (pre-truncation count, null exactly when not truncated).
+The array has a separate fixed count cap; <code>warnings_truncated</code> counts omitted entries, zero if none.
+These structural fields and warning presence/shape are schema-versioned; message text is not.</p>
+<h3 id="what-if-we-do-nothing"><a class="header" href="#what-if-we-do-nothing">What if we do nothing?</a></h3>
+<p>Consumers keep scraping, including Kani’s own. The status quo works until an output string changes,
+and then the breakage is silent: a grep that matches nothing looks exactly like a run with nothing
+to report. Exit-code-only consumers still miss vacuity, although shipped JSON already exposes
+unreachable statuses. Doing nothing now has a second cost: the shipped document becomes the de-facto
+contract. It already has <code>metadata.version: "1.0"</code>; this RFC proposes the explicit compatibility and
+completeness rules that consumers need alongside a version label.</p>
+<h2 id="open-questions"><a class="header" href="#open-questions">Open questions</a></h2>
+<ul>
+<li><strong>Supersede shipped v1?</strong> Migrate #4472’s unstable writer as assumed, without a deprecation cycle,
+or redraw this RFC around its shipped shape?</li>
+<li><strong>Processed or raw?</strong> Export processed properties/computed verdicts, agreeing with rendered results:
+reachability checks removed, some descriptions rewritten, successes demoted on fundamental failure.
+Also expose raw results, or leave them to CBMC’s <code>--json-ui</code>?</li>
+<li><strong>JSON Schema document?</strong> <code>schemars</code> would be a new workspace dependency requiring an explicit decision.</li>
+<li><strong>Marker or delete-up-front?</strong> The proposal uses a marker; see the completeness trade-offs above.
+Both choices become irreversible once consumed.</li>
+<li><strong>Autoharness classification?</strong> Export <code>chosen</code>/<code>skipped</code>, already in compiler-to-driver <code>AutoHarnessMetadata</code>?</li>
+<li><strong>Coverage results?</strong> Include here or leave to <code>kani-cov</code>?</li>
+<li><strong>Dropped/transformed shipped fields?</strong> Decide whether to restore <code>build_mode</code>, <code>mangled_name</code>,
+<code>end_line</code>, <code>goto_file</code>, per-check descriptions/locations, CBMC OS information or statistics.</li>
+<li><strong>Effective <code>--object-bits</code>?</strong> Restore shipped resolved encoding provenance under <code>configuration</code> or per harness?
+File/update a tracking issue on adoption; resolve representation before or at stabilization.</li>
+<li><strong>Path provenance?</strong> <code>file</code> is invocation-relative. Restore <code>project.workspace_root</code> or make paths
+workspace-relative? <code>output_dir</code> may stay dropped, but <code>--target-dir</code> changes it; do not assume a default.</li>
+<li><strong><code>is_ctor_based</code>?</strong> Constructor generation/mined-invariant filtering restricts success to admitted
+values independently of <code>is_bounded</code>. Representation is open; exports must state this restriction
+before stabilization. Omission cannot justify unrestricted proofs.</li>
+<li><strong>Final name?</strong> Settle <code>--export-json</code> versus <code>--results-json</code> before leaving <code>-Z</code>.</li>
+</ul>
+<p>Apply the configuration policy to every effective Kani option before stabilization, including loop-contract
+synthesis and the vtable restriction override; <code>cbmc_args</code> does not record these Kani options.</p>
+<h2 id="out-of-scope--future-improvements"><a class="header" href="#out-of-scope--future-improvements">Out of scope / Future Improvements</a></h2>
+<p>None of these additions is proposed now.</p>
+<ul>
+<li><strong>Full tool/solver provenance and host <code>machine</code> metadata:</strong> cut from v1 (#4731); file tracking
+issues on adoption.</li>
+<li><strong>Per-check timing/resources:</strong> used by GNATprove, unavailable from CBMC structured output today.</li>
+<li><strong>Reproducible counterexamples:</strong> expose <code>--concrete-playback</code>’s concrete value vector without source edits.</li>
+<li><strong>Finer failure classification:</strong> distinguish unwinding/undefined-function failures to guide retries or fixes.</li>
+<li><strong>Harness triviality signal:</strong> aggregate RFC 0003’s vacuity concern.</li>
+<li><strong>Aggregate coverage:</strong> defer to <code>kani-cov</code> and RFC 0011.</li>
+<li><strong>Contract trust chain:</strong> <code>stub_verified</code> needs a passing contract proof. Kani enforces its existence
+at compile time; both relationships here let consumers check its run-time result. Kani could report status later.</li>
+<li><strong>Per-harness peak memory:</strong> rejected process-wide <code>getrusage(RUSAGE_CHILDREN)</code>; accurate figures
+need per-child accounting (<code>wait4()</code> or a cgroup’s <code>memory.peak</code>).</li>
+</ul>
+<h2 id="normative-schema-reference"><a class="header" href="#normative-schema-reference">Normative schema reference</a></h2>
+<p>This RFC contains the proposed field contract and design rules.</p>
+<h3 id="field-reference"><a class="header" href="#field-reference">Field reference</a></h3>
+<p><code>null</code> means <em>not measured or not applicable</em>, never guessed; it differs from <code>0</code>, <code>false</code> and <code>[]</code>.
+“—” means never absent/null in a terminal document, subject to explicit per-outcome conditions.
+The narrower <code>INCOMPLETE</code> marker follows its presence matrix below.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Field</th><th>Type</th><th>Null?</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>schema_version</code></td><td>string (semver)</td><td>—</td><td>This document’s own version; see Compatibility policy.</td></tr>
+<tr><td><code>kani_commit</code></td><td>string</td><td>nullable</td><td>Git commit Kani was built from; <code>null</code> outside a git checkout.</td></tr>
+<tr><td><code>kani_commit_dirty</code></td><td>bool</td><td>nullable</td><td>Whether the build tree had uncommitted changes; <code>null</code> exactly when <code>kani_commit</code> is <code>null</code>.</td></tr>
+<tr><td><code>tools.kani</code></td><td>string</td><td>—</td><td>The Kani release producing this document (<code>env!("CARGO_PKG_VERSION")</code> at build time); always known.</td></tr>
+<tr><td><code>tools.rustc</code></td><td>string</td><td>nullable</td><td>rustc toolchain <code>kani-compiler</code> was built against; <code>null</code> if the probe failed.</td></tr>
+<tr><td><code>tools.cbmc</code></td><td>string</td><td>nullable</td><td>CBMC’s own <code>--version</code> output; <code>null</code> if it could not be probed.</td></tr>
+<tr><td><code>enabled_unstable_features</code></td><td>array of strings</td><td>never null, may be empty</td><td>Sorted <code>-Z</code> flags active for this run.</td></tr>
+<tr><td><code>harness_selection.requested_filters</code></td><td>array of strings</td><td>never null, may be empty</td><td>Raw <code>--harness</code> values; empty means no filter.</td></tr>
+<tr><td><code>harness_selection.exact</code></td><td>bool</td><td>—</td><td>Whether <code>--exact</code> was passed.</td></tr>
+<tr><td><code>harness_selection.unmatched_filters</code></td><td>array of strings</td><td>never null, may be empty</td><td>Filters matching nothing while another matched; only without <code>--exact</code>. A wholly unmatched set errors before export (#4743).</td></tr>
+<tr><td><code>harness_selection.matched_count</code></td><td>integer</td><td>—</td><td>Pre-verification match count; compare against <code>summary.total</code>/<code>run_state</code>.</td></tr>
+<tr><td><code>harness_timeout_s</code></td><td>number</td><td>nullable</td><td><code>--harness-timeout</code> value in seconds; <code>null</code> when unset.</td></tr>
+<tr><td><code>configuration.checks.*</code> (9 bools)</td><td>bool</td><td>— each</td><td>Nine mandatory bools, defined below under Configuration.</td></tr>
+<tr><td><code>configuration.coverage_enabled</code></td><td>bool</td><td>—</td><td>Mandatory; mirrors <code>--coverage</code>, default false. Generates excluded <code>code_coverage</code> properties; alongside <code>checks</code>, not inside it.</td></tr>
+<tr><td><code>configuration.cbmc_args</code></td><td>array of strings</td><td>never null, may be empty</td><td>Verbatim (UTF-8-lossy) <code>--cbmc-args</code>; a comparability signal, not a replayable argv.</td></tr>
+<tr><td><code>outcome.kind</code> (run level)</td><td><code>"COMPLETED"</code></td><td>—</td><td>Always <code>COMPLETED</code> in a terminal document; absent in the marker. No run-level <code>CRASHED</code> value.</td></tr>
+<tr><td><code>run_state</code></td><td><code>"INCOMPLETE"</code> | <code>"COMPLETE"</code> | <code>"PARTIAL"</code> | <code>"NO_HARNESSES_SELECTED"</code></td><td>—</td><td>Trust is based on this field; see Completeness under Reading the results.</td></tr>
+<tr><td><code>target</code></td><td>string</td><td>—</td><td>The Rust target triple Kani itself was built for.</td></tr>
+<tr><td><code>started_at</code></td><td>string</td><td>—</td><td>UTC, <code>YYYY-MM-DDTHH:MM:SSZ</code> (second resolution).</td></tr>
+<tr><td><code>wall_time_s</code></td><td>number</td><td>—</td><td>Seconds; volatile between runs by design (see “Interaction with other flags”).</td></tr>
+<tr><td><code>harnesses[]</code></td><td>array of harness objects</td><td>never null, may be empty (e.g. under <code>NO_HARNESSES_SELECTED</code>)</td><td>Sorted by <code>(crate_name, file, line, name)</code>.</td></tr>
+<tr><td><code>harnesses[].name</code></td><td>string</td><td>—</td><td>Fully qualified <code>pretty_name</code>; see Selection under Reading the results.</td></tr>
+<tr><td><code>harnesses[].crate_name</code></td><td>string</td><td>—</td><td>Distinguishes same-named harnesses across crates in one workspace.</td></tr>
+<tr><td><code>harnesses[].file</code></td><td>string</td><td>—</td><td>Declaring-file path relative to the invocation directory; see the path-provenance open question.</td></tr>
+<tr><td><code>harnesses[].line</code></td><td>integer</td><td>—</td><td>1-based harness-function start line; end line is not exported.</td></tr>
+<tr><td><code>harnesses[].contract</code></td><td>object</td><td>nullable</td><td><code>null</code> when the harness carries no CBMC-level <code>assigns</code> contract.</td></tr>
+<tr><td><code>harnesses[].contract.contracted_function_name</code></td><td>string</td><td>— (when <code>contract</code> present)</td><td>The contract’s target function.</td></tr>
+<tr><td><code>harnesses[].contract.recursion_tracker</code></td><td>string</td><td>nullable</td><td>Non-null only for a <code>#[kani::recursive]</code> function.</td></tr>
+<tr><td><code>harnesses[].is_automatically_generated</code></td><td>bool</td><td>—</td><td>True for an autoharness-generated harness; not selectable with <code>--harness</code>/<code>--exact</code>.</td></tr>
+<tr><td><code>harnesses[].has_loop_contracts</code></td><td>bool</td><td>—</td><td>Whether the harness uses loop contracts.</td></tr>
+<tr><td><code>harnesses[].is_bounded</code></td><td>bool</td><td>—</td><td>Mandatory; see Bounded results under Reading the results.</td></tr>
+<tr><td><code>harnesses[].attributes.kind</code></td><td><code>"Proof"</code> | <code>"Test"</code> | <code>{"ProofForContract": {"target_fn": string}}</code></td><td>—</td><td>Requested metadata enum, including the object form for contract proofs.</td></tr>
+<tr><td><code>harnesses[].attributes.should_panic</code></td><td>bool</td><td>—</td><td>Whether <code>#[kani::should_panic]</code> is set.</td></tr>
+<tr><td><code>harnesses[].attributes.solver</code></td><td>string | <code>{"Binary": string}</code></td><td>nullable</td><td>The <em>requested</em> solver attribute; <code>null</code> when unset (default resolution applies). Compare <code>resolved_solver</code>.</td></tr>
+<tr><td><code>harnesses[].attributes.unwind_value</code></td><td>integer</td><td>nullable</td><td><code>#[kani::unwind(N)]</code> value, if set.</td></tr>
+<tr><td><code>harnesses[].attributes.stubs[]</code></td><td>array of <code>{original, replacement}</code> strings</td><td>never null, may be empty</td><td>Requested stubs.</td></tr>
+<tr><td><code>harnesses[].attributes.verified_stubs[]</code></td><td>array of strings</td><td>never null, may be empty</td><td>Functions stubbed by their verified contract.</td></tr>
+<tr><td><code>harnesses[].outcome.kind</code></td><td><code>"COMPLETED"</code> | <code>"TIMEOUT"</code> | <code>"OUT_OF_MEMORY"</code> | <code>"CRASHED"</code></td><td>—</td><td></td></tr>
+<tr><td><code>harnesses[].outcome.verdict</code></td><td><code>"SUCCESS"</code> | <code>"FAILURE"</code></td><td>present only on <code>COMPLETED</code>, never null there</td><td>The per-harness pass/fail call.</td></tr>
+<tr><td><code>harnesses[].outcome.code</code></td><td>integer</td><td>nullable, present only on <code>CRASHED</code></td><td>Process exit code when known; per-harness crashes still reach the terminal write.</td></tr>
+<tr><td><code>harnesses[].outcome.message</code></td><td>string</td><td>nullable, present only on <code>CRASHED</code></td><td>Free-text reason for this harness crash; wording is non-contractual.</td></tr>
+<tr><td><code>harnesses[].resolved_solver</code></td><td>string</td><td>nullable</td><td>The solver CBMC actually runs with; <code>null</code> when CBMC chooses for itself (bare <code>--smt2</code>).</td></tr>
+<tr><td><code>harnesses[].resolved_unwind</code></td><td>integer</td><td>nullable</td><td>The effective <code>--unwind</code> bound; <code>null</code> when none applies.</td></tr>
+<tr><td><code>harnesses[].generated_concrete_test</code></td><td>bool</td><td>—</td><td>Whether <code>--concrete-playback</code> produced a test for this harness.</td></tr>
+<tr><td><code>harnesses[].resources.verification_time_s</code></td><td>number</td><td>—</td><td>Always present; on timeout/OOM/crash, elapsed time until that outcome, not a verification duration.</td></tr>
+<tr><td><code>harnesses[].n_properties</code></td><td>integer</td><td>nullable; <code>null</code> except on <code>COMPLETED</code></td><td><code>checks.total + covers.total</code>; excludes <code>code_coverage</code> properties.</td></tr>
+<tr><td><code>harnesses[].n_failed</code></td><td>integer</td><td>nullable; <code>null</code> except on <code>COMPLETED</code></td><td><code>failed_properties.len()</code>.</td></tr>
+<tr><td><code>harnesses[].failure_kind</code></td><td><code>"NONE"</code> | <code>"PANICS_ONLY"</code> | <code>"OTHER"</code> | <code>"ERROR"</code></td><td>present only on <code>COMPLETED</code>, never null there</td><td>Raw failure classification, distinct from verdict; see the truth table below.</td></tr>
+<tr><td><code>harnesses[].failed_properties[]</code></td><td>array of property objects</td><td>never null, may be empty (empty on a non-<code>COMPLETED</code> harness)</td><td>Full shape below.</td></tr>
+<tr><td><code>harnesses[].unsupported_constructs[]</code></td><td>array of property objects, same shape</td><td>never null, may be empty</td><td>Rust/MIR constructs Kani can’t model; a reached one also appears in <code>failed_properties</code>.</td></tr>
+<tr><td><code>harnesses[].warnings[]</code></td><td>array of <code>{message: string, truncated: bool, original_chars: integer|null}</code></td><td>never null, may be empty</td><td>Structural fields are schema-versioned; message contents are not. See warning caps under Rationale.</td></tr>
+<tr><td><code>harnesses[].warnings_truncated</code></td><td>integer</td><td>—</td><td>Count of warnings dropped by the cap; zero if none.</td></tr>
+<tr><td><code>harnesses[].checks</code> / <code>.covers</code></td><td>objects</td><td>— (the object itself is never omitted)</td><td>Bucket shape below; per-outcome contents follow the presence matrix.</td></tr>
+<tr><td><code>summary.*</code> (7 integer fields)</td><td>integer</td><td>— each</td><td>Run-level totals; see the <code>Summary</code> discussion in “Rationale”.</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong><code>failed_properties[]</code> / <code>unsupported_constructs[]</code> element shape</strong> (a full property record):</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Field</th><th>Type</th><th>Null?</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>id</code></td><td>string</td><td>—</td><td>The CBMC-style property id, in <code>&lt;function&gt;.&lt;class&gt;.&lt;counter&gt;</code> general form, or the shorter <code>&lt;function&gt;.&lt;counter&gt;</code> / <code>&lt;class&gt;.&lt;counter&gt;</code> forms. Recursion unwinding also uses <code>&lt;function&gt;.recursion</code> (historically <code>.recursion</code>), with <strong>no numeric counter</strong>. The export reconstructs these forms from the parsed id, rather than using Kani’s display rendering. Ordinals (<code>&lt;counter&gt;</code>) are <strong>not</strong> promised stable across source changes: adding or removing an assertion upstream of one can renumber it.</td></tr>
+<tr><td><code>description</code></td><td>string</td><td>—</td><td>Free-form property description text.</td></tr>
+<tr><td><code>class</code></td><td>string</td><td>—</td><td>The property’s class (e.g. <code>"assertion"</code>, <code>"unsupported_construct"</code>).</td></tr>
+<tr><td><code>file</code></td><td>string</td><td>nullable</td><td>Source file, when CBMC recorded a location.</td></tr>
+<tr><td><code>line</code></td><td>string</td><td>nullable</td><td>Source line, <strong>as a string</strong>, not an integer — carried through verbatim from CBMC’s own field (contrast <code>harnesses[].line</code>, which is an integer).</td></tr>
+<tr><td><code>trace_available</code></td><td>bool</td><td>—</td><td>Whether a counterexample trace exists for this property.</td></tr>
+<tr><td><code>status</code></td><td>closed <code>CheckStatus</code> value</td><td>—</td><td></td></tr>
+</tbody>
+</table>
+</div>
+<p><strong><code>checks.other[]</code> / <code>covers.other[]</code> element shape</strong> (a bucketing record, not a full property):</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Field</th><th>Type</th><th>Null?</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>id</code></td><td>string</td><td>—</td><td>Same id format as above.</td></tr>
+<tr><td><code>status</code></td><td>closed <code>CheckStatus</code> value</td><td>—</td><td>The actual, unbucketed status; see Value domains below.</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>other[]</code> carries only <code>id</code> and <code>status</code>; full records are reserved for failed/unsupported properties.</p>
+<p><strong><code>checks{}</code> / <code>covers{}</code> bucket shape</strong>, both objects:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Field</th><th>Type</th><th>Null?</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>total</code></td><td>integer</td><td>nullable; <code>null</code> when the owning harness’s <code>outcome.kind</code> is not <code>COMPLETED</code></td><td>Every property this bucket accounts for.</td></tr>
+<tr><td><code>success</code> (checks only)</td><td>integer</td><td>nullable; <code>null</code> under the same condition as <code>total</code></td><td>A <strong>count</strong>, not an identity list.</td></tr>
+<tr><td><code>satisfied</code> (covers only)</td><td>array of ids</td><td>never null, may be empty (empty, not absent, on a non-<code>COMPLETED</code> harness)</td><td>An identity list (covers are user-authored and few).</td></tr>
+<tr><td><code>failure</code> (checks) / <code>unsatisfiable</code> (covers)</td><td>array of ids</td><td>never null, may be empty</td><td></td></tr>
+<tr><td><code>unreachable</code>, <code>undetermined</code>, <code>error</code>, <code>unknown</code></td><td>array of ids, each</td><td>never null, may be empty</td><td></td></tr>
+<tr><td><code>other[]</code></td><td>array of <code>{id, status}</code></td><td>never null, may be empty</td><td>See above.</td></tr>
+</tbody>
+</table>
+</div>
+<p>On non-<code>COMPLETED</code> harnesses, no property list exists: bucket totals and <code>checks.success</code> are null,
+every identity list is <code>[]</code>, and bucket arithmetic says nothing about the harness.
+On <code>COMPLETED</code> harnesses, <code>checks.total == success + len(failure) + len(unreachable) + len(undetermined) + len(error) + len(unknown) + len(other)</code>;
+symmetrically, <code>covers.total</code> sums all its lists, including <code>satisfied</code>. <code>n_properties == checks.total + covers.total</code>.
+Partition by <code>property_id.class</code>, independently of status: <code>cover</code> goes to covers, <code>code_coverage</code> is
+excluded from both buckets and <code>n_properties</code>, and every other class goes to checks. Cross-domain
+statuses stay in their class’s <code>other[]</code>. Successful-check identities are not exported; satisfied covers are named.
+<code>failed_properties[]</code> is exactly <code>checks.failure</code> with full records: non-cover/non-code-coverage
+properties with <code>FAILURE</code> status, excluding <code>checks.error</code> and all covers. Thus <code>n_failed == len(checks.failure)</code>.</p>
+<h3 id="configuration"><a class="header" href="#configuration">Configuration</a></h3>
+<p>All nine <code>configuration.checks.*</code> fields are mandatory bools; their names record effective check settings.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Field</th><th>Flag/default</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>assertion_reach_checks</code></td><td><code>--no-assertion-reach-checks</code>; true unless passed</td><td>Inserts reach checks before ordinary assertions; false prevents vacuity detection through <code>checks.unreachable</code>.</td></tr>
+<tr><td><code>ignore_global_asm</code></td><td><code>--ignore-global-asm</code></td><td>True suppresses the <code>global_asm!</code> error; behavior reachable only through it is absent, so success can be vacuous for its effects.</td></tr>
+<tr><td><code>extra_pointer_checks</code></td><td><code>--extra-pointer-checks</code></td><td>Adds invalid-pointer relational-operation and pointer-arithmetic-overflow obligations; totals are not comparable across settings.</td></tr>
+<tr><td><code>memory_safety</code></td><td><code>--no-memory-safety-checks</code> (also <code>--no-default-checks</code>, the whole group); default true</td><td>False leaves out-of-bounds accesses and invalid-pointer dereferences unchecked.</td></tr>
+<tr><td><code>overflow</code></td><td><code>--no-overflow-checks</code>; default true</td><td>False omits CBMC’s NaN and division-by-zero checks, not Rust/MIR arithmetic-overflow or integer division-by-zero assertions: <code>-C overflow-checks=on</code> remains, subject separately to <code>prove_safety_only</code>.</td></tr>
+<tr><td><code>unwinding</code></td><td><code>--no-unwinding-checks</code>; default true</td><td>False omits assertions that loop/recursion bounds cover every execution; behavior beyond bounds can be missed.</td></tr>
+<tr><td><code>undefined_function</code></td><td><code>--no-undefined-function-checks</code>; default true</td><td>False skips <code>assert-false-assume-false</code> bodies; calls remain with CBMC’s default nondeterministic returns, without modeling possible side effects.</td></tr>
+<tr><td><code>assert_contracts</code></td><td><code>--no-assert-contracts</code> requires <code>-Z function-contracts</code>; true unless passed</td><td>False uses <code>ContractMode::Original</code> for ordinary calls: original body, no contract assertions or assumptions. Success does not establish contract obligations. Explicit <code>proof_for_contract</code>/<code>stub_verified</code> modes take precedence and keep their instrumentation.</td></tr>
+<tr><td><code>prove_safety_only</code></td><td><code>--prove-safety-only</code> requires <code>-Z unstable-options</code>; default false</td><td>True converts <code>codegen_assert_assume</code>’s <code>PropertyClass::Assertion</code> checks, including user assertions/panics, to assumptions; success is conditional on them. Direct <code>codegen_assert</code> checks, including <code>CheckHook</code> Assertion properties, remain; conversion depends on code path, not just class.</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Policy for <code>configuration</code>.</strong> A flag belongs in this block when it changes <em>which properties are
+generated</em> or <em>what a status means</em>: when two runs differing only in it are not directly
+comparable, or when it can make a passing result prove less than it appears to. The nine <code>checks</code> flags
+and <code>coverage_enabled</code> meet that test (the partial inventory above identifies remaining gaps); future
+flags are added under this rule, each a minor schema change (a new field). <code>cbmc_args</code> is the catch-all
+for direct CBMC options this rule cannot name individually: anything passed straight to CBMC via
+<code>--cbmc-args</code> can change results in ways Kani cannot inspect, so it is
+recorded and two runs with different <code>cbmc_args</code> are not assumed comparable. It is recorded <em>verbatim
+except for UTF-8 conversion</em> (captured with <code>to_string_lossy</code>, so a non-UTF-8 argument is rendered with U+FFFD rather
+than round-tripped byte-for-byte): sufficient as a comparability signal, but not an exact argv to replay.
+Future flags must be assessed under this policy in the PR adding them.
+<code>--randomize-layout [seed]</code> changes the program’s type layout; its seed is excluded here for a future subject/provenance block.
+<code>resolved_unwind</code> precedence is CLI <code>--unwind</code> &gt; harness <code>#[kani::unwind]</code> &gt; <code>--default-unwind</code>.
+Requested attributes come verbatim from <code>.kani-metadata.json</code>; resolved solver/unwind are scalars or null.
+Solver precedence is last solver-selecting <code>--cbmc-args</code> override &gt; CLI <code>--solver</code> &gt; attribute &gt; default;
+CBMC arguments follow Kani’s flags. Bare <code>--smt2</code> lets CBMC choose and yields <code>resolved_solver: null</code>.</p>
+<h3 id="failure-scenarios"><a class="header" href="#failure-scenarios">Failure scenarios</a></h3>
+<ul>
+<li>Unwritable path: error and non-zero exit; never rewrite the independently computed verification verdict.
+Marker failure precedes verification; terminal export follows harness verdicts but precedes SARIF/final
+summary, so failure aborts those steps. Whether to suppress SARIF remains an implementation question.</li>
+<li>Undetermined tool version: null, never guessed; Kani’s own version is always known.</li>
+<li>Harness timeout/OOM/CBMC crash: record that harness outcome and still write the file. Complete accounting
+is verdict-independent, even if every harness times out; missing entries mean <code>PARTIAL</code>, marker-only means <code>INCOMPLETE</code>.</li>
+<li>Kani crash (compiler ICE, driver panic, SIGKILL): no terminal document; the single final <code>verify_project</code>
+write is bypassed. An <code>INCOMPLETE</code> marker remains, or whatever file existed if the crash preceded it.
+No run-level <code>CRASHED</code> exists; per-harness <code>CRASHED</code> remains possible in a completed document.</li>
+<li>Existing file: atomically replace it with the <code>INCOMPLETE</code> marker when verification begins after building.</li>
+<li>Missing parent: create it with <code>create_dir_all</code>, as for SARIF. An existing directory target currently
+fails at write time; this proposal rejects it at argument parsing before verification.</li>
+</ul>
+<h3 id="presence-matrices"><a class="header" href="#presence-matrices">Presence matrices</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Field(s)</th><th><code>INCOMPLETE</code> marker</th><th>Terminal document (<code>COMPLETE</code> / <code>PARTIAL</code> / <code>NO_HARNESSES_SELECTED</code>)</th></tr>
+</thead>
+<tbody>
+<tr><td><code>schema_version</code>, <code>kani_commit</code>, <code>kani_commit_dirty</code>, <code>tools.*</code>, <code>enabled_unstable_features</code>, <code>harness_selection.*</code>, <code>harness_timeout_s</code>, <code>configuration.*</code>, <code>target</code>, <code>started_at</code></td><td>present</td><td>present</td></tr>
+<tr><td><code>run_state</code></td><td>present, always <code>"INCOMPLETE"</code></td><td>present, one of <code>"COMPLETE"</code>/<code>"PARTIAL"</code>/<code>"NO_HARNESSES_SELECTED"</code></td></tr>
+<tr><td><code>outcome</code>, <code>wall_time_s</code></td><td>absent</td><td>present</td></tr>
+<tr><td><code>summary</code>, <code>harnesses[]</code></td><td>absent</td><td>present (<code>harnesses[]</code> may be empty, only under <code>NO_HARNESSES_SELECTED</code>)</td></tr>
+</tbody>
+</table>
+</div>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Field(s)</th><th><code>COMPLETED</code></th><th><code>TIMEOUT</code> / <code>OUT_OF_MEMORY</code></th><th><code>CRASHED</code></th></tr>
+</thead>
+<tbody>
+<tr><td><code>name</code>, <code>crate_name</code>, <code>file</code>, <code>line</code>, <code>contract</code>, <code>is_automatically_generated</code>, <code>has_loop_contracts</code>, <code>is_bounded</code>, <code>attributes.*</code>, <code>resolved_solver</code>, <code>resolved_unwind</code>, <code>generated_concrete_test</code></td><td>present</td><td>present</td><td>present</td></tr>
+<tr><td><code>resources.verification_time_s</code></td><td>present, a verification duration</td><td>present, time elapsed until the timeout/OOM occurred</td><td>present, time elapsed until the crash</td></tr>
+<tr><td><code>outcome.verdict</code></td><td>present</td><td>absent</td><td>absent</td></tr>
+<tr><td><code>outcome.code</code> / <code>outcome.message</code></td><td>absent</td><td>absent</td><td>present</td></tr>
+<tr><td><code>failure_kind</code></td><td>present</td><td>absent</td><td>absent</td></tr>
+<tr><td><code>checks</code>, <code>covers</code> (the objects themselves)</td><td>present</td><td>present</td><td>present</td></tr>
+<tr><td><code>checks.total</code>, <code>checks.success</code>, <code>covers.total</code></td><td>integer</td><td><code>null</code></td><td><code>null</code></td></tr>
+<tr><td><code>checks.failure</code>, <code>.unreachable</code>, …, <code>covers.satisfied</code>, … (identity-list fields)</td><td>array of ids, may be empty</td><td><code>[]</code></td><td><code>[]</code></td></tr>
+<tr><td><code>n_properties</code>, <code>n_failed</code></td><td>integer</td><td><code>null</code></td><td><code>null</code></td></tr>
+<tr><td><code>failed_properties[]</code>, <code>unsupported_constructs[]</code></td><td>array, may be empty</td><td><code>[]</code></td><td><code>[]</code></td></tr>
+<tr><td><code>warnings[]</code>, <code>warnings_truncated</code></td><td>retained warnings / number dropped by cap</td><td>retained warnings / number dropped by cap; <code>[]</code> / <code>0</code> if none available</td><td>retained warnings / number dropped by cap; <code>[]</code> / <code>0</code> if none available</td></tr>
+</tbody>
+</table>
+</div>
+<p>Warnings need no property array. Preserve whatever the driver retained, with the same caps for every
+outcome; <code>[]</code> means none retained, not proof that CBMC emitted none.</p>
+<h3 id="value-domains-and-casing"><a class="header" href="#value-domains-and-casing">Value domains and casing</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Field</th><th>Values</th><th>Closed?</th></tr>
+</thead>
+<tbody>
+<tr><td><code>outcome.kind</code> (run level)</td><td><code>COMPLETED</code> (single value)</td><td>closed</td></tr>
+<tr><td><code>run_state</code> (run level)</td><td><code>INCOMPLETE</code>, <code>COMPLETE</code>, <code>PARTIAL</code>, <code>NO_HARNESSES_SELECTED</code></td><td>closed</td></tr>
+<tr><td><code>harnesses[].outcome.kind</code></td><td><code>COMPLETED</code>, <code>TIMEOUT</code>, <code>OUT_OF_MEMORY</code>, <code>CRASHED</code></td><td>closed</td></tr>
+<tr><td><code>harnesses[].outcome.verdict</code></td><td><code>SUCCESS</code>, <code>FAILURE</code> (field omitted at run level)</td><td>closed</td></tr>
+<tr><td><code>harnesses[].failure_kind</code></td><td><code>NONE</code>, <code>PANICS_ONLY</code>, <code>OTHER</code>, <code>ERROR</code></td><td>closed</td></tr>
+<tr><td><code>…[].status</code> (in <code>failed_properties</code>, <code>unsupported_constructs</code>, <code>checks.other</code>, <code>covers.other</code>)</td><td><code>SUCCESS</code>, <code>FAILURE</code>, <code>SATISFIED</code>, <code>UNSATISFIABLE</code>, <code>UNREACHABLE</code>, <code>UNDETERMINED</code>, <code>ERROR</code>, <code>UNKNOWN</code>, <code>COVERED</code>, <code>UNCOVERED</code></td><td>closed</td></tr>
+<tr><td><code>harnesses[].attributes.kind</code></td><td><code>"Proof"</code>, <code>"Test"</code>, <code>{"ProofForContract": {...}}</code></td><td>closed (<code>HarnessKind</code>, 3 variants)</td></tr>
+<tr><td><code>harnesses[].attributes.solver</code></td><td><code>"Cadical"</code>, <code>"Bitwuzla"</code>, <code>"Cvc5"</code>, <code>"Kissat"</code>, <code>"Minisat"</code>, <code>"Z3"</code>, or <code>{"Binary": "&lt;path&gt;"}</code></td><td><strong>explicitly open</strong> — see below</td></tr>
+<tr><td><code>harnesses[].resolved_solver</code></td><td>the lowercase spellings of the same six names, or an arbitrary binary-path string</td><td><strong>explicitly open</strong> — see below</td></tr>
+</tbody>
+</table>
+</div>
+<p>Harness <code>OUT_OF_MEMORY</code> is inferred from CBMC-child status 137 (including SIGKILL mapped to <code>128 + 9</code>)
+when no property array exists; it is not measured memory. <code>TIMEOUT</code> arises only under <code>--harness-timeout</code>.
+Read <code>attributes.should_panic</code> before interpreting the computed <code>failure_kind</code> classification:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th><code>attributes.should_panic</code></th><th><code>failure_kind</code></th><th><code>outcome.verdict</code></th></tr>
+</thead>
+<tbody>
+<tr><td><code>false</code></td><td><code>NONE</code></td><td><code>SUCCESS</code></td></tr>
+<tr><td><code>false</code></td><td><code>PANICS_ONLY</code>, <code>OTHER</code>, or <code>ERROR</code></td><td><code>FAILURE</code></td></tr>
+<tr><td><code>true</code></td><td><code>PANICS_ONLY</code></td><td><code>SUCCESS</code></td></tr>
+<tr><td><code>true</code></td><td><code>NONE</code>, <code>OTHER</code>, or <code>ERROR</code></td><td><code>FAILURE</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Missing expected panic gives <code>NONE</code>; unexpected non-panic failures give <code>OTHER</code>; property errors give <code>ERROR</code>.
+Preserve #4719’s computed <code>ERROR</code>/<code>FAILURE</code> override for ignored quantifiers even without an ERROR-status property; do not recompute solely from properties.
+<code>status</code> is closed <code>CheckStatus</code>. <code>other</code> holds known statuses lacking a named bucket in that domain
+(e.g. <code>SATISFIED</code> among checks), not unknown statuses. An unmodeled status needs a parser variant and major bump.</p>
+<p>Solver names are open by this export’s consumer contract: accept unfamiliar strings with a string/fallback,
+not solely the current closed <code>CbmcSolver</code> enum. Its <code>Binary(String)</code> variant accepts paths, not unknown
+unit variants; producers may reuse its serialization. The known object form remains <code>{"Binary": "&lt;path&gt;"}</code>.</p>
+<p><strong>Casing.</strong> <em>a value keeps the serialization of the Rust type it comes from, and this schema does not fork types to re-case them.</em>
+Keys are snake_case; outcome/verdict/failure_kind/run_state/status values are SCREAMING_SNAKE_CASE,
+including new multi-word values; embedded attribute enums retain PascalCase and their object variants.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../rfcs/0014-harness-partition.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../rfcs/0014-harness-partition.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>
