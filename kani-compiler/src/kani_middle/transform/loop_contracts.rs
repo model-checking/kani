@@ -18,9 +18,9 @@ use itertools::Itertools;
 use rustc_middle::ty::TyCtxt;
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::{
-    AggregateKind, BasicBlock, BasicBlockIdx, Body, ConstOperand, Operand, Place, Rvalue,
-    Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, VarDebugInfoContents,
-    WithRetag,
+    AggregateKind, BasicBlock, BasicBlockIdx, Body, ConstOperand, Operand, Place, ProjectionElem,
+    Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
+    VarDebugInfoContents, WithRetag,
 };
 use rustc_public::ty::{FnDef, GenericArgKind, MirConst, RigidTy, TyKind, UintTy};
 use rustc_span::Symbol;
@@ -775,16 +775,207 @@ impl LoopContractPass {
         }
     }
 
+    /// Blocks of each `StorageLive(local)` statement in the body. A local
+    /// declared inside a loop appears here with a block that maps to that
+    /// loop's head in `loop_head_map`.
+    fn storagelive_blocks(body: &MutableBody) -> HashMap<usize, Vec<usize>> {
+        let mut map: HashMap<usize, Vec<usize>> = HashMap::new();
+        for (bb, block) in body.blocks().iter().enumerate() {
+            for stmt in &block.statements {
+                if let StatementKind::StorageLive(local) = stmt.kind {
+                    map.entry(local).or_default().push(bb);
+                }
+            }
+        }
+        map
+    }
+
+    /// Blocks that assign each local (as an `Assign` statement or a `Call`
+    /// destination). Used only for locals without a `StorageLive` to decide
+    /// whether they are declared inside a loop; see `group_mentions_loop_local`.
+    fn assign_blocks(body: &MutableBody) -> HashMap<usize, Vec<usize>> {
+        let mut map: HashMap<usize, Vec<usize>> = HashMap::new();
+        for (bb, block) in body.blocks().iter().enumerate() {
+            for stmt in &block.statements {
+                if let StatementKind::Assign(place, _) = &stmt.kind {
+                    map.entry(place.local).or_default().push(bb);
+                }
+            }
+            if let TerminatorKind::Call { destination, .. } = &block.terminator.kind {
+                map.entry(destination.local).or_default().push(bb);
+            }
+        }
+        map
+    }
+
+    fn place_locals(place: &Place, out: &mut HashSet<usize>) {
+        out.insert(place.local);
+        for elem in &place.projection {
+            if let ProjectionElem::Index(local) = elem {
+                out.insert(*local);
+            }
+        }
+    }
+
+    fn operand_locals(operand: &Operand, out: &mut HashSet<usize>) {
+        match operand {
+            Operand::Copy(place) | Operand::Move(place) => Self::place_locals(place, out),
+            Operand::Constant(_) | Operand::RuntimeChecks(_) => {}
+        }
+    }
+
+    /// Collect the locals `rvalue` reads into `out`. Returns false for a
+    /// construct the gate does not model; the caller then refuses the move
+    /// (conservative: a refused move keeps the body's own checks intact).
+    fn rvalue_locals(rvalue: &Rvalue, out: &mut HashSet<usize>) -> bool {
+        // Arm list mirrors points_to_analysis.rs; fix arities per compiler.
+        match rvalue {
+            Rvalue::Use(operand, ..)
+            | Rvalue::Cast(_, operand, _)
+            | Rvalue::Repeat(operand, ..)
+            | Rvalue::UnaryOp(_, operand) => Self::operand_locals(operand, out),
+            Rvalue::Reborrow(_, _, place)
+            | Rvalue::Ref(_, _, place)
+            | Rvalue::AddressOf(_, place)
+            | Rvalue::CopyForDeref(place)
+            | Rvalue::Discriminant(place) => Self::place_locals(place, out),
+            Rvalue::BinaryOp(_, lhs, rhs) => {
+                Self::operand_locals(lhs, out);
+                Self::operand_locals(rhs, out);
+            }
+            Rvalue::Aggregate(_, operands) => {
+                for operand in operands {
+                    Self::operand_locals(operand, out);
+                }
+            }
+            Rvalue::ThreadLocalRef(_) => {}
+            _ => return false,
+        }
+        true
+    }
+
+    /// Every local the group's copied code would evaluate at the loop head:
+    /// all places and operands in its statements and terminators. Returns
+    /// `None` for code we refuse to analyze (keeps the gate conservative).
+    fn locals_mentioned_in_blocks(blocks: &[BasicBlock]) -> Option<HashSet<usize>> {
+        let mut out = HashSet::new();
+        for block in blocks {
+            for stmt in &block.statements {
+                match &stmt.kind {
+                    StatementKind::Assign(place, rvalue) => {
+                        Self::place_locals(place, &mut out);
+                        if !Self::rvalue_locals(rvalue, &mut out) {
+                            return None;
+                        }
+                    }
+                    StatementKind::FakeRead(_, place)
+                    | StatementKind::SetDiscriminant { place, .. }
+                    | StatementKind::PlaceMention(place) => Self::place_locals(place, &mut out),
+                    StatementKind::StorageLive(_)
+                    | StatementKind::StorageDead(_)
+                    | StatementKind::Coverage(_)
+                    | StatementKind::ConstEvalCounter
+                    | StatementKind::Nop => {}
+                    // Unmodeled statement (e.g. AscribeUserType, an intrinsic): refuse the move.
+                    _ => return None,
+                }
+            }
+            match &block.terminator.kind {
+                TerminatorKind::Call { func, args, destination, .. } => {
+                    Self::operand_locals(func, &mut out);
+                    for arg in args {
+                        Self::operand_locals(arg, &mut out);
+                    }
+                    Self::place_locals(destination, &mut out);
+                }
+                TerminatorKind::Assert { cond, .. } => Self::operand_locals(cond, &mut out),
+                TerminatorKind::SwitchInt { discr, .. } => Self::operand_locals(discr, &mut out),
+                TerminatorKind::Drop { place, .. } => Self::place_locals(place, &mut out),
+                TerminatorKind::Goto { .. }
+                | TerminatorKind::Return
+                | TerminatorKind::Unreachable => {}
+                // Unmodeled terminator (e.g. InlineAsm): refuse the move.
+                _ => return None,
+            }
+        }
+        Some(out)
+    }
+
+    /// True when copying this group to the loop head would evaluate a local
+    /// that is declared inside the same loop, i.e. dead at the head. Locals
+    /// the group itself initializes (its own temporaries, including call
+    /// results) and the destination are excluded; they are set by the copied
+    /// code.
+    ///
+    /// A local that carries a `StorageLive` is declared-in-this-loop when that
+    /// `StorageLive` sits in a loop-body block. Some locals never get a
+    /// `StorageLive` (e.g. an arithmetic result like `mid` in a binary
+    /// search); for those we fall back to their definition sites: the local is
+    /// declared-in-this-loop when every block that assigns it is inside this
+    /// loop (so a value computed before the loop, assigned outside it, still
+    /// counts as live at the head).
+    ///
+    /// The fallback is deliberately conservative in two directions that can
+    /// leave a move in place (a spurious failure, never an unsound pass): a
+    /// local whose sole in-loop definition uses a write form `assign_blocks`
+    /// does not track, and a local assigned only in an inner loop but read by
+    /// an outer-loop-head group, whose assign blocks map to the inner head.
+    fn group_mentions_loop_local(
+        group_blocks: &[BasicBlock],
+        group_dest: usize,
+        group_loop_head: usize,
+        loop_head_map: &HashMap<usize, usize>,
+        storagelive_map: &HashMap<usize, Vec<usize>>,
+        assign_map: &HashMap<usize, Vec<usize>>,
+    ) -> bool {
+        let Some(mentioned) = Self::locals_mentioned_in_blocks(group_blocks) else {
+            // Unanalyzable code: refuse the move rather than risk a head
+            // evaluation of dead state.
+            return true;
+        };
+        let mut internal = HashSet::new();
+        for block in group_blocks {
+            for stmt in &block.statements {
+                match &stmt.kind {
+                    StatementKind::StorageLive(local) => {
+                        internal.insert(*local);
+                    }
+                    StatementKind::Assign(place, _) => {
+                        internal.insert(place.local);
+                    }
+                    _ => {}
+                }
+            }
+            if let TerminatorKind::Call { destination, .. } = &block.terminator.kind {
+                internal.insert(destination.local);
+            }
+        }
+        let in_this_loop = |bb: &usize| loop_head_map.get(bb) == Some(&group_loop_head);
+        mentioned.iter().filter(|local| **local != group_dest && !internal.contains(local)).any(
+            |local| match storagelive_map.get(local) {
+                Some(bbs) => bbs.iter().any(in_this_loop),
+                // No `StorageLive`: declared-in-loop iff every definition site is.
+                None => assign_map
+                    .get(local)
+                    .is_some_and(|bbs| !bbs.is_empty() && bbs.iter().all(in_this_loop)),
+            },
+        )
+    }
+
     //Move all variables initiation using function-call inside the loop body to the loop-head
     fn move_storagelive_call_to_loophead(
         &self,
         body: &mut MutableBody,
         loop_head_map: &HashMap<usize, usize>,
+        storagelive_map: &HashMap<usize, Vec<usize>>,
+        assign_map: &HashMap<usize, Vec<usize>>,
         found_local_list: Vec<usize>,
     ) {
         let mut found_local_list = found_local_list;
         let localvars = self.get_storage_moving_variables(body);
         let forloopvars = self.get_kaniiter_variables(body);
+        let firstpat_vars: Vec<usize> =
+            self.get_first_pats_and_nth_pats(body).iter().map(|(first, ..)| *first).collect();
         let mut current_user_local = 0;
         let mut current_local_decl_blocks: Vec<BasicBlock> = Vec::new();
         let mut move_call_list: Vec<(usize, Vec<BasicBlock>)> = Vec::new();
@@ -826,7 +1017,23 @@ impl LoopContractPass {
                 && dest.local == current_user_local
                 && current_user_local != 0
             {
-                move_call_list.push((closest_loop_head, current_local_decl_blocks.clone()));
+                // Copying the group is only sound-to-evaluate at the head if
+                // everything it reads is live there. The for-loop machinery
+                // (kaniiter, firstpat tuples) keeps its move unconditionally.
+                let machinery = forloopvars.contains(&current_user_local)
+                    || firstpat_vars.contains(&current_user_local);
+                if machinery
+                    || !Self::group_mentions_loop_local(
+                        &current_local_decl_blocks,
+                        current_user_local,
+                        closest_loop_head,
+                        loop_head_map,
+                        storagelive_map,
+                        assign_map,
+                    )
+                {
+                    move_call_list.push((closest_loop_head, current_local_decl_blocks.clone()));
+                }
                 current_local_decl_blocks = Vec::new();
                 current_user_local = 0;
             }
@@ -940,6 +1147,14 @@ impl LoopContractPass {
         let mut new_body = MutableBody::from(body);
         self.replace_first_pat_by_nth_pat(&mut new_body);
         let loop_head_map = self.get_associated_loop_head_hashmap(&new_body, tcx);
+        // Snapshot where each local is declared (StorageLive) and assigned, against
+        // the original body and its block indices, before the hoisting passes move
+        // statements to the loop head. The call-move gate consults these to decide
+        // which locals a group reads are loop-body-local (dead at the head). Original
+        // block indices stay valid for the gate: assign-move only moves statements
+        // within existing blocks and transform_bb only appends blocks at the end.
+        let storagelive_map = Self::storagelive_blocks(&new_body);
+        let assign_map = Self::assign_blocks(&new_body);
         let found_local_list =
             self.move_storagelive_assign_to_loophead(&mut new_body, &loop_head_map);
         let mut contain_loop_contracts: bool = false;
@@ -971,7 +1186,13 @@ impl LoopContractPass {
                 }
             }
         }
-        self.move_storagelive_call_to_loophead(&mut new_body, &loop_head_map, found_local_list);
+        self.move_storagelive_call_to_loophead(
+            &mut new_body,
+            &loop_head_map,
+            &storagelive_map,
+            &assign_map,
+            found_local_list,
+        );
         (contain_loop_contracts, new_body.into())
     }
 
