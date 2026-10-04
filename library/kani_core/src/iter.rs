@@ -145,7 +145,14 @@ macro_rules! generate_iter {
                         // Without this, the unchecked subtraction overflows when loop-contract
                         // havoc produces `start > end` ("attempt to subtract with overflow").
                         if self.end > self.start {
-                            self.end.abs_diff(self.start) as usize
+                            // A 128-bit range can span more elements than `usize::MAX`. The
+                            // `as usize` cast would silently truncate the span (`i128::MIN..0`
+                            // becomes 0), modeling a non-empty range as empty. Widen to u128
+                            // (lossless for every instantiation) and fail the proof if the span
+                            // does not fit usize.
+                            let span = self.end.abs_diff(self.start) as u128;
+                            assert!(span <= usize::MAX as u128);
+                            span as usize
                         } else {
                             0
                         }
