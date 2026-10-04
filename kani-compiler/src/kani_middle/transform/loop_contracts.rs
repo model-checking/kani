@@ -1017,20 +1017,36 @@ impl LoopContractPass {
                 && dest.local == current_user_local
                 && current_user_local != 0
             {
+                // The splice helpers re-target each moved block's terminator via
+                // `get_mut_target_ref`, which only supports terminators with a single
+                // `target` (`Call` with a return target, `Goto`, `Assert`, `Drop`).
+                // A group spanning any other terminator (e.g. the `SwitchInt` of a
+                // branching initializer) cannot be moved; before this guard,
+                // attempting to move it panicked there.
+                let retargetable = current_local_decl_blocks.iter().all(|b| {
+                    matches!(
+                        b.terminator.kind,
+                        TerminatorKind::Call { target: Some(_), .. }
+                            | TerminatorKind::Goto { .. }
+                            | TerminatorKind::Assert { .. }
+                            | TerminatorKind::Drop { .. }
+                    )
+                });
                 // Copying the group is only sound-to-evaluate at the head if
                 // everything it reads is live there. The for-loop machinery
                 // (kaniiter, firstpat tuples) keeps its move unconditionally.
                 let machinery = forloopvars.contains(&current_user_local)
                     || firstpat_vars.contains(&current_user_local);
-                if machinery
-                    || !Self::group_mentions_loop_local(
-                        &current_local_decl_blocks,
-                        current_user_local,
-                        closest_loop_head,
-                        loop_head_map,
-                        storagelive_map,
-                        assign_map,
-                    )
+                if retargetable
+                    && (machinery
+                        || !Self::group_mentions_loop_local(
+                            &current_local_decl_blocks,
+                            current_user_local,
+                            closest_loop_head,
+                            loop_head_map,
+                            storagelive_map,
+                            assign_map,
+                        ))
                 {
                     move_call_list.push((closest_loop_head, current_local_decl_blocks.clone()));
                 }
