@@ -1,0 +1,10 @@
+[TEST] Copy standard library from the current toolchain
+[TEST] Modify library
+[TEST] Run kani autoharness --std
+[independent] exit status: 0
+[independent] | core | verify_alias_arguments::ptrs_distinct | #[kani::proof] | Success |
+[independent] | core | verify_alias_arguments::refs_distinct | #[kani::proof] | Success |
+[TEST] Run kani autoharness --std --alias-arguments
+[aliasing] exit status: 1
+[aliasing] | core | verify_alias_arguments::ptrs_distinct | #[kani::proof] | Failure |
+[aliasing] | core | verify_alias_arguments::refs_distinct | #[kani::proof] | Failure |
