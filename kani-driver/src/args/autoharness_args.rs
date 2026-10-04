@@ -82,6 +82,14 @@ pub struct CommonAutoharnessArgs {
     #[arg(long)]
     pub check_invariants: bool,
 
+    /// Model caller-controlled aliasing between arguments: an argument that is a shared
+    /// reference (`&T`, including `&[T]` and `&str`) or a raw pointer may additionally be the
+    /// very same reference or pointer as an earlier argument of the same type, as when a
+    /// caller passes one value twice. Without this option, every such argument refers to its
+    /// own allocation, so a bug that requires two arguments to alias will not be found.
+    #[arg(long)]
+    pub alias_arguments: bool,
+
     /// Run the `list` subcommand after generating the automatic harnesses. Note that this option implies --only-codegen.
     #[arg(long)]
     pub list: bool,
