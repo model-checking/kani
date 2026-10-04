@@ -64,14 +64,7 @@ fn setup_session(session: &mut KaniSession, common_autoharness_args: &CommonAuto
     if common_autoharness_args.bounded_arguments {
         warn_if_bounds_reach_unwind(bounds, &session.args);
     }
-    session.add_auto_harness_args(
-        &common_autoharness_args.include_pattern,
-        &common_autoharness_args.exclude_pattern,
-        common_autoharness_args.bounded_arguments,
-        common_autoharness_args.constructor_args,
-        common_autoharness_args.check_invariants,
-        bounds,
-    );
+    session.add_auto_harness_args(common_autoharness_args, bounds);
 }
 
 /// Warn about a bound that reaches the effective unwinding bound. A loop iterating over such an
@@ -211,21 +204,17 @@ impl KaniSession {
     /// Add the compiler arguments specific to the `autoharness` subcommand.
     pub fn add_auto_harness_args(
         &mut self,
-        included: &[String],
-        excluded: &[String],
-        bounded_arguments: bool,
-        constructor_args: bool,
-        check_invariants: bool,
+        autoharness_args: &CommonAutoharnessArgs,
         bounds: AutoharnessBounds,
     ) {
         let mut args = vec![];
-        for pattern in included {
+        for pattern in &autoharness_args.include_pattern {
             args.push(format!("--autoharness-include-pattern {pattern}"));
         }
-        for pattern in excluded {
+        for pattern in &autoharness_args.exclude_pattern {
             args.push(format!("--autoharness-exclude-pattern {pattern}"));
         }
-        if bounded_arguments {
+        if autoharness_args.bounded_arguments {
             args.push("--autoharness-bounded-arguments".to_string());
             args.push(format!("--autoharness-slice-bound {}", bounds.slice));
             args.push(format!("--autoharness-string-bound {}", bounds.string));
@@ -234,11 +223,14 @@ impl KaniSession {
                 bounds.bounded_arbitrary
             ));
         }
-        if constructor_args {
+        if autoharness_args.constructor_args {
             args.push("--autoharness-constructor-args".to_string());
         }
-        if check_invariants {
+        if autoharness_args.check_invariants {
             args.push("--autoharness-check-invariants".to_string());
+        }
+        if autoharness_args.alias_arguments {
+            args.push("--autoharness-alias-arguments".to_string());
         }
         self.autoharness_compiler_flags = Some(args);
         self.autoharness_bounds = bounds;

@@ -1,0 +1,40 @@
+[independent] exit status 0, 0 failed checks, 0 other than assertion failures
+[independent] | cargo_autoharness_alias_arguments | alias_safe | #[kani::proof] | Success |
+[independent] | cargo_autoharness_alias_arguments | bounded_slices_distinct | #[kani::proof] (bounded) | Success |
+[independent] | cargo_autoharness_alias_arguments | cell_no_alias | #[kani::proof] | Success |
+[independent] | cargo_autoharness_alias_arguments | const_ptrs_distinct | #[kani::proof] | Success |
+[independent] | cargo_autoharness_alias_arguments | contract_allows_alias | #[kani::proof_for_contract] | Success |
+[independent] | cargo_autoharness_alias_arguments | contract_excludes_alias | #[kani::proof_for_contract] | Success |
+[independent] | cargo_autoharness_alias_arguments | different_ptr_mutability_distinct | #[kani::proof] | Success |
+[independent] | cargo_autoharness_alias_arguments | different_types_distinct | #[kani::proof] | Success |
+[independent] | cargo_autoharness_alias_arguments | first_and_last_distinct | #[kani::proof] | Success |
+[independent] | cargo_autoharness_alias_arguments | last_two_distinct | #[kani::proof] | Success |
+[independent] | cargo_autoharness_alias_arguments | mut_ptrs_distinct | #[kani::proof] | Success |
+[independent] | cargo_autoharness_alias_arguments | muts_distinct | #[kani::proof] | Success |
+[independent] | cargo_autoharness_alias_arguments | nested_refs_distinct | #[kani::proof] | Success |
+[independent] | cargo_autoharness_alias_arguments | ref_and_mut_distinct | #[kani::proof] | Success |
+[independent] | cargo_autoharness_alias_arguments | ref_and_ptr_distinct | #[kani::proof] | Success |
+[independent] | cargo_autoharness_alias_arguments | refs_distinct | #[kani::proof] | Success |
+[independent] | cargo_autoharness_alias_arguments | refs_distinct_lifetimes | #[kani::proof] | Success |
+[independent] | cargo_autoharness_alias_arguments | slices_distinct | #[kani::proof] | Success |
+[independent] | cargo_autoharness_alias_arguments | three_not_all_same | #[kani::proof] | Success |
+[aliasing] exit status 1, 12 failed checks, 0 other than assertion failures
+[aliasing] | cargo_autoharness_alias_arguments | alias_safe | #[kani::proof] | Success |
+[aliasing] | cargo_autoharness_alias_arguments | bounded_slices_distinct | #[kani::proof] (bounded) | Failure |
+[aliasing] | cargo_autoharness_alias_arguments | cell_no_alias | #[kani::proof] | Failure |
+[aliasing] | cargo_autoharness_alias_arguments | const_ptrs_distinct | #[kani::proof] | Failure |
+[aliasing] | cargo_autoharness_alias_arguments | contract_allows_alias | #[kani::proof_for_contract] | Failure |
+[aliasing] | cargo_autoharness_alias_arguments | contract_excludes_alias | #[kani::proof_for_contract] | Success |
+[aliasing] | cargo_autoharness_alias_arguments | different_ptr_mutability_distinct | #[kani::proof] | Success |
+[aliasing] | cargo_autoharness_alias_arguments | different_types_distinct | #[kani::proof] | Success |
+[aliasing] | cargo_autoharness_alias_arguments | first_and_last_distinct | #[kani::proof] | Failure |
+[aliasing] | cargo_autoharness_alias_arguments | last_two_distinct | #[kani::proof] | Failure |
+[aliasing] | cargo_autoharness_alias_arguments | mut_ptrs_distinct | #[kani::proof] | Failure |
+[aliasing] | cargo_autoharness_alias_arguments | muts_distinct | #[kani::proof] | Success |
+[aliasing] | cargo_autoharness_alias_arguments | nested_refs_distinct | #[kani::proof] | Failure |
+[aliasing] | cargo_autoharness_alias_arguments | ref_and_mut_distinct | #[kani::proof] | Success |
+[aliasing] | cargo_autoharness_alias_arguments | ref_and_ptr_distinct | #[kani::proof] | Success |
+[aliasing] | cargo_autoharness_alias_arguments | refs_distinct | #[kani::proof] | Failure |
+[aliasing] | cargo_autoharness_alias_arguments | refs_distinct_lifetimes | #[kani::proof] | Failure |
+[aliasing] | cargo_autoharness_alias_arguments | slices_distinct | #[kani::proof] | Failure |
+[aliasing] | cargo_autoharness_alias_arguments | three_not_all_same | #[kani::proof] | Failure |

@@ -2014,6 +2014,29 @@ impl AutomaticArbitraryPass {
         new_body.into()
     }
 }
+
+/// Whether an argument of type `later` may alias an earlier argument of type `earlier` under
+/// --alias-arguments. This is deliberately conservative: both must be shared references, or both
+/// raw pointers of the same mutability, to the same pointee type. The region of a reference is
+/// not compared, so the lifetimes the function declares do not matter.
+///
+/// A `&mut T` never aliases anything, since it is exclusive. References and pointers of
+/// different types, partially overlapping slices, and references nested in other types are not
+/// modeled.
+fn can_alias_args(earlier: Ty, later: Ty) -> bool {
+    match (earlier.kind(), later.kind()) {
+        (
+            TyKind::RigidTy(RigidTy::Ref(_, earlier_pointee, Mutability::Not)),
+            TyKind::RigidTy(RigidTy::Ref(_, later_pointee, Mutability::Not)),
+        ) => earlier_pointee == later_pointee,
+        (
+            TyKind::RigidTy(RigidTy::RawPtr(earlier_pointee, earlier_mutability)),
+            TyKind::RigidTy(RigidTy::RawPtr(later_pointee, later_mutability)),
+        ) => earlier_pointee == later_pointee && earlier_mutability == later_mutability,
+        _ => false,
+    }
+}
+
 /// Transform the dummy body of an automatic_harness Kani intrinsic to be a proof harness for a given function.
 #[derive(Debug, Clone)]
 pub struct AutomaticHarnessPass {
@@ -2027,6 +2050,11 @@ pub struct AutomaticHarnessPass {
     /// Whether --check-invariants is enabled: check values returned by verified functions
     /// against the type's mined invariant conjuncts.
     check_invariants: bool,
+    /// The FnDef of KaniModel::AnyAlias
+    kani_any_alias: FnDef,
+    /// Whether --alias-arguments is enabled: let shared reference and raw pointer arguments
+    /// alias earlier arguments of the same type.
+    alias_arguments: bool,
 }
 
 impl AutomaticHarnessPass {
@@ -2045,6 +2073,8 @@ impl AutomaticHarnessPass {
         let reset_clause_depth =
             Instance::resolve(reset_clause_depth, &GenericArgs(vec![])).unwrap();
         let check_invariants = query_db.args().autoharness_check_invariants;
+        let kani_any_alias = *kani_fns.get(&KaniModel::AnyAlias.into()).unwrap();
+        let alias_arguments = query_db.args().autoharness_alias_arguments;
         Self {
             models: AnyModels::new(query_db),
             check_fmt_models,
@@ -2052,6 +2082,8 @@ impl AutomaticHarnessPass {
             reset_clause_depth,
             kani_autoharness_intrinsic,
             check_invariants,
+            kani_any_alias,
+            alias_arguments,
         }
     }
 }
@@ -2177,7 +2209,7 @@ impl TransformPass for AutomaticHarnessPass {
         // nondeterministic value respects the type's safety invariant,
         // c.f. `call_kani_any_for_ty`.
         let mut invariant_cache = FxHashMap::default();
-        let arg_locals = fn_to_verify_body
+        let mut arg_locals = fn_to_verify_body
             .arg_locals()
             .iter()
             .map(|local_decl| {
@@ -2193,6 +2225,44 @@ impl TransformPass for AutomaticHarnessPass {
                 )
             })
             .collect::<Vec<_>>();
+
+        // Under --alias-arguments, model caller-controlled aliasing: each argument may
+        // additionally be the same reference or pointer as any earlier argument it can alias,
+        // c.f. `can_alias_args`. The values generated above stay as they are, so each argument
+        // still covers the non-aliasing case through its own storage.
+        if self.alias_arguments {
+            let arg_tys =
+                fn_to_verify_body.arg_locals().iter().map(|decl| decl.ty).collect::<Vec<_>>();
+            for later in 1..arg_tys.len() {
+                for earlier in 0..later {
+                    if !can_alias_args(arg_tys[earlier], arg_tys[later]) {
+                        continue;
+                    }
+                    let ty = arg_tys[later];
+                    let any_alias_inst = Instance::resolve(
+                        self.kani_any_alias,
+                        &GenericArgs(vec![GenericArgKind::Type(ty)]),
+                    )
+                    .unwrap();
+                    let alias_lcl = harness_body.new_local(
+                        ty,
+                        source.span(harness_body.blocks()),
+                        Mutability::Not,
+                    );
+                    harness_body.insert_call(
+                        &any_alias_inst,
+                        &mut source,
+                        InsertPosition::Before,
+                        vec![
+                            Operand::Copy(Place::from(arg_locals[later])),
+                            Operand::Copy(Place::from(arg_locals[earlier])),
+                        ],
+                        Place::from(alias_lcl),
+                    );
+                    arg_locals[later] = alias_lcl;
+                }
+            }
+        }
 
         let func_to_verify_ret = fn_to_verify_body.ret_local();
         let ret_lcl = harness_body.new_local(
