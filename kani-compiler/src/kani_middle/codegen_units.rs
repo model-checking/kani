@@ -8,6 +8,7 @@
 //! according to their stub configuration.
 
 use crate::args::{Arguments, ReachabilityType};
+use crate::intrinsics::{Intrinsic, simd_mask_problem};
 use crate::kani_middle::attributes::{KaniAttributes, is_proof_harness};
 use crate::kani_middle::kani_functions::{KaniHook, KaniIntrinsic, KaniModel};
 use crate::kani_middle::metadata::{
@@ -29,6 +30,7 @@ use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_hir::def_id::DefId;
 use rustc_infer::infer::TyCtxtInferExt;
 use rustc_middle::ty::{self, TyCtxt, TypingMode};
+use rustc_public::mir::TerminatorKind;
 use rustc_public::mir::mono::Instance;
 use rustc_public::rustc_internal;
 use rustc_public::ty::{
@@ -897,6 +899,58 @@ fn resolve_deferred_fn_slots<'tcx>(
     true
 }
 
+/// Why this instantiation makes a SIMD intrinsic call in `instance`'s body invalid, if it does: a
+/// vector operand turned into a non-SIMD type, or a comparison whose result is not a valid mask
+/// (see [simd_mask_problem]).
+///
+/// rustc's codegen backends reject such a monomorphization with `E0511`, so the call site cannot
+/// appear in a program that `cargo build` accepts: nothing bounds the parameter of a helper like
+/// `fn imin<T: Copy>(a: T, b: T) -> T { simd_lt(a, b) }` to the SIMD types, but every real caller
+/// passes one. Autoharness picks its own instantiation, though, so it has to make that check
+/// itself, or the harness it generates is one rustc would not accept. `core` has exactly this
+/// shape in `core_arch::simd::simd_imin`, which is what blocked autoharness over the standard
+/// library: <https://github.com/model-checking/kani/issues/4919>.
+///
+/// Only `instance`'s own body is inspected. An invalid instantiation a level down (a generic
+/// function calling a generic SIMD helper) is reported by codegen against the harness that reached
+/// it, which fails that harness instead of the run; see
+/// <https://github.com/model-checking/kani/issues/4926>.
+fn invalid_simd_instantiation(tcx: TyCtxt, instance: Instance) -> Option<String> {
+    let body = instance.body()?;
+    body.blocks.iter().find_map(|block| {
+        let TerminatorKind::Call { func, .. } = &block.terminator.kind else {
+            return None;
+        };
+        let TyKind::RigidTy(RigidTy::FnDef(def, args)) = func.ty(body.locals()).ok()?.kind() else {
+            return None;
+        };
+        let callee = Instance::resolve(def, &args).ok()?;
+        // `try_match_simd` recognizes exactly the intrinsics named `simd_*`, so do not ask about
+        // any other: the `Intrinsic` conversion asserts on the signatures it knows, and selecting
+        // a harness should not be able to trip an assertion that codegen would not.
+        let name = callee.intrinsic_name().filter(|name| name.starts_with("simd_"))?;
+        let sig = callee.ty().kind().fn_sig()?.skip_binder();
+        let intrinsic = Intrinsic::from_instance(&callee);
+        let operand_ty = intrinsic.simd_vector_operand(sig.inputs(), sig.output())?;
+        if !operand_ty.kind().is_simd() {
+            return Some(format!(
+                "the body calls the SIMD intrinsic `{name}`, which rustc rejects for the \
+                 non-SIMD type `{operand_ty}` this instantiation gives it"
+            ));
+        }
+        if intrinsic.is_simd_comparison()
+            && let Some(problem) = simd_mask_problem(tcx, operand_ty, sig.output())
+        {
+            return Some(format!(
+                "the body calls the SIMD comparison `{name}`, which rustc rejects for the result \
+                 type `{}` ({problem})",
+                sig.output()
+            ));
+        }
+        None
+    })
+}
+
 /// Try to find a monomorphic instantiation of the generic function `fn_item` for which we can
 /// generate an automatic harness. Substitute each type parameter with the first candidate from
 /// `generic_instantiation_candidates` such that all of the function's trait bounds are satisfied
@@ -997,6 +1051,9 @@ fn choose_generic_instantiation(
     };
 
     let attempts = std::cell::Cell::new(0usize);
+    // The first candidate rejected for making a SIMD intrinsic call invalid, so that the skip
+    // reason names that instead of the trait bounds, which such a candidate does satisfy.
+    let simd_rejection: std::cell::Cell<Option<String>> = std::cell::Cell::new(None);
     let try_choice = |choice: &[Ty]| -> Option<Instance> {
         attempts.set(attempts.get() + 1);
         let args = build_args(choice);
@@ -1007,7 +1064,14 @@ fn choose_generic_instantiation(
         // instance (e.g. a generic trait method without a default) is then reported accurately
         // as `NoBody` by `skip_reason`, rather than falling through to a generic-function skip
         // reason here.
-        Instance::resolve(def, &args).ok()
+        let instance = Instance::resolve(def, &args).ok()?;
+        if let Some(reason) = invalid_simd_instantiation(tcx, instance) {
+            // Keep the first rejection: it is the one for the most common candidate.
+            let reason = simd_rejection.take().unwrap_or(reason);
+            simd_rejection.set(Some(reason));
+            return None;
+        }
+        Some(instance)
     };
 
     // First pass: the same primitive candidate for every type parameter (the common case,
@@ -1065,6 +1129,11 @@ fn choose_generic_instantiation(
         && let Some(instance) = try_choice(&vec![Ty::new_tuple(&[]); type_slots.len()])
     {
         return Ok(instance);
+    }
+    // A candidate that satisfied the bounds but would make a SIMD intrinsic call invalid is the
+    // more specific reason, so report it ahead of the generic ones below.
+    if let Some(reason) = simd_rejection.take() {
+        return Err(reason);
     }
     if search_limited {
         return Err(format!(

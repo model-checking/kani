@@ -1,0 +1,1 @@
+error: `break` or `continue` to a loop enclosing a loop whose `#[kani::loop_invariant]` uses `prev` is not supported

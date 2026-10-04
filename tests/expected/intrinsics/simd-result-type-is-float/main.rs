@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 //! Checks that storing the result of a vector comparison in a vector of floats
-//! causes an error.
+//! is reported as an unsupported construct. rustc's codegen backends reject it
+//! with E0511; Kani reports it per harness rather than aborting the crate, so an
+//! instantiation autoharness reaches does not stop the whole run (see #4950).
 #![feature(repr_simd, core_intrinsics)]
 use std::intrinsics::simd::simd_eq;
 
