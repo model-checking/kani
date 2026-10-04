@@ -6,8 +6,8 @@ use cbmc::utils::aggr_tag;
 use cbmc::{InternString, InternedString};
 use kani_metadata::UnstableFeature;
 use rustc_abi::{
-    BackendRepr::SimdVector, FieldIdx, FieldsShape, Float, Integer, LayoutData, Primitive, Size,
-    TagEncoding, TyAndLayout, VariantIdx, VariantLayout, Variants,
+    BackendRepr, BackendRepr::SimdVector, FieldIdx, FieldsShape, Float, Integer, LayoutData,
+    Primitive, Size, TagEncoding, TyAndLayout, VariantIdx, VariantLayout, Variants,
 };
 use rustc_ast::ast::Mutability;
 use rustc_index::IndexVec;
@@ -1184,14 +1184,44 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
         self.ensure_struct(self.ty_mangled_name(ty), self.ty_pretty_name(ty), |ctx, _| {
             let variant = &def.variants().raw[0];
             let layout = ctx.layout_of(ty);
+            let align = Size::from_bits(layout.layout.align.abi.bits());
+            if def.repr().scalable() && variant.fields.len() > 1 {
+                return ctx.codegen_scalable_vector_tuple_fields(variant, subst, align);
+            }
             ctx.codegen_variant_struct_fields(
                 variant,
                 subst,
                 &layout.layout.fields,
-                Size::from_bits(layout.layout.align.abi.bits()),
+                align,
                 Size::ZERO,
             )
         })
+    }
+
+    /// The fields of a tuple of scalable vectors, such as `svint32x4_t(svint32_t, svint32_t,
+    /// svint32_t, svint32_t)` in `core::arch::aarch64`.
+    ///
+    /// rustc lays such a tuple out as a single `SimdScalableVector` whose `FieldsShape` holds one
+    /// offset however many vectors the tuple has, so `codegen_struct_fields` cannot place its
+    /// fields, c.f. <https://github.com/model-checking/kani/issues/4963>. A scalable vector has no
+    /// size fixed at compile time; rustc sizes it at its minimum (a 128-bit vector) and so does
+    /// Kani. The members are all the same vector type, so they are placed back to back, which
+    /// adds up to the size rustc reports for the tuple.
+    fn codegen_scalable_vector_tuple_fields(
+        &mut self,
+        variant: &VariantDef,
+        subst: &'tcx GenericArgsRef<'tcx>,
+        align: Size,
+    ) -> Vec<DatatypeComponent> {
+        let mut fields = Vec::with_capacity(variant.fields.len());
+        let mut offset = Size::ZERO;
+        for field in &variant.fields {
+            let fld_ty = field.ty(self.tcx, subst).skip_normalization();
+            fields.push(DatatypeComponent::field(field.name.to_string(), self.codegen_ty(fld_ty)));
+            offset += self.layout_of(fld_ty).size;
+        }
+        fields.extend(self.codegen_alignment_padding(offset, align, fields.len()));
+        fields
     }
 
     /// generate a struct representing the layout of the variant
@@ -1633,8 +1663,22 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
         debug! {"handling simd with layout {:?}", layout};
 
         let (element, size) = match layout {
-            SimdVector { element, count } => (element, count),
-            _ => unreachable!(),
+            // As of nightly-2026-08-21 the lane count is a `BackendLaneCount` (a `NonZero<u16>`)
+            // rather than a bare `u64`.
+            SimdVector { element, count } => (*element, count.as_u64()),
+            // `core::simd::Simd` is `#[repr(simd, packed)]`, and rustc lays out a packed vector
+            // whose lane count is not a power of two, such as `Simd<i16, 12>`, as memory with no
+            // padding instead of as a vector. The lanes are taken from the type instead. CBMC
+            // aligns a vector to 1 and Kani pads structs itself, so a vector of that many lanes has
+            // the size and field offsets rustc gives the packed type.
+            BackendRepr::Memory { sized: true } => {
+                let (count, lane_ty) = ty.simd_size_and_type(self.tcx);
+                let BackendRepr::Scalar(element) = self.layout_of(lane_ty).backend_repr else {
+                    unreachable!("SIMD lane `{lane_ty}` is not a scalar")
+                };
+                (element, count)
+            }
+            _ => unreachable!("unexpected layout for SIMD type `{ty}`: {layout:?}"),
         };
 
         // CBMC requires a numeric vector element type, so a pointer lane is modeled as an unsigned
@@ -1657,9 +1701,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             self.codegen_ty(rust_type)
         };
 
-        // As of nightly-2026-08-21 the lane count is a `BackendLaneCount` (a `NonZero<u16>`)
-        // rather than a bare `u64`.
-        Type::vector(cbmc_type, size.as_u64())
+        Type::vector(cbmc_type, size)
     }
 
     /// the function type of the current instance
