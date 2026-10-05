@@ -31,6 +31,14 @@ Usage: kani [OPTIONS] [INPUT]
 
 For more information, try '--help'.
 
+[TEST] --c-lib is refused for another target
+error: Conflicting options: --c-lib is compiled for the host, so it isn't compatible with --target for another platform.
+
+Usage: kani [OPTIONS] [INPUT]
+       kani <COMMAND>
+
+For more information, try '--help'.
+
 [TEST] verify-std is refused with --target
 error: The `verify-std` subcommand does not support `--target`
 

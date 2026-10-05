@@ -51,6 +51,9 @@ popd > /dev/null
 echo "[TEST] --concrete-playback is refused for another target"
 kani riscv64.rs --target $TARGET -Z unstable-options -Z concrete-playback --concrete-playback print
 
+echo "[TEST] --c-lib is refused for another target"
+kani riscv64.rs --target $TARGET -Z unstable-options -Z c-ffi --c-lib is_negative.c
+
 echo "[TEST] verify-std is refused with --target"
 kani verify-std . --target $TARGET -Z unstable-options
 
