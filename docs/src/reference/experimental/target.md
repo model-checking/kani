@@ -48,15 +48,13 @@ cargo kani --target riscv64gc-unknown-linux-gnu -Z unstable-options
 * `--concrete-playback` is rejected with a non-host `--target`, because the generated test runs
   on the host.
 * The `verify-std` subcommand does not support `--target`.
-* The `__CPROVER_architecture_*` symbols in the final `.out` are the host's rather than the ones
-  Kani wrote. When `goto-cc` links goto binaries, the first input's architecture symbols win, and
-  Kani currently passes `kani_lib.c` to the link as a C source, which `goto-cc` compiles with the
-  host's configuration. On macOS a cross-target run therefore reports the host's `arm64` and
-  `char_is_unsigned = 0` there, and a 64-bit `long double` where riscv64's is 128-bit. The Rust
-  side of the goto program spells out its own widths and signedness, which is what the proof
-  checks, so this matters only where CBMC interprets C: `kani_lib.c`, its C library models, and
-  any C code a harness reaches. Compiling `kani_lib.c` to a goto object ahead of time and
-  linking it after the Rust inputs would keep the model Kani wrote.
+* `--c-lib` is rejected with a non-host `--target`. `goto-cc` compiles C sources with the host's
+  C configuration, and a source compiled as part of the link would replace the target's machine
+  model in the linked program.
+* Kani's machine model has no operating system, so `__CPROVER_architecture_os` in the linked
+  program is the host's, as it is for a host run. A `riscv64gc-unknown-linux-gnu` run on macOS
+  therefore has `os = "macos"`. CBMC reads this setting in a few places when it processes C, such
+  as the arm64 `va_list` layout.
 * Inline assembly is unsupported on every target, as it is on the host. Code behind
   `core::arch::asm!` has to be [stubbed](stubbing.md) to be verified.
 * Only 64-bit little-endian targets are supported. A 32-bit target needs `goto-cc -m32` and a
