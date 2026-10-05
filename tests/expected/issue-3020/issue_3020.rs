@@ -5,7 +5,7 @@
 //! At `-Zmir-opt-level=2`, rustc folds `transmute::<u8, bool>(2)` into a `bool` constant whose
 //! byte is 2. Kani used to panic on that constant; it should report UB only where it is reached.
 
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq)]
 struct Wrapper(bool);
 
 #[kani::proof]
