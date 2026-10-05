@@ -31,6 +31,15 @@ for goto in "$TMP_DIR"/*target_is_riscv64gc.out; do
         /^Symbol\.+: __CPROVER_architecture_(arch|char_is_unsigned)$/ { name = $2 }
         /^Value/ && name { sub(/^\(__CPROVER_integer\)/, "", $2); print name " = " $2; name = "" }'
 done
+
+echo "[TEST] --export-json records the verification target"
+EXPORT_JSON="$TMP_DIR/export.json"
+kani riscv64.rs --target $TARGET -Z unstable-options --harness target_is_riscv64gc \
+    --export-json "$EXPORT_JSON" > /dev/null
+python3 - "$EXPORT_JSON" << 'EOF'
+import json, sys
+print("metadata.target =", json.load(open(sys.argv[1]))["metadata"]["target"])
+EOF
 rm -rf "$TMP_DIR"
 
 echo "[TEST] cargo kani for riscv64"

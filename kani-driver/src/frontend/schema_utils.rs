@@ -21,14 +21,14 @@ use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
 /// Creates structured JSON metadata for an export run
-/// This utility function captures basic environment for the whole session
-pub fn create_metadata_json() -> Value {
+/// This utility function captures basic environment for the whole session.
+/// `target` is the target triple verified for, which `--target` can make differ from the host's.
+pub fn create_metadata_json(target: &str) -> Value {
     let timestamp = OffsetDateTime::now_utc()
         .format(&Rfc3339)
         .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string());
 
     let kani_version = env!("CARGO_PKG_VERSION");
-    let target = env!("TARGET");
     let build_mode = if cfg!(debug_assertions) { "debug" } else { "release" };
 
     json!({

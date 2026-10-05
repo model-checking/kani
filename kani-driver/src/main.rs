@@ -199,7 +199,7 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
 
     if let Some(handler) = handler.as_mut() {
         // Add project and export run metadata using frontend utility
-        handler.add_item("metadata", create_metadata_json());
+        handler.add_item("metadata", create_metadata_json(session.args.verification_target()));
         handler.add_item("project", create_project_metadata_json(&project));
         handler.add_item("tools", create_tool_versions_json(&session, &harnesses));
 
