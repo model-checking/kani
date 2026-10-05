@@ -278,21 +278,37 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
         loc: Location,
     ) -> Expr {
         debug!(?ty, ?alloc, "codegen_const_ptr");
+        // The data offset, and a slice's length, come from the pointer itself: a constant
+        // reference or subslice can point into the middle of another constant's allocation.
+        let pointer_size = self.symbol_table.machine_model().pointer_width_in_bytes();
+        let offset = alloc.read_partial_uint(0..pointer_size).unwrap();
         if self.use_fat_pointer_stable(inner_ty) {
+            let len = alloc.read_partial_uint(pointer_size..2 * pointer_size).unwrap();
             match inner_ty.kind() {
                 TyKind::RigidTy(RigidTy::Str) => {
+                    let typ = self.codegen_ty_stable(ty);
+                    let len_expr = Expr::int_constant(len, Type::size_t());
+                    let Some(&(_, prov)) = alloc.provenance.ptrs.first() else {
+                        // A pointer with no provenance (an empty slice or `&str` from a dangling
+                        // pointer, for example) holds its address in the offset.
+                        let data_expr = Expr::size_constant(offset, &self.symbol_table)
+                            .cast_to(Type::unsigned_int(8).to_pointer());
+                        return slice_fat_ptr(typ, data_expr, len_expr, &self.symbol_table);
+                    };
                     // a string literal
                     // Create a static variable that holds its value
-                    assert_eq!(
-                        alloc.provenance.ptrs.len(),
-                        1,
-                        "Expected `&str` to point to a str buffer"
-                    );
-                    let alloc_id = alloc.provenance.ptrs[0].1.0;
-                    let GlobalAlloc::Memory(data) = GlobalAlloc::from(alloc_id) else {
+                    let GlobalAlloc::Memory(data) = GlobalAlloc::from(prov.0) else {
                         unreachable!()
                     };
                     let mem_var = self.codegen_const_allocation(&data, None, loc, false);
+                    if offset != 0 || len != data.bytes.len() as u128 {
+                        // A substring of another constant records no literal, and the offset,
+                        // even when zero, keeps `extract_const_message` from matching it.
+                        let data_expr = mem_var
+                            .cast_to(Type::unsigned_int(8).to_pointer())
+                            .plus(Expr::int_constant(offset, Type::size_t()));
+                        return slice_fat_ptr(typ, data_expr, len_expr, &self.symbol_table);
+                    }
 
                     // Extract identifier for static variable.
                     // codegen_allocation_auto_imm_name returns the *address* of
@@ -314,29 +330,22 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
 
                     // Codegen as a fat pointer
                     let data_expr = mem_var.cast_to(Type::unsigned_int(8).to_pointer());
-                    let len_expr = Expr::int_constant(bytes.len(), Type::size_t());
-                    slice_fat_ptr(
-                        self.codegen_ty_stable(ty),
-                        data_expr,
-                        len_expr,
-                        &self.symbol_table,
-                    )
+                    slice_fat_ptr(typ, data_expr, len_expr, &self.symbol_table)
                 }
                 TyKind::RigidTy(RigidTy::Slice(inner_ty)) => {
-                    // Create a static variable that holds its value
-                    assert_eq!(
-                        alloc.provenance.ptrs.len(),
-                        1,
-                        "Expected `&[T]` to point to a single buffer"
-                    );
-                    let alloc_id = alloc.provenance.ptrs[0].1.0;
-                    let GlobalAlloc::Memory(data) = GlobalAlloc::from(alloc_id) else {
-                        unreachable!()
-                    };
-                    let mem_var = self.codegen_const_allocation(&data, None, loc, false);
                     let inner_typ = self.codegen_ty_stable(inner_ty);
-                    let len = data.bytes.len() / inner_typ.sizeof(&self.symbol_table) as usize;
-                    let data_expr = mem_var.cast_to(inner_typ.to_pointer());
+                    let data_addr = if let Some(&(_, prov)) = alloc.provenance.ptrs.first() {
+                        // Create a static variable that holds its value
+                        let GlobalAlloc::Memory(data) = GlobalAlloc::from(prov.0) else {
+                            unreachable!()
+                        };
+                        self.codegen_const_allocation(&data, None, loc, false)
+                            .cast_to(Type::unsigned_int(8).to_pointer())
+                            .plus(Expr::int_constant(offset, Type::size_t()))
+                    } else {
+                        Expr::size_constant(offset, &self.symbol_table)
+                    };
+                    let data_expr = data_addr.cast_to(inner_typ.to_pointer());
                     let len_expr = Expr::int_constant(len, Type::size_t());
                     slice_fat_ptr(
                         self.codegen_ty_stable(ty),
@@ -376,10 +385,9 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
         } else if !alloc.provenance.ptrs.is_empty() {
             // Codegen the provenance pointer.
             trace!("codegen_const_ptr with_prov");
-            let ptr = alloc.provenance.ptrs[0];
-            let alloc_id = ptr.1.0;
+            let alloc_id = alloc.provenance.ptrs[0].1.0;
             let typ = self.codegen_ty_stable(ty);
-            self.codegen_alloc_pointer(typ, alloc_id, ptr.0, loc)
+            self.codegen_alloc_pointer(typ, alloc_id, offset.try_into().unwrap(), loc)
         } else {
             // If there's no provenance, just codegen the pointer address.
             trace!("codegen_const_ptr no_prov");
