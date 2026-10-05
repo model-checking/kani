@@ -577,8 +577,6 @@ impl GotocCtx<'_, '_> {
             }
             Intrinsic::SimdShuffle(stripped) => {
                 let Some(n) = self.simd_shuffle_length(stripped.as_str(), farg_types, span) else {
-                    // An error here would abort the whole crate; as an unsupported construct it
-                    // fails only the harnesses that reach it.
                     return self.codegen_unimplemented_stmt(
                         &format!(
                             "`{intrinsic_str}` with the index type `{}` (not a SIMD vector of `u32`)",
@@ -1506,8 +1504,6 @@ impl GotocCtx<'_, '_> {
         let loc = self.codegen_span_stable(span);
         let (_, vector_base_type) = self.simd_size_and_type(rust_arg_types[0]);
         if rust_ret_type != vector_base_type {
-            // An error here would abort the whole crate; as an unsupported construct it fails
-            // only the harnesses that reach it.
             return self.codegen_unimplemented_stmt(
                 &format!(
                     "`simd_extract` with the result type `{rust_ret_type}` (the input `{}` has `{vector_base_type}` lanes)",
@@ -1552,8 +1548,6 @@ impl GotocCtx<'_, '_> {
 
         let (_, vector_base_type) = self.simd_size_and_type(rust_arg_types[0]);
         if vector_base_type != rust_arg_types[2] {
-            // An error here would abort the whole crate; as an unsupported construct it fails
-            // only the harnesses that reach it.
             return self.codegen_unimplemented_stmt(
                 &format!(
                     "`simd_insert` with the inserted type `{}` (the input `{}` has `{vector_base_type}` lanes)",
@@ -1791,8 +1785,6 @@ impl GotocCtx<'_, '_> {
         let loc = self.codegen_span_stable(span);
         let (_, vec_subtype) = self.simd_size_and_type(rust_arg_types[0]);
         let (ret_type_len, ret_type_subtype) = self.simd_size_and_type(rust_ret_type);
-        // An error here would abort the whole crate; as an unsupported construct it fails only the
-        // harnesses that reach it.
         if ret_type_len != n {
             return self.codegen_unimplemented_stmt(
                 &format!(
