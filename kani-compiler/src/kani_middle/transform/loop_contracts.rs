@@ -790,18 +790,24 @@ impl LoopContractPass {
         map
     }
 
-    /// Blocks that assign each local (as an `Assign` statement or a `Call`
-    /// destination). Used only for locals without a `StorageLive` to decide
+    /// Blocks that define each local with a whole-local `Assign` or `Call`
+    /// destination. Used only for locals without a `StorageLive` to decide
     /// whether they are declared inside a loop; see `group_mentions_loop_local`.
+    /// A write through a pointer the local holds (`*p = v`) or into part of it
+    /// (`x.f = v`) is not a definition, so `defines_local` filters it out.
     fn assign_blocks(body: &MutableBody) -> HashMap<usize, Vec<usize>> {
         let mut map: HashMap<usize, Vec<usize>> = HashMap::new();
         for (bb, block) in body.blocks().iter().enumerate() {
             for stmt in &block.statements {
-                if let StatementKind::Assign(place, _) = &stmt.kind {
+                if let StatementKind::Assign(place, _) = &stmt.kind
+                    && Self::defines_local(place)
+                {
                     map.entry(place.local).or_default().push(bb);
                 }
             }
-            if let TerminatorKind::Call { destination, .. } = &block.terminator.kind {
+            if let TerminatorKind::Call { destination, .. } = &block.terminator.kind
+                && Self::defines_local(destination)
+            {
                 map.entry(destination.local).or_default().push(bb);
             }
         }
@@ -815,6 +821,15 @@ impl LoopContractPass {
                 out.insert(*local);
             }
         }
+    }
+
+    /// True when `place` is a whole-local assignment: an empty projection, which
+    /// brings the local's entire value into existence and so defines it. A write
+    /// through a pointer the local holds (`*p = v`) or into part of the local
+    /// (`x.f = v`, `x[i] = v`) presumes the local already exists, so it is not a
+    /// definition site.
+    fn defines_local(place: &Place) -> bool {
+        place.projection.is_empty()
     }
 
     fn operand_locals(operand: &Operand, out: &mut HashSet<usize>) {
@@ -905,7 +920,8 @@ impl LoopContractPass {
     /// that is declared inside the same loop, i.e. dead at the head. Locals
     /// the group itself initializes (its own temporaries, including call
     /// results) and the destination are excluded; they are set by the copied
-    /// code.
+    /// code. A write through a pointer the local holds (`*p = v`) or into part
+    /// of it (`x.f = v`) does not initialize it, so it stays a checked mention.
     ///
     /// A local that carries a `StorageLive` is declared-in-this-loop when that
     /// `StorageLive` sits in a loop-body block. Some locals never get a
@@ -940,13 +956,17 @@ impl LoopContractPass {
                     StatementKind::StorageLive(local) => {
                         internal.insert(*local);
                     }
-                    StatementKind::Assign(place, _) => {
+                    // Only a whole-local assignment makes the local the group's
+                    // own; a write through a pointer or into part of it does not.
+                    StatementKind::Assign(place, _) if Self::defines_local(place) => {
                         internal.insert(place.local);
                     }
                     _ => {}
                 }
             }
-            if let TerminatorKind::Call { destination, .. } = &block.terminator.kind {
+            if let TerminatorKind::Call { destination, .. } = &block.terminator.kind
+                && Self::defines_local(destination)
+            {
                 internal.insert(destination.local);
             }
         }
