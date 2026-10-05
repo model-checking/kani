@@ -12,6 +12,10 @@ attempt to add with overflow
 VERIFICATION:- FAILED
 Complete - 1 successfully verified harnesses, 1 failures, 2 total.
 
+[TEST] the linked goto binary keeps the riscv64 machine model
+__CPROVER_architecture_arch = "riscv64"
+__CPROVER_architecture_char_is_unsigned = 1
+
 [TEST] cargo kani for riscv64
 Checking harness verify::elapsed_never_panics...
 Complete - 1 successfully verified harnesses, 0 failures, 1 total.
