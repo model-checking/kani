@@ -492,6 +492,11 @@ impl VerificationArgs {
         self.target_triple.as_deref().unwrap_or(HOST_TARGET)
     }
 
+    /// Whether `--target` names a platform other than the host's.
+    pub fn is_cross_target(&self) -> bool {
+        self.verification_target() != HOST_TARGET
+    }
+
     pub fn restrict_vtable(&self) -> bool {
         self.common_args.unstable_features.contains(UnstableFeature::RestrictVtable)
             && !self.no_restrict_vtable
@@ -878,14 +883,21 @@ impl ValidateArgs for VerificationArgs {
                 --output-format=old.",
                 ));
             }
-            if self.concrete_playback.is_some()
-                && let Some(triple) = &self.target_triple
-                && triple != HOST_TARGET
-            {
+            if self.concrete_playback.is_some() && self.is_cross_target() {
                 // Playback compiles and runs the generated test on the host.
                 return Err(Error::raw(
                     ErrorKind::ArgumentConflict,
                     "Conflicting options: --concrete-playback runs on the host, so it isn't \
+                compatible with --target for another platform.",
+                ));
+            }
+            if !self.c_lib.is_empty() && self.is_cross_target() {
+                // goto-cc compiles C sources with the host's C configuration, and when it
+                // compiles them as part of a link, that configuration replaces the target's
+                // machine model in the linked binary.
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    "Conflicting options: --c-lib is compiled for the host, so it isn't \
                 compatible with --target for another platform.",
                 ));
             }
@@ -1555,5 +1567,37 @@ mod tests {
             let err = parsed.validate().unwrap_err();
             assert_eq!(err.kind(), ErrorKind::ArgumentConflict, "for `{args}`");
         }
+    }
+
+    /// A target triple that is not the host's, whatever the host is.
+    fn other_target() -> &'static str {
+        if HOST_TARGET == "riscv64gc-unknown-linux-gnu" {
+            "x86_64-unknown-linux-gnu"
+        } else {
+            "riscv64gc-unknown-linux-gnu"
+        }
+    }
+
+    #[test]
+    fn check_c_lib_conflicts_with_cross_target() {
+        let args = format!(
+            "kani input.rs -Z unstable-options -Z c-ffi --c-lib lib.c --target {}",
+            other_target()
+        );
+        let err = StandaloneArgs::try_parse_from(args.split_whitespace())
+            .unwrap()
+            .verify_opts
+            .validate()
+            .unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
+
+        let args = format!(
+            "kani input.rs -Z unstable-options -Z c-ffi --c-lib lib.c --target {HOST_TARGET}"
+        );
+        StandaloneArgs::try_parse_from(args.split_whitespace())
+            .unwrap()
+            .verify_opts
+            .validate()
+            .unwrap();
     }
 }
