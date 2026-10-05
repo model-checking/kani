@@ -46,3 +46,11 @@ Usage: kani [OPTIONS] [INPUT]
        kani <COMMAND>
 
 For more information, try '--help'.
+
+[TEST] autoharness --std is refused with --target
+error: The `autoharness` subcommand does not support `--target` with `--std`
+
+Usage: kani [OPTIONS] [INPUT]
+       kani <COMMAND>
+
+For more information, try '--help'.

@@ -1600,4 +1600,21 @@ mod tests {
             .validate()
             .unwrap();
     }
+
+    /// `verify-std` and `autoharness --std` build against Kani's host-only `no_core` library, so
+    /// both refuse `--target`. Each case fails on the target before the std path is checked.
+    #[test]
+    fn check_std_verification_rejects_target() {
+        for args in [
+            "kani verify-std library -Z unstable-options --target",
+            "kani autoharness --std library -Z unstable-options -Z autoharness --target",
+        ] {
+            let args = format!("{args} {}", other_target());
+            let err = StandaloneArgs::try_parse_from(args.split_whitespace())
+                .unwrap()
+                .validate()
+                .unwrap_err();
+            assert_eq!(err.kind(), ErrorKind::ArgumentConflict, "for `{args}`");
+        }
+    }
 }

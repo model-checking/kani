@@ -57,5 +57,8 @@ kani riscv64.rs --target $TARGET -Z unstable-options -Z c-ffi --c-lib is_negativ
 echo "[TEST] verify-std is refused with --target"
 kani verify-std . --target $TARGET -Z unstable-options
 
+echo "[TEST] autoharness --std is refused with --target"
+kani autoharness --std . --target $TARGET -Z unstable-options -Z autoharness
+
 # The rejections above exit non-zero on purpose; the suite passes when the transcript matches.
 exit 0
