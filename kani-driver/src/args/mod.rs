@@ -15,7 +15,7 @@ use crate::util::warning;
 use cargo::CargoCommonArgs;
 use clap::builder::{PossibleValue, TypedValueParser};
 use clap::{ValueEnum, error::ContextKind, error::ContextValue, error::Error, error::ErrorKind};
-use kani_metadata::CbmcSolver;
+use kani_metadata::{CbmcSolver, SUPPORTED_TARGETS, supported_targets_list};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -846,6 +846,20 @@ impl ValidateArgs for VerificationArgs {
                 UnstableFeature::UnstableOptions,
             )?;
 
+            // Checked here, after the unstable gate, so that the error is about the triple and
+            // not about a missing library folder or a compiler error deep in a cargo build.
+            if let Some(triple) = &self.target_triple
+                && !SUPPORTED_TARGETS.contains(&triple.as_str())
+            {
+                return Err(Error::raw(
+                    ErrorKind::InvalidValue,
+                    format!(
+                        "Unsupported target `{triple}`: Kani can verify for {}.",
+                        supported_targets_list()
+                    ),
+                ));
+            }
+
             Ok(())
         };
 
@@ -1615,6 +1629,28 @@ mod tests {
                 .validate()
                 .unwrap_err();
             assert_eq!(err.kind(), ErrorKind::ArgumentConflict, "for `{args}`");
+        }
+    }
+
+    /// `--target` is checked against `SUPPORTED_TARGETS` before anything is built, including the
+    /// empty string, which would otherwise resolve to the `targets/` folder itself.
+    #[test]
+    fn check_target_must_be_supported() {
+        for target in ["x86_64-unknown-linux-musl", "thumbv7em-none-eabihf", ""] {
+            let mut args: Vec<&str> =
+                "kani input.rs -Z unstable-options --target".split_whitespace().collect();
+            args.push(target);
+            let err =
+                StandaloneArgs::try_parse_from(args).unwrap().verify_opts.validate().unwrap_err();
+            assert_eq!(err.kind(), ErrorKind::InvalidValue, "for `{target}`");
+        }
+        for target in SUPPORTED_TARGETS {
+            let args = format!("kani input.rs -Z unstable-options --target {target}");
+            StandaloneArgs::try_parse_from(args.split_whitespace())
+                .unwrap()
+                .verify_opts
+                .validate()
+                .unwrap();
         }
     }
 }

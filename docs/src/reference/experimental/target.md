@@ -20,7 +20,8 @@ A target needs a CBMC machine model in Kani. These are the targets that have one
 | `x86_64-apple-darwin` | |
 | `aarch64-apple-darwin` | |
 
-Any other target is rejected by the compiler with an error that lists these.
+Kani refuses any other `--target`, and `cargo build-dev --lib-target`, with an error that lists
+these.
 
 The bare-metal `riscv64gc-unknown-none-elf`, which kernels usually build for, is not supported.
 Verifying such a crate as `riscv64gc-unknown-linux-gnu` instead sets `target_os = "linux"` and

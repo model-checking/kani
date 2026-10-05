@@ -12,6 +12,9 @@ TARGET=riscv64gc-unknown-linux-gnu
 echo "[TEST] --target needs -Z unstable-options"
 kani riscv64.rs --target $TARGET
 
+echo "[TEST] an unsupported --target is refused before anything is built"
+kani riscv64.rs --target riscv64gc-unknown-none-elf -Z unstable-options
+
 echo "[TEST] single file on the host: the riscv64 harnesses are compiled out"
 kani riscv64.rs
 

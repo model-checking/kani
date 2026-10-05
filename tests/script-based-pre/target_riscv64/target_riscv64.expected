@@ -1,6 +1,14 @@
 [TEST] --target needs -Z unstable-options
 error: The `--target` option is unstable and requires `-Z unstable-options` to be used.
 
+[TEST] an unsupported --target is refused before anything is built
+error: Unsupported target `riscv64gc-unknown-none-elf`: Kani can verify for `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `riscv64gc-unknown-linux-gnu`, `x86_64-apple-darwin` or `aarch64-apple-darwin`.
+
+Usage: kani [OPTIONS] [INPUT]
+       kani <COMMAND>
+
+For more information, try '--help'.
+
 [TEST] single file on the host: the riscv64 harnesses are compiled out
 No proof harnesses (functions with #[kani::proof]) were found to verify.
 
