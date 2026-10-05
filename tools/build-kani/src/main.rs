@@ -11,11 +11,12 @@ mod parser;
 mod sysroot;
 
 use crate::sysroot::{
-    build_bin, build_lib, build_target_lib, build_tools, kani_no_core_lib, kani_playback_lib,
-    kani_sysroot_lib,
+    build_bin, build_lib, build_target_lib, build_tools, existing_lib_targets, kani_no_core_lib,
+    kani_playback_lib, kani_sysroot_lib,
 };
 use anyhow::{Result, bail};
 use clap::Parser;
+use kani_metadata::SUPPORTED_TARGETS;
 use std::{ffi::OsString, path::Path, process::Command};
 
 fn main() -> Result<()> {
@@ -26,8 +27,8 @@ fn main() -> Result<()> {
             let bin_folder = &build_bin(&build_parser.args)?;
             if !build_parser.skip_libs {
                 build_lib(bin_folder)?;
-                for target in &build_parser.lib_targets {
-                    build_target_lib(bin_folder, target)?;
+                for target in lib_targets(&build_parser.lib_targets)? {
+                    build_target_lib(bin_folder, &target)?;
                 }
             }
             Ok(())
@@ -57,6 +58,26 @@ fn main() -> Result<()> {
             Ok(())
         }
     }
+}
+
+/// The targets to build libraries for: the ones requested, plus every one already under
+/// `targets/`. kani-driver uses whatever is in `targets/<triple>/lib`, so a folder left from an
+/// older build would be verified against silently after a change to `library/`.
+fn lib_targets(requested: &[String]) -> Result<Vec<String>> {
+    let mut targets = requested.to_vec();
+    for target in existing_lib_targets()? {
+        if targets.contains(&target) {
+            continue;
+        }
+        if SUPPORTED_TARGETS.contains(&target.as_str()) {
+            println!("-- Rebuilding Kani's libraries for {target}, which a previous build added");
+            targets.push(target);
+        } else {
+            // kani-driver refuses `--target` for it, so the folder is never read.
+            println!("-- Skipping targets/{target}: Kani does not support that target");
+        }
+    }
+    Ok(targets)
 }
 
 /// Ensures everything is good to go before we begin to build the release bundle.

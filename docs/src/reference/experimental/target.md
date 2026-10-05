@@ -39,8 +39,10 @@ cargo build-dev --lib-target riscv64gc-unknown-linux-gnu
 ```
 
 The option may be repeated. Each target's libraries go to `targets/<TRIPLE>/lib/` beside the
-host's `lib/`, so one Kani installation can verify for several targets. The rustup target itself
-does not need to be installed: the standard library is built from the `rust-src` component.
+host's `lib/`, so one Kani installation can verify for several targets. A later `cargo build-dev`
+rebuilds every target already under `targets/`, named or not, so they stay in step with
+`library/`. The rustup target itself does not need to be installed: the standard library is built
+from the `rust-src` component.
 
 ## Usage
 

@@ -69,6 +69,24 @@ pub fn kani_target_lib(target: &str) -> PathBuf {
     path_buf!(kani_sysroot(), "targets", target, "lib")
 }
 
+/// The targets that already have a folder under `targets/`, from an earlier
+/// `cargo build-dev --lib-target`, sorted so the build order is stable.
+pub fn existing_lib_targets() -> Result<Vec<String>> {
+    let targets = path_buf!(kani_sysroot(), "targets");
+    if !targets.is_dir() {
+        return Ok(vec![]);
+    }
+    let mut found = vec![];
+    for entry in fs::read_dir(targets)? {
+        let entry = entry?;
+        if entry.file_type()?.is_dir() {
+            found.push(entry.file_name().to_string_lossy().into_owned());
+        }
+    }
+    found.sort();
+    Ok(found)
+}
+
 /// Returns the path to where Kani's pre-compiled binaries are stored.
 fn kani_sysroot_bin() -> PathBuf {
     path_buf!(kani_sysroot(), "bin")
