@@ -7,6 +7,7 @@ At present, the available Kani attributes are the following:
  - [`#[kani::proof]`](#kaniproof)
  - [`#[kani::should_panic]`](#kanishould_panic)
  - [`#[kani::unwind(<number>)]`](#kaniunwindnumber)
+ - [`#[kani::no_unwinding_checks]`](#kanino_unwinding_checks)
  - [`#[kani::solver(<solver>)]`](#kanisolversolver)
  - [`#[kani::stub(<original>, <replacement>)]`](#kanistuboriginal-replacement)
  - [Contract-related attributes](#contract-attributes)
@@ -196,6 +197,37 @@ SUMMARY:
 
 VERIFICATION:- SUCCESSFUL
 ```
+
+## `#[kani::no_unwinding_checks]`
+
+**The `#[kani::no_unwinding_checks]` attribute turns off the unwinding assertions of a proof harness.**
+
+It has the effect of the `--no-unwinding-checks` option on the annotated harness only.
+Kani does not report loops that weren't unwound enough times, and a successful result only holds for the executions that stay within the unwinding value.
+This is meant for harnesses that verify some code up to a certain bound on purpose.
+It cannot be used on `#[kani::proof_for_contract]` harnesses, since `#[kani::stub_verified]` would then trust the contract beyond the unwinding bound.
+
+### Example
+
+The loop in this harness runs `n` times, for any `u8` value `n`:
+
+```rust
+#[kani::proof]
+#[kani::unwind(3)]
+#[kani::no_unwinding_checks]
+fn check_count_up_to_n() {
+    let n: u8 = kani::any();
+    let mut count = 0;
+    while count < n {
+        count += 1;
+    }
+    assert!(count == n);
+}
+```
+
+Kani verifies this harness successfully.
+The result holds for the values of `n` below 3, the ones for which an unwinding value of 3 is enough.
+Without the `#[kani::no_unwinding_checks]` attribute, verification fails because of the unwinding assertion for the loop.
 
 ## `#[kani::solver(<solver>)]`
 
