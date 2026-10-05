@@ -154,6 +154,7 @@ const UNSUPPORTED_CONSTRUCT_DESC: &str = "is not currently supported by Kani";
 const UNWINDING_ASSERT_DESC: &str = "unwinding assertion loop";
 const UNWINDING_ASSERT_REC_DESC: &str = "recursion unwinding assertion";
 const UNDEFINED_FUNCTION_DESC: &str = "undefined function should be unreachable";
+const VACUITY_COVER_DESC: &str = "autoharness: a generated input reaches ";
 
 impl ParserItem {
     /// Determines if an item must be skipped or not.
@@ -251,7 +252,9 @@ fn format_item_terse(_item: &ParserItem) -> Option<String> {
 /// This function reports the results of normal checks (e.g. assertions and
 /// arithmetic overflow checks) and cover properties (specified using the
 /// `kani::cover` macro) separately. Cover properties currently do not impact
-/// the overall verification success or failure.
+/// the overall verification success or failure, except that a harness fails
+/// when no input reaches its autoharness vacuity cover (see
+/// `is_vacuous_harness_cover`).
 ///
 /// TODO: We could `write!` to `result_str` instead
 /// <https://github.com/model-checking/kani/issues/1480>
@@ -390,6 +393,10 @@ pub fn format_result(
     for prop in failed_tests {
         let failure_message = build_failure_message(prop.description.clone(), &prop.trace.clone());
         result_str.push_str(&failure_message);
+    }
+    for prop in properties.iter().filter(|prop| is_vacuous_harness_cover(prop)) {
+        let vacuity_line = format!("{}\n", vacuity_message(prop));
+        result_str.push_str(&vacuity_line);
     }
 
     let verification_result = if status == VerificationStatus::Success {
@@ -550,6 +557,20 @@ pub fn postprocess_result(properties: Vec<Property>, extra_ptr_checks: bool) -> 
         update_properties_with_reach_status(properties_filtered, has_fundamental_failures);
     let results_after_code_coverage = update_results_of_code_covererage_checks(updated_properties);
     update_results_of_cover_checks(results_after_code_coverage)
+}
+
+/// Whether `prop` is a `cover_function_reached` cover (kani-compiler, `automatic.rs`) that no
+/// input can satisfy, which makes the harness vacuous.
+pub fn is_vacuous_harness_cover(prop: &Property) -> bool {
+    prop.is_cover_property()
+        && prop.description.starts_with(VACUITY_COVER_DESC)
+        && matches!(prop.status, CheckStatus::Unsatisfiable | CheckStatus::Unreachable)
+}
+
+/// The line reporting a vacuous harness, for a `prop` that `is_vacuous_harness_cover` accepts.
+pub fn vacuity_message(prop: &Property) -> String {
+    let function = &prop.description[VACUITY_COVER_DESC.len()..];
+    format!("Vacuous harness: no generated input reaches {function}")
 }
 
 /// Determines if there is property with status `FAILURE` and the given description
