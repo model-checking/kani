@@ -1,0 +1,11 @@
+check_invalid_bool.safety_check\
+- Status: FAILURE\
+- Description: "Undefined Behavior: Invalid value of type `bool`"
+
+check_invalid_bool_in_struct.safety_check\
+- Status: FAILURE\
+- Description: "Undefined Behavior: Invalid value of type `bool`"
+
+Verification failed for - check_invalid_bool
+Verification failed for - check_invalid_bool_in_struct
+Complete - 2 successfully verified harnesses, 2 failures, 4 total.
