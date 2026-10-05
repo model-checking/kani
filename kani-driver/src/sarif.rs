@@ -3,9 +3,11 @@
 
 use crate::call_cbmc::ExitStatus;
 use crate::cbmc_output_parser::{CheckStatus, Property, SourceLocation, TraceItem};
+use crate::cbmc_property_renderer::{is_vacuous_harness_cover, vacuity_message};
 use crate::harness_runner::HarnessResult;
 use crate::session::KaniSession;
 use anyhow::{Context, Result};
+use kani_metadata::HarnessMetadata;
 use pathdiff::diff_paths;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -180,6 +182,16 @@ impl SarifLog {
                             },
                         });
                     }
+                    for prop in properties.iter().filter(|prop| is_vacuous_harness_cover(prop)) {
+                        let rule_id = "kani.autoharness.vacuous";
+                        let desc = "No generated input reaches the function under test";
+                        rules.entry(rule_id.to_string()).or_insert_with(|| ReportingDescriptor {
+                            id: rule_id.to_string(),
+                            short_description: Message { text: desc.to_string() },
+                        });
+                        let text = vacuity_message(prop);
+                        sarif_results.push(harness_level_result(harness, rule_id, &text));
+                    }
                 }
                 Err(exit_status) => {
                     let (rule_id, desc) = exit_status_rule(exit_status);
@@ -188,26 +200,7 @@ impl SarifLog {
                         short_description: Message { text: desc.to_string() },
                     });
 
-                    sarif_results.push(SarifResult {
-                        rule_id: rule_id.to_string(),
-                        level: "error",
-                        message: Message { text: format!("[{}] {desc}", harness.pretty_name) },
-                        locations: vec![Location {
-                            physical_location: PhysicalLocation {
-                                artifact_location: ArtifactLocation {
-                                    uri: relativize_path(&harness.original_file),
-                                },
-                                region: Region {
-                                    start_line: harness.original_start_line as u32,
-                                    start_column: None,
-                                },
-                            },
-                        }],
-                        properties: ResultProperties {
-                            harness: harness.pretty_name.clone(),
-                            property_name: None,
-                        },
-                    });
+                    sarif_results.push(harness_level_result(harness, rule_id, desc));
                 }
             }
         }
@@ -227,6 +220,27 @@ impl SarifLog {
                 results: sarif_results,
             }],
         }
+    }
+}
+
+/// An error result about `harness` as a whole, located at the harness's own source.
+fn harness_level_result(harness: &HarnessMetadata, rule_id: &str, text: &str) -> SarifResult {
+    SarifResult {
+        rule_id: rule_id.to_string(),
+        level: "error",
+        message: Message { text: format!("[{}] {text}", harness.pretty_name) },
+        locations: vec![Location {
+            physical_location: PhysicalLocation {
+                artifact_location: ArtifactLocation {
+                    uri: relativize_path(&harness.original_file),
+                },
+                region: Region {
+                    start_line: harness.original_start_line as u32,
+                    start_column: None,
+                },
+            },
+        }],
+        properties: ResultProperties { harness: harness.pretty_name.clone(), property_name: None },
     }
 }
 
