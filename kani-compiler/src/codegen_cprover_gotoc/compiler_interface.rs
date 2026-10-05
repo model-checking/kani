@@ -20,7 +20,10 @@ use cbmc::goto_program::Location;
 use cbmc::{InternedString, MachineModel};
 use cbmc::{RoundingMode, WithInterner};
 use kani_metadata::artifact::convert_type;
-use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata, UnsupportedFeature};
+use kani_metadata::{
+    ArtifactType, HarnessMetadata, KaniMetadata, SUPPORTED_TARGETS, UnsupportedFeature,
+    supported_targets_list,
+};
 use kani_metadata::{AssignsContract, CompilerArtifactStub};
 use rustc_abi::{Align, Endian};
 use rustc_codegen_ssa::back::archive::{
@@ -45,7 +48,7 @@ use rustc_session::output::out_filename;
 use rustc_session::{EarlySession, IncrCompSession, Session};
 use rustc_span::{Symbol, sym};
 use rustc_structures::CrateType;
-use rustc_target::spec::{Arch, Os, PanicStrategy};
+use rustc_target::spec::{Arch, Os, PanicStrategy, TargetTuple};
 use std::any::Any;
 use std::cmp::min;
 use std::collections::BTreeMap;
@@ -604,36 +607,24 @@ impl ArchiveBuilderBuilder for ArArchiveBuilderBuilder {
 }
 
 fn check_target(session: &Session) {
-    // The requirement below is needed to build a valid CBMC machine model
-    // in function `machine_model_from_session` from
-    // src/kani-compiler/src/codegen_cprover_gotoc/context/goto_ctx.rs
-    let is_x86_64_linux_target = session.target.llvm_target == "x86_64-unknown-linux-gnu";
-    let is_arm64_linux_target = session.target.llvm_target == "aarch64-unknown-linux-gnu";
-    // Comparison with `x86_64-apple-darwin` does not work well because the LLVM
-    // target may become `x86_64-apple-macosx10.7.0` (or similar) and
-    // fail. Other Apple targets (iOS, tvOS and so on) share these prefixes, so also match the OS.
-    let is_x86_64_darwin_target =
-        session.target.llvm_target.starts_with("x86_64-apple-") && session.target.os == Os::MacOs;
-    // looking for `arm64-apple-*`
-    let is_arm64_darwin_target =
-        session.target.llvm_target.starts_with("arm64-apple-") && session.target.os == Os::MacOs;
-    // `riscv64gc-unknown-linux-gnu`, whose LLVM target drops the `gc`.
-    // `riscv64a23-unknown-linux-gnu` and `riscv64-wrs-vxworks` share that LLVM target, so also
-    // match the OS and the features that `target_config` hardcodes.
-    let is_riscv64_linux_target = session.target.llvm_target == "riscv64-unknown-linux-gnu"
-        && session.target.os == Os::Linux
-        && session.target.features == "+m,+a,+f,+d,+c,+zicsr,+zifencei";
-
-    if !is_x86_64_linux_target
-        && !is_arm64_linux_target
-        && !is_x86_64_darwin_target
-        && !is_arm64_darwin_target
-        && !is_riscv64_linux_target
-    {
+    // `machine_model_from_session` in this file builds a CBMC machine model only for the targets
+    // in `SUPPORTED_TARGETS`, and `target_config` hardcodes their features, so the session must
+    // be one of those built-in targets exactly. The tuple names the built-in spec, which already
+    // tells apart targets that share an LLVM target, such as `riscv64gc-unknown-linux-gnu`,
+    // `riscv64a23-unknown-linux-gnu` and `riscv64-wrs-vxworks`.
+    //
+    // A target JSON file is refused even when its name matches: rustc names it after the file
+    // stem, so `riscv64gc-unknown-linux-gnu.json` would pass a name check with whatever data
+    // layout and features the file sets. An exact comparison of the `features` string used to
+    // guard against both cases, and broke whenever rustc respelled that string.
+    let supported = match &session.opts.target_triple {
+        TargetTuple::TargetTuple(tuple) => SUPPORTED_TARGETS.contains(&tuple.as_str()),
+        TargetTuple::TargetJson { .. } => false,
+    };
+    if !supported {
         let err_msg = format!(
-            "Kani requires the target platform to be `x86_64-unknown-linux-gnu`, \
-            `aarch64-unknown-linux-gnu`, `riscv64gc-unknown-linux-gnu`, `x86_64-apple-darwin` \
-            or `aarch64-apple-darwin`, but it is `{}` (LLVM target `{}`)",
+            "Kani requires the target platform to be {}, but it is `{}` (LLVM target `{}`)",
+            supported_targets_list(),
             session.opts.target_triple.tuple(),
             session.target.llvm_target
         );
