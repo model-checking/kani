@@ -823,8 +823,6 @@ fn new_machine_model(sess: &Session) -> MachineModel {
     // We check the target platform in function
     // `check_target` from src/kani-compiler/src/codegen_cprover_gotoc/compiler_interface.rs
     // and error if it is not any of the ones we expect.
-    let architecture = &sess.target.arch;
-    let os = &sess.target.os;
     let pointer_width = sess.target.pointer_width.into();
 
     // The model assumes the following values for session options:
@@ -839,7 +837,18 @@ fn new_machine_model(sess: &Session) -> MachineModel {
         Endian::Little => false,
         Endian::Big => true,
     };
+    machine_model_for(&sess.target.arch, &sess.target.os, pointer_width, alignment, is_big_endian)
+}
 
+/// The machine model for `architecture` and `os`, with the values `new_machine_model` reads from
+/// the session passed in.
+fn machine_model_for(
+    architecture: &Arch,
+    os: &Os,
+    pointer_width: u64,
+    alignment: u64,
+    is_big_endian: bool,
+) -> MachineModel {
     // The values below cannot be obtained from the session so they are
     // hardcoded using standard ones for the supported platforms
     // see /tools/sizeofs/main.cpp.
@@ -891,7 +900,9 @@ fn new_machine_model(sess: &Session) -> MachineModel {
         }
         Arch::AArch64 => {
             let bool_width = 8;
-            let char_is_unsigned = true;
+            // `char` is unsigned on aarch64 Linux and signed on Apple platforms, see the links
+            // above `wchar_t_is_unsigned`.
+            let char_is_unsigned = matches!(os, Os::Linux);
             let char_width = 8;
             let double_width = 64;
             let float_width = 32;
@@ -995,4 +1006,21 @@ where
     let elapsed = start.elapsed();
     info!("Finished {description} in {}s", elapsed.as_secs_f32());
     ret
+}
+
+#[cfg(test)]
+mod tests {
+    use super::machine_model_for;
+    use rustc_target::spec::{Arch, Os};
+
+    /// `char` is unsigned on aarch64 Linux but signed on Apple arm64, which CBMC itself also
+    /// encodes for `arm64` on macOS.
+    /// https://developer.apple.com/documentation/xcode/writing-arm64-code-for-apple-platforms
+    #[test]
+    fn arm64_char_signedness_follows_the_os() {
+        let linux = machine_model_for(&Arch::AArch64, &Os::Linux, 64, 1, false);
+        let macos = machine_model_for(&Arch::AArch64, &Os::MacOs, 64, 1, false);
+        assert!(linux.char_is_unsigned);
+        assert!(!macos.char_is_unsigned);
+    }
 }
