@@ -1,2 +1,2 @@
-Failed Checks: assertion failed: span <= usize::MAX as u128
+Failed Checks: loop contracts: a `for` loop over a range with more than `usize::MAX` elements
 VERIFICATION:- FAILED

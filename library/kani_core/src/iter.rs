@@ -130,7 +130,10 @@ macro_rules! generate_iter {
                 impl KaniIter for Range<$t> {
                     type Item = $t;
                     fn nth(&self, i: usize) -> Self::Item {
-                        self.start + i as $t
+                        // `i < len()`, so the true value `start + i` lies in `[start, end)` and is
+                        // representable; wrapping arithmetic computes it exactly even when `i as $t`
+                        // wraps for a wide signed span.
+                        self.start.wrapping_add(i as $t)
                     }
                     fn first(&self) -> Self::Item {
                         self.start
@@ -142,16 +145,21 @@ macro_rules! generate_iter {
                         // A `Range` with `start >= end` is empty (zero iterations). Otherwise use
                         // `abs_diff` so the span never overflows the element type (the macro also
                         // instantiates signed types, where a wide `end - start` would overflow).
-                        // Without this, the unchecked subtraction overflows when loop-contract
-                        // havoc produces `start > end` ("attempt to subtract with overflow").
+                        // Without the `end > start` guard, the subtraction underflows whenever the
+                        // range is empty with `start > end` (e.g. a concrete `5u32..3`): "attempt
+                        // to subtract with overflow".
                         if self.end > self.start {
                             // A 128-bit range can span more elements than `usize::MAX`. The
                             // `as usize` cast would silently truncate the span (`i128::MIN..0`
                             // becomes 0), modeling a non-empty range as empty. Widen to u128
-                            // (lossless for every instantiation) and fail the proof if the span
-                            // does not fit usize.
+                            // (lossless for every instantiation) and report the range as an
+                            // unsupported construct if the span does not fit usize.
                             let span = self.end.abs_diff(self.start) as u128;
-                            assert!(span <= usize::MAX as u128);
+                            if span > usize::MAX as u128 {
+                                crate::kani::unsupported(
+                                    "loop contracts: a `for` loop over a range with more than `usize::MAX` elements",
+                                );
+                            }
                             span as usize
                         } else {
                             0
