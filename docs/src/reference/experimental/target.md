@@ -22,6 +22,11 @@ A target needs a CBMC machine model in Kani. These are the targets that have one
 
 Any other target is rejected by the compiler with an error that lists these.
 
+The bare-metal `riscv64gc-unknown-none-elf`, which kernels usually build for, is not supported.
+Verifying such a crate as `riscv64gc-unknown-linux-gnu` instead sets `target_os = "linux"` and
+makes `std` available, so code behind `cfg(target_os = "none")` is compiled out and the `linux`
+branch, if there is one, is what Kani verifies.
+
 ## Building the libraries
 
 Kani verifies against its own build of the standard library and of the `kani` crate, compiled for
@@ -47,7 +52,7 @@ cargo kani --target riscv64gc-unknown-linux-gnu -Z unstable-options
 
 * `--concrete-playback` is rejected with a non-host `--target`, because the generated test runs
   on the host.
-* The `verify-std` subcommand does not support `--target`.
+* The `verify-std` subcommand and `autoharness --std` do not support `--target`.
 * `--c-lib` is rejected with a non-host `--target`. `goto-cc` compiles C sources with the host's
   C configuration, and a source compiled as part of the link would replace the target's machine
   model in the linked program.
