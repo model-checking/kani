@@ -880,15 +880,14 @@ impl GotocHook for LoopInvariantRegister {
 
             let mut stmt = Stmt::goto(bb_label(target.unwrap()), loc)
                 .with_loop_contracts(func_exp.call(fargs).cast_to(Type::CInteger(CIntType::Bool)));
-            if let Some(mut assigns) = gcx.loop_modifies.remove(&instance) {
+            let current_fn = gcx.current_fn().instance_stable();
+            if let Some(mut assigns) = gcx.loop_modifies.remove(&(current_fn, instance)) {
                 // The user wrote a loop modifies clause, possibly without any target. Add the
                 // locals that the loop contract transformation makes live across iterations of
                 // this loop, which the user cannot name (without a user clause, CBMC infers the
                 // clause instead).
-                let generated = gcx
-                    .transformer
-                    .generated_loop_modifies(gcx.current_fn().instance_stable(), instance)
-                    .to_vec();
+                let generated =
+                    gcx.transformer.generated_loop_modifies(current_fn, instance).to_vec();
                 assigns.extend(generated.into_iter().map(|local| gcx.codegen_local(local, loc)));
                 if assigns.is_empty() {
                     // The clause has no target (e.g. `#[kani::loop_modifies()]`, or only targets

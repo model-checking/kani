@@ -1242,6 +1242,7 @@ impl LoopContractPass {
             'walk: while let Some(current) = block {
                 for (stmt_idx, stmt) in body.blocks()[current].statements.iter().enumerate().rev() {
                     if let StatementKind::Assign(place, _) = &stmt.kind
+                        && place.projection.is_empty()
                         && binding_locals.contains(&place.local)
                     {
                         // Either the binding of this loop, or a binding of another loop, after

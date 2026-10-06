@@ -171,22 +171,20 @@ impl GotocCtx<'_, '_> {
             StatementKind::Assign(lhs, rhs) => {
                 let lty = self.place_ty_stable(lhs);
                 let rty = self.rvalue_ty_stable(rhs);
-                let localname = self.codegen_var_name(&lhs.local);
-                if localname.contains("kani_loop_modifies") {
-                    // Record the clause for its loop, which the loop contract pass determined (see
-                    // `LoopContractPass::find_loop_modifies_bindings`), even if no target is left
-                    // (e.g. an empty clause, or only targets of zero size). A clause that does not
-                    // belong to a loop with a loop contract is not used.
-                    let instance = self.current_fn().instance_stable();
-                    if let Some(register_fn) =
+                let instance = self.current_fn().instance_stable();
+                if lhs.projection.is_empty()
+                    && let Some(register_fn) =
                         self.transformer.loop_of_modifies_binding(instance, lhs.local)
-                    {
-                        let assigns = self.rvalue_to_assign_targets(rhs, location);
-                        self.loop_modifies.insert(register_fn, assigns);
-                    }
+                {
+                    // The binding of the loop modifies clause of the loop that the loop contract
+                    // pass determined (see `LoopContractPass::find_loop_modifies_bindings`).
+                    // Record the clause for that loop, even if no target is left (e.g. an empty
+                    // clause, or only targets of zero size).
+                    let assigns = self.rvalue_to_assign_targets(rhs, location);
+                    self.loop_modifies.insert((instance, register_fn), assigns);
                     return Stmt::skip(location);
                 }
-                if localname.contains("kani_loop_decreases") {
+                if self.codegen_var_name(&lhs.local).contains("kani_loop_decreases") {
                     if !self
                         .queries
                         .args()
