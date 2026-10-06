@@ -21,3 +21,13 @@ fn help_exits_successfully() {
         assert!(!stderr.contains("panicked"), "{args:?}: {stderr}");
     }
 }
+
+#[test]
+fn no_arguments_print_usage_and_exit_with_error() {
+    let output = Command::new(env!("CARGO_BIN_EXE_compiletest")).output().unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{}\n{stdout}\n{stderr}", output.status);
+    assert!(stdout.contains("Usage:"), "{stdout}");
+    assert!(!stderr.contains("panicked"), "{stderr}");
+}
