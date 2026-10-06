@@ -406,7 +406,7 @@ The narrower `INCOMPLETE` marker follows its presence matrix below.
 | `tools.kani` | string | — | The Kani release producing this document (`env!("CARGO_PKG_VERSION")` at build time); always known. |
 | `tools.rustc` | string | nullable | rustc toolchain `kani-compiler` was built against; `null` if the probe failed. |
 | `tools.cbmc` | string | nullable | CBMC's own `--version` output; `null` if it could not be probed. |
-| `enabled_unstable_features` | array of strings | never null, may be empty | Sorted `-Z` flags active for this run. |
+| `enabled_unstable_features` | array of strings | never null, may be empty | Sorted, distinct `-Z` flags active for this run. |
 | `harness_selection.requested_filters` | array of strings | never null, may be empty | Raw `--harness` values; empty means no filter. |
 | `harness_selection.exact` | bool | — | Whether `--exact` was passed. |
 | `harness_selection.unmatched_filters` | array of strings | never null, may be empty | Filters matching nothing while another matched; only without `--exact`. A wholly unmatched set errors before export (#4743). |

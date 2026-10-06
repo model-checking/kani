@@ -18,13 +18,21 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 VALIDATOR="$PROJECT_ROOT/scripts/validate_json_export.py"
 
 # Run Kani with JSON export
-kani -Z export-json test.rs --export-json "$OUTPUT_FILE"
+kani -Z export-json -Z export-json test.rs --export-json "$OUTPUT_FILE"
 
 # Check that JSON file was created
 if [ ! -f "$OUTPUT_FILE" ]; then
     echo "ERROR: JSON file $OUTPUT_FILE was not created"
     exit 1
 fi
+
+python3 - "$OUTPUT_FILE" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1]) as export:
+    assert json.load(export)["enabled_unstable_features"] == ["export-json"]
+PY
 
 # Validate JSON structure using the validation script (suppress verbose output)
 python3 "$VALIDATOR" "$OUTPUT_FILE" 2>&1 | tail -1

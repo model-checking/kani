@@ -37,7 +37,7 @@ struct RunContext {
     rustc_version: Option<String>,
     kani_commit: Option<&'static str>,
     kani_commit_dirty: Option<bool>,
-    enabled_unstable_features: Vec<String>,
+    enabled_unstable_features: BTreeSet<String>,
     harness_selection: HarnessSelectionExport,
     harness_timeout_s: Option<f64>,
     configuration: ConfigurationExport,
@@ -77,7 +77,7 @@ impl KaniSession {
         started_at: OffsetDateTime,
         wall_time: Duration,
     ) -> RunContext {
-        let enabled_unstable_features: Vec<String> = self
+        let enabled_unstable_features: BTreeSet<String> = self
             .args
             .common_args
             .unstable_features
@@ -293,7 +293,7 @@ struct ExportedRun {
     kani_commit: Option<&'static str>,
     kani_commit_dirty: Option<bool>,
     tools: ToolsExport,
-    enabled_unstable_features: Vec<String>,
+    enabled_unstable_features: BTreeSet<String>,
     harness_selection: HarnessSelectionExport,
     harness_timeout_s: Option<f64>,
     configuration: ConfigurationExport,
@@ -632,9 +632,6 @@ impl ExportedRun {
                 &b.name,
             ))
         });
-        let mut enabled_unstable_features = ctx.enabled_unstable_features;
-        enabled_unstable_features.sort();
-
         let summary = Summary::from_harnesses(&harnesses);
         let run_state = if ctx.harness_selection.requested_filters.is_empty()
             && ctx.harness_selection.matched_count == 0
@@ -655,7 +652,7 @@ impl ExportedRun {
                 rustc: ctx.rustc_version,
                 cbmc: ctx.cbmc_version,
             },
-            enabled_unstable_features,
+            enabled_unstable_features: ctx.enabled_unstable_features,
             harness_selection: ctx.harness_selection,
             harness_timeout_s: ctx.harness_timeout_s,
             configuration: ctx.configuration,
@@ -878,7 +875,7 @@ mod tests {
             rustc_version: None,
             kani_commit: None,
             kani_commit_dirty: None,
-            enabled_unstable_features: Vec::new(),
+            enabled_unstable_features: BTreeSet::new(),
             harness_selection: HarnessSelectionExport {
                 requested_filters: Vec::new(),
                 exact: false,
@@ -1502,10 +1499,12 @@ mod tests {
         let h = harness("h");
         let hr = HarnessResult { harness: &h, result: success_result(vec![]) };
         let ctx = RunContext {
-            enabled_unstable_features: vec![
+            enabled_unstable_features: [
                 "quantifiers".to_string(),
                 "function-contracts".to_string(),
-            ],
+            ]
+            .into_iter()
+            .collect(),
             ..test_context()
         };
         let v = serde_json::to_value(export_with(&[hr], ctx)).unwrap();
