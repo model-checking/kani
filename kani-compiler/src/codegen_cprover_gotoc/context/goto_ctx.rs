@@ -94,9 +94,11 @@ pub struct GotocCtx<'tcx, 'r> {
     pub transformer: &'r mut BodyTransformation,
     /// If there exist some usage of loop contracts int context.
     pub has_loop_contracts: bool,
-    /// Track loop assign clause: `None` if the user did not write one for the current loop,
-    /// which is not the same as a clause without targets.
-    pub current_loop_modifies: Option<Vec<Expr>>,
+    /// The targets of the loop modifies clause of each loop whose clause binding has been
+    /// generated but whose loop latch has not, by the instance of the register function of the
+    /// loop. A loop without an entry has no clause, which is not the same as a clause without
+    /// targets.
+    pub loop_modifies: HashMap<Instance, Vec<Expr>>,
     /// Track loop decreases clause
     pub current_loop_decreases: Option<Expr>,
 }
@@ -129,7 +131,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             concurrent_constructs: FxHashMap::default(),
             transformer,
             has_loop_contracts: false,
-            current_loop_modifies: None,
+            loop_modifies: HashMap::new(),
             current_loop_decreases: None,
         }
     }

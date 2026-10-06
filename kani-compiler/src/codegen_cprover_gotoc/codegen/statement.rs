@@ -173,10 +173,17 @@ impl GotocCtx<'_, '_> {
                 let rty = self.rvalue_ty_stable(rhs);
                 let localname = self.codegen_var_name(&lhs.local);
                 if localname.contains("kani_loop_modifies") {
-                    // The user wrote a clause, even if no target is left (e.g. an empty clause, or
-                    // only targets of zero size).
-                    let assigns = self.rvalue_to_assign_targets(rhs, location);
-                    self.current_loop_modifies = Some(assigns);
+                    // Record the clause for its loop, which the loop contract pass determined (see
+                    // `LoopContractPass::find_loop_modifies_bindings`), even if no target is left
+                    // (e.g. an empty clause, or only targets of zero size). A clause that does not
+                    // belong to a loop with a loop contract is not used.
+                    let instance = self.current_fn().instance_stable();
+                    if let Some(register_fn) =
+                        self.transformer.loop_of_modifies_binding(instance, lhs.local)
+                    {
+                        let assigns = self.rvalue_to_assign_targets(rhs, location);
+                        self.loop_modifies.insert(register_fn, assigns);
+                    }
                     return Stmt::skip(location);
                 }
                 if localname.contains("kani_loop_decreases") {

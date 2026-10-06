@@ -136,6 +136,9 @@ fn indexed_place_modifies_then_invariant() {
     assert!(out[0] <= 5 * 255);
 }
 
+/// Each clause is checked against the writes of its own loop (see `nested_outer_writes_unlisted`
+/// in `for_loop_modifies_fail.rs`, whose outer loop writes a variable that its clause does not
+/// list).
 #[kani::proof]
 fn nested_for_loops() {
     let a: [u8; 3] = kani::any();

@@ -95,6 +95,10 @@ pub struct BodyTransformation {
     /// contains the loop and the instance of the register function that the loop latch calls, as
     /// recorded by the passes (see [TransformPass::take_generated_loop_modifies]).
     generated_loop_modifies: HashMap<(Instance, Instance), Vec<Local>>,
+    /// The instance of the register function of the loop whose loop modifies clause a
+    /// `kani_loop_modifies` binding is, by the instance of the body and the binding local, as
+    /// recorded by the passes (see [TransformPass::take_loop_modifies_bindings]).
+    loop_modifies_bindings: HashMap<(Instance, Local), Instance>,
 }
 
 impl BodyTransformation {
@@ -104,6 +108,7 @@ impl BodyTransformation {
             inst_passes: vec![],
             cache: Default::default(),
             generated_loop_modifies: Default::default(),
+            loop_modifies_bindings: Default::default(),
         };
         let safety_check_type = CheckType::new_safety_check_assert_assume(queries);
         let unsupported_check_type = CheckType::new_unsupported_check_assert_assume_false(queries);
@@ -162,6 +167,11 @@ impl BodyTransformation {
                             .into_iter()
                             .map(|(register_fn, locals)| ((instance, register_fn), locals)),
                     );
+                    self.loop_modifies_bindings.extend(
+                        pass.take_loop_modifies_bindings()
+                            .into_iter()
+                            .map(|(binding, register_fn)| ((instance, binding), register_fn)),
+                    );
                 }
 
                 TransformationResult(body, modified)
@@ -174,6 +184,13 @@ impl BodyTransformation {
     /// `register_fn`. The body of `instance` must have been transformed already.
     pub fn generated_loop_modifies(&self, instance: Instance, register_fn: Instance) -> &[Local] {
         self.generated_loop_modifies.get(&(instance, register_fn)).map_or(&[], Vec::as_slice)
+    }
+
+    /// The instance of the register function of the loop whose loop modifies clause is the
+    /// `kani_loop_modifies` binding `binding` of the transformed body of `instance`, if the
+    /// binding belongs to a loop with a loop contract.
+    pub fn loop_of_modifies_binding(&self, instance: Instance, binding: Local) -> Option<Instance> {
+        self.loop_modifies_bindings.get(&(instance, binding)).copied()
     }
 
     /// Retrieve the body of an instance. This does not apply global passes, but will retrieve the
@@ -222,6 +239,13 @@ pub(crate) trait TransformPass: Debug {
     /// that this pass last transformed, by the instance of the register function that each
     /// loop latch calls. See `LoopContractPass::add_generated_loop_modifies`.
     fn take_generated_loop_modifies(&mut self) -> Vec<(Instance, Vec<Local>)> {
+        Vec::new()
+    }
+
+    /// Take the `kani_loop_modifies` bindings of the loops of the body that this pass last
+    /// transformed, with the instance of the register function of their loop. See
+    /// `LoopContractPass::find_loop_modifies_bindings`.
+    fn take_loop_modifies_bindings(&mut self) -> Vec<(Local, Instance)> {
         Vec::new()
     }
 }

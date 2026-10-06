@@ -69,3 +69,43 @@ fn indexed_place_other_element() {
         out[1] = x as u32;
     }
 }
+
+/// The outer loop writes `y`, which is not in its clause, while the inner loop has a clause of its
+/// own. The clause of the outer loop used to be replaced by the clause of the inner loop, so the
+/// outer loop got an inferred write set and this verified.
+#[kani::proof]
+fn nested_outer_writes_unlisted() {
+    let a: [u8; 3] = kani::any();
+    let b: [u8; 3] = kani::any();
+    let mut s: u32 = 0;
+    let mut y: u8 = 0;
+    #[kani::loop_invariant(s <= kani::index as u32 * 3 * 255)]
+    #[kani::loop_modifies(&s)]
+    for _x in a {
+        #[kani::loop_invariant(s <= on_entry(s) + kani::index as u32 * 255)]
+        #[kani::loop_modifies(&s)]
+        for z in b {
+            s += z as u32;
+        }
+        y = y.wrapping_add(1);
+    }
+}
+
+/// The same, with the clause of the outer loop written before its invariant.
+#[kani::proof]
+fn nested_outer_writes_unlisted_clause_first() {
+    let a: [u8; 3] = kani::any();
+    let b: [u8; 3] = kani::any();
+    let mut s: u32 = 0;
+    let mut y: u8 = 0;
+    #[kani::loop_modifies(&s)]
+    #[kani::loop_invariant(s <= kani::index as u32 * 3 * 255)]
+    for _x in a {
+        #[kani::loop_invariant(s <= on_entry(s) + kani::index as u32 * 255)]
+        #[kani::loop_modifies(&s)]
+        for z in b {
+            s += z as u32;
+        }
+        y = y.wrapping_add(1);
+    }
+}

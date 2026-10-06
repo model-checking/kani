@@ -880,7 +880,7 @@ impl GotocHook for LoopInvariantRegister {
 
             let mut stmt = Stmt::goto(bb_label(target.unwrap()), loc)
                 .with_loop_contracts(func_exp.call(fargs).cast_to(Type::CInteger(CIntType::Bool)));
-            if let Some(mut assigns) = gcx.current_loop_modifies.take() {
+            if let Some(mut assigns) = gcx.loop_modifies.remove(&instance) {
                 // The user wrote a loop modifies clause, possibly without any target. Add the
                 // locals that the loop contract transformation makes live across iterations of
                 // this loop, which the user cannot name (without a user clause, CBMC infers the
@@ -926,7 +926,6 @@ impl GotocHook for LoopInvariantRegister {
             // Discard any decreases clause since it won't be checked without
             // the loop-contracts flag.
             gcx.current_loop_decreases = None;
-            gcx.current_loop_modifies = None;
             Stmt::block(
                 vec![
                     unwrap_or_return_codegen_unimplemented_stmt!(

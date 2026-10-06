@@ -14,4 +14,12 @@ in function write_through_loop_local
 - Description: "Check that out[\
 in function indexed_place_other_element
 
-Complete - 0 successfully verified harnesses, 4 failures, 4 total.
+- Status: FAILURE\
+- Description: "Check that y is assignable"\
+in function nested_outer_writes_unlisted
+
+- Status: FAILURE\
+- Description: "Check that y is assignable"\
+in function nested_outer_writes_unlisted_clause_first
+
+Complete - 0 successfully verified harnesses, 6 failures, 6 total.

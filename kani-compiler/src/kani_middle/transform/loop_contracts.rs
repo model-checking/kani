@@ -47,6 +47,11 @@ pub struct LoopContractPass {
     /// [BodyTransformation](super::BodyTransformation) after each transformation, which keys
     /// them by the instance of the body as well.
     generated_loop_modifies: Vec<(Instance, Vec<Local>)>,
+    /// The `kani_loop_modifies` binding of the loop modifies clause of each loop of the last
+    /// transformed body, with the instance of the register function of that loop. Taken by
+    /// [BodyTransformation](super::BodyTransformation) after each transformation, which keys
+    /// them by the instance of the body as well. See [LoopContractPass::find_loop_modifies_bindings].
+    loop_modifies_bindings: Vec<(Local, Instance)>,
 }
 
 impl TransformPass for LoopContractPass {
@@ -113,6 +118,7 @@ impl TransformPass for LoopContractPass {
         self.new_loop_latches = HashMap::new();
         self.generated_loop_locals = HashMap::new();
         self.generated_loop_modifies = Vec::new();
+        self.loop_modifies_bindings = Vec::new();
         match instance.ty().kind().rigid().unwrap() {
             RigidTy::FnDef(_func, args) => {
                 if KaniAttributes::for_instance(tcx, instance).fn_marker()
@@ -135,6 +141,10 @@ impl TransformPass for LoopContractPass {
 
     fn take_generated_loop_modifies(&mut self) -> Vec<(Instance, Vec<Local>)> {
         std::mem::take(&mut self.generated_loop_modifies)
+    }
+
+    fn take_loop_modifies_bindings(&mut self) -> Vec<(Local, Instance)> {
+        std::mem::take(&mut self.loop_modifies_bindings)
     }
 }
 
@@ -193,6 +203,7 @@ impl LoopContractPass {
                 new_loop_latches: HashMap::new(),
                 generated_loop_locals: HashMap::new(),
                 generated_loop_modifies: Vec::new(),
+                loop_modifies_bindings: Vec::new(),
             }
         } else {
             // If reachability mode is PubFns or Tests, we just remove any contract logic.
@@ -1129,6 +1140,8 @@ impl LoopContractPass {
         }
         // The original loop positions, before new blocks are added to the body.
         let loop_positions = self.get_loop_positions(&new_body, tcx);
+        self.loop_modifies_bindings =
+            self.find_loop_modifies_bindings(&new_body, tcx, &loop_positions);
         let loop_head_map = self.get_associated_loop_head_hashmap(&new_body, tcx);
         let found_local_list =
             self.move_storagelive_assign_to_loophead(&mut new_body, &loop_head_map);
@@ -1164,6 +1177,158 @@ impl LoopContractPass {
         self.move_storagelive_call_to_loophead(&mut new_body, &loop_head_map, found_local_list);
         self.add_generated_loop_modifies(&new_body, tcx, &loop_positions);
         (contain_loop_contracts, new_body.into())
+    }
+
+    /// Find the `kani_loop_modifies` binding of the loop modifies clause of each loop (see
+    /// `loop_modifies` in library/kani_macros/src/sysroot/loop_contracts), and return it with the
+    /// instance of the register function of the loop, so that codegen attaches the clause to that
+    /// loop rather than to the next loop latch that it generates. The latch of an inner loop is
+    /// generated before the latch of its outer loop, and the latch of a loop that never iterates
+    /// (e.g. `loop { break; }`) is not generated at all.
+    ///
+    /// The binding of a loop is the last assignment of a `kani_loop_modifies` binding found by
+    /// walking up the dominator tree from the loop head: the binding is assigned right before its
+    /// loop, so it dominates the loop head, and the code that `#[kani::loop_invariant]` generates
+    /// in between (e.g. the `on_entry` variables, which can branch, or the rewrite of a `for` loop)
+    /// does not get in the way. The walk stops at the head of another loop and at a binding of
+    /// another loop, and the loops are visited in reverse postorder, so a loop never takes the
+    /// binding of a loop before it. A binding that is not found this way (e.g. that of a loop
+    /// without `#[kani::loop_invariant]`) is not attached to any loop.
+    fn find_loop_modifies_bindings(
+        &self,
+        body: &MutableBody,
+        tcx: TyCtxt,
+        loop_positions: &[(usize, usize)],
+    ) -> Vec<(Local, Instance)> {
+        let binding_locals: HashSet<usize> = body
+            .var_debug_info()
+            .iter()
+            .filter(|info| info.name == "kani_loop_modifies")
+            .filter_map(|info| info.local())
+            .collect();
+        if binding_locals.is_empty() {
+            return Vec::new();
+        }
+        let (immediate_dominators, rpo_number) = Self::immediate_dominators(body);
+        let mut loop_heads: Vec<usize> = loop_positions.iter().map(|(head, _)| *head).collect();
+        loop_heads.sort_by_key(|head| rpo_number[*head]);
+        let dominates = |dominator: usize, mut block: usize| loop {
+            if block == dominator {
+                return true;
+            }
+            match immediate_dominators[block] {
+                Some(idom) => block = idom,
+                None => return false,
+            }
+        };
+        let mut predecessors = vec![Vec::new(); body.blocks().len()];
+        for (block, data) in body.blocks().iter().enumerate() {
+            for successor in data.terminator.successors() {
+                predecessors[successor].push(block);
+            }
+        }
+        // The head of a loop with or without a loop contract: the head of a loop with a loop
+        // contract that does not iterate (e.g. `loop { break; }`) is not a back edge target.
+        let is_any_loop_head = |block: usize| {
+            self.is_loop_head(body, tcx, block)
+                || predecessors[block].iter().any(|pred| dominates(block, *pred))
+        };
+
+        // The bindings found so far, by their position (block, statement index).
+        let mut found: HashSet<(usize, usize)> = HashSet::new();
+        let mut bindings = Vec::new();
+        for loop_head in loop_heads {
+            let Some((register_fn, _)) = self.register_fn(body, tcx, loop_head) else { continue };
+            let mut block = Some(loop_head);
+            'walk: while let Some(current) = block {
+                for (stmt_idx, stmt) in body.blocks()[current].statements.iter().enumerate().rev() {
+                    if let StatementKind::Assign(place, _) = &stmt.kind
+                        && binding_locals.contains(&place.local)
+                    {
+                        // Either the binding of this loop, or a binding of another loop, after
+                        // which the binding of this loop cannot be.
+                        if found.insert((current, stmt_idx)) {
+                            bindings.push((place.local, register_fn));
+                        }
+                        break 'walk;
+                    }
+                }
+                // Stop at the head of an enclosing or preceding loop, before its own binding.
+                block =
+                    immediate_dominators[current].filter(|dominator| !is_any_loop_head(*dominator));
+            }
+        }
+        bindings
+    }
+
+    /// The immediate dominator of each block that is reachable from the entry block (`None` for
+    /// the entry block and the unreachable blocks), computed with the algorithm of Cooper, Harvey
+    /// and Kennedy, "A Simple, Fast Dominance Algorithm", and the reverse postorder number of each
+    /// block (`usize::MAX` for the unreachable blocks).
+    fn immediate_dominators(body: &MutableBody) -> (Vec<Option<usize>>, Vec<usize>) {
+        let num_blocks = body.blocks().len();
+        // The postorder of the blocks that are reachable from the entry block.
+        let mut postorder = Vec::with_capacity(num_blocks);
+        let mut visited = vec![false; num_blocks];
+        let mut stack: Vec<(usize, usize)> = vec![(0, 0)];
+        visited[0] = true;
+        while let Some((block, next_successor)) = stack.pop() {
+            let successors = body.blocks()[block].terminator.successors();
+            if let Some(&successor) = successors.get(next_successor) {
+                stack.push((block, next_successor + 1));
+                if !visited[successor] {
+                    visited[successor] = true;
+                    stack.push((successor, 0));
+                }
+            } else {
+                postorder.push(block);
+            }
+        }
+        let mut rpo_number = vec![usize::MAX; num_blocks];
+        for (number, block) in postorder.iter().rev().enumerate() {
+            rpo_number[*block] = number;
+        }
+        let mut predecessors = vec![Vec::new(); num_blocks];
+        for &block in &postorder {
+            for successor in body.blocks()[block].terminator.successors() {
+                predecessors[successor].push(block);
+            }
+        }
+        let intersect = |idom: &[Option<usize>], mut a: usize, mut b: usize| {
+            while a != b {
+                while rpo_number[a] > rpo_number[b] {
+                    a = idom[a].unwrap();
+                }
+                while rpo_number[b] > rpo_number[a] {
+                    b = idom[b].unwrap();
+                }
+            }
+            a
+        };
+        let mut idom: Vec<Option<usize>> = vec![None; num_blocks];
+        idom[0] = Some(0);
+        let mut changed = true;
+        while changed {
+            changed = false;
+            // All blocks in reverse postorder, except for the entry block.
+            for &block in postorder.iter().rev().skip(1) {
+                let mut new_idom = None;
+                for &pred in &predecessors[block] {
+                    if idom[pred].is_some() {
+                        new_idom = Some(match new_idom {
+                            None => pred,
+                            Some(other) => intersect(&idom, pred, other),
+                        });
+                    }
+                }
+                if new_idom != idom[block] {
+                    idom[block] = new_idom;
+                    changed = true;
+                }
+            }
+        }
+        idom[0] = None;
+        (idom, rpo_number)
     }
 
     /// Record the locals in [LoopContractPass::generated_loop_locals], and the variables that
