@@ -5,8 +5,8 @@
 
 //! Check that the `#[kani::loop_modifies]` clause of an outer loop is applied to the outer loop,
 //! not to the inner loop (and, in `sequential_loops`, that the clause of a loop is not taken by
-//! the following loop). Each loop with a clause writes `t`, which is not in its modifies clause,
-//! so the assigns check for `t` must fail.
+//! the following loop). In each harness, a loop with a clause writes `t`, which is not in its
+//! modifies clause, so the assigns check for `t` must fail.
 //! The clause of the outer loop used to be attached to the inner loop instead: it was ignored if
 //! the inner loop had a clause of its own, and checked against the writes of the inner loop
 //! otherwise.
@@ -95,6 +95,33 @@ fn sequential_loops() {
     }
     #[kani::loop_invariant(i <= 3)]
     while i < 3 {
+        i += 1;
+    }
+}
+
+/// Three nested loops, whose middle loop writes `t`.
+#[kani::proof]
+fn three_levels() {
+    let mut i: u8 = 0;
+    let mut j: u8 = 0;
+    let mut k: u8 = 0;
+    let mut t: u8 = 0;
+    #[kani::loop_invariant(i <= 2)]
+    #[kani::loop_modifies(&i, &j, &k, &t)]
+    while i < 2 {
+        j = 0;
+        #[kani::loop_invariant(j <= 2)]
+        #[kani::loop_modifies(&j, &k)]
+        while j < 2 {
+            k = 0;
+            #[kani::loop_invariant(k <= 2)]
+            #[kani::loop_modifies(&k)]
+            while k < 2 {
+                k += 1;
+            }
+            t = t.wrapping_add(1);
+            j += 1;
+        }
         i += 1;
     }
 }

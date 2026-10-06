@@ -14,4 +14,8 @@ in function join_before_outer_loop
 - Description: "Check that t is assignable"\
 in function sequential_loops
 
-Complete - 0 successfully verified harnesses, 4 failures, 4 total.
+- Status: FAILURE\
+- Description: "Check that t is assignable"\
+in function three_levels
+
+Complete - 0 successfully verified harnesses, 5 failures, 5 total.
