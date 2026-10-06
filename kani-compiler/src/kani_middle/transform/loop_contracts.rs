@@ -17,9 +17,10 @@ use crate::rustc_public::CrateDef;
 use itertools::Itertools;
 use rustc_middle::ty::TyCtxt;
 use rustc_public::mir::mono::Instance;
+use rustc_public::mir::visit::{Location, MirVisitor, PlaceContext, terminator_location};
 use rustc_public::mir::{
-    AggregateKind, BasicBlock, BasicBlockIdx, Body, ConstOperand, Operand, Place, ProjectionElem,
-    Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
+    AggregateKind, BasicBlock, BasicBlockIdx, Body, ConstOperand, Local, Operand, Place,
+    ProjectionElem, Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
     VarDebugInfoContents, WithRetag,
 };
 use rustc_public::ty::{FnDef, GenericArgKind, MirConst, RigidTy, TyKind, UintTy};
@@ -792,7 +793,7 @@ impl LoopContractPass {
 
     /// Blocks that define each local with a whole-local `Assign` or `Call`
     /// destination. Used only for locals without a `StorageLive` to decide
-    /// whether they are declared inside a loop; see `group_mentions_loop_local`.
+    /// whether they are declared inside a loop; see `group_reads_dead_local`.
     /// A write through a pointer the local holds (`*p = v`) or into part of it
     /// (`x.f = v`) is not a definition, so `defines_local` filters it out.
     fn assign_blocks(body: &MutableBody) -> HashMap<usize, Vec<usize>> {
@@ -814,15 +815,6 @@ impl LoopContractPass {
         map
     }
 
-    fn place_locals(place: &Place, out: &mut HashSet<usize>) {
-        out.insert(place.local);
-        for elem in &place.projection {
-            if let ProjectionElem::Index(local) = elem {
-                out.insert(*local);
-            }
-        }
-    }
-
     /// True when `place` is a whole-local assignment: an empty projection, which
     /// brings the local's entire value into existence and so defines it. A write
     /// through a pointer the local holds (`*p = v`) or into part of the local
@@ -832,96 +824,10 @@ impl LoopContractPass {
         place.projection.is_empty()
     }
 
-    fn operand_locals(operand: &Operand, out: &mut HashSet<usize>) {
-        match operand {
-            Operand::Copy(place) | Operand::Move(place) => Self::place_locals(place, out),
-            Operand::Constant(_) | Operand::RuntimeChecks(_) => {}
-        }
-    }
-
-    /// Collect the locals `rvalue` reads into `out`. Returns false for a
-    /// construct the gate does not model; the caller then refuses the move
-    /// (conservative: a refused move keeps the body's own checks intact).
-    fn rvalue_locals(rvalue: &Rvalue, out: &mut HashSet<usize>) -> bool {
-        // Arm list mirrors points_to_analysis.rs; fix arities per compiler.
-        match rvalue {
-            Rvalue::Use(operand, ..)
-            | Rvalue::Cast(_, operand, _)
-            | Rvalue::Repeat(operand, ..)
-            | Rvalue::UnaryOp(_, operand) => Self::operand_locals(operand, out),
-            Rvalue::Reborrow(_, _, place)
-            | Rvalue::Ref(_, _, place)
-            | Rvalue::AddressOf(_, place)
-            | Rvalue::CopyForDeref(place)
-            | Rvalue::Discriminant(place) => Self::place_locals(place, out),
-            Rvalue::BinaryOp(_, lhs, rhs) => {
-                Self::operand_locals(lhs, out);
-                Self::operand_locals(rhs, out);
-            }
-            Rvalue::Aggregate(_, operands) => {
-                for operand in operands {
-                    Self::operand_locals(operand, out);
-                }
-            }
-            Rvalue::ThreadLocalRef(_) => {}
-            _ => return false,
-        }
-        true
-    }
-
-    /// Every local the group's copied code would evaluate at the loop head:
-    /// all places and operands in its statements and terminators. Returns
-    /// `None` for code we refuse to analyze (keeps the gate conservative).
-    fn locals_mentioned_in_blocks(blocks: &[BasicBlock]) -> Option<HashSet<usize>> {
-        let mut out = HashSet::new();
-        for block in blocks {
-            for stmt in &block.statements {
-                match &stmt.kind {
-                    StatementKind::Assign(place, rvalue) => {
-                        Self::place_locals(place, &mut out);
-                        if !Self::rvalue_locals(rvalue, &mut out) {
-                            return None;
-                        }
-                    }
-                    StatementKind::FakeRead(_, place)
-                    | StatementKind::SetDiscriminant { place, .. }
-                    | StatementKind::PlaceMention(place) => Self::place_locals(place, &mut out),
-                    StatementKind::StorageLive(_)
-                    | StatementKind::StorageDead(_)
-                    | StatementKind::Coverage(_)
-                    | StatementKind::ConstEvalCounter
-                    | StatementKind::Nop => {}
-                    // Unmodeled statement (e.g. AscribeUserType, an intrinsic): refuse the move.
-                    _ => return None,
-                }
-            }
-            match &block.terminator.kind {
-                TerminatorKind::Call { func, args, destination, .. } => {
-                    Self::operand_locals(func, &mut out);
-                    for arg in args {
-                        Self::operand_locals(arg, &mut out);
-                    }
-                    Self::place_locals(destination, &mut out);
-                }
-                TerminatorKind::Assert { cond, .. } => Self::operand_locals(cond, &mut out),
-                TerminatorKind::SwitchInt { discr, .. } => Self::operand_locals(discr, &mut out),
-                TerminatorKind::Drop { place, .. } => Self::place_locals(place, &mut out),
-                TerminatorKind::Goto { .. }
-                | TerminatorKind::Return
-                | TerminatorKind::Unreachable => {}
-                // Unmodeled terminator (e.g. InlineAsm): refuse the move.
-                _ => return None,
-            }
-        }
-        Some(out)
-    }
-
-    /// True when copying this group to the loop head would evaluate a local
-    /// that is declared inside the same loop, i.e. dead at the head. Locals
-    /// the group itself initializes (its own temporaries, including call
-    /// results) and the destination are excluded; they are set by the copied
-    /// code. A write through a pointer the local holds (`*p = v`) or into part
-    /// of it (`x.f = v`) does not initialize it, so it stays a checked mention.
+    /// True when copying this group to the loop head would read a local that
+    /// is declared inside the same loop, i.e. dead at the head. `uses` is the
+    /// ordered walk of the group's code; `already_live` holds the locals an
+    /// earlier hoist has already made live at this head.
     ///
     /// A local that carries a `StorageLive` is declared-in-this-loop when that
     /// `StorageLive` sits in a loop-body block. Some locals never get a
@@ -936,50 +842,25 @@ impl LoopContractPass {
     /// local whose sole in-loop definition uses a write form `assign_blocks`
     /// does not track, and a local assigned only in an inner loop but read by
     /// an outer-loop-head group, whose assign blocks map to the inner head.
-    fn group_mentions_loop_local(
-        group_blocks: &[BasicBlock],
-        group_dest: usize,
+    fn group_reads_dead_local(
+        uses: &GroupLocalUses,
         group_loop_head: usize,
         loop_head_map: &HashMap<usize, usize>,
         storagelive_map: &HashMap<usize, Vec<usize>>,
         assign_map: &HashMap<usize, Vec<usize>>,
+        already_live: Option<&HashSet<usize>>,
     ) -> bool {
-        let Some(mentioned) = Self::locals_mentioned_in_blocks(group_blocks) else {
-            // Unanalyzable code: refuse the move rather than risk a head
-            // evaluation of dead state.
-            return true;
-        };
-        let mut internal = HashSet::new();
-        for block in group_blocks {
-            for stmt in &block.statements {
-                match &stmt.kind {
-                    StatementKind::StorageLive(local) => {
-                        internal.insert(*local);
-                    }
-                    // Only a whole-local assignment makes the local the group's
-                    // own; a write through a pointer or into part of it does not.
-                    StatementKind::Assign(place, _) if Self::defines_local(place) => {
-                        internal.insert(place.local);
-                    }
-                    _ => {}
-                }
-            }
-            if let TerminatorKind::Call { destination, .. } = &block.terminator.kind
-                && Self::defines_local(destination)
-            {
-                internal.insert(destination.local);
-            }
-        }
         let in_this_loop = |bb: &usize| loop_head_map.get(bb) == Some(&group_loop_head);
-        mentioned.iter().filter(|local| **local != group_dest && !internal.contains(local)).any(
-            |local| match storagelive_map.get(local) {
+        uses.mentions
+            .iter()
+            .filter(|local| !already_live.is_some_and(|live| live.contains(*local)))
+            .any(|local| match storagelive_map.get(local) {
                 Some(bbs) => bbs.iter().any(in_this_loop),
                 // No `StorageLive`: declared-in-loop iff every definition site is.
                 None => assign_map
                     .get(local)
                     .is_some_and(|bbs| !bbs.is_empty() && bbs.iter().all(in_this_loop)),
-            },
-        )
+            })
     }
 
     //Move all variables initiation using function-call inside the loop body to the loop-head
@@ -990,6 +871,7 @@ impl LoopContractPass {
         storagelive_map: &HashMap<usize, Vec<usize>>,
         assign_map: &HashMap<usize, Vec<usize>>,
         found_local_list: Vec<usize>,
+        visit_loc: Location,
     ) {
         let mut found_local_list = found_local_list;
         let localvars = self.get_storage_moving_variables(body);
@@ -1055,17 +937,18 @@ impl LoopContractPass {
                 // Copying the group is only sound-to-evaluate at the head if
                 // everything it reads is live there. The for-loop machinery
                 // (kaniiter, firstpat tuples) keeps its move unconditionally.
+                let uses = GroupLocalUses::analyze(&current_local_decl_blocks, visit_loc);
                 let machinery = forloopvars.contains(&current_user_local)
                     || firstpat_vars.contains(&current_user_local);
                 if retargetable
                     && (machinery
-                        || !Self::group_mentions_loop_local(
-                            &current_local_decl_blocks,
-                            current_user_local,
+                        || !Self::group_reads_dead_local(
+                            &uses,
                             closest_loop_head,
                             loop_head_map,
                             storagelive_map,
                             assign_map,
+                            None,
                         ))
                 {
                     move_call_list.push((closest_loop_head, current_local_decl_blocks.clone()));
@@ -1180,6 +1063,8 @@ impl LoopContractPass {
     /// This function transform the function body as described in fn transform.
     /// It is the core of fn transform, and is separated just to avoid code repetition.
     fn transform_body_with_loop(&mut self, tcx: TyCtxt, body: Body) -> (bool, Body) {
+        // One location value to drive the group visitor; its span is unused.
+        let visit_loc = terminator_location(&body, &0);
         let mut new_body = MutableBody::from(body);
         self.replace_first_pat_by_nth_pat(&mut new_body);
         let loop_head_map = self.get_associated_loop_head_hashmap(&new_body, tcx);
@@ -1228,6 +1113,7 @@ impl LoopContractPass {
             &storagelive_map,
             &assign_map,
             found_local_list,
+            visit_loc,
         );
         (contain_loop_contracts, new_body.into())
     }
@@ -1501,5 +1387,93 @@ impl LoopContractPass {
             }
         }
         contain_loop_contracts
+    }
+}
+
+/// Ordered walk of a declaration group's blocks, exactly as the splice would
+/// copy them to the loop head. `mentions` collects every local the copied
+/// code would read (or write through / into part of) before the group itself
+/// defines it; `defined` collects the locals the group brings into existence:
+/// `StorageLive`s, whole-local `Assign` destinations and whole-local `Call`
+/// destinations. Reads are visited before the write of the same statement or
+/// call, so a group that reads a local and only later whole-writes it still
+/// reports the early read.
+struct GroupLocalUses {
+    defined: HashSet<usize>,
+    mentions: HashSet<usize>,
+}
+
+impl GroupLocalUses {
+    fn analyze(blocks: &[BasicBlock], loc: Location) -> Self {
+        let mut uses = GroupLocalUses { defined: HashSet::new(), mentions: HashSet::new() };
+        for block in blocks {
+            for stmt in &block.statements {
+                uses.visit_statement(stmt, loc);
+            }
+            uses.visit_terminator(&block.terminator, loc);
+        }
+        uses
+    }
+
+    /// A place access that presumes the local already exists: the base local
+    /// and any `Index` locals are reads the head copy would evaluate.
+    fn mention_place(&mut self, place: &Place) {
+        self.mention_local(place.local);
+        for elem in &place.projection {
+            if let ProjectionElem::Index(local) = elem {
+                self.mention_local(*local);
+            }
+        }
+    }
+
+    fn mention_local(&mut self, local: usize) {
+        if !self.defined.contains(&local) {
+            self.mentions.insert(local);
+        }
+    }
+}
+
+impl MirVisitor for GroupLocalUses {
+    fn visit_statement(&mut self, stmt: &Statement, location: Location) {
+        match &stmt.kind {
+            // The rvalue's reads happen before the destination's write, so
+            // visit it first: `x = x + 1` must report the read of `x`.
+            StatementKind::Assign(place, rvalue) => {
+                self.visit_rvalue(rvalue, location);
+                if LoopContractPass::defines_local(place) {
+                    self.defined.insert(place.local);
+                } else {
+                    self.mention_place(place);
+                }
+            }
+            StatementKind::StorageLive(local) => {
+                self.defined.insert(*local);
+            }
+            StatementKind::StorageDead(_) => {}
+            _ => self.super_statement(stmt, location),
+        }
+    }
+
+    fn visit_terminator(&mut self, term: &Terminator, location: Location) {
+        match &term.kind {
+            // The callee and arguments are read before the destination is
+            // written: visit them first, then record the destination.
+            TerminatorKind::Call { func, args, destination, .. } => {
+                self.visit_operand(func, location);
+                for arg in args {
+                    self.visit_operand(arg, location);
+                }
+                if LoopContractPass::defines_local(destination) {
+                    self.defined.insert(destination.local);
+                } else {
+                    self.mention_place(destination);
+                }
+            }
+            _ => self.super_terminator(term, location),
+        }
+    }
+
+    fn visit_local(&mut self, local: &Local, _ptx: PlaceContext, _location: Location) {
+        self.mention_local(*local);
     }
 }
