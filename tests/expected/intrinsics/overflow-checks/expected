@@ -1,0 +1,19 @@
+check_overflow_checks_intrinsic.assertion\
+Status: SUCCESS\
+Description: "assertion failed: core::intrinsics::overflow_checks()"
+core::num::imp::overflow_panic::pow.assertion\
+Status: FAILURE\
+Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+check_pow_overflow.cover\
+Status: UNREACHABLE\
+Description: "`2u32.pow(32)` returns"
+check_signed_pow_overflow.cover\
+Status: UNREACHABLE\
+Description: "`2i32.pow(31)` returns"
+core::num::<impl u32>::funnel_shl.assertion\
+Status: FAILURE\
+Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+<u8 as std::iter::Step>::forward.assertion\
+Status: FAILURE\
+Description: "attempt to add with overflow"
+Complete - 3 successfully verified harnesses, 4 failures, 7 total.
