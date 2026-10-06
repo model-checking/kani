@@ -3,9 +3,11 @@
 
 //! Single source of truth about which intrinsics we support.
 
+use rustc_middle::ty::TyCtxt;
 use rustc_public::{
     mir::{Mutability, mono::Instance},
-    ty::{FloatTy, IntTy, RigidTy, TyKind, UintTy},
+    rustc_internal,
+    ty::{FloatTy, IntTy, RigidTy, Ty, TyKind, UintTy},
 };
 
 // Enumeration of all intrinsics we support right now, with the last option being a catch-all. This
@@ -176,6 +178,63 @@ macro_rules! assert_sig_matches {
 }
 
 impl Intrinsic {
+    /// The operand that must be a SIMD vector for this intrinsic to have a meaning, given the
+    /// monomorphized argument and return types of a call to it; `None` for a non-SIMD intrinsic.
+    ///
+    /// rustc's codegen backends reject a violation with `E0511` (`invalid monomorphization of
+    /// `simd_lt` intrinsic: expected SIMD input type, found non-SIMD `i32``). Kani replaces the
+    /// backend, so it sees such calls: from a harness that calls `imin::<i32>` directly, and from
+    /// instantiations that `-Z autoharness` picks for a helper like
+    /// `fn imin<T: Copy>(a: T, b: T) -> T` whose body calls `simd_lt`, since nothing bounds `T` to
+    /// the SIMD types. See <https://github.com/model-checking/kani/issues/4919>.
+    pub fn simd_vector_operand(&self, arg_tys: &[Ty], ret_ty: Ty) -> Option<Ty> {
+        match self {
+            // `simd_splat<T, U>(value: U) -> T` broadcasts a scalar, so its vector is the return
+            // type. Every other SIMD intrinsic takes a vector first, including the ones that take
+            // a scalar or an index later (`simd_insert`, `simd_extract`, `simd_shuffle`).
+            Intrinsic::SimdSplat => Some(ret_ty),
+            Intrinsic::SimdAdd
+            | Intrinsic::SimdAnd
+            | Intrinsic::SimdDiv
+            | Intrinsic::SimdEq
+            | Intrinsic::SimdExtract
+            | Intrinsic::SimdGe
+            | Intrinsic::SimdGt
+            | Intrinsic::SimdInsert
+            | Intrinsic::SimdLe
+            | Intrinsic::SimdLt
+            | Intrinsic::SimdMul
+            | Intrinsic::SimdNe
+            | Intrinsic::SimdOr
+            | Intrinsic::SimdReduceAll
+            | Intrinsic::SimdRem
+            | Intrinsic::SimdShl
+            | Intrinsic::SimdShr
+            | Intrinsic::SimdShuffle(_)
+            | Intrinsic::SimdSub
+            | Intrinsic::SimdXor => arg_tys.first().copied(),
+            // Listing the non-SIMD intrinsics would not make a new SIMD one any harder to miss:
+            // `try_match_simd` is where they are added, and it sits next to this match.
+            _ => None,
+        }
+    }
+
+    /// Whether this is a SIMD lane-wise comparison. Its result is a mask: a vector with as many
+    /// lanes as the operands, whose lanes are integers (all ones for true, zero for false). rustc
+    /// rejects any other result type with `E0511`, and Kani's codegen relies on the same shape;
+    /// see [simd_mask_problem].
+    pub fn is_simd_comparison(&self) -> bool {
+        matches!(
+            self,
+            Intrinsic::SimdEq
+                | Intrinsic::SimdGe
+                | Intrinsic::SimdGt
+                | Intrinsic::SimdLe
+                | Intrinsic::SimdLt
+                | Intrinsic::SimdNe
+        )
+    }
+
     /// Create an intrinsic enum from a given intrinsic instance, shallowly validating the argument types.
     pub fn from_instance(intrinsic_instance: &Instance) -> Self {
         let intrinsic_str = intrinsic_instance.intrinsic_name().unwrap();
@@ -829,4 +888,28 @@ fn try_match_f64(intrinsic_instance: &Instance) -> Option<Intrinsic> {
         }
         _ => None,
     }
+}
+
+/// Why `ret_ty` cannot be the result of a SIMD comparison over the SIMD type `operand_ty`, if it
+/// cannot, as a phrase for a diagnostic. A comparison's result is a mask: a vector with integer
+/// lanes and as many lanes as the operands. rustc's codegen backends reject anything else with
+/// `E0511`; Kani has to check it itself, because it replaces the backend.
+///
+/// Both autoharness (which rejects candidate instantiations that break the rule) and codegen
+/// (which reports the ones it is handed anyway as unsupported) call this, so they cannot disagree
+/// on what a valid mask is. See <https://github.com/model-checking/kani/issues/4950>.
+///
+/// `rustc_public` does not expose a SIMD type's lane count or lane type, so ask rustc for them.
+pub fn simd_mask_problem(tcx: TyCtxt, operand_ty: Ty, ret_ty: Ty) -> Option<String> {
+    let ret = rustc_internal::internal(tcx, ret_ty);
+    if !ret.is_simd() {
+        return Some("not a SIMD type".to_string());
+    }
+    let (operand_lanes, _) = rustc_internal::internal(tcx, operand_ty).simd_size_and_type(tcx);
+    let (ret_lanes, ret_lane_ty) = ret.simd_size_and_type(tcx);
+    if !ret_lane_ty.is_integral() {
+        return Some(format!("non-integer `{ret_lane_ty}` lanes"));
+    }
+    (ret_lanes != operand_lanes)
+        .then(|| format!("{ret_lanes} lanes for a {operand_lanes}-lane comparison"))
 }
