@@ -36,3 +36,32 @@ fn wrong_decreases_for_loop_harness() {
         m = m + 1;
     }
 }
+
+#[kani::proof]
+fn wrong_decreases_while_let_harness() {
+    let mut n: u8 = kani::any_where(|v| *v <= 10);
+    let mut up: u8 = 0;
+
+    // The decreases clause is after the loop invariant.
+    #[kani::loop_invariant(n <= 10 && up <= 10 && up + n <= 10)]
+    #[kani::loop_decreases(up)]
+    while let Some(m) = n.checked_sub(1) {
+        n = m;
+        // Bug: the measure increases instead of decreasing.
+        up += 1;
+    }
+}
+
+#[kani::proof]
+fn wrapping_decreases_harness() {
+    let mut i: u8 = 0;
+    let mut m: u8 = kani::any();
+
+    #[kani::loop_invariant(i <= 4)]
+    #[kani::loop_decreases(m)]
+    while i < 4 {
+        // Bug: the measure increases when it wraps around from 0.
+        m = m.wrapping_sub(1);
+        i += 1;
+    }
+}

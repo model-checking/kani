@@ -35,6 +35,18 @@ fn variable_measure_for_loop_harness() {
 }
 
 #[kani::proof]
+fn variable_measure_while_let_harness() {
+    let mut n: u8 = kani::any_where(|v| *v <= 10);
+
+    // The decreases clause is after the loop invariant.
+    #[kani::loop_invariant(n <= 10)]
+    #[kani::loop_decreases(n)]
+    while let Some(m) = n.checked_sub(1) {
+        n = m;
+    }
+}
+
+#[kani::proof]
 fn variable_measure_with_prev_harness() {
     let mut x: u8 = kani::any_where(|v| *v >= 2 && *v <= 50);
 

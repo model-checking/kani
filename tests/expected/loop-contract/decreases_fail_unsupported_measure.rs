@@ -4,7 +4,9 @@
 // kani-flags: -Z loop-contracts
 
 //! Check that a measure that Kani cannot evaluate at each iteration does not pass the decreases
-//! check without being checked. Here, the measures are wrong.
+//! check without being checked, and that Kani warns about it. The measures are wrong, except in
+//! `checked_arithmetic_measure_harness`, whose check fails until
+//! https://github.com/model-checking/kani/issues/4585 is fixed.
 
 #![feature(stmt_expr_attributes)]
 #![feature(proc_macro_hygiene)]
@@ -51,5 +53,17 @@ fn index_measure_harness() {
     while a[0] > 0 {
         a[0] -= 1;
         i = 1;
+    }
+}
+
+#[kani::proof]
+fn checked_arithmetic_measure_harness() {
+    let mut i: u16 = 0;
+
+    #[kani::loop_invariant(i <= 4)]
+    // The measure decreases, but `4 - i` is computed once, before the loop.
+    #[kani::loop_decreases(4 - i)]
+    while i < 4 {
+        i += 1;
     }
 }

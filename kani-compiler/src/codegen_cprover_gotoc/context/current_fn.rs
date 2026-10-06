@@ -77,6 +77,8 @@ pub struct LoopDecreases {
     /// The local of the binding of the clause.
     pub binding: Local,
     pub measure: Expr,
+    /// Whether the measure is computed once, before the loop, so that the decreases check fails.
+    pub computed_once: bool,
     /// The span of the binding, to report the clause if it is not attached to a loop.
     pub span: Span,
 }

@@ -899,8 +899,10 @@ pub fn loop_decreases(attr: TokenStream, item: TokenStream) -> TokenStream {
     // the assignment of the binding, which codegen needs to find the measure. Otherwise, if the
     // measure is a variable that is assigned only once, copy propagation replaces the binding by
     // that variable, and if the measure is a constant, the binding is replaced by the constant.
+    // The marker keeps autoharness from generating a harness for this function.
     let loop_decreases_keep_stmts: Vec<Stmt> = parse_quote! {
         #[inline(never)]
+        #[kanitool::fn_marker = "kani_keep_loop_decreases_binding"]
         const fn kani_keep_loop_decreases_binding<T>(_binding: &T) {}
         kani_keep_loop_decreases_binding(&#loop_decreases_ident);
     };

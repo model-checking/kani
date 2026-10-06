@@ -147,10 +147,14 @@ impl GotocCtx<'_, '_> {
 
     /// Whether CBMC can evaluate `rvalue`, the right-hand side of the binding of a decreases
     /// clause, before and after each iteration of the loop: it must only read user variables and
-    /// arguments, and not temporaries, whose values are computed before the loop.
+    /// arguments, and not temporaries, whose values are computed before the loop. A constant is
+    /// not evaluated at each iteration either.
     fn is_live_loop_decreases_measure(&self, rvalue: &Rvalue) -> bool {
         let mut places = vec![];
         collect_rvalue_places(rvalue, &mut places);
+        if places.is_empty() {
+            return false;
+        }
         let arg_count = self.current_fn().arg_count();
         places.iter().all(|place| {
             let index_locals = place.projection.iter().filter_map(|elem| match elem {
@@ -164,14 +168,51 @@ impl GotocCtx<'_, '_> {
     }
 
     /// Record `measure` as the measure of the decreases clause with binding `binding`, which is
-    /// attached to the first loop head generated after it (see `codegen_block`).
-    fn record_loop_decreases(&mut self, binding: Local, measure: Expr, span: Span) {
-        let decreases = LoopDecreases { binding, measure, span };
-        if let Some(pending) = self.current_fn_mut().loop_decreases_mut().pending.replace(decreases)
-            && pending.binding != binding
-        {
-            self.report_ignored_loop_decreases(pending.span);
+    /// attached to the first loop head generated after it (see `codegen_block`). If the measure
+    /// is `computed_once`, before the loop, the decreases check fails.
+    fn record_loop_decreases(
+        &mut self,
+        binding: Local,
+        measure: Expr,
+        computed_once: bool,
+        span: Span,
+    ) {
+        let decreases = LoopDecreases { binding, measure, computed_once, span };
+        let pending = self.current_fn_mut().loop_decreases_mut().pending.replace(decreases);
+        match pending {
+            Some(pending) if pending.binding == binding => {
+                // Another assignment of the same binding: report it once.
+                if computed_once && !pending.computed_once {
+                    self.report_loop_decreases_computed_once(span);
+                }
+            }
+            pending => {
+                if let Some(pending) = pending {
+                    self.report_ignored_loop_decreases(pending.span);
+                }
+                if computed_once {
+                    self.report_loop_decreases_computed_once(span);
+                }
+            }
         }
+    }
+
+    /// Warn that the measure of the decreases clause with the binding at `span` is computed once,
+    /// before the loop, so that the decreases check fails.
+    fn report_loop_decreases_computed_once(&self, span: Span) {
+        let msg = "the measure of this `#[kani::loop_decreases]` clause is computed once, before \
+                   the loop, so the decreases check will fail even if the measure decreases";
+        self.tcx
+            .dcx()
+            .struct_span_warn(rustc_internal::internal(self.tcx, span), msg)
+            .with_note(
+                "Kani evaluates a measure at each iteration of the loop only if it reads \
+                 variables directly (e.g. `x`, `s.field` or `*p`). Other measures, such as \
+                 arithmetic with overflow checks, casts, indexing, function calls, `if` \
+                 expressions and constants, are computed before the loop.",
+            )
+            .with_note("see https://github.com/model-checking/kani/issues/4585")
+            .emit();
     }
 
     /// Warn that the decreases clause with the binding at `span` is ignored, since loop contracts
@@ -234,16 +275,17 @@ impl GotocCtx<'_, '_> {
                         // CBMC evaluates the right-hand side of the binding before and after each
                         // iteration of the loop.
                         let measure = self.codegen_rvalue_stable(rhs, location);
-                        self.record_loop_decreases(lhs.local, measure, stmt.source_info.span);
+                        let span = stmt.source_info.span;
+                        self.record_loop_decreases(lhs.local, measure, false, span);
                         return Stmt::skip(location);
                     }
-                    // The right-hand side reads values computed before the loop (e.g. a temporary
-                    // holding the result of checked arithmetic), or the binding is assigned more
-                    // than once (e.g. the measure is an `if` expression). Use the value of the
-                    // binding as the measure instead, and assign it below. Since that value does
-                    // not change in the loop, the decreases check fails.
+                    // The right-hand side is a constant or reads values computed before the loop
+                    // (e.g. a temporary holding the result of checked arithmetic), or the binding
+                    // is assigned more than once (e.g. the measure is an `if` expression). Use the
+                    // value of the binding as the measure instead, and assign it below. Since that
+                    // value does not change in the loop, the decreases check fails.
                     let measure = self.codegen_local(lhs.local, location);
-                    self.record_loop_decreases(lhs.local, measure, stmt.source_info.span);
+                    self.record_loop_decreases(lhs.local, measure, true, stmt.source_info.span);
                 }
                 // we ignore assignment for all zero size types
                 if self.is_zst_stable(lty) {
@@ -469,7 +511,7 @@ impl GotocCtx<'_, '_> {
                         // check fails.
                         let measure =
                             self.codegen_local(destination.local, self.codegen_span_stable(span));
-                        self.record_loop_decreases(destination.local, measure, span);
+                        self.record_loop_decreases(destination.local, measure, true, span);
                     } else {
                         self.report_loop_decreases_without_loop_contracts(span);
                     }

@@ -592,9 +592,8 @@ Loop contracts comes with the following limitations.
 3. We don't check if loop contracts (invariants, decreases clauses) are side-effect free. A loop contract with a side effect could lead to an unsound proof result. Make sure that the specified loop contracts are side-effect free.
 4. Decreases clauses only support integer-typed expressions. See the [decreases clause limitations](#decreases-clause-limitations-and-comparison-with-other-tools) section for a detailed comparison with other verification tools.
 5. Decreases clauses have the following known bugs (tracked in [#3168](https://github.com/model-checking/kani/issues/3168)):
-   - **Measures computed before the loop.** Kani evaluates a measure at each iteration only if it reads variables of the function directly (e.g., `x`, `s.field` or `*p`). Other measures, such as arithmetic with overflow checks (e.g., `n - i`), casts, indexing, function calls, or variables captured by a closure, are computed once before the loop, so the check fails even when the measure decreases ([#4585](https://github.com/model-checking/kani/issues/4585)).
+   - **Measures computed before the loop.** Kani evaluates a measure at each iteration only if it reads variables of the function directly (e.g., `x`, `s.field` or `*p`). Other measures, such as arithmetic with overflow checks (e.g., `n - i`), casts, indexing, function calls, constants, or variables captured by a closure, are computed once before the loop, so the check fails even when the measure decreases, and Kani reports a warning ([#4585](https://github.com/model-checking/kani/issues/4585)).
    - **Multi-dimensional decreases** (e.g., `#[kani::loop_decreases(a, b)]`) are not correctly processed — CBMC does not perform lexicographic comparison on tuple expressions passed through Kani's irep encoding.
-   - **Combining `loop_decreases` with `loop_modifies`** causes the assigns clause check to conflict with the decreases instrumentation.
    - **Nested loops with decreases** on both inner and outer loops can cause assigns clause conflicts.
    
    These limitations are documented as `fixme` tests in `tests/expected/loop-contract/`.
