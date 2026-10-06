@@ -85,8 +85,10 @@ pub struct CommonAutoharnessArgs {
     /// Model caller-controlled aliasing between arguments: an argument that is a shared
     /// reference (`&T`, including `&[T]` and `&str`) or a raw pointer may additionally be the
     /// very same reference or pointer as an earlier argument of the same type, as when a
-    /// caller passes one value twice. Without this option, every such argument refers to its
-    /// own allocation, so a bug that requires two arguments to alias will not be found.
+    /// caller passes one value twice; a `*const T` and a `*mut T` may be the same pointer,
+    /// too. Without this option, every such argument refers to its own allocation, so a bug
+    /// that requires two arguments to alias will not be found. Harnesses in which some
+    /// argument may alias another one are marked "(aliasing)" in the output.
     #[arg(long)]
     pub alias_arguments: bool,
 
