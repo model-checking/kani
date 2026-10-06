@@ -7,7 +7,6 @@ use super::{PropertyClass, bb_label};
 use crate::codegen_cprover_gotoc::codegen::function::rustc_public_bridge::region_from_coverage_opaque;
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
-use cbmc::goto_program::ExprValue;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
 use rustc_abi::Size;
 use rustc_abi::{FieldsShape, Primitive, TagEncoding, Variants};
@@ -70,20 +69,18 @@ impl GotocCtx<'_, '_> {
         .call(vec![effective_ptr, size])
     }
 
+    /// The assigns targets of a loop modifies clause, given the right-hand side of its binding:
+    /// a tuple of pointers to the targets (see `loop_modifies_binding` in `kani_macros`), or a
+    /// reference to a local of zero size for an empty clause.
     pub fn rvalue_to_assign_targets(&mut self, rvalue: &Rvalue, location: Location) -> Vec<Expr> {
-        let assigns = self.codegen_rvalue_stable(rvalue, location);
-        let assigns_value = assigns.value().clone();
-        let assign_exprs = if let ExprValue::Struct { values } = assigns_value {
-            values.clone()
-        } else {
-            vec![assigns.clone()]
-        };
         match rvalue {
-            Rvalue::Aggregate(_agg_kind, operands) => {
-                let mut ptr_exprs = Vec::new();
-                for (operand, expr) in operands.iter().zip(assign_exprs.iter()) {
+            // Generate each operand on its own, rather than the tuple: the fields of the
+            // generated tuple are in the order of its layout, which can differ from the order of
+            // the operands.
+            Rvalue::Aggregate(_agg_kind, operands) => operands
+                .iter()
+                .filter_map(|operand| {
                     let operand_ty = self.operand_ty_stable(operand);
-                    debug!("Ty {:?}", operand_ty);
                     // Do not emit an assigns target for a pointer to a ZST. Havocking a
                     // zero-sized location is a no-op (a ZST has a single inhabitant and
                     // occupies zero bytes), so dropping it preserves soundness, while
@@ -92,14 +89,25 @@ impl GotocCtx<'_, '_> {
                     // capture-free closure). This mirrors the function-contract handling
                     // in `codegen_modifies_target`.
                     if pointee_type_stable(operand_ty).is_some_and(|ty| self.is_zst_stable(ty)) {
-                        continue;
+                        return None;
                     }
-                    let ptr_expr = self.ty_to_assign_target(operand_ty, expr);
-                    ptr_exprs.push(ptr_expr)
+                    let expr = self.codegen_operand_stable(operand);
+                    Some(self.ty_to_assign_target(operand_ty, &expr))
+                })
+                .collect(),
+            // A single target. Like above, a pointer to a ZST is not a target, and neither is
+            // the reference to a local of zero size of an empty clause.
+            _ => {
+                let rvalue_ty = self.rvalue_ty_stable(rvalue);
+                if self.is_zst_stable(rvalue_ty)
+                    || pointee_type_stable(rvalue_ty).is_some_and(|ty| self.is_zst_stable(ty))
+                {
+                    vec![]
+                } else {
+                    let assigns = self.codegen_rvalue_stable(rvalue, location);
+                    vec![self.ty_to_assign_target(rvalue_ty, &assigns)]
                 }
-                ptr_exprs
             }
-            _ => vec![assigns.dereference()],
         }
     }
 
@@ -159,13 +167,20 @@ impl GotocCtx<'_, '_> {
             StatementKind::Assign(lhs, rhs) => {
                 let lty = self.place_ty_stable(lhs);
                 let rty = self.rvalue_ty_stable(rhs);
-                let localname = self.codegen_var_name(&lhs.local);
-                if localname.contains("kani_loop_modifies") {
+                let instance = self.current_fn().instance_stable();
+                if lhs.projection.is_empty()
+                    && let Some(register_fn) =
+                        self.transformer.loop_of_modifies_binding(instance, lhs.local)
+                {
+                    // The binding of the loop modifies clause of the loop that the loop contract
+                    // pass determined (see `LoopContractPass::find_loop_modifies_bindings`).
+                    // Record the clause for that loop, even if no target is left (e.g. an empty
+                    // clause, or only targets of zero size).
                     let assigns = self.rvalue_to_assign_targets(rhs, location);
-                    self.current_loop_modifies = assigns.clone();
+                    self.loop_modifies.insert((instance, register_fn), assigns);
                     return Stmt::skip(location);
                 }
-                if localname.contains("kani_loop_decreases") {
+                if self.codegen_var_name(&lhs.local).contains("kani_loop_decreases") {
                     if !self
                         .queries
                         .args()
