@@ -19,3 +19,5 @@ main.assertion.6\
 	 - Description: "assertion failed: s == 100"
 
 VERIFICATION:- SUCCESSFUL
+
+Complete - 5 successfully verified harnesses, 0 failures, 5 total.
