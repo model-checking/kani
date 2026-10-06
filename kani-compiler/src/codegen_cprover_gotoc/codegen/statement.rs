@@ -76,8 +76,9 @@ impl GotocCtx<'_, '_> {
                 // tuple: a tuple's struct layout may order fields by offset rather than by source
                 // position, so the tuple's field values do not line up one-to-one with `operands`
                 // (e.g. a `loop_modifies` clause whose first target is a fat pointer followed by
-                // thin references). Codegen'ing each operand keeps the target aligned with its own
-                // type.
+                // thin references). Mispairing crashes when a fat field is read as thin, and
+                // otherwise mis-sizes the target so an out-of-frame write is silently accepted.
+                // Codegen'ing each operand keeps the target aligned with its own type.
                 let mut ptr_exprs = Vec::new();
                 for operand in operands.iter() {
                     let operand_ty = self.operand_ty_stable(operand);
