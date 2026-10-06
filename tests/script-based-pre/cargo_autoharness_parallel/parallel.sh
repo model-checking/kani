@@ -11,11 +11,27 @@
 # of how much parallelism the machine (or its cgroup/CPU affinity) actually offers. Rayon only
 # consults the environment variable when the thread count is left unset; --jobs=1 must override
 # it and preserve the serial opt-out.
-if ! parallel_output=$(RAYON_NUM_THREADS=2 cargo kani autoharness -Z autoharness 2>&1); then
+parallel_output=$(RAYON_NUM_THREADS=2 cargo kani autoharness -Z autoharness -Z unstable-options --output-into-files --target-dir target 2>&1)
+# f5 intentionally fails verification, so both runs must exit with status 1.
+if [[ $? -ne 1 ]]; then
     echo "$parallel_output"
     exit 1
 fi
-if ! serial_output=$(RAYON_NUM_THREADS=2 cargo kani autoharness -Z autoharness --jobs=1 2>&1); then
+
+# Each file already identifies its harness. Keep result lines usable by tools
+# that match the beginning of the line, just as in a sequential run.
+file_results=$(grep -h '^VERIFICATION:- ' target/result_output_dir/*)
+if [[ $(echo "$file_results" | grep -c '^VERIFICATION:- SUCCESSFUL$') -eq 4 ]] &&
+    [[ $(echo "$file_results" | grep -c '^VERIFICATION:- FAILED$') -eq 1 ]] &&
+    ! grep -q '^Thread [0-9]*:' target/result_output_dir/*; then
+    echo "FILES: yes"
+else
+    echo "FILES: no"
+    exit 1
+fi
+
+serial_output=$(RAYON_NUM_THREADS=2 cargo kani autoharness -Z autoharness --jobs=1 2>&1)
+if [[ $? -ne 1 ]]; then
     echo "$serial_output"
     exit 1
 fi
@@ -48,11 +64,17 @@ fi
 # Regression for #4438: every nonempty line in the parallel harness output must identify
 # its thread, including the verification result and timing, not just the first line.
 if echo "$parallel_output" | awk '
+    expect_separator { if (NF) missing_separator = 1; expect_separator = 0 }
     /^Thread [0-9]+:/ { in_harness_output = 1 }
     /^Manual Harness Summary:/ { in_harness_output = 0 }
     in_harness_output && NF && $0 !~ /^Thread [0-9]+:/ { missing_prefix = 1 }
-    /^Thread [0-9]+: VERIFICATION:- SUCCESSFUL$/ { results++ }
-    END { exit (missing_prefix || results != 4) }
+    /^Thread [0-9]+: VERIFICATION:- SUCCESSFUL$/ { successes++ }
+    /^Thread [0-9]+: VERIFICATION:- FAILED$/ { failures++ }
+    /^Thread [0-9]+: Failed Checks:/ { failed_checks++ }
+    /^Thread [0-9]+:  File:/ { locations++ }
+    /^Thread [0-9]+: Verification Time:/ { expect_separator = 1 }
+    END { exit (missing_prefix || missing_separator || successes != 4 ||
+                failures != 1 || failed_checks != 1 || locations != 1) }
 '; then
     echo "PREFIXED RESULTS: yes"
 else
