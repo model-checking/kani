@@ -25,6 +25,10 @@ impl i64x2 {
 pub struct i32x2([i32; 2]);
 
 #[repr(simd)]
+#[allow(non_camel_case_types)]
+pub struct f64x2([f64; 2]);
+
+#[repr(simd)]
 struct SimdShuffleIdx<const LEN: usize>([u32; LEN]);
 
 #[kani::proof]
@@ -79,4 +83,20 @@ fn check_shuffle_wrong_index_type() {
     let b = i64x2([20, 21]);
     const I: i32x2 = i32x2([1, 2]);
     let _: i64x2 = unsafe { simd_shuffle(a, b, I) };
+}
+
+#[kani::proof]
+fn check_shuffle_wrong_result_lane_count() {
+    let a = i64x2([10, 11]);
+    let b = i64x2([20, 21]);
+    const I: SimdShuffleIdx<4> = SimdShuffleIdx([1, 2, 1, 2]);
+    let _: i64x2 = unsafe { simd_shuffle(a, b, I) };
+}
+
+#[kani::proof]
+fn check_shuffle_wrong_result_lane_type() {
+    let a = i64x2([10, 11]);
+    let b = i64x2([20, 21]);
+    const I: SimdShuffleIdx<2> = SimdShuffleIdx([1, 2]);
+    let _: f64x2 = unsafe { simd_shuffle(a, b, I) };
 }
