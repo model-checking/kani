@@ -1,0 +1,9 @@
+Checking harness block_reusing_loop_label...
+Failed Checks: assertion failed: k != 5
+VERIFICATION:- FAILED
+
+Checking harness nested_break_does_not_end_outer_loop...
+Failed Checks: assertion failed: k != 5
+VERIFICATION:- FAILED
+
+Complete - 0 successfully verified harnesses, 2 failures, 2 total.
