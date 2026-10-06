@@ -43,12 +43,12 @@ fn chain_short_circuits() {
     let n: u8 = kani::any();
     kani::assume(n < 5);
     let mut polled = false;
-    let mut it = [1u8].into_iter();
+    let mut src: Option<u8> = Some(1);
     #[kani::loop_invariant(!polled)]
     while n >= 5
         && let Some(_v) = {
             polled = true;
-            it.next()
+            src.take()
         }
     {}
     assert!(!polled);
@@ -101,4 +101,24 @@ fn chain_invariant_violated() {
         n = next;
     }
     assert!(n <= 4);
+}
+
+#[kani::proof]
+fn chain_loop_modifies_after_invariant() {
+    // Deliberately-failing harness: a `#[kani::loop_modifies]` placed after the
+    // invariant must carry over to the rewritten `loop`. `k` is assigned but
+    // omitted from the clause, so the assigns check must FAIL; a passing harness
+    // would also pass if the attribute were silently dropped.
+    let mut n: u8 = kani::any();
+    kani::assume(n <= 6);
+    let mut k: u8 = 0;
+    #[kani::loop_invariant(n <= 6)]
+    #[kani::loop_modifies(&n)]
+    while n > 0
+        && let Some(m) = n.checked_sub(1)
+    {
+        n = m;
+        k = 1; // not in loop_modifies
+    }
+    assert!(k <= 1);
 }
