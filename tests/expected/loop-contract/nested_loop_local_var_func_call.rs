@@ -4,7 +4,8 @@
 // kani-flags: -Z loop-contracts
 
 //! Check if loop assign clause can be infered for inner-loop when there are local variables of outter-loop body.
-//! Also checks that the `move_storagelive_call_to_loophead` liveness gate doesn't wrongly refuse copies needed for nested-loop assigns inference: checked-arithmetic initializers, call-hoisted locals, and `&mut`-argument writes.
+//! The gate-regression harnesses below cover checked-arithmetic, chained-call,
+//! and hoisted-reference initializers, plus a projection write through an argument.
 
 #![feature(proc_macro_hygiene)]
 #![feature(stmt_expr_attributes)]
