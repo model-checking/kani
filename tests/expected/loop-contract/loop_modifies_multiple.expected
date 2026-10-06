@@ -1,0 +1,5 @@
+- Status: FAILURE\
+- Description: "Check that w is assignable"\
+in function with_empty_clause_fail
+
+Complete - 4 successfully verified harnesses, 1 failures, 5 total.

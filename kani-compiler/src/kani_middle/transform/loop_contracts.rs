@@ -1180,20 +1180,20 @@ impl LoopContractPass {
     }
 
     /// Find the `kani_loop_modifies` binding of the loop modifies clause of each loop (see
-    /// `loop_modifies` in library/kani_macros/src/sysroot/loop_contracts), and return it with the
-    /// instance of the register function of the loop, so that codegen attaches the clause to that
-    /// loop rather than to the next loop latch that it generates. The latch of an inner loop is
-    /// generated before the latch of its outer loop, and the latch of a loop that never iterates
-    /// (e.g. `loop { break; }`) is not generated at all.
+    /// `loop_modifies_binding` in library/kani_macros/src/sysroot/loop_contracts), and return it
+    /// with the instance of the register function of the loop, so that codegen attaches the clause
+    /// to that loop rather than to the next loop latch that it generates. The latch of an inner
+    /// loop is generated before the latch of its outer loop, and the latch of a loop that never
+    /// iterates (e.g. `loop { break; }`) is not generated at all.
     ///
-    /// The binding of a loop is the last assignment of a `kani_loop_modifies` binding found by
-    /// walking up the dominator tree from the loop head: the binding is assigned right before its
-    /// loop, so it dominates the loop head, and the code that `#[kani::loop_invariant]` generates
-    /// in between (e.g. the `on_entry` variables, which can branch, or the rewrite of a `for` loop)
-    /// does not get in the way. The walk stops at the head of another loop and at a binding of
-    /// another loop, and the loops are visited in reverse postorder, so a loop never takes the
-    /// binding of a loop before it. A binding that is not found this way (e.g. that of a loop
-    /// without `#[kani::loop_invariant]`) is not attached to any loop.
+    /// `#[kani::loop_invariant]` assigns the binding right before its loop, so the binding of a
+    /// loop is the last assignment of a `kani_loop_modifies` binding found by walking up the
+    /// dominator tree from the loop head. Loops without a loop contract do not stop the walk: one
+    /// can be between the binding and the loop (e.g. in a `#[kani::loop_decreases]` expression),
+    /// and the binding can be the first statement in the body of a `loop` around the loop, which
+    /// is in the head of that loop. The walk stops at the head of another loop with a loop
+    /// contract, and at a binding of another loop, and the loops are visited in reverse
+    /// postorder, so a loop never takes the binding of a loop before it.
     fn find_loop_modifies_bindings(
         &self,
         body: &MutableBody,
@@ -1212,27 +1212,6 @@ impl LoopContractPass {
         let (immediate_dominators, rpo_number) = Self::immediate_dominators(body);
         let mut loop_heads: Vec<usize> = loop_positions.iter().map(|(head, _)| *head).collect();
         loop_heads.sort_by_key(|head| rpo_number[*head]);
-        let dominates = |dominator: usize, mut block: usize| loop {
-            if block == dominator {
-                return true;
-            }
-            match immediate_dominators[block] {
-                Some(idom) => block = idom,
-                None => return false,
-            }
-        };
-        let mut predecessors = vec![Vec::new(); body.blocks().len()];
-        for (block, data) in body.blocks().iter().enumerate() {
-            for successor in data.terminator.successors() {
-                predecessors[successor].push(block);
-            }
-        }
-        // The head of a loop with or without a loop contract: the head of a loop with a loop
-        // contract that does not iterate (e.g. `loop { break; }`) is not a back edge target.
-        let is_any_loop_head = |block: usize| {
-            self.is_loop_head(body, tcx, block)
-                || predecessors[block].iter().any(|pred| dominates(block, *pred))
-        };
 
         // The bindings found so far, by their position (block, statement index).
         let mut found: HashSet<(usize, usize)> = HashSet::new();
@@ -1253,9 +1232,12 @@ impl LoopContractPass {
                         break 'walk;
                     }
                 }
-                // Stop at the head of an enclosing or preceding loop, before its own binding.
-                block =
-                    immediate_dominators[current].filter(|dominator| !is_any_loop_head(*dominator));
+                // Stop at the head of an enclosing or preceding loop with a loop contract (also
+                // one that does not iterate, e.g. `loop { break; }`), before its own binding.
+                if current != loop_head && self.is_loop_head(body, tcx, current) {
+                    break;
+                }
+                block = immediate_dominators[current];
             }
         }
         bindings

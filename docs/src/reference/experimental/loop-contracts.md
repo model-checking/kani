@@ -300,6 +300,12 @@ fn main() {
 }
 ```
 
+The targets are evaluated right before the loop, after the code that `#[kani::loop_invariant]` adds before it
+(e.g., the `on_entry` values and, for a `for` loop, the iterator).
+A loop with several `loop_modifies` attributes may modify the targets of all of them.
+A `loop_modifies` attribute on a loop without a `#[kani::loop_invariant]` is ignored with a warning,
+since Kani does not abstract such a loop: it unwinds it like any other loop.
+
 The `loop_modifies` clause only needs to list memory that exists outside of the loop.
 Kani adds the variables that it generates for the loop to the clause
 (the variables for `prev` and, for `for` loops, the pattern bindings and the loop index `kani::index`),

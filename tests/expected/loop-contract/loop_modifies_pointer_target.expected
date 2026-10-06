@@ -1,0 +1,17 @@
+- Status: FAILURE\
+- Description: "Check that *bad is assignable"\
+in function write_through_and_bad
+
+- Status: FAILURE\
+- Description: "Check that i is assignable"\
+in function count
+
+- Status: FAILURE\
+- Description: "assertion failed: !q.is_null()"\
+in function write_after_loop_fail
+
+- Status: FAILURE\
+- Description: "Check that bad is assignable"\
+in function pointer_local_fail
+
+Complete - 2 successfully verified harnesses, 4 failures, 6 total.
