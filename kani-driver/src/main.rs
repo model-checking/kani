@@ -191,6 +191,7 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
 
     let harnesses = session.determine_targets(project.get_all_harnesses())?;
     debug!(n = harnesses.len(), ?harnesses, "verify_project");
+    let export_context = session.begin_export_json(&harnesses, started_at)?;
 
     // Verification
     let runner = harness_runner::HarnessRunner { sess: &session, project: &project };
@@ -215,7 +216,7 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
         session.save_coverage_results(&project, &results, &timestamp)?;
     }
 
-    session.write_export_json(&harnesses, &results, started_at, start_instant.elapsed())?;
+    session.write_export_json(&results, export_context, start_instant.elapsed())?;
     session.write_sarif(&results)?;
     if !session.args.common_args.quiet {
         session.print_final_summary(&results)?;
