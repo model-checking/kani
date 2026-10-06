@@ -794,11 +794,17 @@ impl LoopContractPass {
         map
     }
 
-    /// Blocks that define each local with a whole-local `Assign` or `Call`
-    /// destination. Used only for locals without a `StorageLive` to decide
-    /// whether they are declared inside a loop; see `group_reads_dead_local`.
-    /// A write through a pointer the local holds (`*p = v`) or into part of it
-    /// (`x.f = v`) is not a definition, so `defines_local` filters it out.
+    /// Blocks that define each local with a whole-local statement `Assign`.
+    /// Used only for locals without a `StorageLive` to decide whether they are
+    /// declared inside a loop; see `group_reads_dead_local`. A write through a
+    /// pointer (`*p = v`) or into part of a local (`x.f = v`) is not a
+    /// definition, so `defines_local` filters it out — and a `Call`
+    /// destination does not count either: rustc omits storage markers for
+    /// such locals, their storage spans the whole function, and the head copy
+    /// reads them exactly where the unguarded pass always has. Only
+    /// statement-form whole-local assigns (e.g. an arithmetic result like
+    /// `mid` in a binary search) stay tracked, so a group reading one is
+    /// still refused.
     fn assign_blocks(body: &MutableBody) -> HashMap<usize, Vec<usize>> {
         let mut map: HashMap<usize, Vec<usize>> = HashMap::new();
         for (bb, block) in body.blocks().iter().enumerate() {
@@ -808,11 +814,6 @@ impl LoopContractPass {
                 {
                     map.entry(place.local).or_default().push(bb);
                 }
-            }
-            if let TerminatorKind::Call { destination, .. } = &block.terminator.kind
-                && Self::defines_local(destination)
-            {
-                map.entry(destination.local).or_default().push(bb);
             }
         }
         map
