@@ -636,10 +636,11 @@ impl LoopContractPass {
         &self,
         body: &mut MutableBody,
         loop_head_map: &HashMap<usize, usize>,
-    ) -> Vec<usize> {
+    ) -> (Vec<usize>, HashMap<usize, HashSet<usize>>) {
         let mut add_assign_list: Vec<(usize, Statement)> = Vec::new();
         let mut found_local_list: Vec<usize> = Vec::new();
         let decreases_bindings = self.get_loop_decreases_bindings(body);
+        let mut head_live: HashMap<usize, HashSet<usize>> = HashMap::new();
         let mut localvars = self.get_user_defined_variables(body);
         localvars.retain(|local| !decreases_bindings.contains(local));
         let mut blocks_stmts: Vec<(usize, Vec<Statement>)> = Vec::new();
@@ -667,6 +668,7 @@ impl LoopContractPass {
                         if matches!(next_stmt.kind.clone(), StatementKind::Assign(lhs,_) if lhs.local == local)
                         {
                             found_local_list.push(local);
+                            head_live.entry(closest_loop_head).or_default().insert(local);
                             add_assign_list.push((closest_loop_head, stmt.clone()));
                             add_assign_list.push((closest_loop_head, next_stmt.clone()));
                             new_stmts.push(next_stmt.clone());
@@ -684,6 +686,7 @@ impl LoopContractPass {
                             && matches!(fifth_stmt.kind.clone(), StatementKind::StorageDead(dead_local) if dead_local == temp_local)
                         {
                             found_local_list.push(local);
+                            head_live.entry(closest_loop_head).or_default().insert(local);
                             add_assign_list.push((closest_loop_head, stmt.clone()));
                             add_assign_list.push((closest_loop_head, next_stmt.clone()));
                             add_assign_list.push((closest_loop_head, third_stmt.clone()));
@@ -716,7 +719,7 @@ impl LoopContractPass {
                 InsertPosition::Before,
             );
         }
-        found_local_list
+        (found_local_list, head_live)
     }
 
     fn terminator_of_new_target(old: Terminator, new_target: usize) -> Terminator {
@@ -879,6 +882,7 @@ impl LoopContractPass {
     }
 
     //Move all variables initiation using function-call inside the loop body to the loop-head
+    #[allow(clippy::too_many_arguments)]
     fn move_storagelive_call_to_loophead(
         &self,
         body: &mut MutableBody,
@@ -886,6 +890,7 @@ impl LoopContractPass {
         storagelive_map: &HashMap<usize, Vec<usize>>,
         assign_map: &HashMap<usize, Vec<usize>>,
         found_local_list: Vec<usize>,
+        head_live: &mut HashMap<usize, HashSet<usize>>,
         visit_loc: Location,
     ) {
         let mut found_local_list = found_local_list;
@@ -963,10 +968,15 @@ impl LoopContractPass {
                             loop_head_map,
                             storagelive_map,
                             assign_map,
-                            None,
+                            head_live.get(&closest_loop_head),
                         ))
                 {
                     move_call_list.push((closest_loop_head, current_local_decl_blocks.clone()));
+                    // The copy makes the group's locals live at this head for
+                    // every later group that reads them — machinery moves too.
+                    let live = head_live.entry(closest_loop_head).or_default();
+                    live.insert(current_user_local);
+                    live.extend(uses.defined.iter().copied());
                 }
                 current_local_decl_blocks = Vec::new();
                 current_user_local = 0;
@@ -1091,7 +1101,7 @@ impl LoopContractPass {
         // within existing blocks and transform_bb only appends blocks at the end.
         let storagelive_map = Self::storagelive_blocks(&new_body);
         let assign_map = Self::assign_blocks(&new_body);
-        let found_local_list =
+        let (found_local_list, mut head_live) =
             self.move_storagelive_assign_to_loophead(&mut new_body, &loop_head_map);
         let mut contain_loop_contracts: bool = false;
 
@@ -1128,6 +1138,7 @@ impl LoopContractPass {
             &storagelive_map,
             &assign_map,
             found_local_list,
+            &mut head_live,
             visit_loc,
         );
         (contain_loop_contracts, new_body.into())
