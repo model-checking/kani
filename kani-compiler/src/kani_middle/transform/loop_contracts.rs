@@ -940,10 +940,16 @@ impl LoopContractPass {
                             | TerminatorKind::Drop { .. }
                     )
                 });
-                // Copying the group is only sound-to-evaluate at the head if
-                // everything it reads is live there. The for-loop machinery
-                // (kaniiter, firstpat tuples) keeps its move unconditionally.
+                // The gate covers liveness only: it refuses a copy that would
+                // read storage not yet live at the head. It does not model the
+                // copied code's own effects. A called function's side effects,
+                // a `kani::assume`, or a panic run once at the head, on paths
+                // where the body may never run (#4982).
                 let uses = GroupLocalUses::analyze(&current_local_decl_blocks, visit_loc);
+                // The for-loop machinery (kaniiter, firstpat tuples) keeps its
+                // move unconditionally. A nested `for` whose range reads
+                // outer-loop state computes its iterator once from the outer
+                // variable's value at entry (also #4982).
                 let machinery = forloopvars.contains(&current_user_local)
                     || firstpat_vars.contains(&current_user_local);
                 if retargetable
