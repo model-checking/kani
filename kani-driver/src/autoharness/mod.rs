@@ -276,14 +276,19 @@ impl KaniSession {
             if harness.is_ctor_based {
                 kind.push_str(" (ctor)");
             }
+            if harness.is_aliasing {
+                kind.push_str(" (aliasing)");
+            }
             kind
         };
         let mut any_bounded = false;
         let mut any_ctor = false;
+        let mut any_aliasing = false;
 
         for success in successes {
             any_bounded |= success.harness.is_bounded;
             any_ctor |= success.harness.is_ctor_based;
+            any_aliasing |= success.harness.is_aliasing;
             verified_fns.add_row(vec![
                 success.harness.crate_name.clone(),
                 success.harness.pretty_name.clone(),
@@ -295,6 +300,7 @@ impl KaniSession {
         for failure in failures {
             any_bounded |= failure.harness.is_bounded;
             any_ctor |= failure.harness.is_ctor_based;
+            any_aliasing |= failure.harness.is_aliasing;
             verified_fns.add_row(vec![
                 failure.harness.crate_name.clone(),
                 failure.harness.pretty_name.clone(),
@@ -321,6 +327,12 @@ impl KaniSession {
             println!(
                 "Note: harnesses marked \"(ctor)\" generate some values through one of a type's own constructors (--constructor-args);\n\
                  their verification results only cover values reachable through that constructor."
+            );
+        }
+        if any_aliasing {
+            println!(
+                "Note: harnesses marked \"(aliasing)\" let some shared reference or raw pointer argument be the same as an earlier argument (--alias-arguments);\n\
+                 their verification results also cover callers that pass the same reference or pointer for those arguments."
             );
         }
 

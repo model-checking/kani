@@ -6,5 +6,5 @@
 [independent] | core | verify_alias_arguments::refs_distinct | #[kani::proof] | Success |
 [TEST] Run kani autoharness --std --alias-arguments
 [aliasing] exit status: 1
-[aliasing] | core | verify_alias_arguments::ptrs_distinct | #[kani::proof] | Failure |
-[aliasing] | core | verify_alias_arguments::refs_distinct | #[kani::proof] | Failure |
+[aliasing] | core | verify_alias_arguments::ptrs_distinct | #[kani::proof] (aliasing) | Failure |
+[aliasing] | core | verify_alias_arguments::refs_distinct | #[kani::proof] (aliasing) | Failure |

@@ -16,9 +16,10 @@ use crate::kani_middle::transform::body::{
 };
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_middle::{
-    CtorReturn, FmtTrait, SmartPointerModels, adt_has_private_field_check, can_derive_arbitrary,
-    find_arbitrary_constructor, fmt_impl_self_ty, implements_arbitrary, implements_invariant,
-    is_byte_str, is_c_str, is_formatter, is_wtf8, scalar_niche, smart_pointer_model_instance,
+    CtorReturn, FmtTrait, SmartPointerModels, adt_has_private_field_check, aliasable_arg_pairs,
+    can_derive_arbitrary, find_arbitrary_constructor, fmt_impl_self_ty, implements_arbitrary,
+    implements_invariant, is_byte_str, is_c_str, is_formatter, is_wtf8, scalar_niche,
+    smart_pointer_model_instance,
 };
 use crate::kani_queries::QueryDb;
 use rustc_data_structures::fx::FxHashMap;
@@ -2015,28 +2016,6 @@ impl AutomaticArbitraryPass {
     }
 }
 
-/// Whether an argument of type `later` may alias an earlier argument of type `earlier` under
-/// --alias-arguments. This is deliberately conservative: both must be shared references, or both
-/// raw pointers of the same mutability, to the same pointee type. The region of a reference is
-/// not compared, so the lifetimes the function declares do not matter.
-///
-/// A `&mut T` never aliases anything, since it is exclusive. References and pointers of
-/// different types, partially overlapping slices, and references nested in other types are not
-/// modeled.
-fn can_alias_args(earlier: Ty, later: Ty) -> bool {
-    match (earlier.kind(), later.kind()) {
-        (
-            TyKind::RigidTy(RigidTy::Ref(_, earlier_pointee, Mutability::Not)),
-            TyKind::RigidTy(RigidTy::Ref(_, later_pointee, Mutability::Not)),
-        ) => earlier_pointee == later_pointee,
-        (
-            TyKind::RigidTy(RigidTy::RawPtr(earlier_pointee, earlier_mutability)),
-            TyKind::RigidTy(RigidTy::RawPtr(later_pointee, later_mutability)),
-        ) => earlier_pointee == later_pointee && earlier_mutability == later_mutability,
-        _ => false,
-    }
-}
-
 /// Transform the dummy body of an automatic_harness Kani intrinsic to be a proof harness for a given function.
 #[derive(Debug, Clone)]
 pub struct AutomaticHarnessPass {
@@ -2053,7 +2032,7 @@ pub struct AutomaticHarnessPass {
     /// The FnDef of KaniModel::AnyAlias
     kani_any_alias: FnDef,
     /// Whether --alias-arguments is enabled: let shared reference and raw pointer arguments
-    /// alias earlier arguments of the same type.
+    /// alias the earlier arguments they can alias, c.f. `aliasable_arg_pairs`.
     alias_arguments: bool,
 }
 
@@ -2228,39 +2207,54 @@ impl TransformPass for AutomaticHarnessPass {
 
         // Under --alias-arguments, model caller-controlled aliasing: each argument may
         // additionally be the same reference or pointer as any earlier argument it can alias,
-        // c.f. `can_alias_args`. The values generated above stay as they are, so each argument
-        // still covers the non-aliasing case through its own storage.
+        // c.f. `aliasable_arg_pairs`. The values generated above stay as they are, so each
+        // argument still covers the non-aliasing case through its own storage.
         if self.alias_arguments {
             let arg_tys =
                 fn_to_verify_body.arg_locals().iter().map(|decl| decl.ty).collect::<Vec<_>>();
-            for later in 1..arg_tys.len() {
-                for earlier in 0..later {
-                    if !can_alias_args(arg_tys[earlier], arg_tys[later]) {
-                        continue;
-                    }
-                    let ty = arg_tys[later];
-                    let any_alias_inst = Instance::resolve(
-                        self.kani_any_alias,
-                        &GenericArgs(vec![GenericArgKind::Type(ty)]),
-                    )
-                    .unwrap();
-                    let alias_lcl = harness_body.new_local(
+            for (earlier, later) in aliasable_arg_pairs(tcx, fn_to_verify) {
+                let ty = arg_tys[later];
+                // Raw pointers alias regardless of their mutability: cast the earlier pointer
+                // to the type of the later one, which is what the model returns.
+                let is_raw_ptr = matches!(ty.kind(), TyKind::RigidTy(RigidTy::RawPtr(..)));
+                let earlier_lcl = if !is_raw_ptr || arg_tys[earlier] == ty {
+                    arg_locals[earlier]
+                } else {
+                    let cast_lcl = harness_body.new_local(
                         ty,
                         source.span(harness_body.blocks()),
                         Mutability::Not,
                     );
-                    harness_body.insert_call(
-                        &any_alias_inst,
+                    harness_body.assign_to(
+                        Place::from(cast_lcl),
+                        Rvalue::Cast(
+                            CastKind::PtrToPtr,
+                            Operand::Copy(Place::from(arg_locals[earlier])),
+                            ty,
+                        ),
                         &mut source,
                         InsertPosition::Before,
-                        vec![
-                            Operand::Copy(Place::from(arg_locals[later])),
-                            Operand::Copy(Place::from(arg_locals[earlier])),
-                        ],
-                        Place::from(alias_lcl),
                     );
-                    arg_locals[later] = alias_lcl;
-                }
+                    cast_lcl
+                };
+                let any_alias_inst = Instance::resolve(
+                    self.kani_any_alias,
+                    &GenericArgs(vec![GenericArgKind::Type(ty)]),
+                )
+                .unwrap();
+                let alias_lcl =
+                    harness_body.new_local(ty, source.span(harness_body.blocks()), Mutability::Not);
+                harness_body.insert_call(
+                    &any_alias_inst,
+                    &mut source,
+                    InsertPosition::Before,
+                    vec![
+                        Operand::Copy(Place::from(arg_locals[later])),
+                        Operand::Copy(Place::from(earlier_lcl)),
+                    ],
+                    Place::from(alias_lcl),
+                );
+                arg_locals[later] = alias_lcl;
             }
         }
 
