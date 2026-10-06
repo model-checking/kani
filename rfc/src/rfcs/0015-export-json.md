@@ -362,8 +362,9 @@ completeness rules that consumers need alongside a version label.
   `end_line`, `goto_file`, per-check descriptions/locations, CBMC OS information or statistics.
 - **Effective `--object-bits`?** Restore shipped resolved encoding provenance under `configuration` or per harness?
   File/update a tracking issue on adoption; resolve representation before or at stabilization.
-- **Path provenance?** `file` is invocation-relative. Restore `project.workspace_root` or make paths
-  workspace-relative? `output_dir` may stay dropped, but `--target-dir` changes it; do not assume a default.
+- **Path provenance?** The base of `file` depends on how Kani runs (see the field reference). Restore
+  `project.workspace_root` or make all paths relative to one base? `output_dir` may stay dropped, but
+  `--target-dir` changes it; do not assume a default.
 - **`is_ctor_based`?** Constructor generation/mined-invariant filtering restricts success to admitted
   values independently of `is_bounded`. Representation is open; exports must state this restriction
   before stabilization. Omission cannot justify unrestricted proofs.
@@ -418,15 +419,15 @@ The narrower `INCOMPLETE` marker follows its presence matrix below.
 | `outcome.kind` (run level) | `"COMPLETED"` | — | Always `COMPLETED` in a terminal document; absent in the marker. No run-level `CRASHED` value. |
 | `run_state` | `"INCOMPLETE"` \| `"COMPLETE"` \| `"PARTIAL"` \| `"NO_HARNESSES_SELECTED"` | — | Trust is based on this field; see Completeness under Reading the results. |
 | `target` | string | — | The Rust target triple Kani itself was built for. |
-| `started_at` | string | — | UTC, `YYYY-MM-DDTHH:MM:SSZ` (second resolution). |
-| `wall_time_s` | number | — | Seconds; volatile between runs by design (see "Interaction with other flags"). |
+| `started_at` | string | — | UTC, `YYYY-MM-DDTHH:MM:SSZ` (second resolution). Taken after the build, when target selection starts. |
+| `wall_time_s` | number | — | Seconds from target selection to the start of the export write: target selection, verification and coverage output. The build is not included. Volatile between runs by design (see "Interaction with other flags"). |
 | `harnesses[]` | array of harness objects | never null, may be empty (e.g. under `NO_HARNESSES_SELECTED`) | Sorted by `(crate_name, file, line, name)`. |
 | `harnesses[].name` | string | — | Fully qualified `pretty_name`; see Selection under Reading the results. |
 | `harnesses[].crate_name` | string | — | Distinguishes same-named harnesses across crates in one workspace. |
-| `harnesses[].file` | string | — | Declaring-file path relative to the invocation directory; see the path-provenance open question. |
+| `harnesses[].file` | string | — | Declaring-file path. Under `cargo kani` it is relative to the Cargo workspace root; under `kani` it is relative to the invocation directory. Kani keeps a relative path from rustc unchanged and makes an absolute path relative to the invocation directory when it can; see the path-provenance open question. |
 | `harnesses[].line` | integer | — | 1-based harness-function start line; end line is not exported. |
 | `harnesses[].contract` | object | nullable | `null` when the harness carries no CBMC-level `assigns` contract. |
-| `harnesses[].contract.contracted_function_name` | string | — (when `contract` present) | The contract's target function. |
+| `harnesses[].contract.contracted_function_name` | string | — (when `contract` present) | Internal mangled symbol of the generated closure that carries the CBMC `assigns` contract. For the target function of a contract proof, read `harnesses[].attributes.kind.ProofForContract.target_fn`. |
 | `harnesses[].contract.recursion_tracker` | string | nullable | Non-null only for a `#[kani::recursive]` function. |
 | `harnesses[].is_automatically_generated` | bool | — | True for an autoharness-generated harness; not selectable with `--harness`/`--exact`. |
 | `harnesses[].has_loop_contracts` | bool | — | Whether the harness uses loop contracts. |
