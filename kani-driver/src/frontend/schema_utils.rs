@@ -873,6 +873,7 @@ mod tests {
             is_bounded: false,
             is_ctor_based: false,
             has_refcount_caveat: false,
+            is_aliasing: false,
         }
     }
 

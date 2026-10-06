@@ -3,11 +3,16 @@
 
 // Test the autoharness `--alias-arguments` option, which models caller-controlled aliasing
 // between arguments: a shared reference or raw pointer argument may be the same reference or
-// pointer as an earlier argument of the same type, c.f. the `AnyAlias` model. Without the
-// option, each such argument refers to its own allocation.
+// pointer as an earlier argument of the same type (or, for raw pointers, of the same pointee
+// type), c.f. the `AnyAlias` model. Without the option, each such argument refers to its own
+// allocation.
 // The "TEST NOTE" comments give the expected result per function, without and with the option.
+// With the option, the harnesses of the functions that have a pair of arguments that may alias
+// are marked "(aliasing)"; those are exactly the functions whose note says "with: FAIL", plus
+// `alias_safe` and `contract_excludes_alias`.
 
 use core::cell::Cell;
+use std::rc::Rc;
 
 // TEST NOTE: without: PASS (separate allocations); with: FAIL (`b` may be `a`).
 pub fn refs_distinct(a: &u8, b: &u8) {
@@ -92,17 +97,56 @@ pub fn different_types_distinct(a: &u8, b: &u16) {
     assert!(a as *const u8 != b as *const u16 as *const u8);
 }
 
+// TEST NOTE: without: PASS; with: FAIL. Both arguments have the same type whatever `T` is
+// instantiated with, so `b` may be `a`.
+pub fn generic_same_distinct<T>(a: &T, b: &T) {
+    assert!(!core::ptr::eq(a, b));
+}
+
+// TEST NOTE: without: PASS; with: FAIL. The two arguments may alias exactly if `T` and `U`
+// are instantiated with the same type, and autoharness instantiates both with `i32`. The
+// marker and the harness body are derived from the same instantiation, so they agree.
+pub fn generic_pair_distinct<T, U>(a: &T, b: &U) {
+    assert!(a as *const T as *const u8 != b as *const U as *const u8);
+}
+
 // TEST NOTE: PASS in both modes: a reference and a raw pointer do not alias, even if they
 // have the same pointee type.
 pub fn ref_and_ptr_distinct(a: &u8, p: *const u8) {
     assert!(a as *const u8 != p);
 }
 
-// TEST NOTE: PASS in both modes: raw pointers of different mutability do not alias.
-pub fn different_ptr_mutability_distinct(p: *const u8, q: *mut u8) {
+// TEST NOTE: PASS in both modes. As `ref_and_ptr_distinct`, for a mutable raw pointer: a
+// write through it while the reference is live would be undefined behavior, so the two are
+// never the same.
+pub fn ref_and_mut_ptr_distinct(a: &u8, p: *mut u8) {
+    assert!(a as *const u8 != p as *const u8);
+}
+
+// TEST NOTE: without: PASS; with: FAIL. Raw pointers to the same type may alias whatever
+// their mutability: `q` may be `p`.
+pub fn const_and_mut_ptrs_distinct(p: *const u8, q: *mut u8) {
     if !p.is_null() && !q.is_null() {
         assert!(p != q as *const u8);
     }
+}
+
+// TEST NOTE: without: PASS; with: FAIL, since `src` may be `dst`, in which case the write
+// through `dst` changes `*src`. The precondition holds for aliasing pointers as well.
+#[kani::requires(kani::mem::can_dereference(dst) && kani::mem::can_dereference(src))]
+#[kani::modifies(dst)]
+pub unsafe fn add_one_mut_const(dst: *mut u32, src: *const u32) {
+    unsafe {
+        let s = *src;
+        *dst = s.wrapping_add(1);
+        assert!(*src == s);
+    }
+}
+
+// TEST NOTE: PASS in both modes: smart pointer arguments are not modeled as aliasing, even
+// though a caller could pass two clones of one `Rc`.
+pub fn rcs_distinct(a: Rc<Cell<u8>>, b: Rc<Cell<u8>>) {
+    assert!(!Rc::ptr_eq(&a, &b));
 }
 
 // TEST NOTE: PASS in both modes: the function is correct whether or not its arguments alias.
