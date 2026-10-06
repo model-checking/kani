@@ -1,0 +1,11 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+[package]
+name = "loop-invariant-let-chain"
+version = "0.1.0"
+edition = "2024"
+description = "Check that loop_invariant accepts while-let-chain conditions (issue 4943)"
+
+[package.metadata.kani.unstable]
+loop-contracts = true

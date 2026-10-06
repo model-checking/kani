@@ -11,8 +11,8 @@ use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::token::AndAnd;
 use syn::{
-    BinOp, Block, Expr, ExprBinary, ExprForLoop, ExprWhile, Ident, Stmt, Token, parse_macro_input,
-    parse_quote, visit_mut::VisitMut,
+    BinOp, Block, Expr, ExprBinary, ExprForLoop, ExprLoop, ExprWhile, Ident, Stmt, Token,
+    parse_macro_input, parse_quote, visit_mut::VisitMut,
 };
 
 /*
@@ -364,7 +364,65 @@ fn while_let_rewrite(loopexpr: Stmt) -> Stmt {
         };
     }
 
+    if let Some(rewritten) = while_let_chain_rewrite(&loopexpr) {
+        return rewritten;
+    }
+
     loopexpr.clone()
+}
+
+/// Rewrite a `while` loop whose condition is a let chain
+/// (`c1 && let p = e && ...`) into an equivalent `loop`, so the invariant
+/// machinery (which rebuilds `while` conditions and cannot re-emit a `let`
+/// inside the rebuilt condition; see issue #4943) only ever sees a plain
+/// `loop`.
+///
+/// `while c1 && let Some(x) = e { body }` becomes:
+/// ```ignore
+/// loop {
+///     if c1 && let Some(x) = e { body } else { break }
+/// }
+/// ```
+/// Evaluation order and short-circuiting match the original chain; `break`
+/// and `continue` in the body keep their targets (an `if` is not a loop).
+/// The loop's label and attributes are preserved on the new `loop`.
+fn while_let_chain_rewrite(loopexpr: &Stmt) -> Option<Stmt> {
+    let Stmt::Expr(Expr::While(ew), _) = loopexpr else {
+        return None;
+    };
+    let mut operands: Vec<Expr> = Vec::new();
+    collect_and_chain_operands(&ew.cond, &mut operands);
+    // A chain has at least two operands with a `let` among them; a bare
+    // `while let` was already handled by the arm above.
+    if operands.len() < 2 || !operands.iter().any(|e| matches!(e, Expr::Let(_))) {
+        return None;
+    }
+    let cond = &ew.cond;
+    let body = &ew.body;
+    let new_loop = ExprLoop {
+        attrs: ew.attrs.clone(),
+        label: ew.label.clone(),
+        loop_token: Default::default(),
+        body: parse_quote! {{
+            if #cond #body else {
+                break;
+            }
+        }},
+    };
+    Some(Stmt::Expr(Expr::Loop(new_loop), Some(Default::default())))
+}
+
+/// Flatten the left-associated top-level `&&` operands of a condition,
+/// in evaluation order. `a && b && c` yields `[a, b, c]`.
+fn collect_and_chain_operands(cond: &Expr, out: &mut Vec<Expr>) {
+    if let Expr::Binary(bin) = cond
+        && matches!(bin.op, BinOp::And(_))
+    {
+        collect_and_chain_operands(&bin.left, out);
+        out.push((*bin.right).clone());
+    } else {
+        out.push(cond.clone());
+    }
 }
 
 /*
