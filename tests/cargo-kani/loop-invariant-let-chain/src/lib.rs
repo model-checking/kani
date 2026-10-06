@@ -73,9 +73,8 @@ fn chain_labeled() {
 #[kani::proof]
 fn chain_cfg_attr() {
     // The cfg_attr spelling is how verify-rust-std applies the attribute
-    // (the motivating case in issue 4943); tokens delivered through
-    // cfg_attr can arrive wrapped in invisible groups, which the chain
-    // detection must see through.
+    // (the motivating case in issue 4943); a regression test that the chain
+    // is detected and rewritten through that spelling.
     let mut remaining: usize = kani::any();
     kani::assume(remaining <= 4);
     #[cfg_attr(kani, kani::loop_invariant(remaining <= 4))]

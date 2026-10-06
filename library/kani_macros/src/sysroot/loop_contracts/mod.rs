@@ -299,26 +299,14 @@ fn while_let_chain_rewrite(loopexpr: &Stmt) -> Option<Stmt> {
     Some(Stmt::Expr(Expr::Loop(new_loop), Some(Default::default())))
 }
 
-/// See through invisible-delimiter groups (`Expr::Group`) that attribute
-/// token streams can carry (e.g. when the attribute is applied through
-/// `cfg_attr`); a group-wrapped `let` or `&&` must still be recognized.
-fn unwrap_groups(mut e: &Expr) -> &Expr {
-    while let Expr::Group(g) = e {
-        e = &g.expr;
-    }
-    e
-}
-
 /// Flatten the left-associated top-level `&&` operands of a condition,
-/// in evaluation order. `a && b && c` yields `[a, b, c]`. Group nodes are
-/// unwrapped so the pushed operands match directly on `Expr::Let`.
+/// in evaluation order. `a && b && c` yields `[a, b, c]`.
 fn collect_and_chain_operands(cond: &Expr, out: &mut Vec<Expr>) {
-    let cond = unwrap_groups(cond);
     if let Expr::Binary(bin) = cond
         && matches!(bin.op, BinOp::And(_))
     {
         collect_and_chain_operands(&bin.left, out);
-        out.push(unwrap_groups(&bin.right).clone());
+        out.push((*bin.right).clone());
     } else {
         out.push(cond.clone());
     }
