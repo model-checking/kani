@@ -7,7 +7,7 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::codegen_cprover_gotoc::codegen::cache::{CacheEntry, cache_entry};
 use cbmc::goto_program::Location;
 use lazy_static::lazy_static;
-use rustc_hir::Attribute;
+use rustc_attr_ir::Attribute;
 use rustc_public::rustc_internal;
 use rustc_public::ty::Span as SpanStable;
 use rustc_span::Span;
