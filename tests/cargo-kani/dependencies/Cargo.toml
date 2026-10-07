@@ -8,5 +8,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+# zerocopy 0.8.60 (pulled in by rand through ppv-lite86) doesn't compile under `--cfg kani`
+# without its `derive` feature. Remove once a fixed release is out:
+# https://github.com/model-checking/kani/issues/4988
+zerocopy = "=0.8.59"
 memchr = { version = "2", default-features = false }
 rand = "0.8.4"
