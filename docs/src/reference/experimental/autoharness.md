@@ -415,9 +415,25 @@ results arrive in nondeterministic order; the summary table printed at the end i
 
 ## Soundness caveats
 
+A `Success` result means that Kani found no failing check for any of the inputs the harness
+generated. The cases below are where those inputs, or the instantiation being verified, do not
+cover everything a caller could do, so a `Success` can still miss a bug. With Kani's default
+checks, a harness that times out or needs more loop unwinding than the bound allows is reported
+as a failure, not a success (see [Default settings](#default-settings)).
+
 ### Single monomorphization
 
-<!-- TODO(#4979): single monomorphization -->
+For a generic function, autoharness verifies a single instantiation (see
+[Generic Functions](#generic-functions)): each type parameter is replaced by one concrete type
+that satisfies its bounds, and each `usize` const generic parameter by the value 2. A `Success`
+for `foo::<i32>` therefore does not imply that `foo::<u8>` or `foo::<MyType>` is also safe. The
+summary table always shows the instantiated name, so it is visible which instantiation was
+verified.
+
+Type parameters bounded by `Fn`, `FnMut` or `FnOnce` are the exception: they are instantiated
+with a model that covers every value a closure with that signature could return, rather than
+with one particular closure (see [Other limitations](#other-limitations) for what the model does
+not cover). The function's other type parameters are still verified for one choice only.
 
 ### No aliasing between arguments
 Each reference, pointer, slice, or string argument is generated from its own independent
@@ -434,24 +450,54 @@ Modeling caller-controlled aliasing between arguments is tracked in
 
 ### Bounded arguments
 
-<!-- TODO(#4979): bounded arguments only up to the bound -->
+Harnesses marked "(bounded)" use bounded nondeterministic values for some arguments, which
+`--bounded-arguments` enables (see [Bounded Arguments](#bounded-arguments-opt-in---bounded-arguments)).
+Their results only hold for inputs up to those bounds: a bug that needs a longer slice or string,
+or a larger `BoundedArbitrary` value, is not found. The bounds a run used are printed in a note
+after the summary table. Arguments that are generated without bounds by default, such as slices
+and `Vec`s of primitive integers or floats, are not affected.
 
 ### Vacuous constructors
 
-> **Caveat:** if the chosen constructor is *unsatisfiable* for the generated type — an
-> assert-guarded constructor every argument of which trips an assertion, or a checked
-> constructor that always returns `None`/`Err` — the generated body assumes `false` on all
-> paths and the harness becomes **vacuous**, reporting `Success` without checking anything.
-> Kani does not yet detect this case; see
-> [#4757](https://github.com/model-checking/kani/issues/4757).
+This applies to harnesses marked "(ctor)", i.e. runs with `--constructor-args` (see
+[Constructor-based generation](#constructor-based-generation-constructor-args)). If the chosen
+constructor is *unsatisfiable* for the generated type — an assert-guarded constructor every
+argument of which trips an assertion, or a checked constructor that always returns
+`None`/`Err` — the generated body assumes `false` on all paths and the harness becomes
+**vacuous**, reporting `Success` without checking anything. Kani does not yet detect this case;
+see [#4757](https://github.com/model-checking/kani/issues/4757).
 
 ### Mined-invariant heuristic
 
-> **Caveat:** the "asserted in ≥2 methods" filter is a heuristic, not a proof of
-> type-invariance. If two methods share a *precondition* that is not a universal invariant,
-> it is assumed for all generated values and may exclude otherwise-valid inputs — a potential
-> missed bug. This is acceptable only under the opt-in, under-approximating `(ctor)` contract;
-> see [#4763](https://github.com/model-checking/kani/issues/4763).
+This also applies only to "(ctor)" harnesses, where mined invariants are assumed for generated
+values (see [Mined invariants](#mined-invariants)). The "asserted in ≥2 methods" filter is a
+heuristic, not a proof of type-invariance. If two methods share a *precondition* that is not a
+universal invariant, it is assumed for all generated values and may exclude otherwise-valid
+inputs — a potential missed bug. This is acceptable only under the opt-in, under-approximating
+`(ctor)` contract; see [#4763](https://github.com/model-checking/kani/issues/4763).
+
+### Other limitations
+
+The following under-approximations apply by default, and the summary table does not mark the
+harnesses they affect:
+
+- **Closures have no side effects.** The model used for `Fn`/`FnMut`/`FnOnce`-bounded type
+  parameters returns a fresh nondeterministic value on every call but never modifies anything.
+  It therefore does not cover closures that modify state the function can also observe, such as
+  a `static` or a `Cell` that the caller also passes as an argument; see
+  [#4994](https://github.com/model-checking/kani/issues/4994).
+- **Raw pointers are well-behaved.** Generated raw pointers are always aligned, never point to
+  deallocated memory, and point to an initialized value whenever they are valid, so bugs that
+  need a misaligned or dangling pointer are not found (see [Raw Pointers](#raw-pointers)).
+- **Formatting uses the default parameters and a sink that never fails.** Harnesses for `fmt`
+  trait implementations only cover the default formatting parameters, not a non-default width,
+  precision, fill, alignment, sign or the alternate flag, and never reach the error path of a
+  failed write (see [Formatting Trait Implementations](#formatting-trait-implementations)). The
+  `&Formatter` model used under `--bounded-arguments` also writes to a sink that never fails.
+- **Specifications are assumed.** Function contract preconditions and the `is_safe()` predicate
+  of types implementing `Invariant` are assumed for generated values, so a precondition or
+  invariant that is stronger than necessary excludes inputs that a caller could pass (see
+  [Contracts (requires)](#contracts-requires) and [Type Safety Invariants](#type-safety-invariants)).
 
 ## Architecture (for contributors)
 
