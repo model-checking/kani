@@ -159,17 +159,26 @@ versions of the generic function may still be reachable (and thus verified) thro
 
 #### Unbounded (default)
 
+Kani uses the following argument generators by default, without requiring
+`--bounded-arguments`. Their supported types and modeling limits are described below.
+
 ##### Arguments Implementing Arbitrary
-Kani will only generate an automatic harness for a function if it can represent each of its arguments nondeterministically.
-By default, it must be able to do so *without bounds*: each argument needs to implement the `Arbitrary`
-trait or be capable of deriving it, or be a reference (mutable or immutable)
-where any of the prior requirements is fulfilled by the referenced type.
-The `--bounded-arguments` option (see above) relaxes this to
-additionally allow argument types that can only be represented up to a bound: slice (`&[T]`/`&mut [T]`) and
-string (`&str`) references, and types implementing [`BoundedArbitrary`](../bounded_arbitrary.md)
-(e.g. `Vec<T>`, `String`, or user types deriving it).
-Kani will detect if a struct or enum could implement `Arbitrary` and derive it automatically.
-Note that this automatic derivation feature is only available for autoharness.
+Kani generates an automatic harness when it can generate each of the function's arguments
+nondeterministically. For an argument implementing [`Arbitrary`](../arbitrary.md), it uses
+`kani::any()`. For a shared or mutable reference to such a type, it generates a value of the
+referenced type in storage that lives for the entire harness, then passes a reference to it.
+
+For supported structs and enums without an `Arbitrary` implementation, Kani can synthesize
+one by generating fields and, for enums, selecting a variant nondeterministically. Private
+fields are supported, but field generation has additional restrictions: bare reference
+fields and `NonNull` fields (including wrappers such as `Option<NonNull<T>>`) are not
+synthesized, and types with lifetime arguments cannot use automatic derivation. Other
+fields must implement `Arbitrary` or meet the recursive derivation requirements. Automatic
+derivation is available only for autoharness and does not require adding a derive attribute
+to the type. The argument models below do not make unsupported field types derivable.
+
+The following sections describe additional argument models. Types that require a bounded
+generator are covered under [Bounded Arguments](#bounded-arguments-opt-in---bounded-arguments).
 
 ##### Raw Pointers
 For a function with raw pointer arguments (`*const T`/`*mut T`, including nested raw pointers),
@@ -197,20 +206,60 @@ Current limitations of the generated pointers:
 
 ##### Box, Rc and Arc
 
-<!-- TODO(#4979 item 3): Box, Rc and Arc arguments -->
+`Box<T>`, `Rc<T>` and `Arc<T>` arguments are supported when the sized pointee type `T`
+implements `Arbitrary` or Kani can derive it automatically. Kani generates a nondeterministic
+pointee and constructs a new smart pointer around it. These arguments require no
+`--bounded-arguments` flag and do not add a "(bounded)" marker.
+
+The generation models require allocation support and use the default allocator. They cover
+the pointee's generated values; `Rc` and `Arc` start with one strong reference and no weak
+references, so states with existing owners or weak references are not explored. Unsized
+pointees such as `str` and `[T]` are outside these models; some types, such as `Box<[T]>`,
+can instead be generated through `BoundedArbitrary` with `--bounded-arguments`.
 
 ##### Primitive slices and Vec
 
-<!-- TODO(#4979 item 1): primitive slices and Vec arguments -->
+Direct `&[T]`, `&mut [T]` and `Vec<T>` arguments are generated without a length bound when
+`T` is a primitive integer or floating-point type, for example `u8`, `i32` or `f64`. Each
+argument uses a fresh allocation with nondeterministic length and contents. The length is
+restricted only by Rust's allocation-size requirements. Mutable slices have exclusive
+backing storage; the generated `Vec` uses the global allocator and a capacity of
+`len.max(1)`.
+
+These models require allocation support. They are enabled by default, do not add a
+"(bounded)" marker, and take precedence over bounded generation even when
+`--bounded-arguments` is passed. `--slice-bound` and `--bounded-arbitrary-bound` do not limit
+them. Element types such as `bool`, `char`, `NonZeroU32` and user-defined structs use the
+bounded generators instead, when supported.
+
+Unbounded argument length does not remove the loop-unwinding bound. A function that
+iterates over the input can fail an unwinding assertion if that bound is insufficient;
+see [Loop unwinding](../../tutorial-loop-unwinding.md). Nested slice references such as
+`&&[u8]` and slices inside user-defined types are outside these argument models.
 
 ##### Fn-bound closures
 
-<!-- TODO(#4979 item 2): Fn-bound closure arguments -->
+For supported generic parameters bounded by `Fn`, `FnMut` or `FnOnce`, Kani supplies a
+function item that returns a fresh `kani::any()` value on each call. The return type must
+implement `Arbitrary`. Repeated calls can return different values, even for the same inputs.
+The function item itself needs no `Arbitrary` implementation.
+
+Models support zero through three arguments passed by value. For shared-reference inputs,
+models support one or two arguments, including a mix of shared references and values.
+The referenced types must be sized. These reference models can satisfy higher-ranked bounds
+such as `for<'a> Fn(&'a T) -> R`; there is no corresponding model for higher-ranked mutable
+references. Eligibility also depends on satisfying the generic function's other bounds;
+see [Generic Functions](#generic-functions).
+
+These models check the function under verification against arbitrary callback results.
+They do not execute a particular closure's body or model its captures, mutations or other
+side effects. Use a handwritten harness when verification depends on a particular callback
+implementation.
 
 ##### Formatting Trait Implementations
 For the `fmt` methods of `Debug`, `Display`, `Binary`, `Octal`, `LowerHex`, `UpperHex`, `LowerExp`,
-`UpperExp` and `Pointer` implementations, the `&mut Formatter` argument is not taken from the
-bounded `Formatter` model above. Instead, Kani generates a harness that formats a
+`UpperExp` and `Pointer` implementations, Kani uses a special harness rather than the
+general [bounded `Formatter` model](#bounded-arguments-opt-in---bounded-arguments). It formats a
 nondeterministic value of the implementing type into a sink that discards the output: the
 `Formatter` is constructed by the core formatting machinery (so it is always valid), and panics
 or undefined behavior inside the `fmt` implementation are detected as usual.
@@ -235,17 +284,17 @@ Current limitations:
 #### Opt-in under-approximations
 
 ##### Bounded Arguments (opt-in: `--bounded-arguments`)
-By default, autoharness only generates harnesses whose nondeterministic inputs cover *all*
-possible values, so that a successful result carries Kani's usual guarantee. Some argument
-types (e.g. slices) can only be generated with *bounds*; because a bug that requires
-a larger input would then be missed, these are **disabled by default** and require the
-`--bounded-arguments` option. Functions that would become eligible with the option are
-reported in the skipped-functions table with reason "Requires --bounded-arguments". Harnesses
-that use bounded values are marked **"(bounded)"** in the summary table, and a note after the
+Some argument types require a bounded generator, including strings and slices whose
+elements are not primitive integers or floats. Because a bug requiring a larger input
+would be missed, these generators are **disabled by default** and require
+`--bounded-arguments`. Functions that would become eligible with the option are reported
+in the skipped-functions table with reason "Requires --bounded-arguments". Harnesses that
+use bounded values are marked **"(bounded)"** in the summary table, and a note after the
 table repeats this limitation.
 
-With `--bounded-arguments`, for a function with `&[T]`/`&mut [T]` arguments (where `T`
-implements or can derive `Arbitrary`), `&str`, `&CStr`, `&ByteStr` or `&Wtf8` arguments, the
+With `--bounded-arguments`, for a function with `&[T]`/`&mut [T]` arguments outside the
+[unbounded primitive models](#primitive-slices-and-vec) (where `T` implements or can derive
+`Arbitrary`), or with `&str`, `&CStr`, `&ByteStr` or `&Wtf8` arguments, the
 generated harness produces a slice of nondeterministic length, backed by nondeterministic storage
 that lives for the entire harness: by default **up to 16 elements** for slices and byte strings,
 **up to 4 bytes** for strings and WTF-8 strings, and **up to 15 bytes** plus the terminating NUL
@@ -272,7 +321,7 @@ paths that handle a write error are not reached.
 
 Additionally (also requiring `--bounded-arguments`), for arguments whose type implements
 [`BoundedArbitrary`](../bounded_arbitrary.md)
-(e.g. `Vec<T>`, `String`, or user types deriving it), the harness generates a bounded
+(e.g. `Vec<bool>`, `String`, or user types deriving it), the harness generates a bounded
 nondeterministic value with a **default bound of 4** (via `kani::bounded_any`), overridable
 with `--bounded-arbitrary-bound`. The same caveat applies:
 verification results only hold up to the bound. The smaller bound reflects that these values are
