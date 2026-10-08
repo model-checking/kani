@@ -269,7 +269,7 @@ fn location_from_source_location(loc: &SourceLocation) -> Option<(String, u32, O
     Some((relativize_path(file), line, column))
 }
 
-fn relativize_path(file: &str) -> String {
+pub(crate) fn relativize_path(file: &str) -> String {
     let file_path = PathBuf::from(file);
     let Ok(cur_dir) = env::current_dir() else { return file.to_string() };
 
@@ -333,7 +333,8 @@ mod tests {
             generated_concrete_test: false,
             ignored_quantifiers: 0,
             coverage_results: None,
-            cbmc_stats: None,
+            warnings: Vec::new(),
+            warnings_truncated: 0,
         }
     }
 
@@ -348,7 +349,8 @@ mod tests {
             generated_concrete_test: false,
             ignored_quantifiers: 0,
             coverage_results: None,
-            cbmc_stats: None,
+            warnings: Vec::new(),
+            warnings_truncated: 0,
         };
         let harness_result = HarnessResult { harness: &harness, result };
 

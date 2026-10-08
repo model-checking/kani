@@ -199,8 +199,6 @@ pub fn kani_cbmc_output_filter(
             }
         }
     }
-    // TODO: Record processed items and dump them into a JSON file
-    // <https://github.com/model-checking/kani/issues/942>
     Some(processed_item)
 }
 
