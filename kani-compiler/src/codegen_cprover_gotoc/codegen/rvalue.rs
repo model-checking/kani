@@ -661,6 +661,19 @@ impl GotocCtx<'_, '_> {
             AggregateKind::Adt(_, variant_index, ..) if res_ty.kind().is_enum() => {
                 self.codegen_rvalue_enum_aggregate(variant_index, operands, res_ty, loc)
             }
+            AggregateKind::Adt(..)
+                if rustc_internal::internal(self.tcx, res_ty).is_scalable_vector() =>
+            {
+                // The layout of a tuple of scalable vectors has a single offset, so the operands
+                // cannot be ordered by it. `codegen_scalable_vector_tuple_fields` lays the fields
+                // out in declaration order, which is the order of the operands.
+                let typ = self.codegen_ty_stable(res_ty);
+                Expr::struct_expr_from_values(
+                    typ,
+                    operands.iter().map(|op| self.codegen_operand_stable(op)).collect(),
+                    &self.symbol_table,
+                )
+            }
             AggregateKind::Adt(..) | AggregateKind::Closure(..) | AggregateKind::Tuple => {
                 let typ = self.codegen_ty_stable(res_ty);
                 let layout = self.layout_of_stable(res_ty);
