@@ -553,104 +553,131 @@ fn args_satisfy_predicates(tcx: TyCtxt, def: FnDef, args: &GenericArgs) -> bool 
     ocx.evaluate_obligations_error_on_ambiguity().no_errors()
 }
 
-/// Bound on the number of MIR bodies [has_const_generic_precondition] inspects. Reaching it means
+/// Bound on the number of MIR bodies [has_generic_const_precondition] inspects. Reaching it means
 /// we could not finish ruling out a const-block violation, so the candidate is rejected.
 const CONST_PRECONDITION_SEARCH_LIMIT: usize = 1024;
 
-/// Whether any generic argument in `args` mentions a const generic parameter.
-fn args_mention_const_param(args: ty::GenericArgsRef<'_>) -> bool {
+/// Whether `args` mention a type or const generic parameter: one that autoharness substitutes.
+/// Lifetime parameters are erased and cannot decide whether a constant evaluates.
+fn args_mention_param(args: ty::GenericArgsRef<'_>) -> bool {
     use rustc_middle::ty::TypeVisitableExt;
-    args.iter().any(|arg| match arg.kind() {
-        ty::GenericArgKind::Const(ct) => ct.has_param(),
-        _ => false,
-    })
+    args.has_type_flags(ty::TypeFlags::HAS_TY_PARAM | ty::TypeFlags::HAS_CT_PARAM)
 }
 
-/// Whether `body` contains an anonymous `const {}` block parameterized by a const generic
-/// parameter.
-fn body_has_const_param_block(body: &rustc_middle::mir::Body<'_>) -> bool {
+/// Whether `body`, instantiated with `args`, requires a constant whose evaluation may depend on
+/// the generic parameters autoharness substitutes: an anonymous `const {}` block that mentions a
+/// type or const parameter, or any other unevaluated constant that mentions a const parameter.
+///
+/// Type parameters are only considered for `const {}` blocks. A generic associated constant such
+/// as `<T as SizedTypeProperties>::IS_ZST` is required by most functions that touch a slice or a
+/// collection, so treating every such constant as a possible precondition would skip them all.
+fn body_has_generic_const_block<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &rustc_middle::mir::Body<'tcx>,
+    args: ty::GenericArgsRef<'tcx>,
+) -> bool {
+    use rustc_middle::ty::TypeVisitableExt;
     body.required_consts().iter().any(|const_op| {
-        // Only anonymous `const {}` blocks appear as `Unevaluated`; array lengths and other
-        // already-resolved constants come through as `Const::Ty`/`Const::Val` and cannot fail.
+        // Array lengths and other already-resolved constants come through as
+        // `Const::Ty`/`Const::Val` and cannot fail.
         let rustc_middle::mir::Const::Unevaluated(uneval, _) = const_op.const_ else {
             return false;
         };
-        args_mention_const_param(uneval.args)
+        let uneval_args = ty::EarlyBinder::bind(tcx, uneval.args).instantiate(tcx, args);
+        let is_const_block = tcx.def_kind(uneval.def) == rustc_hir::def::DefKind::AnonConst
+            && tcx.anon_const_kind(uneval.def) == ty::AnonConstKind::NonTypeSystemInline;
+        if is_const_block {
+            args_mention_param(uneval_args.skip_normalization())
+        } else {
+            uneval_args.skip_normalization().has_type_flags(ty::TypeFlags::HAS_CT_PARAM)
+        }
     })
 }
 
-/// Collects the bodies that `body` instantiates with a const argument derived from a const
-/// parameter: called functions, function items reified into pointers, and nested closures and
-/// coroutines (which inherit their parent's generics, so their arguments mention the parameter
-/// whenever the parent has one).
-struct ConstParamCalleeCollector<'a> {
-    callees: &'a mut Vec<DefId>,
+/// Collects the bodies that `body`, instantiated with `args`, instantiates with arguments that
+/// still mention a type or const parameter: called functions, function items reified into
+/// pointers, and nested closures and coroutines (which inherit their parent's generics, so their
+/// arguments mention the parameters whenever the parent has any). Each callee is recorded with
+/// its instantiated arguments, so that a parameter reaching it through a type argument (e.g.
+/// `inner::<[u8; N]>`) is still visible once the walk reaches its body.
+struct GenericCalleeCollector<'a, 'tcx> {
+    tcx: TyCtxt<'tcx>,
+    args: ty::GenericArgsRef<'tcx>,
+    callees: &'a mut Vec<(DefId, ty::GenericArgsRef<'tcx>)>,
 }
 
-impl<'tcx> rustc_middle::mir::visit::Visitor<'tcx> for ConstParamCalleeCollector<'_> {
+impl<'tcx> GenericCalleeCollector<'_, 'tcx> {
+    fn push(&mut self, def_id: DefId, callee_args: ty::GenericArgsRef<'tcx>) {
+        let callee_args = ty::EarlyBinder::bind(self.tcx, callee_args)
+            .instantiate(self.tcx, self.args)
+            .skip_normalization();
+        if args_mention_param(callee_args) {
+            self.callees.push((def_id, callee_args));
+        }
+    }
+}
+
+impl<'tcx> rustc_middle::mir::visit::Visitor<'tcx> for GenericCalleeCollector<'_, 'tcx> {
     fn visit_const_operand(
         &mut self,
         const_op: &rustc_middle::mir::ConstOperand<'tcx>,
         _: rustc_middle::mir::Location,
     ) {
-        if let ty::FnDef(def_id, args) = *const_op.const_.ty().kind()
-            && args_mention_const_param(args.skip_binder())
-        {
-            self.callees.push(def_id);
+        if let ty::FnDef(def_id, args) = *const_op.const_.ty().kind() {
+            self.push(def_id, args.skip_binder());
         }
     }
 
     fn visit_ty(&mut self, ty: ty::Ty<'tcx>, _: rustc_middle::mir::visit::TyContext) {
-        let nested = match *ty.kind() {
+        match *ty.kind() {
             ty::Closure(def_id, args)
             | ty::Coroutine(def_id, args)
-            | ty::CoroutineClosure(def_id, args) => Some((def_id, args)),
-            _ => None,
-        };
-        if let Some((def_id, args)) = nested
-            && args_mention_const_param(args)
-        {
-            self.callees.push(def_id);
+            | ty::CoroutineClosure(def_id, args) => self.push(def_id, args),
+            _ => {}
         }
     }
 }
 
-/// Whether generating a harness for `def` could reach an anonymous `const {}` block parameterized
-/// by a const generic parameter. Such a block can encode a precondition on that parameter, as
-/// `core::escape` does with `const { assert!(N >= 4) }`.
+/// Whether generating a harness for `def` could reach an anonymous `const {}` block whose
+/// evaluation depends on the generic arguments autoharness substitutes. Such a block can encode a
+/// precondition on a const parameter, as `core::escape` does with `const { assert!(N >= 4) }`, or
+/// on a type parameter, as in `const { assert!(size_of::<T>() >= 4) }`.
 ///
 /// These blocks are listed in rustc's `required_consts`: rustc evaluates every entry when
 /// monomorphizing and rejects the instantiation if any fails. `args_satisfy_predicates` does not
-/// cover them, since they are not trait bounds, so autoharness would otherwise substitute
-/// [AUTOHARNESS_CONST_GENERIC_VALUE] regardless and the violation would surface as an
-/// unrecoverable `E0080` that aborts the whole run.
+/// cover them, since they are not trait bounds, so autoharness would otherwise substitute its
+/// chosen arguments regardless and the violation would surface as an unrecoverable `E0080` that
+/// aborts the whole run.
 ///
 /// The search is transitive, because the offending block need not be in `def`'s own body: a
 /// harness for `wrapper<const N: usize>() { guarded::<N>() }` monomorphizes `guarded::<2>` too,
 /// and that instantiation aborts the run just the same. So walk outwards from `def` through the
-/// bodies it instantiates with a const argument derived from a const parameter — the values that
-/// autoharness' substitution decides. Instantiations with a *concrete* const argument are not
-/// followed: whatever they evaluate to does not depend on our choice, so a failure there is a
-/// pre-existing bug in the crate under verification that any harness over `def` would hit.
+/// bodies it instantiates with arguments derived from its type or const parameters — the values
+/// that autoharness' substitution decides. The walk carries each body's arguments expressed in
+/// terms of `def`'s parameters, so a parameter forwarded inside a type argument, as in
+/// `inner::<[u8; N]>`, is still recognized in `inner`'s blocks. Instantiations with *concrete*
+/// arguments are not followed: whatever they evaluate to does not depend on our choice, so a
+/// failure there is a pre-existing bug in the crate under verification that any harness over
+/// `def` would hit.
 ///
-/// This deliberately does *not* evaluate the block to find out whether the chosen value actually
-/// violates it, because a failing evaluation reports `E0080` from inside the const-eval query
-/// itself: merely asking the question emits the error we are trying to avoid. The check is
-/// therefore conservative in two ways. It rejects a block the chosen value would satisfy, and,
+/// This deliberately does *not* evaluate the block to find out whether the chosen arguments
+/// actually violate it, because a failing evaluation reports `E0080` from inside the const-eval
+/// query itself: merely asking the question emits the error we are trying to avoid. The check is
+/// therefore conservative in two ways. It rejects a block the chosen arguments would satisfy, and,
 /// since an anonymous const inherits its parent's generics, it rejects a block that does not read
-/// the const parameter at all. It stays narrow in the way that matters, though: a block in a
-/// function with no const generic parameter is untouched, because only a const parameter can make
-/// the substituted value decide whether evaluation succeeds.
+/// the parameters at all. A block in a function with no type or const parameter is untouched.
 ///
 /// Nothing in `rustc_public` exposes `required_consts`, so query rustc directly.
-/// See <https://github.com/model-checking/kani/issues/4794>.
-fn has_const_generic_precondition(tcx: TyCtxt, def: FnDef) -> bool {
+/// See <https://github.com/model-checking/kani/issues/4794> and
+/// <https://github.com/model-checking/kani/issues/4826>.
+fn has_generic_const_precondition(tcx: TyCtxt, def: FnDef) -> bool {
     use rustc_middle::mir::visit::Visitor;
-    let mut worklist = vec![rustc_internal::internal(tcx, def.def_id())];
+    let def_id = rustc_internal::internal(tcx, def.def_id());
+    let mut worklist = vec![(def_id, ty::GenericArgs::identity_for_item(tcx, def_id))];
     let mut visited = FxHashSet::default();
     let mut budget = CONST_PRECONDITION_SEARCH_LIMIT;
-    while let Some(def_id) = worklist.pop() {
-        if !visited.insert(def_id) {
+    while let Some((def_id, args)) = worklist.pop() {
+        if !visited.insert((def_id, args)) {
             continue;
         }
         // Without MIR there is nothing to inspect. For `def` itself, `skip_reason` reports
@@ -670,10 +697,10 @@ fn has_const_generic_precondition(tcx: TyCtxt, def: FnDef) -> bool {
         // `instance_mir` is rustc's own dispatcher between `optimized_mir` and `mir_for_ctfe`.
         // See <https://github.com/model-checking/kani/issues/4839>.
         let body = tcx.instance_mir(rustc_middle::ty::InstanceKind::Item(def_id));
-        if body_has_const_param_block(body) {
+        if body_has_generic_const_block(tcx, body, args) {
             return true;
         }
-        ConstParamCalleeCollector { callees: &mut worklist }.visit_body(body);
+        GenericCalleeCollector { tcx, args, callees: &mut worklist }.visit_body(body);
     }
     false
 }
@@ -979,15 +1006,14 @@ fn choose_generic_instantiation(
         return Err("non-usize const generic parameters are not supported yet".to_string());
     }
 
-    // A `const {}` block parameterized by a const generic can encode a precondition that the
-    // fixed AUTOHARNESS_CONST_GENERIC_VALUE violates, which rustc reports as an unrecoverable
-    // E0080. We cannot check whether it actually does without emitting that error, so skip.
-    if has_const_generic_precondition(tcx, def) {
-        return Err(format!(
-            "the function has a `const {{}}` block that may constrain its const generic \
-             parameter(s), and the value autoharness substitutes \
-             ({AUTOHARNESS_CONST_GENERIC_VALUE}) is not guaranteed to satisfy it"
-        ));
+    // A `const {}` block parameterized by a type or const generic can encode a precondition that
+    // the arguments we substitute violate, which rustc reports as an unrecoverable E0080. We
+    // cannot check whether they actually do without emitting that error, so skip.
+    if has_generic_const_precondition(tcx, def) {
+        return Err("the function has a `const {}` block that may constrain its generic \
+                    parameter(s), and the arguments autoharness substitutes are not guaranteed \
+                    to satisfy it"
+            .to_string());
     }
 
     // Positions of the type parameters among the identity arguments, and the candidate list
