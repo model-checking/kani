@@ -386,7 +386,7 @@ impl Intrinsic {
             }
             // For const eval of nullary intrinsics, see https://github.com/rust-lang/rust/pull/142839
             "needs_drop" => unreachable!(
-                "Expected nullary intrinsic `core::intrinsics::type_id` to be const-evaluated before codegen"
+                "Expected nullary intrinsic `core::intrinsics::needs_drop` to be const-evaluated before codegen"
             ),
             // As of https://github.com/rust-lang/rust/pull/110822 the `offset` intrinsic is lowered to `mir::BinOp::Offset`
             "offset" => unreachable!(
@@ -438,7 +438,7 @@ impl Intrinsic {
                 Self::Transmute
             }
             "type_id" => unreachable!(
-                "Expected nullary intrinsic `core::intrinsics::type_id` to be const-evaluated before codegen"
+                "Expected nullary intrinsic `core::intrinsics::reflection::type_id` to be const-evaluated before codegen"
             ),
             "type_name" => unreachable!(
                 "Expected nullary intrinsic `core::intrinsics::type_name` to be const-evaluated before codegen"

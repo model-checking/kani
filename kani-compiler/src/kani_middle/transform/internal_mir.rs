@@ -607,9 +607,9 @@ impl RustcInternalMir for Terminator {
                 self.source_info.span,
             )),
             kind: self.kind.internal_mir(tcx),
-            // Terminators gained MIR-level attributes; the stable representation has no
-            // equivalent, and Kani-synthesized terminators carry none.
-            attributes: Default::default(),
+            // Loop hint attributes (`#[unroll]`) have no equivalent in the stable
+            // representation, and Kani-synthesized terminators carry none.
+            loop_hint_attrs: Default::default(),
         }
     }
 }

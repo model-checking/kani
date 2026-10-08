@@ -4,7 +4,7 @@
 // Check that the `type_id` intrinsic is supported with common data types
 // and that there are no duplicate type IDs
 #![feature(core_intrinsics)]
-use std::intrinsics::type_id;
+use std::intrinsics::reflection::type_id;
 
 struct MyStruct {}
 
