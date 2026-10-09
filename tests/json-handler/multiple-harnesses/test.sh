@@ -59,6 +59,13 @@ metadata_names = {h.get('pretty_name') for h in data['harness_metadata']}
 check(metadata_names == expected,
       f"harness_metadata should list {sorted(expected)}, got {sorted(map(str, metadata_names))}")
 
+for harness in data['harness_metadata']:
+    name = harness['pretty_name']
+    want = name == 'verify_multiply_positive'
+    actual = harness['attributes'].get('no_unwinding_checks')
+    check(actual is want,
+          f"{name} attributes.no_unwinding_checks should be {want}, got {actual}")
+
 summary = data['verification_results']['summary']
 for field, want in [('total_harnesses', 3), ('executed', 3),
                     ('successful', 3), ('failed', 0)]:
