@@ -155,6 +155,7 @@ impl GotocCtx<'_, '_> {
         } else {
             self.codegen_span_stable(stmt.source_info.span)
         };
+        self.current_stmt_loc = location;
         match &stmt.kind {
             StatementKind::Assign(lhs, rhs) => {
                 let lty = self.place_ty_stable(lhs);
@@ -348,6 +349,7 @@ impl GotocCtx<'_, '_> {
     /// See also [`GotocCtx::codegen_statement`] for ordinary [Statement]s.
     pub fn codegen_terminator(&mut self, term: &Terminator) -> Stmt {
         let loc = self.codegen_span_stable(term.source_info.span);
+        self.current_stmt_loc = loc;
         let _trace_span = debug_span!("CodegenTerminator", statement = ?term.kind).entered();
         debug!("handling terminator {:?}", term);
         //TODO: Instead of doing location::none(), and updating, just putit in when we make the stmt.
