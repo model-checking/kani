@@ -491,11 +491,56 @@ results arrive in nondeterministic order; the summary table printed at the end i
 
 ### Default settings
 
-<!-- TODO(#4979 item 5): default settings -->
+Unless you pass them yourself, `kani autoharness` sets two verification options so that a
+single harness cannot hold up the whole run:
+
+- `--harness-timeout 60s`: a harness whose verification takes longer than 60 seconds is
+  stopped and reported as a failure.
+- `--default-unwind 20`: loops are unwound up to 20 times. Automatic harnesses carry no
+  `#[kani::unwind]` attribute, so this bound applies to every loop unless you pass
+  `--unwind`. Kani's unwinding checks stay enabled, so a loop that needs more iterations fails
+  an unwinding assertion instead of being silently cut short.
+
+To change either value, pass the option explicitly. When any automatic harness fails, Kani
+prints a reminder of these two defaults after the summary table, because the failure may come
+from a timeout or an insufficient unwinding bound rather than from a bug in the function. In
+that case, try larger values or, where possible, add a [loop contract](./loop-contracts.md).
+The default bounds for [bounded arguments](#bounded-arguments-opt-in---bounded-arguments) are
+chosen to stay below the unwinding bound, and Kani warns if a configured bound reaches it.
+
+Verification itself runs in parallel by default; see
+[Parallel verification](#parallel-verification).
 
 ### Summary table and markers
 
-<!-- TODO(#4979): (bounded) / (ctor) markers, bounds note -->
+A run of `kani autoharness` prints its results in three stages:
+
+1. Before verification, unless `--quiet` is passed, the tables of selected and skipped
+   functions (see [Skip reasons](#skip-reasons)).
+2. During verification, the result of each harness as it finishes.
+3. After verification, the `Autoharness Summary` table, followed by a line of the form
+   `Complete - N successfully verified functions, M failures, T total.` If the crate also
+   contains manual harnesses, they are verified in the same run and reported separately in a
+   `Manual Harness Summary`.
+
+The summary table has the columns `Crate`, `Selected Function`, `Kind of Automatic Harness`
+and `Verification Result`. Rows are sorted by function name, with successes listed before
+failures. For a generic function, `Selected Function` shows the verified instantiation, e.g.
+`foo::<i32>`. `Kind of Automatic Harness` is `#[kani::proof]`, or
+`#[kani::proof_for_contract]` when the function has a [function contract](contracts.md), and
+may carry one or both of these markers:
+
+- **"(bounded)"**: some arguments were generated with bounded values under
+  `--bounded-arguments`. A note after the table lists the bounds the run used (slice length,
+  string length, and the `BoundedArbitrary` bound) and repeats that the result only holds up
+  to them.
+- **"(ctor)"**: some values were generated through one of a type's own constructors, or
+  constrained by mined invariants, under
+  [`--constructor-args`](#constructor-based-generation-constructor-args). A note after the
+  table repeats that the result only covers values reachable through that constructor.
+
+A `Success` without either marker still has the limitations described in
+[Soundness caveats](#soundness-caveats).
 
 ## Soundness caveats
 
