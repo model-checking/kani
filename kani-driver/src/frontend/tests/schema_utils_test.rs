@@ -61,12 +61,14 @@ fn test_create_harness_metadata_json() {
         attributes: HarnessAttributes::new(HarnessKind::Proof),
         contract: None,
         has_loop_contracts: true,
-        // Bounded and constructor-based harnesses are always automatically generated; check
-        // that all three flags are serialized so that JSON consumers can tell an autoharness
-        // run that under-approximates apart from one that does not.
+        // Bounded, constructor-based and aliasing harnesses are always automatically generated;
+        // check that all four flags are serialized so that JSON consumers can tell an
+        // autoharness run that under-approximates apart from one that does not, and one that
+        // models aliasing arguments apart from one that does not.
         is_automatically_generated: true,
         is_bounded: true,
         is_ctor_based: true,
+        is_aliasing: true,
     };
 
     let json = create_harness_metadata_json(&harness);
@@ -80,6 +82,7 @@ fn test_create_harness_metadata_json() {
     assert_eq!(json["is_automatically_generated"], true);
     assert_eq!(json["is_bounded"], true);
     assert_eq!(json["is_ctor_based"], true);
+    assert_eq!(json["is_aliasing"], true);
 }
 
 #[test]
@@ -98,6 +101,7 @@ fn test_create_verification_result_json() {
         is_automatically_generated: false,
         is_bounded: false,
         is_ctor_based: false,
+        is_aliasing: false,
     };
 
     let properties = vec![
@@ -180,6 +184,7 @@ fn test_create_verification_summary_json_real() {
         is_automatically_generated: false,
         is_bounded: false,
         is_ctor_based: false,
+        is_aliasing: false,
     };
 
     // Create a VerificationResult
@@ -213,6 +218,7 @@ fn test_add_runner_results_to_json_real() {
         is_automatically_generated: false,
         is_bounded: false,
         is_ctor_based: false,
+        is_aliasing: false,
     };
 
     let verification_result = VerificationResult {

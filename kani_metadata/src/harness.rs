@@ -52,6 +52,11 @@ pub struct HarnessMetadata {
     /// verification result only covers constructor-reachable values.
     #[serde(default)]
     pub is_ctor_based: bool,
+    /// Whether the (automatically generated) harness lets some reference or pointer argument
+    /// alias an earlier one (c.f. the autoharness --alias-arguments option), in which case its
+    /// verification result also covers callers that pass the same reference or pointer twice.
+    #[serde(default)]
+    pub is_aliasing: bool,
 }
 
 /// The attributes added by the user to control how a harness is executed.
