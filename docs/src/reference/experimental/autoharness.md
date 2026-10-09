@@ -57,11 +57,11 @@ a temporary crate in the target directory, as `kani verify-std` does. `--std` is
 on `kani autoharness`, not on `cargo kani autoharness`.
 
 When verifying the standard library, only the Kani definitions available to `core` can be
-used. The argument models that need `alloc` (`Box`, `Rc` and `Arc` arguments, unbounded
-primitive slices and `Vec`s, and the closure models for `Fn`-bound type parameters) are
-therefore not available with `--std`. Affected arguments are generated with bounded values
-where `core` provides a bounded generator and `--bounded-arguments` is passed; otherwise the
-function is skipped.
+used. Some models are available only in the full `kani` library: `Box`, `Rc` and `Arc`
+arguments, unbounded primitive slices and `Vec`s, and the function models for `Fn`-bound
+type parameters. These models are unavailable with `--std`. Affected arguments are generated
+with bounded values where `core` provides a bounded generator and `--bounded-arguments` is
+passed; otherwise the function is skipped.
 
 Concrete playback (`-Z concrete-playback`) is not supported by the `autoharness` subcommand.
 
@@ -385,7 +385,9 @@ verification results only hold up to the bound. The smaller bound reflects that 
 heap allocated and, for `String`, involve UTF-8 reasoning, both of which are costly for symbolic
 execution.
 
-Nested slice references (e.g. `&&[u8]`) and slices inside user-defined types remain unsupported.
+These argument models do not synthesize nested slice references (e.g. `&&[u8]`) or
+slice fields inside user-defined types; a source-defined `Arbitrary` implementation can
+supply such fields.
 
 ##### Constructor-based generation (--constructor-args)
 
@@ -409,8 +411,8 @@ constructors, preferring (in order):
    `Option<Self>`, or `Result<Self, E>`, called with nondeterministic arguments (assuming
    success for the `Option<Self>`/`Result<Self, E>` shapes).
 
-Zero-argument constructors, and constructors generic over their own parameters, are not
-considered.
+Zero-argument constructors and constructors introducing their own type or const generic
+parameters are not considered. Constructors may have their own lifetime parameters.
 
 `--constructor-args` additionally enables *mined-invariant filtering*: generated struct and
 enum values are constrained via `kani::assume` to satisfy the conditions Kani can extract
