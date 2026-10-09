@@ -44,7 +44,26 @@ Kani generates and runs these harnesses internally—the user only sees the veri
 
 For a full list of options, run `kani autoharness --help`.
 
-<!-- TODO(#4979 item 8): document --std -->
+To run autoharness on the Rust standard library itself, pass `--std` to the standalone
+command and point it at the `library` directory of a standard library checkout, such as the
+one in [verify-rust-std](https://github.com/model-checking/verify-rust-std):
+
+```
+# kani autoharness -Z autoharness --std <PATH>/library
+```
+
+The path must be a directory named `library`. Kani builds it with `cargo -Z build-std` through
+a temporary crate in the target directory, as `kani verify-std` does. `--std` is only available
+on `kani autoharness`, not on `cargo kani autoharness`.
+
+When verifying the standard library, only the Kani definitions available to `core` can be
+used. The argument models that need `alloc` (`Box`, `Rc` and `Arc` arguments, unbounded
+primitive slices and `Vec`s, and the closure models for `Fn`-bound type parameters) are
+therefore not available with `--std`. Affected arguments are generated with bounded values
+where `core` provides a bounded generator and `--bounded-arguments` is passed; otherwise the
+function is skipped.
+
+Concrete playback (`-Z concrete-playback`) is not supported by the `autoharness` subcommand.
 
 ## Example
 Using the `estimate_size` example from [First Steps](../../tutorial-first-steps.md) again:
