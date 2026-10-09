@@ -428,6 +428,10 @@ requires a different value will not be found. Note also that a checked construct
 panics for some of its inputs (rather than rejecting them via `Option`/`Result`) turns those
 inputs into harness failures, so this option can trade one class of false alarm for another.
 
+One exception: values of a type that has its own `Arbitrary` implementation are still filtered
+by mined invariants, but the harness is currently not marked "(ctor)" and no note is printed;
+see [#4995](https://github.com/model-checking/kani/issues/4995).
+
 See [Soundness caveats](#soundness-caveats).
 
 ### Assumptions
@@ -506,7 +510,8 @@ take `self` by value, shared reference or mutable reference; methods with their 
 const generic parameters are excluded.
 
 Under `--constructor-args`, the mined conditions are *assumed* for generated values. This
-input filtering also applies when the type already implements `Arbitrary`. It can exclude
+input filtering also applies when the type already implements `Arbitrary`; such harnesses are
+currently not marked "(ctor)" ([#4995](https://github.com/model-checking/kani/issues/4995)). It can exclude
 valid values if a mined condition is actually a precondition of the methods rather than
 an invariant of the type; see
 [Soundness caveats](#soundness-caveats). The separate
@@ -621,6 +626,9 @@ may carry one or both of these markers:
   constrained by mined invariants, under
   [`--constructor-args`](#constructor-based-generation-constructor-args). A note after the
   table repeats that the result only covers values reachable through that constructor.
+  Harnesses filtered only by the mined invariants of a type with its own `Arbitrary`
+  implementation are currently not marked; see
+  [Mined-invariant heuristic](#mined-invariant-heuristic).
 
 A `Success` without either marker still has the limitations described in
 [Soundness caveats](#soundness-caveats).
@@ -681,12 +689,14 @@ see [#4757](https://github.com/model-checking/kani/issues/4757).
 
 ### Mined-invariant heuristic
 
-This also applies only to "(ctor)" harnesses, where mined invariants are assumed for generated
-values (see [Mined invariants](#mined-invariants)). The "asserted in ≥2 methods" filter is a
+This applies to runs with `--constructor-args`, where mined invariants are assumed for generated
+values (see [Mined invariants](#mined-invariants)). Such harnesses are normally marked "(ctor)",
+but not when the filtered type has its own `Arbitrary` implementation, so a `Success` without
+the marker can still be affected; see [#4995](https://github.com/model-checking/kani/issues/4995). The "asserted in ≥2 methods" filter is a
 heuristic, not a proof of type-invariance. If two methods share a *precondition* that is not a
 universal invariant, it is assumed for all generated values and may exclude otherwise-valid
 inputs — a potential missed bug. This is acceptable only under the opt-in, under-approximating
-`(ctor)` contract; see [#4763](https://github.com/model-checking/kani/issues/4763).
+`--constructor-args` contract; see [#4763](https://github.com/model-checking/kani/issues/4763).
 
 ### Other limitations
 
