@@ -140,9 +140,17 @@ inputs into harness failures, so this option can trade one class of false alarm 
 > **Caveat:** if the chosen constructor is *unsatisfiable* for the generated type — an
 > assert-guarded constructor every argument of which trips an assertion, or a checked
 > constructor that always returns `None`/`Err` — the generated body assumes `false` on all
-> paths and the harness becomes **vacuous**, reporting `Success` without checking anything.
-> Kani does not yet detect this case; see
-> [#4757](https://github.com/model-checking/kani/issues/4757).
+> paths. Mined conditions that no generated value satisfies have the same effect. If no
+> generated input then reaches the function under test, the harness is **vacuous**: none of its
+> checks can fail. Kani covers the call to that function
+> (`` autoharness: a generated input reaches `...` ``) and reports such a harness as a failure,
+> with the line `` Vacuous harness: no generated input reaches `...` ``. For a function with a
+> contract, its `requires` clause is assumed inside the call, after the cover, so a precondition
+> that excludes every generated input is not reported as vacuous. A harness that reaches the
+> function with only some of its inputs, for example with `None` for an `Option` argument whose
+> payload cannot be generated, is reported as usual; the excluded inputs, such as the `Some`
+> path, are never checked. `--constructor-args` cannot be combined with `--output-format=old`,
+> which cannot detect a vacuous harness.
 
 ### Mined invariants (--check-invariants)
 
