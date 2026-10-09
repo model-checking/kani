@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Checks that Kani triggers an error when the result type doesn't have the
+//! Checks that Kani reports an unsupported construct when the result type doesn't have the
 //! length expected from a `simd_shuffle` call.
 #![feature(repr_simd, core_intrinsics)]
 use std::intrinsics::simd::simd_shuffle;
