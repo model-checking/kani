@@ -70,10 +70,14 @@ Complete - 0 successfully verified functions, 1 failures, 1 total.
 
 ## Selecting functions
 
-### Include and exclude patterns
-The `autoharness` subcommand has options `--include-pattern [REGEX]` and `--exclude-pattern [REGEX]` to include and exclude particular functions using regular expressions.
-When matching, Kani prefixes the function's path with the crate name. For example, a function `foo` in the `my_crate` crate will be matched as `my_crate::foo`.
+AutoHarness considers functions defined in the crate being verified, including free functions, inherent methods, trait-implementation methods, and trait methods with default implementations. Functions from dependencies are not candidates. For each eligible function, Kani selects one automatic harness; functions that fail a selection check are skipped. Kani reports selected functions and visible skip reasons before verification, unless `--quiet` is specified.
 
+Selection first attempts to instantiate generic functions, then applies the include and exclude patterns, and finally checks whether the function's arguments can be generated. The details of argument generation are described in [Generating harnesses](#generating-harnesses).
+
+### Include and exclude patterns
+
+The `autoharness` subcommand has options `--include-pattern [REGEX]` and `--exclude-pattern [REGEX]` to include and exclude particular functions using regular expressions.
+When matching, Kani prefixes the function's path with the crate name. For example, a non-generic function `foo` in the `my_crate` crate is matched as `my_crate::foo`.
 The selection algorithm is as follows:
 - If only `--include-pattern`s are provided, include a function if it matches any of the provided patterns.
 - If only `--exclude-pattern`s are provided, include a function if it does not match any of the provided patterns.
@@ -103,26 +107,60 @@ Note that because Kani prefixes function paths with the crate name, some pattern
 For example, given a function `foo_top_level` inside crate `my_crate`, the regex `.*::foo_.*` will match `foo_top_level`, since Kani interprets it as `my_crate::foo_top_level`.
 To match only `foo_` functions inside modules, use a more specific pattern, e.g. `.*::[^:]+::foo_.*`.
 
-### Listing functions (--list)
-Autoharness also accepts a `--list` argument, which runs the [list subcommand](../list.md) including automatic harnesses.
+Patterns match the **instantiated name** of a generic function. For example, `my_crate::foo::<i32>` does not match `^my_crate::foo$`, although an unanchored `foo` pattern matches it. Regular expressions are unanchored unless explicitly anchored; invalid expressions and patterns containing whitespace are rejected. Kani also warns if an include-pattern string contains an exclude-pattern string.
 
-<!-- TODO(#4979 item 8): document --format -->
+Generic instantiation happens before include/exclude filtering. Consequently, a generic function for which Kani cannot find an instantiation is reported with the `Generic Function` skip reason even if the function would not match the supplied filters.
+
+### Listing functions (--list)
+
+AutoHarness also accepts `--list`, which compiles the project and runs the [list subcommand](../list.md), including automatic harnesses, **without running verification**. Unless `--quiet` is passed, Kani first prints the selected-functions and skipped-functions tables.
+
+Use `--list --format <FORMAT>` to choose the output format:
+
+| Format | Output |
+| --- | --- |
+| `pretty` (default) | Print the list to the terminal. |
+| `markdown` | Write `kani-list.md` in the current directory. |
+| `json` | Write `kani-list.json` in the current directory. |
+
+For file-based formats, Kani prints the path of the written file. The `--format` option requires `--list`. Combining `--quiet` with `--list --format pretty` is not supported.
+
+For example:
+
+```bash
+# List functions and harnesses without verification
+cargo kani autoharness -Z autoharness --list
+
+# Write the list as JSON
+cargo kani autoharness -Z autoharness --list --format json
+```
 
 ### Skip reasons
 
-<!-- TODO(#4979 item 6): list the skip reasons -->
+AutoHarness records one skip reason per skipped function: the first failed check in its selection process. The skipped-functions table has `Crate`, `Skipped Function`, and `Reason for Skipping` columns. Reasons visible to users include:
+
+| Reason shown | Meaning |
+| --- | --- |
+| `Can only be called at compile time` | The function is marked for compile-time execution and cannot be selected for an automatic harness. |
+| `Generic Function: <detail>` | Kani could not find a supported instantiation satisfying the function's constraints. The detail provides the specific cause; see [Generic Functions](#generic-functions). |
+| `The function does not have a body` | There is no function body available to verify, as with a trait method without a default implementation. |
+| `Did not match provided filters` | The function was excluded by the include/exclude patterns. |
+| `Unsupported variadic calling convention` | A variadic function uses an unsupported, non-C calling convention. |
+| `Missing Arbitrary implementation for argument(s) x: T, y: U` | At least one argument cannot be generated using a supported argument model. The argument names and types depend on the function. |
+| `Requires --bounded-arguments for argument(s) x: T` | At least one argument requires opting into bounded generation. The argument names and types depend on the function. |
+
+Missing argument names are displayed as `_`. If a function has both unsupported arguments and arguments requiring bounded generation, `Missing Arbitrary implementation` is the skip reason reported. See [Generating harnesses](#generating-harnesses) for the supported argument models and [Bounded Arguments](#bounded-arguments-opt-in---bounded-arguments) for the opt-in behavior.
+
+Kani's internal implementation functions and functions already used as proof harnesses may be excluded internally with the `Kani implementation` reason, but these entries are **not displayed** in the skipped-functions table. The selected-functions table contains `Crate` and `Selected Function` columns. Where a generic instantiation is chosen, the tables display the instantiated function name (for example, `foo::<i32>`); a generic function that cannot be instantiated is listed under its uninstantiated name.
 
 ### Generic Functions
-For a generic function, Kani generates a harness for a single monomorphic instantiation of the function:
-it substitutes the function's type parameters with concrete types such that all of the function's
-trait bounds are satisfied, and erases lifetime parameters. Kani first tries a fixed list of
-primitive types (starting with `i32`, and including the wider integer and float types) uniformly
-for all parameters; if that fails, it searches per-parameter combinations, drawing additional
-candidate types from the concrete implementations of the traits each parameter is bound by
-(so, e.g., a parameter bound by a crate-local trait can be instantiated with a crate-local struct
-implementing it). The search is capped, so functions with many type parameters or very complex
-bounds may still be skipped.
+
+For a generic function, Kani generates a harness for a **single monomorphic instantiation**: it substitutes concrete types for the function's type parameters, requires the instantiation to satisfy the trait bounds and `where` clauses, and erases lifetime parameters.
+
+Kani first tries the following primitive candidate types, using the same type for each type parameter: `i32`, `u32`, `usize`, `u8`, `i64`, `u64`, `f64`, `f32`, `bool`, and `char`. If no uniform choice works, it searches combinations of candidate types for individual parameters. Alongside the primitives, the candidates can include up to 16 concrete types derived from implementations of the parameter's trait bounds (for example, a crate-local struct implementing a crate-local trait). This combinatorial search is limited to 256 attempts. If it finds no suitable instantiation, Kani makes one final attempt using `()` for every type parameter.
+
 For example, given:
+
 ```rust
 fn foo<T: Eq>(x: T, y: T) {
     if x == y {
@@ -130,28 +168,25 @@ fn foo<T: Eq>(x: T, y: T) {
     }
 }
 ```
-Kani generates and runs a harness that verifies `foo::<i32>`, and the summary table shows the
-instantiated name, e.g.:
-```
+
+Kani generates and runs a harness that verifies `foo::<i32>`, and the summary table shows the instantiated name, e.g.:
+
+```text
 | Crate    | Selected Function | Kind of Automatic Harness | Verification Result |
 | my_crate | foo::<i32>        | #[kani::proof]            | Failure             |
 ```
-Verifying a single instantiation is an underapproximation of all of the function's possible behaviors:
-a successful result for `foo::<i32>` does not imply that other instantiations of `foo` are also safe.
-Kani makes this explicit by displaying the instantiated name of the verified function.
 
-`usize` const generic parameters (e.g. array lengths) are instantiated with the value 2.
+Verifying a single instantiation is an underapproximation of all of the function's possible behaviors: a successful result for `foo::<i32>` does not imply that other instantiations of `foo` are also safe. Kani makes the chosen instantiation explicit by displaying its name. See [Single monomorphization](#single-monomorphization) for the implications of this limitation.
 
-Kani skips a generic function (with skip reason "Generic Function") if:
-- no candidate type satisfies the function's trait bounds, or
-- the function has non-`usize` const generic parameters, which Kani does not instantiate yet.
+**Const generic parameters.** `usize` const generic parameters, such as array lengths, are instantiated with the value `2`, so an instantiated function name might include `::<2>`. Other const-generic parameter types are currently unsupported. Kani also skips a function if its const-generic parameter can reach a `const {}` block whose evaluation may constrain that parameter (for example, `const { assert!(N >= 4) }`). This check is conservative: Kani may skip a function even if the substituted value would satisfy the assertion, rather than risk an invalid compile-time evaluation.
 
-If some caller of a generic function is eligible for an automatic harness, then additional monomorphized
-versions of the generic function may still be reachable (and thus verified) through the caller's harness.
+**Function-trait bounds.** For parameters bounded by `Fn`, `FnMut`, or `FnOnce`, Kani can try nondeterministic function models instead of skipping the generic function. The models support zero to three by-value inputs, or one to two inputs involving shared references (including mixed reference/value arguments). The return type must implement `Arbitrary`. Models can also be selected for signatures that involve the generic function's other type parameters, when the resulting bounds can be satisfied. If no available model is suitable, the function may be skipped as a generic function. See [Fn-bound closures](#fn-bound-closures) for the model's behavior and limitations.
 
-<!-- TODO(#4979 item 2): generic functions with Fn bounds -->
+**Other instantiation failures.** Kani may skip a generic function when no candidate satisfies its bounds or the instantiation search reaches its limit. It also rejects candidate instantiations that would call a `simd_*` intrinsic in the function's own body with incompatible non-SIMD types or an invalid SIMD comparison-result type; another valid candidate may still be selected. The `Generic Function` skip-reason detail identifies applicable failures, including unsupported const generics, const-generic preconditions, SIMD constraints, exhausted search attempts, or unsatisfied trait bounds.
 
-<!-- TODO(#4979 item 7): SIMD and const generic instantiation -->
+If some caller of a generic function is eligible for an automatic harness, then additional monomorphized versions of the generic function may still be reachable (and thus verified) through the caller's harness.
+
+After Kani selects a function and, when necessary, an instantiation, it generates the harness arguments as described in [Generating harnesses](#generating-harnesses).
 
 ## Generating harnesses
 
