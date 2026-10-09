@@ -186,6 +186,9 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                 // MIR optimizations (e.g. GVN at `-Zmir-opt-level=2`) can fold a transmute that
                 // produces an invalid `bool` into a constant. Reaching it is UB, so report it.
                 Err(_) => {
+                    // Such a constant has a dummy span, which reports as line 0, so report the
+                    // check at the statement that uses the constant instead.
+                    let loc = if loc.start_line() == Some(0) { self.current_stmt_loc } else { loc };
                     let typ = self.codegen_ty_stable(ty);
                     let check = self.codegen_assert_assume_false(
                         PropertyClass::SafetyCheck,

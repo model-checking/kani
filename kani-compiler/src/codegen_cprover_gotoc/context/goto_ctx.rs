@@ -98,6 +98,8 @@ pub struct GotocCtx<'tcx, 'r> {
     pub current_loop_modifies: Vec<Expr>,
     /// Track loop decreases clause
     pub current_loop_decreases: Option<Expr>,
+    /// The location of the MIR statement or terminator being codegen'd
+    pub current_stmt_loc: Location,
 }
 
 /// Constructor
@@ -130,6 +132,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             has_loop_contracts: false,
             current_loop_modifies: Vec::new(),
             current_loop_decreases: None,
+            current_stmt_loc: Location::none(),
         }
     }
 
