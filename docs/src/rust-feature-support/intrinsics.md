@@ -268,6 +268,8 @@ Name | Support | Notes |
 `simd_mul`  | Yes | |
 `simd_ne`  | Yes | |
 `simd_or`  | Yes | |
+`simd_reduce_max`  | Yes | Integer lanes, the only lanes the intrinsic accepts |
+`simd_reduce_min`  | Yes | Integer lanes, the only lanes the intrinsic accepts |
 `simd_rem`  | Yes | Doesn't check for floating point overflow [#2669](https://github.com/model-checking/kani/issues/2669) |
 `simd_shl`  | Yes | |
 `simd_shr`  | Yes | |
