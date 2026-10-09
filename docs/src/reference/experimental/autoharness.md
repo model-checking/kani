@@ -363,9 +363,11 @@ chosen to stay below the default loop-unwinding bound of 20, so that loops over 
 be fully unwound by default.
 
 The bounds are configurable with `--slice-bound` and `--string-bound` (and
-`--bounded-arbitrary-bound`, see below). A larger bound covers more inputs at a higher solver
-cost. A bound that is not below the effective loop-unwinding bound (`--default-unwind`, 20 by
-default) leaves loops over such an argument only partially unwound, and Kani warns when a
+`--bounded-arbitrary-bound`, see below). All three flags require `--bounded-arguments` and
+accept positive bounds only. They apply only to bounded generators; the unbounded primitive
+slice and `Vec` models continue to use nondeterministic lengths. A larger bound covers more
+inputs at a higher solver cost. A bound that is not below the effective loop-unwinding bound
+(`--default-unwind`, 20 by default) leaves loops over such an argument only partially unwound, and Kani warns when a
 configured bound reaches it. The note printed after the summary table reports the bounds a run
 actually used.
 
@@ -384,8 +386,6 @@ heap allocated and, for `String`, involve UTF-8 reasoning, both of which are cos
 execution.
 
 Nested slice references (e.g. `&&[u8]`) and slices inside user-defined types remain unsupported.
-
-<!-- TODO(#4979 item 8): bound flags require --bounded-arguments -->
 
 ##### Constructor-based generation (--constructor-args)
 
@@ -412,11 +412,11 @@ constructors, preferring (in order):
 Zero-argument constructors, and constructors generic over their own parameters, are not
 considered.
 
-`--constructor-args` additionally enables *mined-invariant filtering*: if a type has no viable
-constructor but its own `&self` methods assert conditions over its fields (see
-[Mined invariants](#mined-invariants) below), the generated value is
-constrained to satisfy those mined conditions via `kani::assume`. This covers types with no
-usable constructor, at lower formula cost than constructor inlining.
+`--constructor-args` additionally enables *mined-invariant filtering*: generated struct and
+enum values are constrained via `kani::assume` to satisfy the conditions Kani can extract
+from assertions in the type's own methods (see [Mined invariants](#mined-invariants)).
+This filtering also applies to types with no usable constructor, at lower formula cost
+than constructor inlining.
 
 This option is opt-in because it under-approximates: harnesses whose values are generated or
 constrained this way are marked "(ctor)" in the output. That marker therefore covers all of the
@@ -430,16 +430,28 @@ See [Soundness caveats](#soundness-caveats).
 
 ### Assumptions
 
+Assumptions restrict the values and execution paths that the generated harness explores.
+The following mechanisms supply assumptions before Kani checks the function's behavior.
+
 #### Contracts (requires)
 
-<!-- TODO(#4979): contract preconditions are assumed -->
+When the selected function has a [function contract](contracts.md), Kani generates a
+`#[kani::proof_for_contract]` harness. The function's `#[kani::requires(...)]` preconditions
+are assumed at entry, so verification covers only inputs that satisfy them. For example,
+`#[kani::requires(x != 0)]` excludes `x == 0` from the automatic contract harness.
+
+Autoharness does not infer caller obligations from an `unsafe fn` declaration or its safety
+documentation. Express those obligations as preconditions to avoid checking the function
+with inputs its callers are required to exclude; see the [raw pointer example](#raw-pointers).
 
 #### Type Safety Invariants
 If a type implements the [`Invariant`](https://model-checking.github.io/kani/crates/doc/kani/trait.Invariant.html) trait,
 Kani assumes that the nondeterministic struct and enum values it generates for automatic harnesses respect the type's safety invariant,
 i.e., each generated value `v` satisfies `v.is_safe()`.
-This assumption applies to nested values as well: if a field of a generated value has a struct or enum type that implements `Invariant`,
-the field's safety invariant is assumed to hold, even if the enclosing type does not implement `Invariant` itself.
+When Kani synthesizes a struct or enum's generation field by field, it also assumes the
+safety invariants of the struct and enum fields it generates, even if the enclosing type
+does not implement `Invariant`. For a source-defined `Arbitrary` implementation, nested
+invariants must be enforced by that implementation or the enclosing type's `Invariant`.
 Invariants implemented for non-ADT types (e.g., tuples or arrays) are currently not assumed.
 
 This matches the [Unsafe Code Guidelines' definition of a safety invariant](https://rust-lang.github.io/unsafe-code-guidelines/glossary.html#validity-and-safety-invariant):
@@ -448,45 +460,94 @@ so verifying a function against invariant-violating inputs would produce spuriou
 
 #### Layout niches
 
-<!-- TODO(#4979 item 4): layout niche assumptions -->
+When Kani automatically derives `Arbitrary` for a struct or enum, it must respect any
+compiler-defined restrictions on its fields' values. A field's underlying integer type
+may allow more values than the field type itself. Kani reads the field type's valid scalar
+range from the compiler's layout information and adds `kani::assume` constraints when
+generating values.
+
+For example, consider a `Month` type without an `Arbitrary` implementation whose field
+type restricts an underlying `u8` to `1..=12`. Generating an arbitrary `u8` alone would also
+allow 0 and 13 through 255. Kani constrains it to `1..=12` before constructing the restricted
+field, so automatic derivation produces only valid month values. This relies on a
+restriction expressed in the field's type; Kani does not infer it from the name `Month`.
+
+Invalid bit patterns that the compiler can use for layout optimizations are called
+*niches*. For `NonZeroU32`, zero is such a pattern. Its existing `Arbitrary` implementation
+already excludes zero, so the additional layout assumption is redundant on that generation
+path; it is needed when automatically synthesizing generation for restricted types that
+have no such implementation.
+
+These assumptions exclude language-level invalid values, preserving the valid inputs
+that the generator represents. They require no flag or `Invariant` implementation and
+do not add a "(ctor)" marker. They prevent false alarms caused by invalid scalar values;
+they do not infer additional relationships between fields or application-level invariants.
 
 #### Mined invariants
 
-Many types state their representation invariant implicitly, as assertions over `self`'s fields
-in their own `&self` methods (e.g. `assert!(self.value >= 1)`). Kani can *mine* these: it
-extracts a condition as a type invariant when the assertion executes on every normal return of
-the method (post-dominance), its condition reads only `self`'s fields and constants (a pure,
-call-free slice), and the same conjunct is asserted in at least two distinct methods (so that
-method-local preconditions are not mistaken for type invariants). For enums, a conjunct read
-from a matched variant is guarded by that variant's discriminant.
+Many types state conditions on their fields through assertions in their own inherent
+methods, such as `assert!(self.value >= 1)`. Kani can *mine* these assertions, treating a
+condition as a candidate type invariant when:
 
-Mined invariants are used in two ways:
+- The assertion occurs on every path to a normal return of the method or the relevant
+  enum match arm (post-dominance).
+- Its condition is a supported pure expression over `self`'s fields and constants,
+  including simple field getters whose expressions Kani can extract.
+- The same condition is asserted in at least two distinct methods.
 
-- Under `--constructor-args`, they are *assumed* for generated values (as described above), and
-  such harnesses are marked "(ctor)".
+For enums, a condition read from a matched variant is applied only to that variant.
+Requiring assertions in two methods reduces the risk of treating a method's precondition
+as a type invariant, but does not prove that the condition holds for every valid value.
 
-  See [Soundness caveats](#soundness-caveats).
+Mining currently applies to struct and enum types without generic arguments. Methods can
+take `self` by value, shared reference or mutable reference; methods with their own type or
+const generic parameters are excluded.
+
+Under `--constructor-args`, the mined conditions are *assumed* for generated values. This
+input filtering also applies when the type already implements `Arbitrary`. It can exclude
+valid values if a mined condition is actually a precondition of the methods rather than
+an invariant of the type; see
+[Soundness caveats](#soundness-caveats). The separate
+[`--check-invariants`](#--check-invariants) option checks mined conditions on return values.
 
 ### Checks
 
 #### Undefined behavior and panics
 
-<!-- TODO(#4979): undefined behavior and panic checks -->
+By default, automatic harnesses use Kani's usual checks for the selected function and code
+reachable from it, including assertions, panics, integer overflow, division by zero and
+invalid memory accesses. These checks also run when the function has a contract. The inputs they
+cover depend on the argument models and assumptions above.
+
+See [Undefined Behaviour](../../undefined-behaviour.md) for the forms of undefined behavior
+Kani can detect and its current limitations, and
+[Verification results](../../verification-results.md) for how individual checks are reported.
 
 #### Contracts (ensures)
-Automatic harnesses do not *assert* type invariants, e.g., they do not check that a function's return value satisfies `is_safe()`.
-To verify that a function preserves an invariant, add a [function contract](contracts.md) such as `#[kani::ensures(|result| result.is_safe())]`;
-autoharness verifies a function against its contract if it has one.
+For a function with a contract, the automatic contract harness checks each
+`#[kani::ensures(...)]` postcondition on return, under the function's assumed preconditions.
+For example, `#[kani::ensures(|result| result.is_safe())]` checks that the returned value
+respects its type's safety invariant.
+
+Assuming `Invariant::is_safe()` for generated inputs does not automatically check it on
+outputs. Add such a postcondition to verify the returned value's safety invariant;
+see [function contracts](contracts.md).
 
 #### `--check-invariants`
 
-- With `--check-invariants`, they are *checked* on the values returned by verified functions:
-  Kani asserts that each returned value (direct `T`, `&T`, or the payload of an
-  `Option<T>`/`Result<T, E>` — `None`/`Err` pass vacuously) satisfies the type's mined
-  invariants. A failure is reported as a distinct property class naming the asserting methods;
-  because the mined predicate is heuristic, a failure means the returned value *would* trip the
-  type's own assertions when used, which may or may not indicate a bug in the returning
-  function.
+With `--check-invariants`, Kani asserts the type's [mined invariants](#mined-invariants)
+on values returned by verified functions. Supported returns include a direct `T`, a
+reference to `T`, or the `Some(T)`/`Ok(T)` payload of an `Option<T>`/`Result<T, E>`;
+`T` must be a struct or enum for which conditions can be mined. `None` and `Err` returns
+do not check a payload. The checks do not recursively unwrap returns such as `Option<&T>`,
+inspect tuple or array elements, or check modified input arguments.
+
+Failures include a message identifying the type and the methods that asserted the mined
+condition. Because mining is heuristic, a failure means the returned value violates a
+condition asserted by those methods, which may or may not indicate a bug in the returning
+function. This option checks mined predicates, rather than `Invariant::is_safe()`, and can
+be used independently of `--constructor-args`. For functions with contracts, these additional
+checks run under the same preconditions and supplement the postcondition checks.
 
 ## Verifying and reading results
 
