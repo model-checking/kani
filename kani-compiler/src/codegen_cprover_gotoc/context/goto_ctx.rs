@@ -99,6 +99,8 @@ pub struct GotocCtx<'tcx, 'r> {
     /// loop and the instance of the register function of the loop. A loop without an entry has no
     /// clause, which is not the same as a clause without targets.
     pub loop_modifies: HashMap<(Instance, Instance), Vec<Expr>>,
+    /// The location of the MIR statement or terminator being codegen'd
+    pub current_stmt_loc: Location,
 }
 
 /// Constructor
@@ -130,6 +132,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             transformer,
             has_loop_contracts: false,
             loop_modifies: HashMap::new(),
+            current_stmt_loc: Location::none(),
         }
     }
 
