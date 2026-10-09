@@ -65,6 +65,8 @@ pub struct HarnessAttributes {
     pub solver: Option<CbmcSolver>,
     /// Optional data to store unwind value.
     pub unwind_value: Option<u32>,
+    /// Whether the harness turns off unwinding assertions, c.f. `--no-unwinding-checks`.
+    pub no_unwinding_checks: bool,
     /// The stubs used in this harness.
     pub stubs: Vec<Stub>,
     /// The name of the functions being stubbed by their contract.
@@ -92,6 +94,7 @@ impl HarnessAttributes {
             should_panic: false,
             solver: None,
             unwind_value: None,
+            no_unwinding_checks: false,
             stubs: vec![],
             verified_stubs: vec![],
         }

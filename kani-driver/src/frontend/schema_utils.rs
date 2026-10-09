@@ -227,6 +227,7 @@ pub fn create_harness_metadata_json(h: &HarnessMetadata) -> Value {
         "attributes": {
             "kind": format!("{:?}", h.attributes.kind),
             "should_panic": h.attributes.should_panic,
+            "no_unwinding_checks": h.attributes.no_unwinding_checks,
         },
         "contract":{
             "contracted_function_name": h.contract.as_ref()
