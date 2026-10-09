@@ -649,7 +649,69 @@ harnesses they affect:
 
 ## Architecture (for contributors)
 
-<!-- TODO(#4979): architecture overview for contributors -->
+This section is for contributors who want to change how autoharness works. The work is split
+between the driver (`kani-driver`), which handles the command line and runs verification, and
+the compiler (`kani-compiler`), which selects functions and builds the harnesses while it
+compiles the crate:
+
+```text
+┌──────────────────────────── kani-driver ────────────────────────────┐
+│ args/autoharness_args.rs   CLI: --include/--exclude-pattern,        │
+│                            --bounded-arguments, --constructor-args, │
+│                            --check-invariants, --list, bounds       │
+│ autoharness/mod.rs  setup_session(): parallel defaults, timeout,    │
+│                     unwind, add_auto_harness_args() →               │
+│                     --autoharness-* compiler flags                  │
+│ call_single_file.rs: adds those flags to the kani-compiler call     │
+└────────────────┬────────────────────────────────────────────────────┘
+                 ▼
+┌──────────────────────────── kani-compiler ──────────────────────────┐
+│ kani_middle/codegen_units.rs                                        │
+│   automatic_harness_partition()  → chosen / skipped (+reasons)      │
+│   get_all_automatic_harnesses()  → AutomaticHarnessIntrinsic::<fn>  │
+│                                    + gen_automatic_proof_metadata() │
+│ kani_middle/transform/automatic.rs                                  │
+│   AutomaticHarnessPass    dummy body → [contract init] args = any() │
+│                           [assume invariants] f(args) [checks]      │
+│   AutomaticArbitraryPass  T::any() for derivable types              │
+│ codegen_cprover_gotoc → goto; KaniMetadata { autoharness_md, ... }  │
+└────────────────┬────────────────────────────────────────────────────┘
+                 ▼
+┌──────────────────────────── kani-driver ────────────────────────────┐
+│ postprocess_project(): chosen/skipped tables, --list stops here     │
+│ harness_runner.rs: CBMC per harness → print_autoharness_summary()   │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+1. **Options and session setup** (`kani-driver`). `args/autoharness_args.rs` defines and
+   validates the `autoharness` options. `setup_session` in `autoharness/mod.rs` enables function
+   and loop contracts, applies the [parallel verification](#parallel-verification) defaults and
+   the [default timeout and unwinding bound](#default-settings), and `add_auto_harness_args`
+   turns the autoharness options into `--autoharness-*` flags, which the driver passes to
+   `kani-compiler` (see `call_single_file.rs`).
+2. **Selection** (`kani-compiler`, `kani_middle/codegen_units.rs`).
+   `automatic_harness_partition` decides for every function in the crate whether it gets a
+   harness, choosing an instantiation for generic functions and otherwise recording one of the
+   [skip reasons](#skip-reasons). It also records whether a harness will use bounded or
+   constructor-based values; these become the "(bounded)" and "(ctor)"
+   [markers](#summary-table-and-markers). For each selected function,
+   `get_all_automatic_harnesses` creates an instance of the `automatic_harness` intrinsic in
+   `kani_core` (marked `AutomaticHarnessIntrinsic`), whose body is still a placeholder, and
+   generates its metadata with `gen_automatic_proof_metadata`.
+3. **Harness bodies** (`kani-compiler`, `kani_middle/transform/automatic.rs`).
+   `AutomaticHarnessPass` replaces each placeholder body with the actual harness: it sets up
+   contract instrumentation if the function has a contract, generates each argument as
+   described in [Generating harnesses](#generating-harnesses), assumes the applicable
+   [assumptions](#assumptions), calls the function, and adds the [checks](#checks).
+   `AutomaticArbitraryPass` synthesizes `T::any()` for structs and enums that can derive
+   `Arbitrary` automatically.
+4. **Code generation**. `codegen_cprover_gotoc` translates the crate, including the harnesses,
+   into a goto program for CBMC, and the selected and skipped functions are stored in the
+   `autoharness_md` field of the crate's `KaniMetadata`.
+5. **Results** (`kani-driver`). `postprocess_project` in `autoharness/mod.rs` prints the
+   selected and skipped tables; with `--list`, the run stops here. Otherwise
+   `harness_runner.rs` runs CBMC on each harness and then calls `print_autoharness_summary` to
+   print the [summary table](#summary-table-and-markers).
 
 ## Request for comments
 This feature is experimental and is therefore subject to change.
