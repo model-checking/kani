@@ -9,7 +9,7 @@ This harness first declares a local variable `x` using `kani::any()`, then calls
 Many proof harnesses follow this predictable format—to verify a function `foo`, we create arbitrary values for each of `foo`'s arguments, then call `foo` on those arguments.
 
 The `autoharness` subcommand leverages this observation to automatically generate harnesses and run Kani against them.
-Kani scans the crate for functions whose arguments all implement the `kani::Arbitrary` trait, generates harnesses for them, then runs them.
+Kani scans the crate for functions whose arguments it can generate nondeterministically (see [Generating harnesses](#generating-harnesses)), generates harnesses for them, then runs them.
 These harnesses are internal to Kani—i.e., Kani does not make any changes to your source code.
 
 ## Usage
@@ -22,7 +22,7 @@ or
 # kani autoharness -Z autoharness <FILE>
 ```
 
-If Kani detects that all of a function `foo`'s arguments implement `kani::Arbitrary`, it will generate and run a `#[kani::proof]` harness, which prints:
+If Kani can generate all of a function `foo`'s arguments, it will generate and run a `#[kani::proof]` harness, which prints:
 
 ```
 Autoharness: Checking function foo against all possible inputs...
@@ -89,7 +89,7 @@ Complete - 0 successfully verified functions, 1 failures, 1 total.
 
 ## Selecting functions
 
-AutoHarness considers functions defined in the crate being verified, including free functions, inherent methods, trait-implementation methods, and trait methods with default implementations. Functions from dependencies are not candidates. For each eligible function, Kani selects one automatic harness; functions that fail a selection check are skipped. Kani reports selected functions and visible skip reasons before verification, unless `--quiet` is specified.
+Autoharness considers functions defined in the crate being verified, including free functions, inherent methods, trait-implementation methods, and trait methods with default implementations. Functions from dependencies are not candidates. For each eligible function, Kani selects one automatic harness; functions that fail a selection check are skipped. Kani reports selected functions and visible skip reasons before verification, unless `--quiet` is specified.
 
 Selection first attempts to instantiate generic functions, then applies the include and exclude patterns, and finally checks whether the function's arguments can be generated. The details of argument generation are described in [Generating harnesses](#generating-harnesses).
 
@@ -132,7 +132,7 @@ Generic instantiation happens before include/exclude filtering. Consequently, a 
 
 ### Listing functions (--list)
 
-AutoHarness also accepts `--list`, which compiles the project and runs the [list subcommand](../list.md), including automatic harnesses, **without running verification**. Unless `--quiet` is passed, Kani first prints the selected-functions and skipped-functions tables.
+Autoharness also accepts `--list`, which compiles the project and runs the [list subcommand](../list.md), including automatic harnesses, **without running verification**. Unless `--quiet` is passed, Kani first prints the selected-functions and skipped-functions tables.
 
 Use `--list --format <FORMAT>` to choose the output format:
 
@@ -156,7 +156,7 @@ cargo kani autoharness -Z autoharness --list --format json
 
 ### Skip reasons
 
-AutoHarness records one skip reason per skipped function: the first failed check in its selection process. The skipped-functions table has `Crate`, `Skipped Function`, and `Reason for Skipping` columns. Reasons visible to users include:
+Autoharness records one skip reason per skipped function: the first failed check in its selection process. The skipped-functions table has `Crate`, `Skipped Function`, and `Reason for Skipping` columns. Reasons visible to users include:
 
 | Reason shown | Meaning |
 | --- | --- |
@@ -164,7 +164,7 @@ AutoHarness records one skip reason per skipped function: the first failed check
 | `Generic Function: <detail>` | Kani could not find a supported instantiation satisfying the function's constraints. The detail provides the specific cause; see [Generic Functions](#generic-functions). |
 | `The function does not have a body` | There is no function body available to verify, as with a trait method without a default implementation. |
 | `Did not match provided filters` | The function was excluded by the include/exclude patterns. |
-| `Unsupported variadic calling convention` | A variadic function uses an unsupported, non-C calling convention. |
+| `Unsupported variadic calling convention` | The function is a C-variadic function whose calling convention Kani cannot model (for example, `extern "sysv64"`). |
 | `Missing Arbitrary implementation for argument(s) x: T, y: U` | At least one argument cannot be generated using a supported argument model. The argument names and types depend on the function. |
 | `Requires --bounded-arguments for argument(s) x: T` | At least one argument requires opting into bounded generation. The argument names and types depend on the function. |
 
@@ -308,7 +308,8 @@ see [Generic Functions](#generic-functions).
 These models check the function under verification against arbitrary callback results.
 They do not execute a particular closure's body or model its captures, mutations or other
 side effects. Use a handwritten harness when verification depends on a particular callback
-implementation.
+implementation. See [Other limitations](#other-limitations) for what this means for a
+`Success` result, and [#4994](https://github.com/model-checking/kani/issues/4994).
 
 ##### Formatting Trait Implementations
 For the `fmt` methods of `Debug`, `Display`, `Binary`, `Octal`, `LowerHex`, `UpperHex`, `LowerExp`,
