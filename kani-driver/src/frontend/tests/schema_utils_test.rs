@@ -19,10 +19,12 @@ use std::path::PathBuf;
 use std::time::Duration;
 #[test]
 fn test_create_metadata_json() {
-    let json = create_metadata_json();
+    let json = create_metadata_json("riscv64gc-unknown-linux-gnu");
 
     assert!(json.is_object());
     assert_eq!(json["version"], "1.0");
+    // The verification target, not the triple Kani was built for.
+    assert_eq!(json["target"], "riscv64gc-unknown-linux-gnu");
     assert!(json["timestamp"].as_str().unwrap().contains('T'));
     assert!(["debug", "release"].contains(&json["build_mode"].as_str().unwrap()));
 }

@@ -20,7 +20,10 @@ use cbmc::goto_program::Location;
 use cbmc::{InternedString, MachineModel};
 use cbmc::{RoundingMode, WithInterner};
 use kani_metadata::artifact::convert_type;
-use kani_metadata::{ArtifactType, HarnessMetadata, KaniMetadata, UnsupportedFeature};
+use kani_metadata::{
+    ArtifactType, HarnessMetadata, KaniMetadata, SUPPORTED_TARGETS, UnsupportedFeature,
+    supported_targets_list,
+};
 use kani_metadata::{AssignsContract, CompilerArtifactStub};
 use rustc_abi::{Align, Endian};
 use rustc_codegen_ssa::back::archive::{
@@ -45,7 +48,7 @@ use rustc_session::output::out_filename;
 use rustc_session::{EarlySession, IncrCompSession, Session};
 use rustc_span::{Symbol, sym};
 use rustc_structures::CrateType;
-use rustc_target::spec::{Arch, Os, PanicStrategy};
+use rustc_target::spec::{Arch, Os, PanicStrategy, TargetTuple};
 use std::any::Any;
 use std::cmp::min;
 use std::collections::BTreeMap;
@@ -309,6 +312,12 @@ impl CodegenBackend for GotocCodegenBackend {
                 // AArch64 mandates Neon support
                 _ => vec![sym::neon],
             }
+        } else if sess.target.arch == Arch::RiscV64 && sess.target.os != Os::None {
+            // The features of `riscv64gc` (`+m,+a,+f,+d,+c,+zicsr,+zifencei`), with the features
+            // each implies. The LP64D ABI requires `d`, and rustc warns when it is missing.
+            ["a", "c", "d", "f", "m", "zaamo", "zalrsc", "zca", "zicsr", "zifencei", "zmmul"]
+                .map(Symbol::intern)
+                .to_vec()
         } else {
             vec![]
         };
@@ -598,26 +607,25 @@ impl ArchiveBuilderBuilder for ArArchiveBuilderBuilder {
 }
 
 fn check_target(session: &Session) {
-    // The requirement below is needed to build a valid CBMC machine model
-    // in function `machine_model_from_session` from
-    // src/kani-compiler/src/codegen_cprover_gotoc/context/goto_ctx.rs
-    let is_x86_64_linux_target = session.target.llvm_target == "x86_64-unknown-linux-gnu";
-    let is_arm64_linux_target = session.target.llvm_target == "aarch64-unknown-linux-gnu";
-    // Comparison with `x86_64-apple-darwin` does not work well because the LLVM
-    // target may become `x86_64-apple-macosx10.7.0` (or similar) and fail
-    let is_x86_64_darwin_target = session.target.llvm_target.starts_with("x86_64-apple-");
-    // looking for `arm64-apple-*`
-    let is_arm64_darwin_target = session.target.llvm_target.starts_with("arm64-apple-");
-
-    if !is_x86_64_linux_target
-        && !is_arm64_linux_target
-        && !is_x86_64_darwin_target
-        && !is_arm64_darwin_target
-    {
+    // `machine_model_from_session` in this file builds a CBMC machine model only for the targets
+    // in `SUPPORTED_TARGETS`, and `target_config` hardcodes their features, so the session must
+    // be one of those built-in targets exactly. The tuple names the built-in spec, which already
+    // tells apart targets that share an LLVM target, such as `riscv64gc-unknown-linux-gnu`,
+    // `riscv64a23-unknown-linux-gnu` and `riscv64-wrs-vxworks`.
+    //
+    // A target JSON file is refused even when its name matches: rustc names it after the file
+    // stem, so `riscv64gc-unknown-linux-gnu.json` would pass a name check with whatever data
+    // layout and features the file sets. An exact comparison of the `features` string used to
+    // guard against both cases, and broke whenever rustc respelled that string.
+    let supported = match &session.opts.target_triple {
+        TargetTuple::TargetTuple(tuple) => SUPPORTED_TARGETS.contains(&tuple.as_str()),
+        TargetTuple::TargetJson { .. } => false,
+    };
+    if !supported {
         let err_msg = format!(
-            "Kani requires the target platform to be `x86_64-unknown-linux-gnu`, \
-            `aarch64-unknown-linux-gnu`, `x86_64-apple-*` or `arm64-apple-*`, but \
-            it is {}",
+            "Kani requires the target platform to be {}, but it is `{}` (LLVM target `{}`)",
+            supported_targets_list(),
+            session.opts.target_triple.tuple(),
             session.target.llvm_target
         );
         session.dcx().err(err_msg);
@@ -801,12 +809,11 @@ impl GotoCodegenResults {
 
 /// Builds a machine model which is required by CBMC
 fn new_machine_model(sess: &Session) -> MachineModel {
-    // The model assumes a `x86_64-unknown-linux-gnu`, `x86_64-apple-darwin`
-    // or `aarch64-apple-darwin` platform. We check the target platform in function
+    // The model assumes a `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`,
+    // `riscv64gc-unknown-linux-gnu`, `x86_64-apple-darwin` or `aarch64-apple-darwin` platform.
+    // We check the target platform in function
     // `check_target` from src/kani-compiler/src/codegen_cprover_gotoc/compiler_interface.rs
     // and error if it is not any of the ones we expect.
-    let architecture = &sess.target.arch;
-    let os = &sess.target.os;
     let pointer_width = sess.target.pointer_width.into();
 
     // The model assumes the following values for session options:
@@ -821,7 +828,18 @@ fn new_machine_model(sess: &Session) -> MachineModel {
         Endian::Little => false,
         Endian::Big => true,
     };
+    machine_model_for(&sess.target.arch, &sess.target.os, pointer_width, alignment, is_big_endian)
+}
 
+/// The machine model for `architecture` and `os`, with the values `new_machine_model` reads from
+/// the session passed in.
+fn machine_model_for(
+    architecture: &Arch,
+    os: &Os,
+    pointer_width: u64,
+    alignment: u64,
+    is_big_endian: bool,
+) -> MachineModel {
     // The values below cannot be obtained from the session so they are
     // hardcoded using standard ones for the supported platforms
     // see /tools/sizeofs/main.cpp.
@@ -873,7 +891,9 @@ fn new_machine_model(sess: &Session) -> MachineModel {
         }
         Arch::AArch64 => {
             let bool_width = 8;
-            let char_is_unsigned = true;
+            // `char` is unsigned on aarch64 Linux and signed on Apple platforms, see the links
+            // above `wchar_t_is_unsigned`.
+            let char_is_unsigned = matches!(os, Os::Linux);
             let char_width = 8;
             let double_width = 64;
             let float_width = 32;
@@ -917,6 +937,49 @@ fn new_machine_model(sess: &Session) -> MachineModel {
                 word_size: int_width,
             }
         }
+        Arch::RiscV64 => {
+            // The RISC-V psABI's LP64D data model, which is also what CBMC's
+            // `set_arch_spec_riscv64` assumes: `char` is unsigned, `wchar_t` is a signed `int`,
+            // and `long double` is IEEE binary128.
+            // https://github.com/riscv-non-isa/riscv-elf-psabi-doc/blob/master/riscv-cc.adoc
+            let bool_width = 8;
+            let char_is_unsigned = true;
+            let char_width = 8;
+            let double_width = 64;
+            let float_width = 32;
+            let int_width = 32;
+            let long_double_width = 128;
+            let long_int_width = 64;
+            let long_long_int_width = 64;
+            let short_int_width = 16;
+            let single_width = 32;
+            let wchar_t_is_unsigned = false;
+            let wchar_t_width = 32;
+
+            MachineModel {
+                architecture: "riscv64".to_string(),
+                alignment,
+                bool_width,
+                char_is_unsigned,
+                char_width,
+                double_width,
+                float_width,
+                int_width,
+                is_big_endian,
+                long_double_width,
+                long_int_width,
+                long_long_int_width,
+                memory_operand_size: int_width / 8,
+                null_is_zero: true,
+                pointer_width,
+                rounding_mode: RoundingMode::ToNearest,
+                short_int_width,
+                single_width,
+                wchar_t_is_unsigned,
+                wchar_t_width,
+                word_size: int_width,
+            }
+        }
         _ => {
             panic!("Unsupported architecture: {architecture}");
         }
@@ -934,4 +997,21 @@ where
     let elapsed = start.elapsed();
     info!("Finished {description} in {}s", elapsed.as_secs_f32());
     ret
+}
+
+#[cfg(test)]
+mod tests {
+    use super::machine_model_for;
+    use rustc_target::spec::{Arch, Os};
+
+    /// `char` is unsigned on aarch64 Linux but signed on Apple arm64, which CBMC itself also
+    /// encodes for `arm64` on macOS.
+    /// https://developer.apple.com/documentation/xcode/writing-arm64-code-for-apple-platforms
+    #[test]
+    fn arm64_char_signedness_follows_the_os() {
+        let linux = machine_model_for(&Arch::AArch64, &Os::Linux, 64, 1, false);
+        let macos = machine_model_for(&Arch::AArch64, &Os::MacOs, 64, 1, false);
+        assert!(linux.char_is_unsigned);
+        assert!(!macos.char_is_unsigned);
+    }
 }
