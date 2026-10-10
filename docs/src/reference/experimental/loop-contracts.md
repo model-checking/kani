@@ -437,9 +437,10 @@ becomes negative but the loop guard is false, that is acceptable.
 ### Interaction with loop invariants
 
 Decreases clauses work in conjunction with loop invariant clauses. The invariant establishes the
-context (the inductive hypothesis) under which the decreases check is performed. If a decreases
-clause is annotated on a loop without an invariant clause, the weakest possible invariant (`true`)
-is used to model an arbitrary iteration.
+context (the inductive hypothesis) under which the decreases check is performed. A decreases
+clause on a loop without an invariant clause is ignored with a warning, since Kani does not
+abstract such a loop: it unwinds it like any other loop. To prove the termination of a loop with
+the weakest possible invariant, use `#[kani::loop_invariant(true)]`.
 
 In practice, you almost always want both: the invariant constrains the state space, and the
 decreases clause proves progress within that constrained space.
@@ -591,9 +592,8 @@ Loop contracts comes with the following limitations.
 3. We don't check if loop contracts (invariants, decreases clauses) are side-effect free. A loop contract with a side effect could lead to an unsound proof result. Make sure that the specified loop contracts are side-effect free.
 4. Decreases clauses only support integer-typed expressions. See the [decreases clause limitations](#decreases-clause-limitations-and-comparison-with-other-tools) section for a detailed comparison with other verification tools.
 5. Decreases clauses have the following known bugs (tracked in [#3168](https://github.com/model-checking/kani/issues/3168)):
-   - **Struct field projections** in decreases expressions (e.g., `#[kani::loop_decreases(s.field)]`) are not correctly processed by CBMC — the check always fails even when the measure genuinely decreases.
+   - **Measures computed before the loop.** Kani evaluates a measure at each iteration only if it reads variables of the function directly (e.g., `x`, `s.field` or `*p`). Other measures, such as arithmetic with overflow checks (e.g., `n - i`), casts, indexing, function calls, constants, or variables captured by a closure, are computed once before the loop, so the check fails even when the measure decreases, and Kani reports a warning ([#4585](https://github.com/model-checking/kani/issues/4585)).
    - **Multi-dimensional decreases** (e.g., `#[kani::loop_decreases(a, b)]`) are not correctly processed — CBMC does not perform lexicographic comparison on tuple expressions passed through Kani's irep encoding.
-   - **Combining `loop_decreases` with `loop_modifies`** causes the assigns clause check to conflict with the decreases instrumentation.
    - **Nested loops with decreases** on both inner and outer loops can cause assigns clause conflicts.
    
    These limitations are documented as `fixme` tests in `tests/expected/loop-contract/`.

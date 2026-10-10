@@ -3,20 +3,20 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::InternedString;
-use cbmc::goto_program::Stmt;
+use cbmc::goto_program::{Expr, Stmt};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::ty::Instance as InstanceInternal;
 use rustc_middle::ty::{TyCtxt, UpvarCapture};
 use rustc_public::CrateDef;
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::{
-    Body, Local, LocalDecl, Operand, Place, ProjectionElem, Rvalue, StatementKind, TerminatorKind,
-    visit::Location, visit::MirVisitor,
+    BasicBlockIdx, Body, Local, LocalDecl, Operand, Place, ProjectionElem, Rvalue, StatementKind,
+    TerminatorKind, visit::Location, visit::MirVisitor,
 };
 use rustc_public::rustc_internal;
-use rustc_public::ty::{RigidTy, TyKind};
+use rustc_public::ty::{RigidTy, Span, TyKind};
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 /// This structure represents useful data about the function we are currently compiling.
 #[derive(Debug)]
@@ -55,6 +55,32 @@ pub struct CurrentFnCtx<'tcx> {
     pragmas: &'static [&'static str],
     /// A counter to enable creating temporary variables
     temp_var_counter: u64,
+    /// The `#[kani::loop_decreases]` clauses of the function.
+    loop_decreases: LoopDecreasesClauses,
+}
+
+/// The `#[kani::loop_decreases]` clauses of a function (see `loop_decreases` in `kani_macros`),
+/// while its body is generated.
+#[derive(Debug, Default)]
+pub struct LoopDecreasesClauses {
+    /// The loop heads of the function, if loop contracts are enabled.
+    pub loop_heads: HashSet<BasicBlockIdx>,
+    /// The clause whose binding was generated last, until the head of its loop is generated.
+    pub pending: Option<LoopDecreases>,
+    /// The clauses by loop head, until the latch of their loop is generated.
+    pub by_head: BTreeMap<BasicBlockIdx, LoopDecreases>,
+}
+
+/// The measure of a `#[kani::loop_decreases]` clause.
+#[derive(Debug)]
+pub struct LoopDecreases {
+    /// The local of the binding of the clause.
+    pub binding: Local,
+    pub measure: Expr,
+    /// Whether the measure is computed once, before the loop, so that the decreases check fails.
+    pub computed_once: bool,
+    /// The span of the binding, to report the clause if it is not attached to a loop.
+    pub span: Span,
 }
 
 struct AddressTakenLocalsCollector {
@@ -131,6 +157,7 @@ impl<'tcx> CurrentFnCtx<'tcx> {
             readable_name,
             pragmas,
             temp_var_counter: 0,
+            loop_decreases: LoopDecreasesClauses::default(),
         }
     }
 }
@@ -140,6 +167,14 @@ impl CurrentFnCtx<'_> {
     /// Returns the current block, replacing it with an empty vector.
     pub fn extract_block(&mut self) -> Vec<Stmt> {
         std::mem::take(&mut self.block)
+    }
+
+    pub fn loop_decreases(&self) -> &LoopDecreasesClauses {
+        &self.loop_decreases
+    }
+
+    pub fn loop_decreases_mut(&mut self) -> &mut LoopDecreasesClauses {
+        &mut self.loop_decreases
     }
 
     pub fn get_and_incr_counter(&mut self) -> u64 {

@@ -1,0 +1,11 @@
+warning: the measure of this `#[kani::loop_decreases]` clause is computed once, before the loop, so the decreases check will fail even if the measure decreases
+
+literal_measure_harness.loop_decreases.1\
+	 - Status: FAILURE\
+	 - Description: "Check variant decreases after step for loop literal_measure_harness.0"
+
+const_measure_harness.loop_decreases.1\
+	 - Status: FAILURE\
+	 - Description: "Check variant decreases after step for loop const_measure_harness.0"
+
+VERIFICATION:- FAILED
