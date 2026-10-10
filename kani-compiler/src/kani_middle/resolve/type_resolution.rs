@@ -132,7 +132,134 @@ pub fn resolve_ty<'tcx>(
         Type::Group(_) => invalid("group paths"),
         Type::ImplTrait(_) => invalid("trait impl paths"),
         Type::Infer(_) => invalid("inferred paths"),
-        Type::TraitObject(_) => invalid("trait object paths"),
+        Type::TraitObject(trait_object) => {
+            // `dyn Trait` as a type argument: one principal (non-auto) trait, its
+            // resolvable type arguments, plus auto traits; lifetimes are erased like
+            // every other path argument. Associated-type bindings and marker-only
+            // objects keep the previous behavior (unsupported).
+            let mut principal: Option<(rustc_span::def_id::DefId, Vec<Ty>)> = None;
+            let mut autos: Vec<rustc_span::def_id::DefId> = Vec::new();
+            for bound in &trait_object.bounds {
+                match bound {
+                    syn::TypeParamBound::Trait(trait_bound) => {
+                        if !matches!(trait_bound.modifier, syn::TraitBoundModifier::None) {
+                            return unsupported("`?`-modified trait object bound");
+                        }
+                        let def_id = resolve_path(tcx, current_module, &trait_bound.path)?;
+                        validate_kind!(tcx, def_id, "trait", DefKind::Trait)?;
+                        if tcx.trait_is_auto(def_id) {
+                            autos.push(def_id);
+                        } else if principal.is_some() {
+                            return unsupported("trait object with two principal traits");
+                        } else {
+                            let mut args = Vec::new();
+                            if let Some(syn::PathArguments::AngleBracketed(syn_args)) =
+                                trait_bound.path.segments.last().map(|seg| &seg.arguments)
+                            {
+                                for arg in &syn_args.args {
+                                    match arg {
+                                        syn::GenericArgument::Type(syn_ty) => {
+                                            args.push(resolve_ty(tcx, current_module, syn_ty)?)
+                                        }
+                                        syn::GenericArgument::Lifetime(_) => {}
+                                        syn::GenericArgument::AssocType(_) => {
+                                            return unsupported(
+                                                "trait object with an associated type binding",
+                                            );
+                                        }
+                                        syn::GenericArgument::Const(_)
+                                        | syn::GenericArgument::AssocConst(_)
+                                        | syn::GenericArgument::Constraint(_) => {
+                                            return unsupported(
+                                                "trait object with non-type generic arguments",
+                                            );
+                                        }
+                                        _ => {
+                                            return unsupported(
+                                                "trait object with non-type generic arguments",
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                            principal = Some((def_id, args));
+                        }
+                    }
+                    syn::TypeParamBound::Lifetime(_) => {}
+                    syn::TypeParamBound::PreciseCapture(_) | syn::TypeParamBound::Verbatim(_) => {
+                        return unsupported("trait object bound");
+                    }
+                    _ => return unsupported("trait object bound"),
+                }
+            }
+            let Some((principal_id, principal_args)) = principal else {
+                return unsupported("trait object without a principal trait");
+            };
+            if !tcx.is_dyn_compatible(principal_id) {
+                return unsupported("trait object for a non-dyn-compatible trait");
+            }
+            // A principal trait with associated types requires those bindings in a
+            // well-formed `dyn` (`dyn Iterator<Item = ..>`). This arm never builds
+            // projection predicates (a written binding is already rejected above), so
+            // it cannot construct such a `dyn`; building a projection-less one trips
+            // `new_dynamic`'s debug projection-count assertion (an ICE in debug builds).
+            // Reject instead. The count mirrors that assertion exactly: associated items
+            // across the principal's supertraits that a `dyn` must name with a binding.
+            let expected_projections: usize = rustc_middle::ty::elaborate::supertraits(
+                tcx,
+                rustc_middle::ty::Binder::dummy(rustc_middle::ty::TraitRef::identity(
+                    tcx,
+                    principal_id,
+                )),
+            )
+            .map(|principal| {
+                tcx.associated_items(principal.def_id())
+                    .in_definition_order()
+                    .filter(|item| item.can_have_equality_constraint(tcx))
+                    .filter(|item| !item.is_impl_trait_in_trait())
+                    .filter(|item| !tcx.generics_require_sized_self(item.def_id))
+                    .count()
+            })
+            .sum();
+            if expected_projections > 0 {
+                return unsupported("trait object with an unspecified associated type");
+            }
+            // Trait generics start with the implicit `Self`; the written arguments
+            // must match the remaining parameters exactly, and those must all be
+            // type parameters. The kind guard also protects `TraitRef::new`, which
+            // asserts argument kinds against the generics.
+            let generics = tcx.generics_of(principal_id);
+            if generics.own_params.len() != principal_args.len() + 1 {
+                return unsupported("trait object with mismatched generic arguments");
+            }
+            if generics.own_params.iter().skip(1).any(|param| {
+                !matches!(param.kind, rustc_middle::ty::GenericParamDefKind::Type { .. })
+            }) {
+                return unsupported("trait object with non-type trait parameters");
+            }
+            let internal_args = std::iter::once(rustc_middle::ty::GenericArg::from(tcx.types.unit))
+                .chain(principal_args.iter().map(|ty| {
+                    rustc_middle::ty::GenericArg::from(rustc_internal::internal(tcx, *ty))
+                }));
+            let trait_ref = rustc_middle::ty::TraitRef::new(tcx, principal_id, internal_args);
+            let existential = rustc_middle::ty::ExistentialTraitRef::erase_self_ty(tcx, trait_ref);
+            autos.sort_by_key(|def_id| tcx.def_path_hash(*def_id));
+            autos.dedup();
+            let mut predicates = vec![rustc_middle::ty::Binder::dummy(
+                rustc_middle::ty::ExistentialPredicate::Trait(existential),
+            )];
+            predicates.extend(autos.into_iter().map(|d| {
+                rustc_middle::ty::Binder::dummy(rustc_middle::ty::ExistentialPredicate::AutoTrait(
+                    d,
+                ))
+            }));
+            let dyn_ty = rustc_middle::ty::Ty::new_dynamic(
+                tcx,
+                tcx.mk_poly_existential_predicates(&predicates),
+                tcx.lifetimes.re_erased,
+            );
+            Ok(rustc_internal::stable(dyn_ty))
+        }
         Type::Verbatim(_) => unsupported("unknown paths"),
         _ => {
             unreachable!()
