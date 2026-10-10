@@ -17,10 +17,11 @@ use crate::rustc_public::CrateDef;
 use itertools::Itertools;
 use rustc_middle::ty::TyCtxt;
 use rustc_public::mir::mono::Instance;
+use rustc_public::mir::visit::{Location, MirVisitor, PlaceContext, terminator_location};
 use rustc_public::mir::{
-    AggregateKind, BasicBlock, BasicBlockIdx, Body, ConstOperand, Operand, Place, Rvalue,
-    Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind, VarDebugInfoContents,
-    WithRetag,
+    AggregateKind, BasicBlock, BasicBlockIdx, Body, ConstOperand, Local, Operand, Place,
+    ProjectionElem, Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
+    VarDebugInfoContents, WithRetag,
 };
 use rustc_public::ty::{FnDef, GenericArgKind, MirConst, RigidTy, TyKind, UintTy};
 use rustc_span::Symbol;
@@ -622,9 +623,10 @@ impl LoopContractPass {
         &self,
         body: &mut MutableBody,
         loop_head_map: &HashMap<usize, usize>,
-    ) -> Vec<usize> {
+    ) -> (Vec<usize>, HashMap<usize, HashSet<usize>>) {
         let mut add_assign_list: Vec<(usize, Statement)> = Vec::new();
         let mut found_local_list: Vec<usize> = Vec::new();
+        let mut head_live: HashMap<usize, HashSet<usize>> = HashMap::new();
         let localvars = self.get_user_defined_variables(body);
         let mut blocks_stmts: Vec<(usize, Vec<Statement>)> = Vec::new();
         for (block_idx, block) in body.blocks().iter().enumerate() {
@@ -651,6 +653,7 @@ impl LoopContractPass {
                         if matches!(next_stmt.kind.clone(), StatementKind::Assign(lhs,_) if lhs.local == local)
                         {
                             found_local_list.push(local);
+                            head_live.entry(closest_loop_head).or_default().insert(local);
                             add_assign_list.push((closest_loop_head, stmt.clone()));
                             add_assign_list.push((closest_loop_head, next_stmt.clone()));
                             new_stmts.push(next_stmt.clone());
@@ -668,6 +671,7 @@ impl LoopContractPass {
                             && matches!(fifth_stmt.kind.clone(), StatementKind::StorageDead(dead_local) if dead_local == temp_local)
                         {
                             found_local_list.push(local);
+                            head_live.entry(closest_loop_head).or_default().insert(local);
                             add_assign_list.push((closest_loop_head, stmt.clone()));
                             add_assign_list.push((closest_loop_head, next_stmt.clone()));
                             add_assign_list.push((closest_loop_head, third_stmt.clone()));
@@ -700,7 +704,7 @@ impl LoopContractPass {
                 InsertPosition::Before,
             );
         }
-        found_local_list
+        (found_local_list, head_live)
     }
 
     fn terminator_of_new_target(old: Terminator, new_target: usize) -> Terminator {
@@ -775,16 +779,111 @@ impl LoopContractPass {
         }
     }
 
+    /// Blocks of each `StorageLive(local)` statement in the body. A local
+    /// declared inside a loop appears here with a block that maps to that
+    /// loop's head in `loop_head_map`.
+    fn storagelive_blocks(body: &MutableBody) -> HashMap<usize, Vec<usize>> {
+        let mut map: HashMap<usize, Vec<usize>> = HashMap::new();
+        for (bb, block) in body.blocks().iter().enumerate() {
+            for stmt in &block.statements {
+                if let StatementKind::StorageLive(local) = stmt.kind {
+                    map.entry(local).or_default().push(bb);
+                }
+            }
+        }
+        map
+    }
+
+    /// Blocks that define each local with a whole-local statement `Assign`.
+    /// Used only for locals without a `StorageLive` to decide whether they are
+    /// declared inside a loop; see `group_reads_dead_local`. A write through a
+    /// pointer (`*p = v`) or into part of a local (`x.f = v`) is not a
+    /// definition, so `defines_local` filters it out — and a `Call`
+    /// destination does not count either: rustc omits storage markers for
+    /// such locals, their storage spans the whole function, and the head copy
+    /// reads them exactly where the unguarded pass always has. Only
+    /// statement-form whole-local assigns (e.g. an arithmetic result like
+    /// `mid` in a binary search) stay tracked, so a group reading one is
+    /// still refused.
+    fn assign_blocks(body: &MutableBody) -> HashMap<usize, Vec<usize>> {
+        let mut map: HashMap<usize, Vec<usize>> = HashMap::new();
+        for (bb, block) in body.blocks().iter().enumerate() {
+            for stmt in &block.statements {
+                if let StatementKind::Assign(place, _) = &stmt.kind
+                    && Self::defines_local(place)
+                {
+                    map.entry(place.local).or_default().push(bb);
+                }
+            }
+        }
+        map
+    }
+
+    /// True when `place` is a whole-local assignment: an empty projection, which
+    /// brings the local's entire value into existence and so defines it. A write
+    /// through a pointer the local holds (`*p = v`) or into part of the local
+    /// (`x.f = v`, `x[i] = v`) presumes the local already exists, so it is not a
+    /// definition site.
+    fn defines_local(place: &Place) -> bool {
+        place.projection.is_empty()
+    }
+
+    /// True when copying this group to the loop head would read a local that
+    /// is declared inside the same loop, i.e. dead at the head. `uses` is the
+    /// ordered walk of the group's code; `already_live` holds the locals an
+    /// earlier hoist has already made live at this head.
+    ///
+    /// A local that carries a `StorageLive` is declared-in-this-loop when that
+    /// `StorageLive` sits in a loop-body block. Some locals never get a
+    /// `StorageLive` (e.g. an arithmetic result like `mid` in a binary
+    /// search); for those we fall back to their definition sites: the local is
+    /// declared-in-this-loop when every block that assigns it is inside this
+    /// loop (so a value computed before the loop, assigned outside it, still
+    /// counts as live at the head).
+    ///
+    /// The fallback is deliberately conservative in two directions that can
+    /// leave a move in place (a spurious failure, never an unsound pass): a
+    /// local whose sole in-loop definition uses a write form `assign_blocks`
+    /// does not track, and a local assigned only in an inner loop but read by
+    /// an outer-loop-head group, whose assign blocks map to the inner head.
+    fn group_reads_dead_local(
+        uses: &GroupLocalUses,
+        group_loop_head: usize,
+        loop_head_map: &HashMap<usize, usize>,
+        storagelive_map: &HashMap<usize, Vec<usize>>,
+        assign_map: &HashMap<usize, Vec<usize>>,
+        already_live: Option<&HashSet<usize>>,
+    ) -> bool {
+        let in_this_loop = |bb: &usize| loop_head_map.get(bb) == Some(&group_loop_head);
+        uses.mentions
+            .iter()
+            .filter(|local| !already_live.is_some_and(|live| live.contains(*local)))
+            .any(|local| match storagelive_map.get(local) {
+                Some(bbs) => bbs.iter().any(in_this_loop),
+                // No `StorageLive`: declared-in-loop iff every definition site is.
+                None => assign_map
+                    .get(local)
+                    .is_some_and(|bbs| !bbs.is_empty() && bbs.iter().all(in_this_loop)),
+            })
+    }
+
     //Move all variables initiation using function-call inside the loop body to the loop-head
+    #[allow(clippy::too_many_arguments)]
     fn move_storagelive_call_to_loophead(
         &self,
         body: &mut MutableBody,
         loop_head_map: &HashMap<usize, usize>,
+        storagelive_map: &HashMap<usize, Vec<usize>>,
+        assign_map: &HashMap<usize, Vec<usize>>,
         found_local_list: Vec<usize>,
+        head_live: &mut HashMap<usize, HashSet<usize>>,
+        visit_loc: Location,
     ) {
         let mut found_local_list = found_local_list;
         let localvars = self.get_storage_moving_variables(body);
         let forloopvars = self.get_kaniiter_variables(body);
+        let firstpat_vars: Vec<usize> =
+            self.get_first_pats_and_nth_pats(body).iter().map(|(first, ..)| *first).collect();
         let mut current_user_local = 0;
         let mut current_local_decl_blocks: Vec<BasicBlock> = Vec::new();
         let mut move_call_list: Vec<(usize, Vec<BasicBlock>)> = Vec::new();
@@ -826,7 +925,51 @@ impl LoopContractPass {
                 && dest.local == current_user_local
                 && current_user_local != 0
             {
-                move_call_list.push((closest_loop_head, current_local_decl_blocks.clone()));
+                // The splice helpers re-target each moved block's terminator via
+                // `get_mut_target_ref`, which only supports terminators with a single
+                // `target` (`Call` with a return target, `Goto`, `Assert`, `Drop`).
+                // A group spanning any other terminator (e.g. the `SwitchInt` of a
+                // branching initializer) cannot be moved; before this guard,
+                // attempting to move it panicked there.
+                let retargetable = current_local_decl_blocks.iter().all(|b| {
+                    matches!(
+                        b.terminator.kind,
+                        TerminatorKind::Call { target: Some(_), .. }
+                            | TerminatorKind::Goto { .. }
+                            | TerminatorKind::Assert { .. }
+                            | TerminatorKind::Drop { .. }
+                    )
+                });
+                // The gate covers liveness only: it refuses a copy that would
+                // read storage not yet live at the head. It does not model the
+                // copied code's own effects. A called function's side effects,
+                // a `kani::assume`, or a panic run once at the head, on paths
+                // where the body may never run (#4982).
+                let uses = GroupLocalUses::analyze(&current_local_decl_blocks, visit_loc);
+                // The for-loop machinery (kaniiter, firstpat tuples) keeps its
+                // move unconditionally. A nested `for` whose range reads
+                // outer-loop state computes its iterator once from the outer
+                // variable's value at entry (also #4982).
+                let machinery = forloopvars.contains(&current_user_local)
+                    || firstpat_vars.contains(&current_user_local);
+                if retargetable
+                    && (machinery
+                        || !Self::group_reads_dead_local(
+                            &uses,
+                            closest_loop_head,
+                            loop_head_map,
+                            storagelive_map,
+                            assign_map,
+                            head_live.get(&closest_loop_head),
+                        ))
+                {
+                    move_call_list.push((closest_loop_head, current_local_decl_blocks.clone()));
+                    // The copy makes the group's locals live at this head for
+                    // every later group that reads them — machinery moves too.
+                    let live = head_live.entry(closest_loop_head).or_default();
+                    live.insert(current_user_local);
+                    live.extend(uses.defined.iter().copied());
+                }
                 current_local_decl_blocks = Vec::new();
                 current_user_local = 0;
             }
@@ -937,10 +1080,20 @@ impl LoopContractPass {
     /// This function transform the function body as described in fn transform.
     /// It is the core of fn transform, and is separated just to avoid code repetition.
     fn transform_body_with_loop(&mut self, tcx: TyCtxt, body: Body) -> (bool, Body) {
+        // One location value to drive the group visitor; its span is unused.
+        let visit_loc = terminator_location(&body, &0);
         let mut new_body = MutableBody::from(body);
         self.replace_first_pat_by_nth_pat(&mut new_body);
         let loop_head_map = self.get_associated_loop_head_hashmap(&new_body, tcx);
-        let found_local_list =
+        // Snapshot where each local is declared (StorageLive) and assigned, against
+        // the original body and its block indices, before the hoisting passes move
+        // statements to the loop head. The call-move gate consults these to decide
+        // which locals a group reads are loop-body-local (dead at the head). Original
+        // block indices stay valid for the gate: assign-move only moves statements
+        // within existing blocks and transform_bb only appends blocks at the end.
+        let storagelive_map = Self::storagelive_blocks(&new_body);
+        let assign_map = Self::assign_blocks(&new_body);
+        let (found_local_list, mut head_live) =
             self.move_storagelive_assign_to_loophead(&mut new_body, &loop_head_map);
         let mut contain_loop_contracts: bool = false;
 
@@ -971,7 +1124,15 @@ impl LoopContractPass {
                 }
             }
         }
-        self.move_storagelive_call_to_loophead(&mut new_body, &loop_head_map, found_local_list);
+        self.move_storagelive_call_to_loophead(
+            &mut new_body,
+            &loop_head_map,
+            &storagelive_map,
+            &assign_map,
+            found_local_list,
+            &mut head_live,
+            visit_loc,
+        );
         (contain_loop_contracts, new_body.into())
     }
 
@@ -1244,5 +1405,93 @@ impl LoopContractPass {
             }
         }
         contain_loop_contracts
+    }
+}
+
+/// Ordered walk of a declaration group's blocks, exactly as the splice would
+/// copy them to the loop head. `mentions` collects every local the copied
+/// code would read (or write through / into part of) before the group itself
+/// defines it; `defined` collects the locals the group brings into existence:
+/// `StorageLive`s, whole-local `Assign` destinations and whole-local `Call`
+/// destinations. Reads are visited before the write of the same statement or
+/// call, so a group that reads a local and only later whole-writes it still
+/// reports the early read.
+struct GroupLocalUses {
+    defined: HashSet<usize>,
+    mentions: HashSet<usize>,
+}
+
+impl GroupLocalUses {
+    fn analyze(blocks: &[BasicBlock], loc: Location) -> Self {
+        let mut uses = GroupLocalUses { defined: HashSet::new(), mentions: HashSet::new() };
+        for block in blocks {
+            for stmt in &block.statements {
+                uses.visit_statement(stmt, loc);
+            }
+            uses.visit_terminator(&block.terminator, loc);
+        }
+        uses
+    }
+
+    /// A place access that presumes the local already exists: the base local
+    /// and any `Index` locals are reads the head copy would evaluate.
+    fn mention_place(&mut self, place: &Place) {
+        self.mention_local(place.local);
+        for elem in &place.projection {
+            if let ProjectionElem::Index(local) = elem {
+                self.mention_local(*local);
+            }
+        }
+    }
+
+    fn mention_local(&mut self, local: usize) {
+        if !self.defined.contains(&local) {
+            self.mentions.insert(local);
+        }
+    }
+}
+
+impl MirVisitor for GroupLocalUses {
+    fn visit_statement(&mut self, stmt: &Statement, location: Location) {
+        match &stmt.kind {
+            // The rvalue's reads happen before the destination's write, so
+            // visit it first: `x = x + 1` must report the read of `x`.
+            StatementKind::Assign(place, rvalue) => {
+                self.visit_rvalue(rvalue, location);
+                if LoopContractPass::defines_local(place) {
+                    self.defined.insert(place.local);
+                } else {
+                    self.mention_place(place);
+                }
+            }
+            StatementKind::StorageLive(local) => {
+                self.defined.insert(*local);
+            }
+            StatementKind::StorageDead(_) => {}
+            _ => self.super_statement(stmt, location),
+        }
+    }
+
+    fn visit_terminator(&mut self, term: &Terminator, location: Location) {
+        match &term.kind {
+            // The callee and arguments are read before the destination is
+            // written: visit them first, then record the destination.
+            TerminatorKind::Call { func, args, destination, .. } => {
+                self.visit_operand(func, location);
+                for arg in args {
+                    self.visit_operand(arg, location);
+                }
+                if LoopContractPass::defines_local(destination) {
+                    self.defined.insert(destination.local);
+                } else {
+                    self.mention_place(destination);
+                }
+            }
+            _ => self.super_terminator(term, location),
+        }
+    }
+
+    fn visit_local(&mut self, local: &Local, _ptx: PlaceContext, _location: Location) {
+        self.mention_local(*local);
     }
 }
