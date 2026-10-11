@@ -546,6 +546,9 @@ impl RustcInternalMir for TerminatorKind {
         match self {
             TerminatorKind::Goto { target } => rustc_middle::mir::TerminatorKind::Goto {
                 target: rustc_middle::mir::BasicBlock::from_usize(*target),
+                // Loop hint attributes (`#[unroll]`) have no equivalent in the stable
+                // representation, and Kani-synthesized gotos carry none.
+                loop_hint_attrs: Default::default(),
             },
             TerminatorKind::SwitchInt { discr, targets } => {
                 rustc_middle::mir::TerminatorKind::SwitchInt {
@@ -607,9 +610,6 @@ impl RustcInternalMir for Terminator {
                 self.source_info.span,
             )),
             kind: self.kind.internal_mir(tcx),
-            // Loop hint attributes (`#[unroll]`) have no equivalent in the stable
-            // representation, and Kani-synthesized terminators carry none.
-            loop_hint_attrs: Default::default(),
         }
     }
 }

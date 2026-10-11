@@ -1558,6 +1558,11 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             // `tcx.types` entry for it, and CBMC has no bfloat16 type either. rustc itself
             // declines to map this primitive back to a Rust type (`rustc_abi::layout::ty`).
             Float::F16B => unimplemented!("bfloat16 (`f16b`) is not supported by Kani"),
+            // PowerPC's double-double `long double`, which only exists on PowerPC targets. Kani
+            // supports none of them, and CBMC has no double-double type.
+            Float::PpcF128 => {
+                unimplemented!("PowerPC double-double (`ppcf128`) is not supported by Kani")
+            }
         }
     }
 
