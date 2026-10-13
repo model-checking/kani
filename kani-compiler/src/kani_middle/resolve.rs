@@ -11,7 +11,7 @@ use crate::kani_middle::stable_fn_def;
 use quote::ToTokens;
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::{CRATE_DEF_INDEX, DefId, LOCAL_CRATE, LocalDefId, LocalModId};
-use rustc_hir::{ItemKind, UseKind};
+use rustc_hir::{ItemKind, UseKind, UseTree};
 use rustc_middle::ty::TyCtxt;
 use rustc_middle::ty::fast_reject::{self, TreatParams};
 use rustc_public::CrateDef;
@@ -533,11 +533,24 @@ fn resolve_relative(tcx: TyCtxt, current_module: LocalModId, name: &str) -> Rela
     // direct module items take precedence over foreign items.
     let result = tcx.hir_module_free_items(current_module).find_map(|item_id| {
         let item = tcx.hir_item(item_id);
+        // A `use` item is one tree of imports (`use a::{b, c::{d, *}}`), so look for `name`, and
+        // collect globs, at every level of it.
+        if let ItemKind::Use(tree) = item.kind {
+            let mut found = None;
+            visit_use_tree(&tree, &mut |tree| match tree.kind {
+                UseKind::Single(ident) if found.is_none() && ident.as_str() == name => {
+                    found =
+                        tree.prefix.res.present_items().filter_map(|res| res.opt_def_id()).next();
+                }
+                // Do not immediately try to resolve the path using this glob,
+                // since paths resolved via non-globs take precedence.
+                UseKind::Glob => glob_imports.extend(tree.prefix.res.present_items()),
+                UseKind::Single(_) | UseKind::Nested { .. } => {}
+            });
+            return found;
+        }
         if item.kind.ident().is_some_and(|ident| ident.as_str() == name) {
             match item.kind {
-                ItemKind::Use(use_path, UseKind::Single(_)) => {
-                    use_path.res.present_items().filter_map(|res| res.opt_def_id()).next()
-                }
                 ItemKind::ExternCrate(orig_name, _) => resolve_external(
                     tcx,
                     orig_name.as_ref().map(|sym| sym.as_str()).unwrap_or(name),
@@ -545,11 +558,6 @@ fn resolve_relative(tcx: TyCtxt, current_module: LocalModId, name: &str) -> Rela
                 _ => Some(item.owner_id.def_id.to_def_id()),
             }
         } else {
-            if let ItemKind::Use(use_path, UseKind::Glob) = item.kind {
-                // Do not immediately try to resolve the path using this glob,
-                // since paths resolved via non-globs take precedence.
-                glob_imports.extend(use_path.res.present_items());
-            }
             // Collect foreign items declared inside `extern` blocks so we can
             // search them if the name is not found as a direct module item.
             // This handles `extern "C" { fn foo(); }` where `foo` is a child
@@ -575,6 +583,18 @@ fn resolve_relative(tcx: TyCtxt, current_module: LocalModId, name: &str) -> Rela
         return RelativeResolution::Found(def_id);
     }
     RelativeResolution::Globs(glob_imports)
+}
+
+/// Call `f` on `tree` and on every tree nested in it. Since nightly-2026-10-06, rustc keeps
+/// `use a::{b, c}` as one HIR item holding a tree of imports, where it used to lower it to one item
+/// per imported name (rust-lang/rust#161349), so every level has to be visited.
+fn visit_use_tree<'hir>(tree: &UseTree<'hir>, f: &mut impl FnMut(&UseTree<'hir>)) {
+    f(tree);
+    if let UseKind::Nested { items } = tree.kind {
+        for (nested, ..) in items {
+            visit_use_tree(nested, f);
+        }
+    }
 }
 
 /// Resolves a path relative to a local or foreign module.
