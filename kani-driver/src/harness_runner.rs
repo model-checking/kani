@@ -92,6 +92,19 @@ fn run_until_abort<I: Sync, T: Send>(
     Ok((payloads, aborted.load(Ordering::Relaxed)))
 }
 
+/// Identify the worker on every line of a rendered verification result.
+fn prefix_thread_lines(output: &str, thread_index: usize) -> String {
+    let mut prefixed = output
+        .lines()
+        .map(|line| format!("Thread {thread_index}: {line}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    if output.ends_with('\n') {
+        prefixed.push('\n');
+    }
+    prefixed
+}
+
 impl<'pr> HarnessRunner<'_, 'pr> {
     /// Given a [`HarnessRunner`] (to abstract over how these harnesses were generated), this runs
     /// the proof-checking process for each harness in `harnesses`.
@@ -171,13 +184,13 @@ impl KaniSession {
     ) {
         if self.should_print_output() {
             if self.args.output_into_files {
-                self.write_output_to_file(result, harness, thread_index);
+                self.write_output_to_file(result, harness);
             }
 
             let output = result.render(&self.args.output_format(), harness.attributes.should_panic);
 
             if rayon::current_num_threads() > 1 {
-                self.emit_line(&format!("Thread {thread_index}: {output}"));
+                self.emit_line(&prefix_thread_lines(&output, thread_index));
             } else {
                 self.emit_line(&output);
             }
@@ -203,12 +216,7 @@ impl KaniSession {
         !self.args.common_args.quiet && self.args.output_format() != OutputFormat::Old
     }
 
-    fn write_output_to_file(
-        &self,
-        result: &VerificationResult,
-        harness: &HarnessMetadata,
-        thread_index: usize,
-    ) {
+    fn write_output_to_file(&self, result: &VerificationResult, harness: &HarnessMetadata) {
         let target_dir = self.result_output_dir().unwrap();
         let file_name = target_dir.join(harness.pretty_name.clone());
         let path = Path::new(&file_name);
@@ -216,11 +224,7 @@ impl KaniSession {
 
         std::fs::create_dir_all(prefix).unwrap();
         let mut file = File::create(&file_name).unwrap();
-        let mut file_output =
-            result.render(&OutputFormat::Regular, harness.attributes.should_panic);
-        if rayon::current_num_threads() > 1 {
-            file_output = format!("Thread {thread_index}:\n{file_output}");
-        }
+        let file_output = result.render(&OutputFormat::Regular, harness.attributes.should_panic);
 
         if let Err(e) = writeln!(file, "{file_output}") {
             eprintln!(
@@ -395,11 +399,24 @@ impl KaniSession {
 
 #[cfg(test)]
 mod tests {
-    use super::{Completed, in_input_order, run_until_abort};
+    use super::{Completed, in_input_order, prefix_thread_lines, run_until_abort};
     use anyhow::{Result, anyhow};
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::Duration;
+
+    #[test]
+    fn thread_prefixes_preserve_trailing_newlines() {
+        for (output, expected) in [
+            ("", ""),
+            ("result", "Thread 2: result"),
+            ("result\n", "Thread 2: result\n"),
+            ("\nresult\n", "Thread 2: \nThread 2: result\n"),
+            ("result\n\n", "Thread 2: result\nThread 2: \n"),
+        ] {
+            assert_eq!(prefix_thread_lines(output, 2), expected);
+        }
+    }
 
     /// What one unit of work should do when it runs.
     #[derive(Clone, Copy)]
