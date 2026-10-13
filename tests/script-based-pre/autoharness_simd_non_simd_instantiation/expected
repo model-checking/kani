@@ -1,0 +1,4 @@
+--- the reproducer is instantiated with the SIMD type, not with a scalar
+--- reaching the invalid instantiation through a call reports it, rather than crashing
+--- a function whose SIMD operand types are fixed is unaffected
+--- and the run finishes, rather than aborting the compiler

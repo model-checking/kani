@@ -350,6 +350,7 @@ pub fn process_harness_results(
                         "exit_status": match &result.result.results {
                             Err(crate::call_cbmc::ExitStatus::Timeout) => "timeout".to_string(),
                             Err(crate::call_cbmc::ExitStatus::OutOfMemory) => "out_of_memory".to_string(),
+                            Err(crate::call_cbmc::ExitStatus::IncompleteResults(code)) => format!("incomplete_results_exit_code_{}", code),
                             Err(crate::call_cbmc::ExitStatus::Other(code)) => format!("exit_code_{}", code),
                             Ok(_) => "properties_failed".to_string()
                         }

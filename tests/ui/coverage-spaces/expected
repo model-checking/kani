@@ -1,0 +1,4 @@
+VERIFICATION:- SUCCESSFUL
+Source-based code coverage results:
+a a.rs (a::c)
+ * 4:1 - 4:14 COVERED
