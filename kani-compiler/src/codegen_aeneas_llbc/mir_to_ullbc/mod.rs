@@ -1447,7 +1447,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 let internal = rustc_internal::internal(self.tcx, def_id);
                 let builtin = self
                     .tcx
-                    .is_lang_item(internal, rustc_hir::attrs::lang_items::LangItem::OwnedBox)
+                    .is_lang_item(internal, rustc_attr_ir::lang_items::LangItem::OwnedBox)
                     .then_some(CharonBuiltinAdt::Box);
                 CharonTy::new(CharonTyKind::Adt(CharonTypeDeclRef {
                     id: c_typedeclid,

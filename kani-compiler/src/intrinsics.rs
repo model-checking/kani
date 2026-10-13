@@ -3,8 +3,10 @@
 
 //! Single source of truth about which intrinsics we support.
 
+use rustc_middle::ty::TyCtxt;
 use rustc_public::{
     mir::{Mutability, mono::Instance},
+    rustc_internal,
     ty::{FloatTy, IntTy, RigidTy, Ty, TyKind, UintTy},
 };
 
@@ -217,6 +219,22 @@ impl Intrinsic {
         }
     }
 
+    /// Whether this is a SIMD lane-wise comparison. Its result is a mask: a vector with as many
+    /// lanes as the operands, whose lanes are integers (all ones for true, zero for false). rustc
+    /// rejects any other result type with `E0511`, and Kani's codegen relies on the same shape;
+    /// see [simd_mask_problem].
+    pub fn is_simd_comparison(&self) -> bool {
+        matches!(
+            self,
+            Intrinsic::SimdEq
+                | Intrinsic::SimdGe
+                | Intrinsic::SimdGt
+                | Intrinsic::SimdLe
+                | Intrinsic::SimdLt
+                | Intrinsic::SimdNe
+        )
+    }
+
     /// Create an intrinsic enum from a given intrinsic instance, shallowly validating the argument types.
     pub fn from_instance(intrinsic_instance: &Instance) -> Self {
         let intrinsic_str = intrinsic_instance.intrinsic_name().unwrap();
@@ -368,7 +386,7 @@ impl Intrinsic {
             }
             // For const eval of nullary intrinsics, see https://github.com/rust-lang/rust/pull/142839
             "needs_drop" => unreachable!(
-                "Expected nullary intrinsic `core::intrinsics::type_id` to be const-evaluated before codegen"
+                "Expected nullary intrinsic `core::intrinsics::needs_drop` to be const-evaluated before codegen"
             ),
             // As of https://github.com/rust-lang/rust/pull/110822 the `offset` intrinsic is lowered to `mir::BinOp::Offset`
             "offset" => unreachable!(
@@ -420,7 +438,7 @@ impl Intrinsic {
                 Self::Transmute
             }
             "type_id" => unreachable!(
-                "Expected nullary intrinsic `core::intrinsics::type_id` to be const-evaluated before codegen"
+                "Expected nullary intrinsic `core::intrinsics::reflection::type_id` to be const-evaluated before codegen"
             ),
             "type_name" => unreachable!(
                 "Expected nullary intrinsic `core::intrinsics::type_name` to be const-evaluated before codegen"
@@ -870,4 +888,28 @@ fn try_match_f64(intrinsic_instance: &Instance) -> Option<Intrinsic> {
         }
         _ => None,
     }
+}
+
+/// Why `ret_ty` cannot be the result of a SIMD comparison over the SIMD type `operand_ty`, if it
+/// cannot, as a phrase for a diagnostic. A comparison's result is a mask: a vector with integer
+/// lanes and as many lanes as the operands. rustc's codegen backends reject anything else with
+/// `E0511`; Kani has to check it itself, because it replaces the backend.
+///
+/// Both autoharness (which rejects candidate instantiations that break the rule) and codegen
+/// (which reports the ones it is handed anyway as unsupported) call this, so they cannot disagree
+/// on what a valid mask is. See <https://github.com/model-checking/kani/issues/4950>.
+///
+/// `rustc_public` does not expose a SIMD type's lane count or lane type, so ask rustc for them.
+pub fn simd_mask_problem(tcx: TyCtxt, operand_ty: Ty, ret_ty: Ty) -> Option<String> {
+    let ret = rustc_internal::internal(tcx, ret_ty);
+    if !ret.is_simd() {
+        return Some("not a SIMD type".to_string());
+    }
+    let (operand_lanes, _) = rustc_internal::internal(tcx, operand_ty).simd_size_and_type(tcx);
+    let (ret_lanes, ret_lane_ty) = ret.simd_size_and_type(tcx);
+    if !ret_lane_ty.is_integral() {
+        return Some(format!("non-integer `{ret_lane_ty}` lanes"));
+    }
+    (ret_lanes != operand_lanes)
+        .then(|| format!("{ret_lanes} lanes for a {operand_lanes}-lane comparison"))
 }
