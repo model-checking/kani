@@ -8,7 +8,7 @@
 //! according to their stub configuration.
 
 use crate::args::{Arguments, ReachabilityType};
-use crate::intrinsics::Intrinsic;
+use crate::intrinsics::{Intrinsic, simd_mask_problem};
 use crate::kani_middle::attributes::{KaniAttributes, is_proof_harness};
 use crate::kani_middle::kani_functions::{KaniHook, KaniIntrinsic, KaniModel};
 use crate::kani_middle::metadata::{
@@ -899,8 +899,9 @@ fn resolve_deferred_fn_slots<'tcx>(
     true
 }
 
-/// The SIMD intrinsic call in `instance`'s body whose vector operand this instantiation turned
-/// into a non-SIMD type, if there is one, as `(intrinsic name, operand type)`.
+/// Why this instantiation makes a SIMD intrinsic call in `instance`'s body invalid, if it does: a
+/// vector operand turned into a non-SIMD type, or a comparison whose result is not a valid mask
+/// (see [simd_mask_problem]).
 ///
 /// rustc's codegen backends reject such a monomorphization with `E0511`, so the call site cannot
 /// appear in a program that `cargo build` accepts: nothing bounds the parameter of a helper like
@@ -914,7 +915,7 @@ fn resolve_deferred_fn_slots<'tcx>(
 /// function calling a generic SIMD helper) is reported by codegen against the harness that reached
 /// it, which fails that harness instead of the run; see
 /// <https://github.com/model-checking/kani/issues/4926>.
-fn invalid_simd_instantiation(instance: Instance) -> Option<(String, Ty)> {
+fn invalid_simd_instantiation(tcx: TyCtxt, instance: Instance) -> Option<String> {
     let body = instance.body()?;
     body.blocks.iter().find_map(|block| {
         let TerminatorKind::Call { func, .. } = &block.terminator.kind else {
@@ -929,9 +930,24 @@ fn invalid_simd_instantiation(instance: Instance) -> Option<(String, Ty)> {
         // a harness should not be able to trip an assertion that codegen would not.
         let name = callee.intrinsic_name().filter(|name| name.starts_with("simd_"))?;
         let sig = callee.ty().kind().fn_sig()?.skip_binder();
-        let operand_ty =
-            Intrinsic::from_instance(&callee).simd_vector_operand(sig.inputs(), sig.output())?;
-        (!operand_ty.kind().is_simd()).then_some((name, operand_ty))
+        let intrinsic = Intrinsic::from_instance(&callee);
+        let operand_ty = intrinsic.simd_vector_operand(sig.inputs(), sig.output())?;
+        if !operand_ty.kind().is_simd() {
+            return Some(format!(
+                "the body calls the SIMD intrinsic `{name}`, which rustc rejects for the \
+                 non-SIMD type `{operand_ty}` this instantiation gives it"
+            ));
+        }
+        if intrinsic.is_simd_comparison()
+            && let Some(problem) = simd_mask_problem(tcx, operand_ty, sig.output())
+        {
+            return Some(format!(
+                "the body calls the SIMD comparison `{name}`, which rustc rejects for the result \
+                 type `{}` ({problem})",
+                sig.output()
+            ));
+        }
+        None
     })
 }
 
@@ -1049,13 +1065,9 @@ fn choose_generic_instantiation(
         // as `NoBody` by `skip_reason`, rather than falling through to a generic-function skip
         // reason here.
         let instance = Instance::resolve(def, &args).ok()?;
-        if let Some((name, operand_ty)) = invalid_simd_instantiation(instance) {
-            let reason = simd_rejection.take().unwrap_or_else(|| {
-                format!(
-                    "the body calls the SIMD intrinsic `{name}`, which rustc rejects for the \
-                     non-SIMD type `{operand_ty}` this instantiation gives it"
-                )
-            });
+        if let Some(reason) = invalid_simd_instantiation(tcx, instance) {
+            // Keep the first rejection: it is the one for the most common candidate.
+            let reason = simd_rejection.take().unwrap_or(reason);
             simd_rejection.set(Some(reason));
             return None;
         }
