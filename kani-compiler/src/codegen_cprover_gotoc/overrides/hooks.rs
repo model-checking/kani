@@ -1080,6 +1080,19 @@ fn handle_quantifier(
     quantifier_kind: QuantifierKind,
 ) -> Stmt {
     let loc = gcx.codegen_span_stable(span);
+    // The predicate becomes part of a pure expression, which needs its body: `kani::forall!` and
+    // `kani::exists!` always pass a closure. A function pointer could be anything at runtime.
+    if find_closure_instance(&instance).is_none() {
+        let predicate_ty = instance.args().0.last().and_then(|arg| arg.ty().copied());
+        return gcx.codegen_unimplemented_stmt(
+            &format!(
+                "a quantifier whose predicate is not a closure (found `{}`)",
+                predicate_ty.map_or_else(|| "?".to_string(), |ty| ty.to_string())
+            ),
+            loc,
+            "https://github.com/model-checking/kani/issues/new/choose",
+        );
+    }
     let target = target.unwrap();
     let lower_bound = &fargs[0];
     let upper_bound = &fargs[1];
