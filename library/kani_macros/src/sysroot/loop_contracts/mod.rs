@@ -351,8 +351,7 @@ fn while_let_rewrite(loopexpr: Stmt) -> Stmt {
 
         // Transform to loop with match.
         // Keep the label and the remaining attributes of the loop (e.g., a
-        // `#[kani::loop_modifies]` or `#[kani::loop_decreases]` written after
-        // `#[kani::loop_invariant]`).
+        // `#[kani::loop_decreases]` written after `#[kani::loop_invariant]`).
         return parse_quote! {
             #(#attrs)*
             #label loop {
@@ -421,6 +420,7 @@ pub fn transform_for_to_loop(
     loop_id: &str,
 ) -> (Stmt, Option<ForLoopExtraStmts>) {
     // Extract components from the for loop
+    let attrs = for_loop.attrs;
     let label = for_loop.label;
     let pat = *for_loop.pat;
     let expr = for_loop.expr;
@@ -486,9 +486,10 @@ pub fn transform_for_to_loop(
     new_body_stmts.extend(body.stmts.iter().cloned());
 
     // Create the final expression with the iterator initialization.
-    // Keep the label of the loop. Attributes after the invariant are intentionally not carried
-    // over yet: see #4929 (and #4940 for why a loop_modifies clause would then fail).
+    // Keep the label and the remaining attributes of the loop (e.g., a `#[kani::loop_decreases]`
+    // written after `#[kani::loop_invariant]`).
     let loop_loop: Stmt = parse_quote! {
+            #(#attrs)*
             #label while (#kani_index < #kani_iter_len) {
                 #(#new_body_stmts)*
             }
@@ -576,9 +577,106 @@ impl VisitMut for KaniIterLenReplacer {
     }
 }
 
+/// Whether `attr` is a `#[kani::loop_invariant]` attribute, also written with another path that
+/// ends in `loop_invariant` (e.g. a re-export, such as `kani_core::loop_invariant`).
+fn is_loop_invariant_attr(attr: &syn::Attribute) -> bool {
+    attr.path().segments.last().is_some_and(|seg| seg.ident == "loop_invariant")
+}
+
+/// Whether `attr` is a `#[kani::loop_modifies]` attribute, also written with another path that
+/// ends in `loop_modifies`, or the attribute that `loop_modifies` leaves on its loop for
+/// `#[kani::loop_invariant]` (`#[kanitool::loop_modifies]`).
+fn is_loop_modifies_attr(attr: &syn::Attribute) -> bool {
+    attr.path().segments.last().is_some_and(|seg| seg.ident == "loop_modifies")
+}
+
+/// The attributes of `loop_stmt`, if it is a loop.
+fn loop_attrs_mut(loop_stmt: &mut Stmt) -> Option<&mut Vec<syn::Attribute>> {
+    match loop_stmt {
+        Stmt::Expr(Expr::While(ExprWhile { attrs, .. }), _)
+        | Stmt::Expr(Expr::ForLoop(ExprForLoop { attrs, .. }), _)
+        | Stmt::Expr(Expr::Loop(syn::ExprLoop { attrs, .. }), _) => Some(attrs),
+        _ => None,
+    }
+}
+
+/// Remove the other `#[kani::loop_invariant]` attributes of the loop, and return their
+/// invariants. The invariant of a loop with several `#[kani::loop_invariant]` attributes is the
+/// conjunction of their invariants.
+fn take_other_loop_invariants(loop_stmt: &mut Stmt) -> syn::Result<Vec<Expr>> {
+    let Some(attrs) = loop_attrs_mut(loop_stmt) else { return Ok(Vec::new()) };
+    let (invariant_attrs, other_attrs): (Vec<_>, Vec<_>) =
+        std::mem::take(attrs).into_iter().partition(is_loop_invariant_attr);
+    *attrs = other_attrs;
+    invariant_attrs.iter().map(|attr| attr.parse_args::<Expr>()).collect()
+}
+
+/// Remove the `#[kani::loop_modifies]` attributes of the loop, and return their targets, or
+/// `None` if the loop has none. The loop modifies clause of a loop with several
+/// `#[kani::loop_modifies]` attributes has the targets of all of them.
+fn take_loop_modifies(loop_stmt: &mut Stmt) -> syn::Result<Option<Vec<Expr>>> {
+    let Some(attrs) = loop_attrs_mut(loop_stmt) else { return Ok(None) };
+    let (modifies_attrs, other_attrs): (Vec<_>, Vec<_>) =
+        std::mem::take(attrs).into_iter().partition(is_loop_modifies_attr);
+    *attrs = other_attrs;
+    if modifies_attrs.is_empty() {
+        return Ok(None);
+    }
+    let mut targets = Vec::new();
+    for attr in modifies_attrs {
+        match &attr.meta {
+            // `#[kani::loop_modifies]` without parentheses is an empty clause.
+            syn::Meta::Path(_) => {}
+            syn::Meta::List(_) => targets
+                .extend(attr.parse_args_with(Punctuated::<Expr, Token![,]>::parse_terminated)?),
+            syn::Meta::NameValue(_) => {
+                return Err(syn::Error::new_spanned(
+                    attr,
+                    "expected `#[kani::loop_modifies(target1, target2, ...)]`",
+                ));
+            }
+        }
+    }
+    Ok(Some(targets))
+}
+
+/// The statements that bind the targets of the loop modifies clause of a loop to
+/// `kani_loop_modifies`. `#[kani::loop_invariant]` puts them right before the loop, where the
+/// loop contract pass of the compiler finds them.
+fn loop_modifies_binding(targets: &[Expr]) -> Vec<Stmt> {
+    let loop_assign_ident = format_ident!("kani_loop_modifies");
+    if targets.is_empty() {
+        // An empty clause: the loop modifies nothing outside of it. Bind a reference to a local
+        // of zero size, which codegen does not use as a target, rather than `()`, which MIR
+        // optimizations remove, so that codegen still sees that the loop has a clause.
+        parse_quote! {
+            let __kani_empty_loop_clause = ();
+            let #loop_assign_ident = &__kani_empty_loop_clause;
+        }
+    } else {
+        // A tuple, even for a single target: MIR optimizations merge a binding to a variable
+        // (e.g. `#[kani::loop_modifies(p)]` with a pointer `p`) with that variable.
+        parse_quote! {
+            let #loop_assign_ident = (#(#targets,)*);
+        }
+    }
+}
+
 pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     // parse the stmt of the loop
     let mut loop_stmt: Stmt = syn::parse(item.clone()).unwrap();
+    // The invariants of the other `#[kani::loop_invariant]` attributes of the loop, if any.
+    let other_invariants = match take_other_loop_invariants(&mut loop_stmt) {
+        Ok(invariants) => invariants,
+        Err(err) => return err.to_compile_error().into(),
+    };
+    // The binding of the loop modifies clause of the loop, if any, which is put right before the
+    // loop (after the code generated below for the loop, e.g. the `on_entry` variables or the
+    // initialization of a `for` loop), so that it is attached to this loop.
+    let modifies_stmts = match take_loop_modifies(&mut loop_stmt) {
+        Ok(targets) => targets.map(|targets| loop_modifies_binding(&targets)).unwrap_or_default(),
+        Err(err) => return err.to_compile_error().into(),
+    };
     loop_stmt = while_let_rewrite(loop_stmt);
     let loop_id = generate_unique_id_from_span(&loop_stmt);
     //We use Option to mark if the loop is a for loop.
@@ -595,6 +693,9 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     // expr of the loop invariant
     let mut inv_expr: Expr = syn::parse(attr).unwrap();
     let original_span = inv_expr.span();
+    for other_invariant in other_invariants {
+        inv_expr = parse_quote! { (#inv_expr) && (#other_invariant) };
+    }
     if let Some(ForLoopExtraStmts { ref kani_index, ref kani_iter_len, .. }) = for_loop_extras {
         let mut index_replacer = KaniIndexReplacer { kani_index: kani_index.clone() };
         index_replacer.visit_expr_mut(&mut inv_expr);
@@ -755,6 +856,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
                 const fn #register_ident<F: Fn() -> bool>(_f: &F, _transformed: usize) -> bool {
                     true
                 }
+                #(#modifies_stmts)*
                 #loop_stmt
             }
             else {
@@ -782,6 +884,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
                 const fn #register_ident<F: Fn() -> bool>(_f: &F, _transformed: usize) -> bool {
                     true
                 }
+                #(#modifies_stmts)*
                 #loop_stmt
             }
             })
@@ -808,6 +911,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
                 const fn #register_ident<F: Fn() -> bool>(_f: &F, _transformed: usize) -> bool {
                     true
                 }
+                #(#modifies_stmts)*
                 #loop_stmt
             }
             else {
@@ -828,6 +932,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
         const fn #register_ident<F: Fn() -> bool>(_f: &F, _transformed: usize) -> bool {
             true
         }
+        #(#modifies_stmts)*
         #loop_stmt
         })
         .into()
@@ -847,23 +952,35 @@ fn generate_unique_id_from_span(stmt: &Stmt) -> String {
     format!("_{:?}_{:?}_{:?}_{:?}", start.line(), start.column(), end.line(), end.column())
 }
 
+/// Implements the `#[kani::loop_modifies(target1, target2, ...)]` attribute.
+///
+/// The clause belongs to the `#[kani::loop_invariant]` of the loop, which takes the
+/// `#[kani::loop_modifies]` attributes of the loop and binds their targets right before the loop
+/// (see `take_loop_modifies`). This macro only runs if the clause is written before the
+/// invariant: it then leaves the clause on the loop as `#[kanitool::loop_modifies]`, which
+/// `#[kani::loop_invariant]` takes as well (the path `kani` may not be in scope, e.g. in the
+/// standard library). A clause on a loop without a loop invariant is ignored with a warning,
+/// since Kani does not abstract such a loop.
 pub fn loop_modifies(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let assigns = parse_macro_input!(attr with Punctuated::<Expr, Token![,]>::parse_terminated)
-        .into_iter()
-        .collect::<Vec<Expr>>();
-    let loop_assign_name: String = "kani_loop_modifies".to_owned();
-    let loop_assign_ident = format_ident!("{}", loop_assign_name);
-    let loop_assign_stmt: Stmt = parse_quote! {
-        let #loop_assign_ident = (#(#assigns),*);
-    };
-    let loop_stmt: Stmt = syn::parse(item.clone()).unwrap();
-    let ret: TokenStream = quote!(
-    {
-        #loop_assign_stmt
-        #loop_stmt
-    })
-    .into();
-    ret
+    let targets = proc_macro2::TokenStream::from(attr.clone());
+    // Check that the targets parse.
+    let _ = parse_macro_input!(attr with Punctuated::<Expr, Token![,]>::parse_terminated);
+    let mut loop_stmt: Stmt = syn::parse(item.clone()).unwrap();
+    match loop_attrs_mut(&mut loop_stmt) {
+        Some(attrs) if attrs.iter().any(is_loop_invariant_attr) => {
+            attrs.push(parse_quote!(#[kanitool::loop_modifies(#targets)]));
+            quote!(#loop_stmt).into()
+        }
+        _ => Diagnostic::spanned(
+            proc_macro2::Span::call_site(),
+            Level::Warning,
+            "found `#[kani::loop_modifies]` that is not attached to a loop with \
+             `#[kani::loop_invariant]`. The modifies clause will be ignored."
+                .to_string(),
+        )
+        .emit_as_item_tokens_or(item.into())
+        .into(),
+    }
 }
 
 /// Implements the `#[kani::loop_decreases(expr1, expr2, ...)]` attribute.
@@ -915,4 +1032,107 @@ pub fn loop_decreases(attr: TokenStream, item: TokenStream) -> TokenStream {
     })
     .into();
     ret
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn attr_paths(attrs: &[syn::Attribute]) -> Vec<String> {
+        attrs
+            .iter()
+            .map(|attr| {
+                attr.path()
+                    .segments
+                    .iter()
+                    .map(|seg| seg.ident.to_string())
+                    .collect::<Vec<_>>()
+                    .join("::")
+            })
+            .collect()
+    }
+
+    /// The `while` loop that replaces a `for` loop keeps the label and the attributes that follow
+    /// `#[kani::loop_invariant]`, so that they still expand on the rewritten loop.
+    #[test]
+    fn for_loop_rewrite_keeps_label_and_attributes() {
+        let for_loop: ExprForLoop = parse_quote! {
+            #[kani::loop_modifies(&s)]
+            #[kani::loop_decreases(n)]
+            'outer: for x in a {
+                s += x;
+            }
+        };
+        let (stmt, extras) = transform_for_to_loop(for_loop, "_1_2_3_4");
+        assert!(extras.is_some());
+        let Stmt::Expr(Expr::While(while_loop), _) = stmt else {
+            panic!("the `for` loop should be rewritten into a `while` loop")
+        };
+        assert_eq!(
+            while_loop.label.map(|label| label.name.ident.to_string()),
+            Some("outer".into())
+        );
+        assert_eq!(attr_paths(&while_loop.attrs), ["kani::loop_modifies", "kani::loop_decreases"]);
+    }
+
+    /// The other `#[kani::loop_invariant]` attributes of a loop are taken out of the loop, so
+    /// that their invariants are combined with the first one, and the other attributes are kept.
+    #[test]
+    fn other_loop_invariants_are_taken() {
+        let mut loop_stmt: Stmt = parse_quote! {
+            #[kani::loop_invariant(a)]
+            #[kani::loop_modifies(&s)]
+            #[kani::loop_invariant(b)]
+            for x in v {
+                s += x;
+            }
+        };
+        let invariants = take_other_loop_invariants(&mut loop_stmt).unwrap();
+        let expected: [Expr; 2] = [parse_quote!(a), parse_quote!(b)];
+        assert!(invariants == expected);
+        let Stmt::Expr(Expr::ForLoop(for_loop), _) = loop_stmt else {
+            panic!("the statement should still be a `for` loop")
+        };
+        assert_eq!(attr_paths(&for_loop.attrs), ["kani::loop_modifies"]);
+    }
+
+    /// The `#[kani::loop_modifies]` attributes of a loop are taken out of the loop, so that
+    /// `#[kani::loop_invariant]` binds their targets right before the loop, and the other
+    /// attributes are kept.
+    #[test]
+    fn loop_modifies_are_taken() {
+        let mut loop_stmt: Stmt = parse_quote! {
+            #[kani::loop_modifies(&a)]
+            #[kani::loop_decreases(n)]
+            #[loop_modifies(&b, &c)]
+            #[kani::loop_modifies]
+            #[kanitool::loop_modifies(&d)]
+            while n > 0 {
+                n -= 1;
+            }
+        };
+        let targets = take_loop_modifies(&mut loop_stmt).unwrap().unwrap();
+        let expected: [Expr; 4] =
+            [parse_quote!(&a), parse_quote!(&b), parse_quote!(&c), parse_quote!(&d)];
+        assert!(targets == expected);
+        let Stmt::Expr(Expr::While(while_loop), _) = &loop_stmt else {
+            panic!("the statement should still be a `while` loop")
+        };
+        assert_eq!(attr_paths(&while_loop.attrs), ["kani::loop_decreases"]);
+        assert!(take_loop_modifies(&mut loop_stmt).unwrap().is_none());
+        let mut loop_stmt: Stmt = parse_quote! {
+            #[kani::loop_modifies = &a]
+            loop {}
+        };
+        assert!(take_loop_modifies(&mut loop_stmt).is_err());
+    }
+
+    /// The binding of a clause with a single target is a tuple, which MIR optimizations do not
+    /// merge with the target.
+    #[test]
+    fn loop_modifies_binding_is_a_tuple() {
+        let stmts = loop_modifies_binding(&[parse_quote!(p)]);
+        let expected: Stmt = parse_quote! { let kani_loop_modifies = (p,); };
+        assert!(stmts == [expected]);
+    }
 }
