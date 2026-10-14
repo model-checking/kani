@@ -460,7 +460,12 @@ impl<'a> UninitInstrumenter<'a> {
                 }
             }
             PointeeLayout::TraitObject => {
-                unreachable!("Cannot change the initialization state of a trait object directly.");
+                // The layout, and so the padding, depends on the concrete type behind the vtable.
+                // As for reads (see `build_get_and_check`), report it rather than skip the update:
+                // a skipped update could leave uninitialized memory marked as initialized.
+                let reason = "Kani does not support reasoning about memory initialization of pointers to trait objects.";
+                self.inject_unsupported_check(body, source, operation.position(), reason);
+                return;
             }
             PointeeLayout::Union { field_layouts } => {
                 // Writing union data, which could be either creating a union from scratch or

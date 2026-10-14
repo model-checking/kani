@@ -1,0 +1,9 @@
+Checking harness check_to_larger_type...
+Failed Checks: Kani does not support checking memory initialization when transmuting `*const u8` to `&u16`, which point to types of incompatible layouts.
+VERIFICATION:- FAILED
+Checking harness check_to_smaller_type_uninit...
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const u32`
+VERIFICATION:- FAILED
+Checking harness check_to_smaller_type...
+VERIFICATION:- SUCCESSFUL
+Complete - 1 successfully verified harnesses, 2 failures, 3 total.

@@ -547,11 +547,21 @@ impl MirVisitor for CheckUninitVisitor {
                         TyKind::RigidTy(RigidTy::Ref(_, to_ty, _)),
                     ) = (operand_ty.kind(), ty.kind())
                     {
-                        // Assert that we can only cast this way if types are the same.
-                        assert!(from_ty == to_ty);
                         // When transmuting from a raw pointer to a reference, need to check that
-                        // the value pointed by the raw pointer is initialized.
-                        self.push_target(MemoryInitOp::Check { operand: operand.clone() });
+                        // the value the reference points to is initialized. The check covers the
+                        // non-padding bytes of `from_ty`, which include every non-padding byte of
+                        // `to_ty` when its layout is compatible. Otherwise it could miss some.
+                        if tys_layout_compatible_to_size(&from_ty, &to_ty) {
+                            self.push_target(MemoryInitOp::Check { operand: operand.clone() });
+                        } else {
+                            self.push_target(MemoryInitOp::Unsupported {
+                                reason: format!(
+                                    "Kani does not support checking memory initialization when \
+                                     transmuting `{operand_ty}` to `{ty}`, which point to types of \
+                                     incompatible layouts."
+                                ),
+                            });
+                        }
                     }
                 }
                 _ => {}
