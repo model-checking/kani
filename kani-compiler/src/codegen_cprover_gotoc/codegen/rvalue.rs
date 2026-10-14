@@ -1645,6 +1645,15 @@ impl GotocCtx<'_, '_> {
         let vtable_name = self.vtable_name_stable(trait_type).intern();
         let vtable_impl_name = format!("{vtable_name}_impl_for_{src_name}");
 
+        // Record this vtable global so that virtual calls can detect metadata that
+        // points to a vtable generated for a different trait (e.g. via `from_raw_parts`).
+        let principal = trait_type.kind().trait_principal();
+        self.vtable_ctx.add_vtable(
+            principal,
+            vtable_impl_name.clone().intern(),
+            Type::struct_tag(vtable_name),
+        );
+
         self.ensure_global_var_init(
             vtable_impl_name,
             true,
