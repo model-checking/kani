@@ -273,6 +273,14 @@ impl ValidateArgs for StandaloneAutoharnessArgs {
         }
 
         if self.std {
+            if self.verify_opts.target_triple.is_some() {
+                // `--std` builds against Kani's `no_core` library, which exists for the host only,
+                // the same as `verify-std`.
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    "The `autoharness` subcommand does not support `--target` with `--std`",
+                ));
+            }
             validate_std_path(&self.input)?;
         } else if !self.input.is_file() {
             return Err(Error::raw(

@@ -6,7 +6,7 @@ use kani_metadata::UnstableFeature;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::session::{KaniSession, lib_folder};
+use crate::session::{KaniSession, lib_folder_for};
 use crate::util::args::{CommandWrapper, KaniArg, PassTo, RustcArg, encode_as_rustc_arg};
 
 pub struct LibConfig {
@@ -64,8 +64,12 @@ impl KaniSession {
         let mut kani_args = self.kani_compiler_local_flags();
         kani_args.push(format!("--reachability={}", self.reachability_mode()).into());
 
-        let lib_path = lib_folder().unwrap();
+        let lib_path = lib_folder_for(self.args.verification_target())?;
         let mut rustc_args = self.kani_rustc_flags(LibConfig::new(lib_path));
+        if let Some(triple) = &self.args.target_triple {
+            rustc_args.push("--target".into());
+            rustc_args.push(triple.into());
+        }
         rustc_args.push(file.into());
         rustc_args.push("--out-dir".into());
         rustc_args.push(RustcArg::from(outdir.as_os_str()));

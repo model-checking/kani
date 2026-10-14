@@ -15,7 +15,7 @@ use crate::util::warning;
 use cargo::CargoCommonArgs;
 use clap::builder::{PossibleValue, TypedValueParser};
 use clap::{ValueEnum, error::ContextKind, error::ContextValue, error::Error, error::ErrorKind};
-use kani_metadata::CbmcSolver;
+use kani_metadata::{CbmcSolver, SUPPORTED_TARGETS, supported_targets_list};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -90,6 +90,10 @@ pub fn print_stabilized_feature_warning(
 
 // By default we configure CBMC to use 16 bits to represent the object bits in pointers.
 const DEFAULT_OBJECT_BITS: u32 = 16;
+
+/// The target triple Kani itself was built for, which is the default verification target
+/// (see build.rs).
+pub const HOST_TARGET: &str = env!("TARGET");
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, strum_macros::EnumString)]
 enum TimeUnit {
@@ -403,6 +407,12 @@ pub struct VerificationArgs {
     #[arg(long)]
     pub target_dir: Option<PathBuf>,
 
+    /// Verify for this target triple instead of the host's, e.g. `riscv64gc-unknown-linux-gnu`.
+    /// Kani's libraries must have been built for it, see `cargo build-dev --lib-target`.
+    /// This option is experimental and requires `-Z unstable-options` to be used.
+    #[arg(long = "target", value_name = "TRIPLE")]
+    pub target_triple: Option<String>,
+
     /// Enable test function verification. Only use this option when the entry point is a test function
     #[arg(long)]
     pub tests: bool,
@@ -475,6 +485,16 @@ impl VerificationArgs {
     /// there is nothing to link or verify: Kani stops once the compiler has run.
     pub fn uses_llbc_backend(&self) -> bool {
         self.common_args.unstable_features.contains(UnstableFeature::Lean)
+    }
+
+    /// The target triple to verify for: the one given with `--target`, otherwise the host's.
+    pub fn verification_target(&self) -> &str {
+        self.target_triple.as_deref().unwrap_or(HOST_TARGET)
+    }
+
+    /// Whether `--target` names a platform other than the host's.
+    pub fn is_cross_target(&self) -> bool {
+        self.verification_target() != HOST_TARGET
     }
 
     pub fn restrict_vtable(&self) -> bool {
@@ -820,6 +840,26 @@ impl ValidateArgs for VerificationArgs {
                 UnstableFeature::UnstableOptions,
             )?;
 
+            self.common_args.check_unstable(
+                self.target_triple.is_some(),
+                "target",
+                UnstableFeature::UnstableOptions,
+            )?;
+
+            // Checked here, after the unstable gate, so that the error is about the triple and
+            // not about a missing library folder or a compiler error deep in a cargo build.
+            if let Some(triple) = &self.target_triple
+                && !SUPPORTED_TARGETS.contains(&triple.as_str())
+            {
+                return Err(Error::raw(
+                    ErrorKind::InvalidValue,
+                    format!(
+                        "Unsupported target `{triple}`: Kani can verify for {}.",
+                        supported_targets_list()
+                    ),
+                ));
+            }
+
             Ok(())
         };
 
@@ -855,6 +895,24 @@ impl ValidateArgs for VerificationArgs {
                     ErrorKind::ArgumentConflict,
                     "Conflicting options: --concrete-playback isn't compatible with \
                 --output-format=old.",
+                ));
+            }
+            if self.concrete_playback.is_some() && self.is_cross_target() {
+                // Playback compiles and runs the generated test on the host.
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    "Conflicting options: --concrete-playback runs on the host, so it isn't \
+                compatible with --target for another platform.",
+                ));
+            }
+            if !self.c_lib.is_empty() && self.is_cross_target() {
+                // goto-cc compiles C sources with the host's C configuration, and when it
+                // compiles them as part of a link, that configuration replaces the target's
+                // machine model in the linked binary.
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    "Conflicting options: --c-lib is compiled for the host, so it isn't \
+                compatible with --target for another platform.",
                 ));
             }
             if self.sarif.is_some() && self.output_format() == OutputFormat::Old {
@@ -1522,6 +1580,77 @@ mod tests {
             }
             let err = parsed.validate().unwrap_err();
             assert_eq!(err.kind(), ErrorKind::ArgumentConflict, "for `{args}`");
+        }
+    }
+
+    /// A target triple that is not the host's, whatever the host is.
+    fn other_target() -> &'static str {
+        if HOST_TARGET == "riscv64gc-unknown-linux-gnu" {
+            "x86_64-unknown-linux-gnu"
+        } else {
+            "riscv64gc-unknown-linux-gnu"
+        }
+    }
+
+    #[test]
+    fn check_c_lib_conflicts_with_cross_target() {
+        let args = format!(
+            "kani input.rs -Z unstable-options -Z c-ffi --c-lib lib.c --target {}",
+            other_target()
+        );
+        let err = StandaloneArgs::try_parse_from(args.split_whitespace())
+            .unwrap()
+            .verify_opts
+            .validate()
+            .unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
+
+        let args = format!(
+            "kani input.rs -Z unstable-options -Z c-ffi --c-lib lib.c --target {HOST_TARGET}"
+        );
+        StandaloneArgs::try_parse_from(args.split_whitespace())
+            .unwrap()
+            .verify_opts
+            .validate()
+            .unwrap();
+    }
+
+    /// `verify-std` and `autoharness --std` build against Kani's host-only `no_core` library, so
+    /// both refuse `--target`. Each case fails on the target before the std path is checked.
+    #[test]
+    fn check_std_verification_rejects_target() {
+        for args in [
+            "kani verify-std library -Z unstable-options --target",
+            "kani autoharness --std library -Z unstable-options -Z autoharness --target",
+        ] {
+            let args = format!("{args} {}", other_target());
+            let err = StandaloneArgs::try_parse_from(args.split_whitespace())
+                .unwrap()
+                .validate()
+                .unwrap_err();
+            assert_eq!(err.kind(), ErrorKind::ArgumentConflict, "for `{args}`");
+        }
+    }
+
+    /// `--target` is checked against `SUPPORTED_TARGETS` before anything is built, including the
+    /// empty string, which would otherwise resolve to the `targets/` folder itself.
+    #[test]
+    fn check_target_must_be_supported() {
+        for target in ["x86_64-unknown-linux-musl", "thumbv7em-none-eabihf", ""] {
+            let mut args: Vec<&str> =
+                "kani input.rs -Z unstable-options --target".split_whitespace().collect();
+            args.push(target);
+            let err =
+                StandaloneArgs::try_parse_from(args).unwrap().verify_opts.validate().unwrap_err();
+            assert_eq!(err.kind(), ErrorKind::InvalidValue, "for `{target}`");
+        }
+        for target in SUPPORTED_TARGETS {
+            let args = format!("kani input.rs -Z unstable-options --target {target}");
+            StandaloneArgs::try_parse_from(args.split_whitespace())
+                .unwrap()
+                .verify_opts
+                .validate()
+                .unwrap();
         }
     }
 }

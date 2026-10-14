@@ -1,0 +1,64 @@
+[TEST] --target needs -Z unstable-options
+error: The `--target` option is unstable and requires `-Z unstable-options` to be used.
+
+[TEST] an unsupported --target is refused before anything is built
+error: Unsupported target `riscv64gc-unknown-none-elf`: Kani can verify for `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `riscv64gc-unknown-linux-gnu`, `x86_64-apple-darwin` or `aarch64-apple-darwin`.
+
+Usage: kani [OPTIONS] [INPUT]
+       kani <COMMAND>
+
+For more information, try '--help'.
+
+[TEST] single file on the host: the riscv64 harnesses are compiled out
+No proof harnesses (functions with #[kani::proof]) were found to verify.
+
+[TEST] single file for riscv64
+Checking harness riscv64::target_is_riscv64gc...
+VERIFICATION:- SUCCESSFUL
+Checking harness riscv64::overflow_is_found...
+attempt to add with overflow
+VERIFICATION:- FAILED
+Complete - 1 successfully verified harnesses, 1 failures, 2 total.
+
+[TEST] the linked goto binary keeps the riscv64 machine model
+__CPROVER_architecture_arch = "riscv64"
+__CPROVER_architecture_char_is_unsigned = 1
+
+[TEST] --export-json records the verification target
+metadata.target = riscv64gc-unknown-linux-gnu
+
+[TEST] cargo kani for riscv64
+Checking harness verify::elapsed_never_panics...
+Complete - 1 successfully verified harnesses, 0 failures, 1 total.
+
+[TEST] --concrete-playback is refused for another target
+error: Conflicting options: --concrete-playback runs on the host, so it isn't compatible with --target for another platform.
+
+Usage: kani [OPTIONS] [INPUT]
+       kani <COMMAND>
+
+For more information, try '--help'.
+
+[TEST] --c-lib is refused for another target
+error: Conflicting options: --c-lib is compiled for the host, so it isn't compatible with --target for another platform.
+
+Usage: kani [OPTIONS] [INPUT]
+       kani <COMMAND>
+
+For more information, try '--help'.
+
+[TEST] verify-std is refused with --target
+error: The `verify-std` subcommand does not support `--target`
+
+Usage: kani [OPTIONS] [INPUT]
+       kani <COMMAND>
+
+For more information, try '--help'.
+
+[TEST] autoharness --std is refused with --target
+error: The `autoharness` subcommand does not support `--target` with `--std`
+
+Usage: kani [OPTIONS] [INPUT]
+       kani <COMMAND>
+
+For more information, try '--help'.
