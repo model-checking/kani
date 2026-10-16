@@ -14,9 +14,6 @@ ignore = [
     # `llbc` feature and not part of Kani releases.
     { id = "RUSTSEC-2024-0436", reason = "paste is unmaintained; only reached via charon" },
     { id = "RUSTSEC-2023-0089", reason = "atomic-polyfill is unmaintained; only reached via charon" },
-    # Unmaintained (not vulnerable): `unsafe-libyaml` is only reached through `serde_yaml` in
-    # compiletest, our test runner, which is not part of Kani releases.
-    { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml is unmaintained; only reached via serde_yaml in compiletest" },
 ]
 
 # This section is considered when running `cargo deny check licenses`
@@ -36,6 +33,9 @@ exceptions = [
     { name = "foldhash", allow=["Zlib"] },
     # Transitive dependencies via charon (LLBC backend)
     { name = "ustr", allow=["BSD-2-Clause-Patent"] },
+    # Transitive dependency of serde-saphyr in compiletest, our test runner, which is not part of
+    # Kani releases.
+    { name = "encoding_rs", allow=["BSD-3-Clause"] },
 ]
 
 [licenses.private]
