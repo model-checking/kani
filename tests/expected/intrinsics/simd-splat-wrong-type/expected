@@ -1,2 +1,3 @@
-expected argument type `i64` (element of output `i64x2`), found `i32`
-error: aborting due to 1 previous error
+Status: FAILURE\
+Description: "`simd_splat` with the argument type `i32` (the output `i64x2` has `i64` lanes) is not currently supported by Kani
+VERIFICATION:- FAILED
