@@ -1,6 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use crate::codegen_cprover_gotoc::GotocCtx;
+use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::utils::slice_fat_ptr;
 use crate::kani_middle::is_anon_static;
 use crate::unwrap_or_return_codegen_unimplemented;
@@ -180,9 +181,27 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                     UintTy::U128 => Expr::int_constant(val, Type::unsigned_int(128)),
                 })
             }
-            TyKind::RigidTy(RigidTy::Bool) => {
-                Some(Expr::c_bool_constant(alloc.read_bool().unwrap()))
-            }
+            TyKind::RigidTy(RigidTy::Bool) => match alloc.read_bool() {
+                Ok(val) => Some(Expr::c_bool_constant(val)),
+                // MIR optimizations (e.g. GVN at `-Zmir-opt-level=2`) can fold a transmute that
+                // produces an invalid `bool` into a constant. Reaching it is UB, so report it.
+                Err(_) => {
+                    // Such a constant has a dummy span, which reports as line 0, so report the
+                    // check at the statement that uses the constant instead.
+                    let loc = if loc.start_line() == Some(0) { self.current_stmt_loc } else { loc };
+                    let typ = self.codegen_ty_stable(ty);
+                    let check = self.codegen_assert_assume_false(
+                        PropertyClass::SafetyCheck,
+                        &format!("Undefined Behavior: Invalid value of type `{ty}`"),
+                        loc,
+                    );
+                    Some(Expr::statement_expression(
+                        vec![check, typ.nondet().as_stmt(loc)],
+                        typ,
+                        loc,
+                    ))
+                }
+            },
             TyKind::RigidTy(RigidTy::Char) => {
                 Some(Expr::int_constant(alloc.read_int().unwrap(), Type::signed_int(32)))
             }
