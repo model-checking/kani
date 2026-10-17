@@ -20,7 +20,9 @@ use crate::args::{OutputFormat, VerificationArgs};
 use crate::cbmc_output_parser::{
     CheckStatus, ParserItem, Property, VerificationOutput, extract_results, process_cbmc_output,
 };
-use crate::cbmc_property_renderer::{format_coverage, format_result, kani_cbmc_output_filter};
+use crate::cbmc_property_renderer::{
+    format_coverage, format_result, is_vacuous_harness_cover, kani_cbmc_output_filter,
+};
 use crate::coverage::cov_results::{CoverageCheck, CoverageResults};
 use crate::coverage::cov_results::{CoverageRegion, CoverageTerm};
 use crate::session::KaniSession;
@@ -570,6 +572,11 @@ impl VerificationResult {
         {
             let (mut status, mut failed_properties) =
                 verification_outcome_from_properties(&results, should_panic);
+            // `format_result` prints the explanation.
+            if results.iter().any(is_vacuous_harness_cover) {
+                status = VerificationStatus::Failure;
+                failed_properties = FailedProperties::Other;
+            }
             // A dropped quantifier makes the analysis unsound: a `kani::assume` containing one is
             // silently not enforced, so a "successful" result may be vacuous. Kani must never
             // report success in that case -- force a failure and (via the rendered error) direct
