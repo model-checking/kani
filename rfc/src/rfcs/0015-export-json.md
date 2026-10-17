@@ -433,6 +433,7 @@ The narrower `INCOMPLETE` marker follows its presence matrix below.
 | `harnesses[].is_bounded` | bool | — | Mandatory; see Bounded results under Reading the results. |
 | `harnesses[].attributes.kind` | `"Proof"` \| `"Test"` \| `{"ProofForContract": {"target_fn": string}}` | — | Requested metadata enum, including the object form for contract proofs. |
 | `harnesses[].attributes.should_panic` | bool | — | Whether `#[kani::should_panic]` is set. |
+| `harnesses[].attributes.no_unwinding_checks` | bool | — | Whether `#[kani::no_unwinding_checks]` is set; false when absent. |
 | `harnesses[].attributes.solver` | string \| `{"Binary": string}` | nullable | The *requested* solver attribute; `null` when unset (default resolution applies). Compare `resolved_solver`. |
 | `harnesses[].attributes.unwind_value` | integer | nullable | `#[kani::unwind(N)]` value, if set. |
 | `harnesses[].attributes.stubs[]` | array of `{original, replacement}` strings | never null, may be empty | Requested stubs. |
