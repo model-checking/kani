@@ -16,9 +16,10 @@ use crate::kani_middle::transform::body::{
 };
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_middle::{
-    CtorReturn, FmtTrait, SmartPointerModels, adt_has_private_field_check, can_derive_arbitrary,
-    find_arbitrary_constructor, fmt_impl_self_ty, implements_arbitrary, implements_invariant,
-    is_byte_str, is_c_str, is_formatter, is_wtf8, scalar_niche, smart_pointer_model_instance,
+    CtorReturn, FmtTrait, SmartPointerModels, adt_has_private_field_check, aliasable_arg_pairs,
+    can_derive_arbitrary, find_arbitrary_constructor, fmt_impl_self_ty, implements_arbitrary,
+    implements_invariant, is_byte_str, is_c_str, is_formatter, is_wtf8, scalar_niche,
+    smart_pointer_model_instance,
 };
 use crate::kani_queries::QueryDb;
 use rustc_data_structures::fx::FxHashMap;
@@ -2014,6 +2015,7 @@ impl AutomaticArbitraryPass {
         new_body.into()
     }
 }
+
 /// Transform the dummy body of an automatic_harness Kani intrinsic to be a proof harness for a given function.
 #[derive(Debug, Clone)]
 pub struct AutomaticHarnessPass {
@@ -2027,6 +2029,11 @@ pub struct AutomaticHarnessPass {
     /// Whether --check-invariants is enabled: check values returned by verified functions
     /// against the type's mined invariant conjuncts.
     check_invariants: bool,
+    /// The FnDef of KaniModel::AnyAlias
+    kani_any_alias: FnDef,
+    /// Whether --alias-arguments is enabled: let shared reference and raw pointer arguments
+    /// alias the earlier arguments they can alias, c.f. `aliasable_arg_pairs`.
+    alias_arguments: bool,
 }
 
 impl AutomaticHarnessPass {
@@ -2045,6 +2052,8 @@ impl AutomaticHarnessPass {
         let reset_clause_depth =
             Instance::resolve(reset_clause_depth, &GenericArgs(vec![])).unwrap();
         let check_invariants = query_db.args().autoharness_check_invariants;
+        let kani_any_alias = *kani_fns.get(&KaniModel::AnyAlias.into()).unwrap();
+        let alias_arguments = query_db.args().autoharness_alias_arguments;
         Self {
             models: AnyModels::new(query_db),
             check_fmt_models,
@@ -2052,6 +2061,8 @@ impl AutomaticHarnessPass {
             reset_clause_depth,
             kani_autoharness_intrinsic,
             check_invariants,
+            kani_any_alias,
+            alias_arguments,
         }
     }
 }
@@ -2177,7 +2188,7 @@ impl TransformPass for AutomaticHarnessPass {
         // nondeterministic value respects the type's safety invariant,
         // c.f. `call_kani_any_for_ty`.
         let mut invariant_cache = FxHashMap::default();
-        let arg_locals = fn_to_verify_body
+        let mut arg_locals = fn_to_verify_body
             .arg_locals()
             .iter()
             .map(|local_decl| {
@@ -2193,6 +2204,59 @@ impl TransformPass for AutomaticHarnessPass {
                 )
             })
             .collect::<Vec<_>>();
+
+        // Under --alias-arguments, model caller-controlled aliasing: each argument may
+        // additionally be the same reference or pointer as any earlier argument it can alias,
+        // c.f. `aliasable_arg_pairs`. The values generated above stay as they are, so each
+        // argument still covers the non-aliasing case through its own storage.
+        if self.alias_arguments {
+            let arg_tys =
+                fn_to_verify_body.arg_locals().iter().map(|decl| decl.ty).collect::<Vec<_>>();
+            for (earlier, later) in aliasable_arg_pairs(tcx, fn_to_verify) {
+                let ty = arg_tys[later];
+                // Raw pointers alias regardless of their mutability: cast the earlier pointer
+                // to the type of the later one, which is what the model returns.
+                let is_raw_ptr = matches!(ty.kind(), TyKind::RigidTy(RigidTy::RawPtr(..)));
+                let earlier_lcl = if !is_raw_ptr || arg_tys[earlier] == ty {
+                    arg_locals[earlier]
+                } else {
+                    let cast_lcl = harness_body.new_local(
+                        ty,
+                        source.span(harness_body.blocks()),
+                        Mutability::Not,
+                    );
+                    harness_body.assign_to(
+                        Place::from(cast_lcl),
+                        Rvalue::Cast(
+                            CastKind::PtrToPtr,
+                            Operand::Copy(Place::from(arg_locals[earlier])),
+                            ty,
+                        ),
+                        &mut source,
+                        InsertPosition::Before,
+                    );
+                    cast_lcl
+                };
+                let any_alias_inst = Instance::resolve(
+                    self.kani_any_alias,
+                    &GenericArgs(vec![GenericArgKind::Type(ty)]),
+                )
+                .unwrap();
+                let alias_lcl =
+                    harness_body.new_local(ty, source.span(harness_body.blocks()), Mutability::Not);
+                harness_body.insert_call(
+                    &any_alias_inst,
+                    &mut source,
+                    InsertPosition::Before,
+                    vec![
+                        Operand::Copy(Place::from(arg_locals[later])),
+                        Operand::Copy(Place::from(earlier_lcl)),
+                    ],
+                    Place::from(alias_lcl),
+                );
+                arg_locals[later] = alias_lcl;
+            }
+        }
 
         let func_to_verify_ret = fn_to_verify_body.ret_local();
         let ret_lcl = harness_body.new_local(

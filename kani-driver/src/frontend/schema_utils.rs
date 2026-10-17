@@ -238,6 +238,7 @@ pub fn create_harness_metadata_json(h: &HarnessMetadata) -> Value {
         "is_automatically_generated": h.is_automatically_generated,
         "is_bounded": h.is_bounded,
         "is_ctor_based": h.is_ctor_based,
+        "is_aliasing": h.is_aliasing,
     })
 }
 
