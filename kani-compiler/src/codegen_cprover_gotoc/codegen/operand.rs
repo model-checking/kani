@@ -9,7 +9,7 @@ use rustc_middle::ty::Const as ConstInternal;
 use rustc_public::CrateDefType;
 use rustc_public::mir::alloc::{AllocId, GlobalAlloc};
 use rustc_public::mir::mono::{Instance, StaticDef};
-use rustc_public::mir::{Mutability, Operand};
+use rustc_public::mir::{Mutability, Operand, RuntimeChecks};
 use rustc_public::rustc_internal;
 use rustc_public::ty::{
     Allocation, ConstantKind, FloatTy, FnDef, GenericArgs, IntTy, MirConst, RigidTy, Size, Ty,
@@ -57,11 +57,15 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             Operand::Constant(constant) => {
                 self.codegen_const(&constant.const_, self.codegen_span_stable(constant.span))
             }
-            // Runtime checks (`ub_checks()`, `contract_checks()`, `overflow_checks()`) were
-            // moved from `Rvalue::NullaryOp(NullOp::RuntimeChecks(..))` to `Operand::RuntimeChecks`
-            // by rust-lang/rust#148766. Kani does not enable these source-level checks (it inserts
-            // its own), so evaluate them to `false` as before.
-            Operand::RuntimeChecks(_) => Expr::c_false(),
+            // Kani turns off the standard library's UB and contract checks (it inserts its own): a
+            // `ub_checks()` or `contract_checks()` call that reaches codegen evaluates to `false`.
+            // `overflow_checks()` follows `-Coverflow-checks=on`, which Kani requires.
+            Operand::RuntimeChecks(RuntimeChecks::OverflowChecks) => {
+                Expr::c_bool_constant(self.tcx.sess.overflow_checks())
+            }
+            Operand::RuntimeChecks(RuntimeChecks::UbChecks | RuntimeChecks::ContractChecks) => {
+                Expr::c_false()
+            }
         }
     }
 
