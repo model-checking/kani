@@ -534,8 +534,8 @@ impl GotocCtx<'_, '_> {
                     self,
                 )
             }
-            ProjectionElem::ConstantIndex { offset, min_length, from_end } => {
-                self.codegen_constant_index(before, *offset, *min_length, *from_end)
+            ProjectionElem::ConstantIndex { offset, from_end, .. } => {
+                self.codegen_constant_index(before, *offset, *from_end)
             }
             // Best effort to codegen subslice projection.
             // Full support to be added in
@@ -799,14 +799,15 @@ impl GotocCtx<'_, '_> {
         &mut self,
         before: ProjectedPlace,
         offset: u64,
-        min_length: u64,
         from_end: bool,
     ) -> Result<ProjectedPlace, Box<UnimplementedData>> {
         match before.mir_typ().kind() {
             //TODO, ask on zulip if we can ever have from_end here?
             TyKind::RigidTy(RigidTy::Array(elemt, length)) => {
                 let length = length.eval_target_usize().unwrap();
-                assert!(length >= min_length);
+                // Like rustc's codegen, ignore `min_length`: it can exceed `length` after a bounds
+                // check that always fails, where GVN turns `a[i]` into `a[i of i+1]`. An
+                // out-of-bounds index that is reached fails CBMC's array bounds check.
                 let idx = if from_end { length - offset } else { offset };
                 let idxe = Expr::int_constant(idx, Type::ssize_t());
                 let expr = self.codegen_idx_array(before.goto_expr, idxe);
