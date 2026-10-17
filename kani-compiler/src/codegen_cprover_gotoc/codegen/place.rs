@@ -580,10 +580,13 @@ impl GotocCtx<'_, '_> {
                         let index = Expr::int_constant(*from, Type::ssize_t());
                         let from_elem = before.goto_expr.index(index);
                         let data = from_elem.address_of();
-                        let fat_ptr = slice_fat_ptr(goto_type, data, len, &self.symbol_table);
+                        let fat_ptr =
+                            slice_fat_ptr(goto_type, data.clone(), len, &self.symbol_table);
+                        // As after a `Deref` of a slice fat pointer, the place is the slice itself
+                        // (its data pointer), since runtime MIR can project further into it.
                         ProjectedPlace::try_new(
-                            fat_ptr.clone(),
-                            TypeOrVariant::Type(ptr_typ),
+                            data,
+                            TypeOrVariant::Type(typ),
                             Some(fat_ptr),
                             Some(ptr_typ),
                             self,
