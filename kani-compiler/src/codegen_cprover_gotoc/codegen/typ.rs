@@ -792,11 +792,17 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                     // we compute the overall offset of the end of the current struct
                     offset = fld_offset + layout.size;
                 }
-                final_fields.extend(self.codegen_alignment_padding(
-                    offset,
-                    align,
-                    final_fields.len(),
-                ));
+                // A slice or `str` tail is a flexible array. It has to stay the last component
+                // of the struct, and its size is only known at run time, so the struct gets no
+                // trailing padding after it. `size_and_align_of_dst` rounds the dynamic size up
+                // to the alignment instead.
+                if !final_fields.last().is_some_and(|fld| fld.typ().is_flexible_array()) {
+                    final_fields.extend(self.codegen_alignment_padding(
+                        offset,
+                        align,
+                        final_fields.len(),
+                    ));
+                }
                 final_fields
             }
             // Primitives, such as NEVER, have no fields
