@@ -1013,8 +1013,8 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     /// There are three kinds of fat pointers:
     /// 1. references to slices (`matches!(pointee_type.kind(), ty::Slice(..) | ty::Str)`).
     /// 2. references to trait objects (`matches!(pointee_type.kind(), ty::Dynamic)`).
-    /// 3. references to structs whose last field is a unsized object (slice / trait)
-    ///    - `matches!(pointee_type.kind(), ty::Adt(..) if self.is_unsized(t))
+    /// 3. references to structs and tuples whose last field is a unsized object (slice / trait)
+    ///    - `matches!(pointee_type.kind(), ty::Adt(..) | ty::Tuple(..) if self.is_unsized(t))
     ///
     fn codegen_fat_ptr(&mut self, pointee_type: Ty<'tcx>) -> Type {
         assert!(
@@ -1026,7 +1026,9 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             let pointer_name = match pointee_type.kind() {
                 ty::Slice(..) => self.ty_mangled_name(pointee_type),
                 ty::Str => "refstr".intern(),
-                ty::Adt(..) => format!("&{}", self.ty_mangled_name(pointee_type)).intern(),
+                ty::Adt(..) | ty::Tuple(..) => {
+                    format!("&{}", self.ty_mangled_name(pointee_type)).intern()
+                }
                 kind => unreachable!("Generating a slice fat pointer to {:?}", kind),
             };
             let pretty_name = format!("&{}", self.ty_pretty_name(pointee_type));
@@ -1034,7 +1036,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                 ty::Slice(elt_type) => self.codegen_ty(*elt_type),
                 ty::Str => Type::unsigned_int(8),
                 // For adt, see https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp
-                ty::Adt(..) => self.codegen_ty(pointee_type),
+                ty::Adt(..) | ty::Tuple(..) => self.codegen_ty(pointee_type),
                 kind => unreachable!("Generating a slice fat pointer to {:?}", kind),
             };
             self.ensure_struct(pointer_name, pretty_name, |_, _| {
