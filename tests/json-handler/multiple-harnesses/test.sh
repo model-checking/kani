@@ -20,7 +20,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 VALIDATOR="$PROJECT_ROOT/scripts/validate_json_export.py"
 
 # Run Kani with JSON export
-kani -Z unstable-options test.rs --export-json "$OUTPUT_FILE"
+kani -Z export-json test.rs --export-json "$OUTPUT_FILE"
 
 # Check that JSON file was created
 if [ ! -f "$OUTPUT_FILE" ]; then
@@ -31,9 +31,8 @@ fi
 # Validate JSON structure (suppress verbose output)
 python3 "$VALIDATOR" "$OUTPUT_FILE" 2>&1 | tail -1
 
-# Check that the export accounts for all three harnesses: not just that the metadata
-# lists them, but that the summary counters, the per-harness results, and the
-# per-harness detail arrays all agree with each other and with the harnesses that ran.
+# Check that the export accounts for all three harnesses: not just that the flat harnesses[]
+# array lists them, but that the run-level summary agrees with the per-harness entries.
 python3 << EOF
 import json
 import sys
@@ -55,50 +54,32 @@ def check(condition, message):
         failures.append(message)
 
 
-metadata_names = {h.get('pretty_name') for h in data['harness_metadata']}
-check(metadata_names == expected,
-      f"harness_metadata should list {sorted(expected)}, got {sorted(map(str, metadata_names))}")
+harnesses = data['harnesses']
+check(len(harnesses) == 3, f"expected 3 harnesses, got {len(harnesses)}")
+names = {h.get('name') for h in harnesses}
+check(names == expected,
+      f"harnesses should cover {sorted(expected)}, got {sorted(map(str, names))}")
+check(all(h.get('crate_name') for h in harnesses),
+      "every harness should report a non-empty crate_name")
 
-summary = data['verification_results']['summary']
-for field, want in [('total_harnesses', 3), ('executed', 3),
-                    ('successful', 3), ('failed', 0)]:
+summary = data['summary']
+for field, want in [('total', 3), ('successful', 3), ('failed', 0)]:
     check(summary[field] == want,
           f"summary.{field} should be {want}, got {summary[field]}")
 
-results = data['verification_results']['results']
-check(len(results) == 3, f"expected 3 results, got {len(results)}")
-result_names = {r.get('harness_id') for r in results}
-check(result_names == expected,
-      f"results should cover {sorted(expected)}, got {sorted(map(str, result_names))}")
-check(all(r.get('status') == 'Success' for r in results),
-      "every harness should report Success")
+check(all(h.get('outcome', {}).get('verdict') == 'SUCCESS' for h in harnesses),
+      "every harness should report SUCCESS")
+check(all(h.get('n_failed') == 0 for h in harnesses),
+      "every harness should have 0 failed properties")
+check(all(not h.get('failed_properties') for h in harnesses),
+      "no harness should list a failed property")
 
-# Each per-harness array must cover every harness exactly once. These arrays are built
-# in a different order from `results`, so identity has to come from harness_id.
-for key in ['error_details', 'property_details', 'cbmc']:
-    entries = data[key]
-    check(len(entries) == 3, f"expected 3 {key} entries, got {len(entries)}")
-    names = {e.get('harness_id') for e in entries}
-    check(names == expected,
-          f"{key} should cover {sorted(expected)}, got {sorted(map(str, names))}")
-
-check(not any(e.get('has_errors') for e in data['error_details']),
-      "no harness should report errors")
-
-counted = ['passed', 'failed', 'unreachable', 'undetermined', 'solver_error',
-           'satisfied', 'unsatisfiable', 'covered', 'uncovered']
-
-for entry in data['property_details']:
-    details = entry['property_details']
-    harness = entry.get('harness_id')
-    check(details.get('failed') == 0,
-          f"{harness} should have 0 failed properties, got {details.get('failed')}")
-    # The per-status counts must account for every property, or a consumer cannot tell a
-    # complete breakdown from one that quietly dropped a status it did not know about.
-    total = sum(details.get(field) or 0 for field in counted)
-    check(total == details.get('total_properties'),
-          f"{harness} status counts sum to {total} but total_properties is "
-          f"{details.get('total_properties')}")
+for h in harnesses:
+    checks_total = h['checks']['total']
+    covers_total = h['covers']['total']
+    check(h['n_properties'] == checks_total + covers_total,
+          f"{h['name']}: n_properties ({h['n_properties']}) != checks.total "
+          f"({checks_total}) + covers.total ({covers_total})")
 
 if failures:
     for failure in failures:
