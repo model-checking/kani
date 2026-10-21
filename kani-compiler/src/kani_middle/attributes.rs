@@ -7,11 +7,10 @@ use std::collections::{BTreeMap, HashSet};
 use kani_metadata::{CbmcSolver, HarnessAttributes, HarnessKind, Stub};
 use quote::ToTokens;
 use rustc_ast::{LitKind, MetaItem, MetaItemKind};
+use rustc_attr_ir::{AttrArgs, Attribute};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_errors::ErrorGuaranteed;
 use rustc_hir::{
-    Attribute,
-    attrs::AttrArgs,
     def::DefKind,
     def_id::{DefId, LocalDefId},
 };
@@ -189,7 +188,7 @@ impl<'tcx> KaniAttributes<'tcx> {
     }
 
     pub fn for_item(tcx: TyCtxt<'tcx>, def_id: DefId) -> Self {
-        // `get_all_attrs` is deprecated in favor of `rustc_hir::find_attr!`, but that
+        // `get_all_attrs` is deprecated in favor of `rustc_attr_ir::find_attr!`, but that
         // macro only matches parsed built-in attributes. Kani inspects `kanitool::*`
         // tool attributes, which are unparsed, so `get_all_attrs` is the correct API.
         #[allow(deprecated)]
