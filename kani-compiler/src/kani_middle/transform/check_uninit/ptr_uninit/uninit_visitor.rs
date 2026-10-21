@@ -543,25 +543,17 @@ impl MirVisitor for CheckUninitVisitor {
                             });
                         }
                     } else if let (
-                        TyKind::RigidTy(RigidTy::RawPtr(from_ty, _)),
+                        TyKind::RigidTy(RigidTy::RawPtr(..)),
                         TyKind::RigidTy(RigidTy::Ref(_, to_ty, _)),
                     ) = (operand_ty.kind(), ty.kind())
                     {
                         // When transmuting from a raw pointer to a reference, need to check that
-                        // the value the reference points to is initialized. The check covers the
-                        // non-padding bytes of `from_ty`, which include every non-padding byte of
-                        // `to_ty` when its layout is compatible. Otherwise it could miss some.
-                        if tys_layout_compatible_to_size(&from_ty, &to_ty) {
-                            self.push_target(MemoryInitOp::Check { operand: operand.clone() });
-                        } else {
-                            self.push_target(MemoryInitOp::Unsupported {
-                                reason: format!(
-                                    "Kani does not support checking memory initialization when \
-                                     transmuting `{operand_ty}` to `{ty}`, which point to types of \
-                                     incompatible layouts."
-                                ),
-                            });
-                        }
+                        // the value the reference points to is initialized. That is a `to_ty`,
+                        // whatever the pointer pointed to before.
+                        self.push_target(MemoryInitOp::CheckAs {
+                            operand: operand.clone(),
+                            pointee_ty: to_ty,
+                        });
                     }
                 }
                 _ => {}

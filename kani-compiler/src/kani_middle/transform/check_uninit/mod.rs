@@ -196,6 +196,7 @@ impl<'a> UninitInstrumenter<'a> {
         match &operation {
             MemoryInitOp::CheckSliceChunk { .. }
             | MemoryInitOp::Check { .. }
+            | MemoryInitOp::CheckAs { .. }
             | MemoryInitOp::CheckRef { .. } => {
                 self.build_get_and_check(body, source, operation, pointee_info)
             }
@@ -241,7 +242,9 @@ impl<'a> UninitInstrumenter<'a> {
                 // Depending on whether accessing the known number of elements in the slice, need to
                 // pass is as an argument.
                 let (diagnostic, args) = match &operation {
-                    MemoryInitOp::Check { .. } | MemoryInitOp::CheckRef { .. } => {
+                    MemoryInitOp::Check { .. }
+                    | MemoryInitOp::CheckAs { .. }
+                    | MemoryInitOp::CheckRef { .. } => {
                         let diagnostic = KANI_IS_PTR_INITIALIZED;
                         let args = vec![ptr_operand.clone(), layout_operand];
                         (diagnostic, args)
@@ -331,6 +334,7 @@ impl<'a> UninitInstrumenter<'a> {
             MemoryInitOp::Check { operand }
             | MemoryInitOp::CheckSliceChunk { operand, .. }
             | MemoryInitOp::CheckRef { operand } => operand.ty(body.locals()).unwrap(),
+            MemoryInitOp::CheckAs { .. } => operation.operand_ty(body),
             _ => unreachable!(),
         };
         body.insert_check(
