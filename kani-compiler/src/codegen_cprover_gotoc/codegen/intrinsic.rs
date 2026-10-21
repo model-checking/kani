@@ -74,9 +74,11 @@ impl GotocCtx<'_, '_> {
         debug!("codegen_never_return_intrinsic:\n\tinstance {:?}\n\tspan {:?}", instance, span);
 
         match intrinsic.as_str() {
-            "abort" => {
-                self.codegen_fatal_error(PropertyClass::Assertion, "reached intrinsic::abort", span)
-            }
+            "abort" | "abort_immediate" => self.codegen_fatal_error(
+                PropertyClass::Assertion,
+                &format!("reached intrinsic::{intrinsic}"),
+                span,
+            ),
             // Transmuting to an uninhabited type is UB.
             "transmute" => self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,

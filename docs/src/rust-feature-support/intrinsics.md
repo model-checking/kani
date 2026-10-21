@@ -20,6 +20,7 @@ if your code depends on an unsupported intrinsic.
 Name | Support | Notes |
 --- | --- | --- |
 abort | Yes | |
+abort_immediate | Yes | |
 add_with_overflow | Yes | |
 arith_offset | Yes | |
 assert_inhabited | Yes | |
