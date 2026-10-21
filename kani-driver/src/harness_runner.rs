@@ -67,7 +67,13 @@ fn run_until_abort<I: Sync, T: Send>(
     let completed: Mutex<Vec<(usize, T)>> = Mutex::new(Vec::new());
     let aborted = AtomicBool::new(false);
 
-    items.par_iter().enumerate().try_for_each(|(idx, item)| -> Result<()> {
+    // One item per rayon job. Rayon's default splitter stops dividing a slice after about
+    // `log2(threads)` unstolen splits and folds the remaining chunk sequentially on one worker,
+    // so with `-j N` the tail of the run would degrade to a single worker holding dozens of
+    // harnesses while the others sit idle. Harness run times vary by orders of magnitude, so
+    // the only balanced unit of work is a single harness. See
+    // <https://github.com/model-checking/kani/issues/4961>.
+    items.par_iter().with_max_len(1).enumerate().try_for_each(|(idx, item)| -> Result<()> {
         // Best effort: a unit that has not started returns without running once it observes a
         // latched abort. The load is `Relaxed`, so a unit racing the store may still run; that
         // costs one extra unit of work and is not incorrect. Units already in flight finish and
@@ -395,7 +401,7 @@ mod tests {
     use super::{Completed, in_input_order, prefix_thread_lines, run_until_abort};
     use anyhow::{Result, anyhow};
     use std::sync::Mutex;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::time::Duration;
 
     #[test]
@@ -499,6 +505,51 @@ mod tests {
 
         let err = outcome.expect_err("the genuine error must propagate");
         assert_eq!(err.to_string(), "unit 1 failed for its own reasons");
+    }
+
+    /// A slow unit must not hold back the units queued after it while other workers are idle.
+    ///
+    /// Rayon's default splitter divides a slice only about `log2(threads)` times before folding
+    /// the rest of a chunk sequentially on one worker. On a three-thread pool that turns twelve
+    /// units into four chunks of three, so unit 1 would be queued behind unit 0 on the same
+    /// worker and could not start until unit 0 finished, even with two workers idle. Unit 0 waits
+    /// (bounded, so nothing hangs) for unit 1 to start; without `with_max_len(1)` the wait times
+    /// out, since unit 1 cannot start before unit 0 returns.
+    #[test]
+    fn a_slow_unit_does_not_hold_back_the_units_after_it() {
+        let unit_1_started = AtomicBool::new(false);
+        let units = [Unit::Pass; 12];
+        let indexed: Vec<(usize, Unit)> = units.iter().copied().enumerate().collect();
+        let pool = rayon::ThreadPoolBuilder::new().num_threads(3).build().unwrap();
+
+        let outcome = pool.install(|| {
+            run_until_abort(&indexed, |(idx, _)| {
+                let saw_unit_1_start = match *idx {
+                    0 => {
+                        let mut seen = false;
+                        for _ in 0..5_000 {
+                            if unit_1_started.load(Ordering::SeqCst) {
+                                seen = true;
+                                break;
+                            }
+                            std::thread::sleep(Duration::from_millis(1));
+                        }
+                        seen
+                    }
+                    1 => {
+                        unit_1_started.store(true, Ordering::SeqCst);
+                        true
+                    }
+                    _ => true,
+                };
+                Ok(Completed { payload: saw_unit_1_start, aborts: false })
+            })
+        });
+
+        let (payloads, aborted) = outcome.expect("a clean run must succeed");
+        assert!(!aborted);
+        assert_eq!(payloads.len(), 12);
+        assert!(payloads[0], "unit 1 must start on another worker while unit 0 is still running");
     }
 
     /// A genuine error propagates when nothing aborts, which is the behaviour that existed before
