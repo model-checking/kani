@@ -318,7 +318,7 @@ impl KaniSession {
         file: &Path,
         harness_metadata: &HarnessMetadata,
     ) -> Result<Vec<OsString>> {
-        let mut args = self.cbmc_check_flags();
+        let mut args = self.cbmc_check_flags(harness_metadata);
 
         if let Some(object_bits) = self.args.cbmc_object_bits() {
             args.push("--object-bits".into());
@@ -369,7 +369,7 @@ impl KaniSession {
     }
 
     /// Just the flags to CBMC that enable property checking of any sort.
-    pub fn cbmc_check_flags(&self) -> Vec<OsString> {
+    pub fn cbmc_check_flags(&self, harness_metadata: &HarnessMetadata) -> Vec<OsString> {
         let mut args = Vec::new();
 
         // We assume that malloc cannot fail, see https://github.com/model-checking/kani/issues/891
@@ -401,7 +401,7 @@ impl KaniSession {
             args.push("--no-div-by-zero-check".into());
         }
 
-        if !self.args.checks.unwinding_on() {
+        if !self.args.checks.unwinding_on() || harness_metadata.attributes.no_unwinding_checks {
             args.push("--no-unwinding-assertions".into());
         } else {
             args.push("--no-self-loops-to-assumptions".into());

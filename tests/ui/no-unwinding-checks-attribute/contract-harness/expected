@@ -1,0 +1,2 @@
+error: `proof_for_contract` and `no_unwinding_checks` may not be used on the same function, because the contract would be trusted beyond the unwinding bound.
+error: aborting due to 1 previous error
