@@ -5,7 +5,8 @@
 
 //! Check if loop assign clause can be infered for inner-loop when there are local variables of outter-loop body.
 //! The gate-regression harnesses below cover checked-arithmetic, chained-call,
-//! and hoisted-reference initializers, plus a projection write through an argument.
+//! hoisted-reference, and statement-computed initializers, plus a projection write
+//! through an argument.
 
 #![feature(proc_macro_hygiene)]
 #![feature(stmt_expr_attributes)]
@@ -128,4 +129,31 @@ fn accumulate(acc: &mut u32, t1: u32) {
 fn proj_write_arg_stays_live() {
     let mut acc: u32 = 0;
     accumulate(&mut acc, kani::any_where(|x: &u32| *x < 5));
+}
+
+#[inline(never)]
+fn id(x: u32) -> u32 {
+    x
+}
+
+// A statement-computed outer-body local (`start = i + 1`, which gets no `StorageLive`)
+// feeding an inner loop's initializer. The copy is still needed so CBMC can infer the
+// inner loop's assigns clause; a liveness gate would wrongly refuse it.
+#[kani::proof]
+fn nested_start_from_stmt() {
+    let n: u32 = 4;
+    let mut i: u32 = 0;
+    let mut s: u32 = 0;
+    #[kani::loop_invariant(i <= n && s <= i * n)]
+    while i < n {
+        let start = i + 1;
+        let mut j = id(start);
+        #[kani::loop_invariant(j <= n + 1)]
+        while j < n {
+            j += 1;
+        }
+        s += j & 3;
+        i += 1;
+    }
+    assert!(s <= 16);
 }
