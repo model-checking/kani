@@ -1,3 +1,11 @@
-Status: FAILURE
+	 - Status: SUCCESS\
+	 - Description: "Check invariant after step for loop stale_measure_harness.0"
+
+stale_measure_harness.loop_decreases.1\
+	 - Status: FAILURE\
+	 - Description: "Check variant decreases after step for loop stale_measure_harness.0"
+
+	 - Status: SUCCESS\
+	 - Description: "assertion failed: x == 1 && y >= 2"
 
 VERIFICATION:- FAILED

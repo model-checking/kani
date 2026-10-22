@@ -12,7 +12,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::args::OutputFormat;
 use crate::call_cbmc::{VerificationResult, VerificationStatus};
-use crate::frontend::{JsonHandler, schema_utils::add_runner_results_to_json};
 use crate::progress_indicator::ProgressIndicator;
 use crate::project::Project;
 use crate::session::{BUG_REPORT_URL, KaniSession};
@@ -68,7 +67,13 @@ fn run_until_abort<I: Sync, T: Send>(
     let completed: Mutex<Vec<(usize, T)>> = Mutex::new(Vec::new());
     let aborted = AtomicBool::new(false);
 
-    items.par_iter().enumerate().try_for_each(|(idx, item)| -> Result<()> {
+    // One item per rayon job. Rayon's default splitter stops dividing a slice after about
+    // `log2(threads)` unstolen splits and folds the remaining chunk sequentially on one worker,
+    // so with `-j N` the tail of the run would degrade to a single worker holding dozens of
+    // harnesses while the others sit idle. Harness run times vary by orders of magnitude, so
+    // the only balanced unit of work is a single harness. See
+    // <https://github.com/model-checking/kani/issues/4961>.
+    items.par_iter().with_max_len(1).enumerate().try_for_each(|(idx, item)| -> Result<()> {
         // Best effort: a unit that has not started returns without running once it observes a
         // latched abort. The load is `Relaxed`, so a unit racing the store may still run; that
         // costs one extra unit of work and is not incorrect. Units already in flight finish and
@@ -92,13 +97,25 @@ fn run_until_abort<I: Sync, T: Send>(
     Ok((payloads, aborted.load(Ordering::Relaxed)))
 }
 
+/// Identify the worker on every line of a rendered verification result.
+fn prefix_thread_lines(output: &str, thread_index: usize) -> String {
+    let mut prefixed = output
+        .lines()
+        .map(|line| format!("Thread {thread_index}: {line}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    if output.ends_with('\n') {
+        prefixed.push('\n');
+    }
+    prefixed
+}
+
 impl<'pr> HarnessRunner<'_, 'pr> {
     /// Given a [`HarnessRunner`] (to abstract over how these harnesses were generated), this runs
     /// the proof-checking process for each harness in `harnesses`.
     pub(crate) fn check_all_harnesses(
         &self,
         harnesses: &'pr [&HarnessMetadata],
-        json_handler: Option<&mut JsonHandler>,
     ) -> Result<Vec<HarnessResult<'pr>>> {
         let sorted_harnesses = crate::metadata::sort_harnesses_by_loc(harnesses);
 
@@ -151,12 +168,7 @@ impl<'pr> HarnessRunner<'_, 'pr> {
         progress_indicator.finish();
 
         // The `Err` channel carries genuine errors only, so any error propagates.
-        let (results, fail_fast) = run_result?;
-
-        if let Some(handler) = json_handler {
-            let status_label = if fail_fast { "completed_with_fail_fast" } else { "completed" };
-            add_runner_results_to_json(handler, &results, harnesses.len(), status_label);
-        }
+        let (results, _) = run_result?;
 
         Ok(results)
     }
@@ -171,13 +183,13 @@ impl KaniSession {
     ) {
         if self.should_print_output() {
             if self.args.output_into_files {
-                self.write_output_to_file(result, harness, thread_index);
+                self.write_output_to_file(result, harness);
             }
 
             let output = result.render(&self.args.output_format(), harness.attributes.should_panic);
 
             if rayon::current_num_threads() > 1 {
-                self.emit_line(&format!("Thread {thread_index}: {output}"));
+                self.emit_line(&prefix_thread_lines(&output, thread_index));
             } else {
                 self.emit_line(&output);
             }
@@ -203,12 +215,7 @@ impl KaniSession {
         !self.args.common_args.quiet && self.args.output_format() != OutputFormat::Old
     }
 
-    fn write_output_to_file(
-        &self,
-        result: &VerificationResult,
-        harness: &HarnessMetadata,
-        thread_index: usize,
-    ) {
+    fn write_output_to_file(&self, result: &VerificationResult, harness: &HarnessMetadata) {
         let target_dir = self.result_output_dir().unwrap();
         let file_name = target_dir.join(harness.pretty_name.clone());
         let path = Path::new(&file_name);
@@ -216,11 +223,7 @@ impl KaniSession {
 
         std::fs::create_dir_all(prefix).unwrap();
         let mut file = File::create(&file_name).unwrap();
-        let mut file_output =
-            result.render(&OutputFormat::Regular, harness.attributes.should_panic);
-        if rayon::current_num_threads() > 1 {
-            file_output = format!("Thread {thread_index}:\n{file_output}");
-        }
+        let file_output = result.render(&OutputFormat::Regular, harness.attributes.should_panic);
 
         if let Err(e) = writeln!(file, "{file_output}") {
             eprintln!(
@@ -395,11 +398,24 @@ impl KaniSession {
 
 #[cfg(test)]
 mod tests {
-    use super::{Completed, in_input_order, run_until_abort};
+    use super::{Completed, in_input_order, prefix_thread_lines, run_until_abort};
     use anyhow::{Result, anyhow};
     use std::sync::Mutex;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::time::Duration;
+
+    #[test]
+    fn thread_prefixes_preserve_trailing_newlines() {
+        for (output, expected) in [
+            ("", ""),
+            ("result", "Thread 2: result"),
+            ("result\n", "Thread 2: result\n"),
+            ("\nresult\n", "Thread 2: \nThread 2: result\n"),
+            ("result\n\n", "Thread 2: result\nThread 2: \n"),
+        ] {
+            assert_eq!(prefix_thread_lines(output, 2), expected);
+        }
+    }
 
     /// What one unit of work should do when it runs.
     #[derive(Clone, Copy)]
@@ -489,6 +505,51 @@ mod tests {
 
         let err = outcome.expect_err("the genuine error must propagate");
         assert_eq!(err.to_string(), "unit 1 failed for its own reasons");
+    }
+
+    /// A slow unit must not hold back the units queued after it while other workers are idle.
+    ///
+    /// Rayon's default splitter divides a slice only about `log2(threads)` times before folding
+    /// the rest of a chunk sequentially on one worker. On a three-thread pool that turns twelve
+    /// units into four chunks of three, so unit 1 would be queued behind unit 0 on the same
+    /// worker and could not start until unit 0 finished, even with two workers idle. Unit 0 waits
+    /// (bounded, so nothing hangs) for unit 1 to start; without `with_max_len(1)` the wait times
+    /// out, since unit 1 cannot start before unit 0 returns.
+    #[test]
+    fn a_slow_unit_does_not_hold_back_the_units_after_it() {
+        let unit_1_started = AtomicBool::new(false);
+        let units = [Unit::Pass; 12];
+        let indexed: Vec<(usize, Unit)> = units.iter().copied().enumerate().collect();
+        let pool = rayon::ThreadPoolBuilder::new().num_threads(3).build().unwrap();
+
+        let outcome = pool.install(|| {
+            run_until_abort(&indexed, |(idx, _)| {
+                let saw_unit_1_start = match *idx {
+                    0 => {
+                        let mut seen = false;
+                        for _ in 0..5_000 {
+                            if unit_1_started.load(Ordering::SeqCst) {
+                                seen = true;
+                                break;
+                            }
+                            std::thread::sleep(Duration::from_millis(1));
+                        }
+                        seen
+                    }
+                    1 => {
+                        unit_1_started.store(true, Ordering::SeqCst);
+                        true
+                    }
+                    _ => true,
+                };
+                Ok(Completed { payload: saw_unit_1_start, aborts: false })
+            })
+        });
+
+        let (payloads, aborted) = outcome.expect("a clean run must succeed");
+        assert!(!aborted);
+        assert_eq!(payloads.len(), 12);
+        assert!(payloads[0], "unit 1 must start on another worker while unit 0 is still running");
     }
 
     /// A genuine error propagates when nothing aborts, which is the behaviour that existed before
