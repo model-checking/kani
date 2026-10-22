@@ -345,6 +345,7 @@ impl GotocCtx<'_, '_> {
         place: &Place,
         place_ref: Expr,
         place_ref_ty: Ty,
+        is_reference: bool,
         loc: &Location,
     ) -> Option<(Stmt, Stmt)> {
         if let Some(ProjectionElem::Deref) = place.projection.last() {
@@ -381,11 +382,18 @@ impl GotocCtx<'_, '_> {
 
                 // Then, generate a __CPROVER_r_ok check.
                 let raw_ptr_read_ok_expr =
-                    Expr::read_ok(ptr.cast_to(Type::void_pointer()), sz.clone())
+                    Expr::read_ok(ptr.clone().cast_to(Type::void_pointer()), sz.clone())
                         .cast_to(Type::Bool);
-                // __CPROVER_r_ok fails if size == 0, so need to explicitly avoid the check.
+                // __CPROVER_r_ok fails if size == 0, so need to explicitly avoid the check. A
+                // reference must still be non-null when nothing behind it can be read (a ZST, or
+                // a struct that is only an `extern type`); a raw pointer need not be.
                 let sz_typ = sz.typ().clone();
-                let raw_ptr_read_ok_expr = sz.eq(sz_typ.zero()).or(raw_ptr_read_ok_expr);
+                let zero_size_ok = if is_reference {
+                    sz.eq(sz_typ.zero()).and(ptr.is_nonnull())
+                } else {
+                    sz.eq(sz_typ.zero())
+                };
+                let raw_ptr_read_ok_expr = zero_size_ok.or(raw_ptr_read_ok_expr);
                 // Finally, assert that the pointer points to a valid memory location.
                 let raw_ptr_read_ok = self.codegen_assert(
                     raw_ptr_read_ok_expr,
