@@ -113,6 +113,8 @@ pub enum Intrinsic {
     SimdAnd,
     SimdDiv,
     SimdReduceAll,
+    SimdReduceMax,
+    SimdReduceMin,
     SimdRem,
     SimdEq,
     SimdExtract,
@@ -207,6 +209,8 @@ impl Intrinsic {
             | Intrinsic::SimdNe
             | Intrinsic::SimdOr
             | Intrinsic::SimdReduceAll
+            | Intrinsic::SimdReduceMax
+            | Intrinsic::SimdReduceMin
             | Intrinsic::SimdRem
             | Intrinsic::SimdShl
             | Intrinsic::SimdShr
@@ -386,7 +390,7 @@ impl Intrinsic {
             }
             // For const eval of nullary intrinsics, see https://github.com/rust-lang/rust/pull/142839
             "needs_drop" => unreachable!(
-                "Expected nullary intrinsic `core::intrinsics::type_id` to be const-evaluated before codegen"
+                "Expected nullary intrinsic `core::intrinsics::needs_drop` to be const-evaluated before codegen"
             ),
             // As of https://github.com/rust-lang/rust/pull/110822 the `offset` intrinsic is lowered to `mir::BinOp::Offset`
             "offset" => unreachable!(
@@ -438,7 +442,7 @@ impl Intrinsic {
                 Self::Transmute
             }
             "type_id" => unreachable!(
-                "Expected nullary intrinsic `core::intrinsics::type_id` to be const-evaluated before codegen"
+                "Expected nullary intrinsic `core::intrinsics::reflection::type_id` to be const-evaluated before codegen"
             ),
             "type_name" => unreachable!(
                 "Expected nullary intrinsic `core::intrinsics::type_name` to be const-evaluated before codegen"
@@ -642,6 +646,14 @@ fn try_match_simd(intrinsic_instance: &Instance) -> Option<Intrinsic> {
         "simd_reduce_all" => {
             assert_sig_matches!(sig, _ => RigidTy::Bool);
             Some(Intrinsic::SimdReduceAll)
+        }
+        "simd_reduce_max" => {
+            assert_sig_matches!(sig, _ => _);
+            Some(Intrinsic::SimdReduceMax)
+        }
+        "simd_reduce_min" => {
+            assert_sig_matches!(sig, _ => _);
+            Some(Intrinsic::SimdReduceMin)
         }
         "simd_rem" => {
             assert_sig_matches!(sig, _, _ => _);
