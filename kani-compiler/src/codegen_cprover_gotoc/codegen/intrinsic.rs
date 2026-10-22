@@ -1598,6 +1598,18 @@ impl GotocCtx<'_, '_> {
                 "https://github.com/model-checking/kani/issues/new/choose",
             );
         }
+        // rustc rejects any other result type with `E0511`; see `codegen_simd_cmp` for why the
+        // check is ours and why it is an unsupported construct.
+        let ret_ty = self.place_ty_stable(place);
+        if ret_ty != lane_ty {
+            return self.codegen_unimplemented_stmt(
+                &format!(
+                    "`{intrinsic_str}` with the result type `{ret_ty}` (lane type `{lane_ty}`)"
+                ),
+                loc,
+                "https://github.com/model-checking/kani/issues/4950",
+            );
+        }
         let arg = fargs.remove(0);
         let (simd, simd_decl) = self.decl_temp_variable(arg.typ().clone(), Some(arg), loc);
         let lane = |i: u64| simd.clone().index_array(Expr::int_constant(i, Type::size_t()));
@@ -1608,7 +1620,7 @@ impl GotocCtx<'_, '_> {
             let keep = if is_max { acc.clone().ge(lane(i)) } else { acc.clone().le(lane(i)) };
             stmts.push(acc.clone().assign(keep.ternary(acc.clone(), lane(i)), loc));
         }
-        let ret_typ = self.codegen_ty_stable(self.place_ty_stable(place));
+        let ret_typ = self.codegen_ty_stable(ret_ty);
         stmts.push(self.codegen_expr_to_place_stable(place, acc.cast_to(ret_typ), loc));
         Stmt::block(stmts, loc)
     }
