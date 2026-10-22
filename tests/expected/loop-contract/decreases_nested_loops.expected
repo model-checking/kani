@@ -1,0 +1,31 @@
+nested_both_harness.loop_decreases.1\
+	 - Status: SUCCESS\
+	 - Description: "Check variant decreases after step for loop nested_both_harness.0"
+
+nested_both_harness.loop_decreases.2\
+	 - Status: SUCCESS\
+	 - Description: "Check variant decreases after step for loop nested_both_harness.1"
+
+nested_outer_harness.loop_decreases.1\
+	 - Status: SUCCESS\
+	 - Description: "Check variant decreases after step for loop nested_outer_harness.1"
+
+nested_inner_harness.loop_decreases.1\
+	 - Status: SUCCESS\
+	 - Description: "Check variant decreases after step for loop nested_inner_harness.0"
+
+nested_wrong_outer_harness.loop_decreases.1\
+	 - Status: SUCCESS\
+	 - Description: "Check variant decreases after step for loop nested_wrong_outer_harness.0"
+
+nested_wrong_outer_harness.loop_decreases.2\
+	 - Status: FAILURE\
+	 - Description: "Check variant decreases after step for loop nested_wrong_outer_harness.1"
+
+nested_wrong_inner_harness.loop_decreases.1\
+	 - Status: FAILURE\
+	 - Description: "Check variant decreases after step for loop nested_wrong_inner_harness.0"
+
+nested_wrong_inner_harness.loop_decreases.2\
+	 - Status: SUCCESS\
+	 - Description: "Check variant decreases after step for loop nested_wrong_inner_harness.1"

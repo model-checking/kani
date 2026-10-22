@@ -362,8 +362,9 @@ completeness rules that consumers need alongside a version label.
   `end_line`, `goto_file`, per-check descriptions/locations, CBMC OS information or statistics.
 - **Effective `--object-bits`?** Restore shipped resolved encoding provenance under `configuration` or per harness?
   File/update a tracking issue on adoption; resolve representation before or at stabilization.
-- **Path provenance?** `file` is invocation-relative. Restore `project.workspace_root` or make paths
-  workspace-relative? `output_dir` may stay dropped, but `--target-dir` changes it; do not assume a default.
+- **Path provenance?** The base of `file` depends on how Kani runs (see the field reference). Restore
+  `project.workspace_root` or make all paths relative to one base? `output_dir` may stay dropped, but
+  `--target-dir` changes it; do not assume a default.
 - **`is_ctor_based`?** Constructor generation/mined-invariant filtering restricts success to admitted
   values independently of `is_bounded`. Representation is open; exports must state this restriction
   before stabilization. Omission cannot justify unrestricted proofs.
@@ -406,7 +407,7 @@ The narrower `INCOMPLETE` marker follows its presence matrix below.
 | `tools.kani` | string | — | The Kani release producing this document (`env!("CARGO_PKG_VERSION")` at build time); always known. |
 | `tools.rustc` | string | nullable | rustc toolchain `kani-compiler` was built against; `null` if the probe failed. |
 | `tools.cbmc` | string | nullable | CBMC's own `--version` output; `null` if it could not be probed. |
-| `enabled_unstable_features` | array of strings | never null, may be empty | Sorted `-Z` flags active for this run. |
+| `enabled_unstable_features` | array of strings | never null, may be empty | Sorted, distinct `-Z` flags active for this run. |
 | `harness_selection.requested_filters` | array of strings | never null, may be empty | Raw `--harness` values; empty means no filter. |
 | `harness_selection.exact` | bool | — | Whether `--exact` was passed. |
 | `harness_selection.unmatched_filters` | array of strings | never null, may be empty | Filters matching nothing while another matched; only without `--exact`. A wholly unmatched set errors before export (#4743). |
@@ -418,15 +419,15 @@ The narrower `INCOMPLETE` marker follows its presence matrix below.
 | `outcome.kind` (run level) | `"COMPLETED"` | — | Always `COMPLETED` in a terminal document; absent in the marker. No run-level `CRASHED` value. |
 | `run_state` | `"INCOMPLETE"` \| `"COMPLETE"` \| `"PARTIAL"` \| `"NO_HARNESSES_SELECTED"` | — | Trust is based on this field; see Completeness under Reading the results. |
 | `target` | string | — | The Rust target triple Kani itself was built for. |
-| `started_at` | string | — | UTC, `YYYY-MM-DDTHH:MM:SSZ` (second resolution). |
-| `wall_time_s` | number | — | Seconds; volatile between runs by design (see "Interaction with other flags"). |
+| `started_at` | string | — | UTC, `YYYY-MM-DDTHH:MM:SSZ` (second resolution). Taken after the build, when target selection starts. |
+| `wall_time_s` | number | — | Seconds from target selection to the start of the export write: target selection, verification and coverage output. The build is not included. Volatile between runs by design (see "Interaction with other flags"). |
 | `harnesses[]` | array of harness objects | never null, may be empty (e.g. under `NO_HARNESSES_SELECTED`) | Sorted by `(crate_name, file, line, name)`. |
 | `harnesses[].name` | string | — | Fully qualified `pretty_name`; see Selection under Reading the results. |
 | `harnesses[].crate_name` | string | — | Distinguishes same-named harnesses across crates in one workspace. |
-| `harnesses[].file` | string | — | Declaring-file path relative to the invocation directory; see the path-provenance open question. |
+| `harnesses[].file` | string | — | Declaring-file path. Under `cargo kani` it is relative to the Cargo workspace root; under `kani` it is relative to the invocation directory. Kani keeps a relative path from rustc unchanged and makes an absolute path relative to the invocation directory when it can; see the path-provenance open question. |
 | `harnesses[].line` | integer | — | 1-based harness-function start line; end line is not exported. |
 | `harnesses[].contract` | object | nullable | `null` when the harness carries no CBMC-level `assigns` contract. |
-| `harnesses[].contract.contracted_function_name` | string | — (when `contract` present) | The contract's target function. |
+| `harnesses[].contract.contracted_function_name` | string | — (when `contract` present) | Internal mangled symbol of the generated closure that carries the CBMC `assigns` contract. For the target function of a contract proof, read `harnesses[].attributes.kind.ProofForContract.target_fn`. |
 | `harnesses[].contract.recursion_tracker` | string | nullable | Non-null only for a `#[kani::recursive]` function. |
 | `harnesses[].is_automatically_generated` | bool | — | True for an autoharness-generated harness; not selectable with `--harness`/`--exact`. |
 | `harnesses[].has_loop_contracts` | bool | — | Whether the harness uses loop contracts. |
@@ -525,10 +526,17 @@ except for UTF-8 conversion* (captured with `to_string_lossy`, so a non-UTF-8 ar
 than round-tripped byte-for-byte): sufficient as a comparability signal, but not an exact argv to replay.
 Future flags must be assessed under this policy in the PR adding them.
 `--randomize-layout [seed]` changes the program's type layout; its seed is excluded here for a future subject/provenance block.
-`resolved_unwind` precedence is CLI `--unwind` > harness `#[kani::unwind]` > `--default-unwind`.
+`resolved_unwind` is the bound CBMC uses: Kani's own bound (CLI `--unwind` > harness `#[kani::unwind]` >
+`--default-unwind`) when there is one, otherwise the first `--unwind` in `--cbmc-args`. Kani's flags come first
+on CBMC's command line and CBMC takes the first occurrence.
 Requested attributes come verbatim from `.kani-metadata.json`; resolved solver/unwind are scalars or null.
-Solver precedence is last solver-selecting `--cbmc-args` override > CLI `--solver` > attribute > default;
-CBMC arguments follow Kani's flags. Bare `--smt2` lets CBMC choose and yields `resolved_solver: null`.
+`resolved_solver` is the solver CBMC selects from Kani's own solver flags (CLI `--solver` > attribute > default)
+followed by `--cbmc-args`, by CBMC's own rules: a named SMT solver flag wins over SAT flags, several named SMT
+flags resolve by CBMC's fixed priority whatever their order, and a repeated `--sat-solver`,
+`--external-sat-solver` or external SMT path takes its first occurrence, so `--cbmc-args --sat-solver X` does not
+replace the SAT solver Kani passes. With `--external-smt2-solver <path>` (or, without a named SMT flag,
+`--incremental-smt2-solver <path>`) the exported value is `<path>`. Bare `--smt2` lets CBMC choose and yields
+`resolved_solver: null`.
 
 ### Failure scenarios
 
@@ -583,10 +591,15 @@ outcome; `[]` means none retained, not proof that CBMC emitted none.
 | `…[].status` (in `failed_properties`, `unsupported_constructs`, `checks.other`, `covers.other`) | `SUCCESS`, `FAILURE`, `SATISFIED`, `UNSATISFIABLE`, `UNREACHABLE`, `UNDETERMINED`, `ERROR`, `UNKNOWN`, `COVERED`, `UNCOVERED` | closed |
 | `harnesses[].attributes.kind` | `"Proof"`, `"Test"`, `{"ProofForContract": {...}}` | closed (`HarnessKind`, 3 variants) |
 | `harnesses[].attributes.solver` | `"Cadical"`, `"Bitwuzla"`, `"Cvc5"`, `"Kissat"`, `"Minisat"`, `"Z3"`, or `{"Binary": "<path>"}` | **explicitly open** — see below |
-| `harnesses[].resolved_solver` | the lowercase spellings of the same six names, or an arbitrary binary-path string | **explicitly open** — see below |
+| `harnesses[].resolved_solver` | the lowercase solver names (the six above, plus other CBMC solver names such as `boolector`, `mathsat`, `yices`, `cprover-smt2`), or an arbitrary binary-path string | **explicitly open** — see below |
 
 Harness `OUT_OF_MEMORY` is inferred from CBMC-child status 137 (including SIGKILL mapped to `128 + 9`)
-when no property array exists; it is not measured memory. `TIMEOUT` arises only under `--harness-timeout`.
+or from CBMC's own `Out of memory` report, even when a property array exists; it is not measured memory.
+A property array counts only when CBMC printed its overall status (`cProverStatus`) after it and its
+exit status shows it finished reporting: 0, 10, or 6 with an `ERROR` property. Otherwise the harness is
+not `COMPLETED`: it is `OUT_OF_MEMORY` as above, else `CRASHED` with that status as `code`. So `code`
+can be `0` on `CRASHED`: CBMC exited 0 but did not print `cProverStatus`. `TIMEOUT` arises only under
+`--harness-timeout`.
 Read `attributes.should_panic` before interpreting the computed `failure_kind` classification:
 
 | `attributes.should_panic` | `failure_kind` | `outcome.verdict` |
