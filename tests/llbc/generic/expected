@@ -14,51 +14,50 @@ pub fn add_opt(x: Option<i32>, y: Option<i32>) -> Option<i32>\
     let v: i32; // local\
     let _5: i32; // anonymous local\
     let _6: i32; // anonymous local\
+    let _7: i32; // anonymous local\
+    let _8: i32; // anonymous local\
 \
     storage_live(_0)\
     storage_live(u)\
     storage_live(v)\
     storage_live(_5)\
     storage_live(_6)\
+    storage_live(_7)\
+    storage_live(_8)\
     match x {\
         Option::Some => {\
-            u = copy (x as variant Option::Some)._0\
-            match y {\
-                Option::Some => {\
-                    v = copy (y as variant Option::Some)._0\
-                    _6 = copy u panic.+ copy v\
-                    _5 = move _6\
-                    _0 = Option::Some { _0: move _5 }\
-                    storage_dead(_5)\
-                    storage_dead(_6)\
-                    storage_dead(v)\
-                    storage_dead(u)\
-                    storage_dead(y)\
-                    storage_dead(x)\
-                    return\
-                },\
-                Option::None => {\
-                    _0 = Option::None {  }\
-                    storage_dead(_6)\
-                    storage_dead(v)\
-                    storage_dead(u)\
-                    storage_dead(y)\
-                    storage_dead(x)\
-                    return\
-                },\
-            }\
         },\
-        Option::None => {\
+        _ => {\
             _0 = Option::None {  }\
-            storage_dead(_6)\
-            storage_dead(v)\
-            storage_dead(u)\
+            storage_dead(_8)\
             storage_dead(y)\
             storage_dead(x)\
             return\
         },\
     }\
-    undefined_behavior\
+    u = copy (x as variant Option::Some)._0\
+    match y {\
+        Option::Some => {\
+            v = copy (y as variant Option::Some)._0\
+            _6 = copy u\
+            _7 = copy v\
+            _8 = copy _6 panic.+ copy _7\
+            _5 = move _8\
+            storage_dead(_7)\
+            storage_dead(_6)\
+            _0 = Option::Some { _0: move _5 }\
+            storage_dead(_5)\
+            storage_dead(v)\
+        },\
+        _ => {\
+            _0 = Option::None {  }\
+        },\
+    }\
+    storage_dead(u)\
+    storage_dead(_8)\
+    storage_dead(y)\
+    storage_dead(x)\
+    return\
 }
 
 // Full name: test::main\
@@ -80,6 +79,7 @@ pub fn main()\
     ↳⚡ undefined_behavior\
     storage_dead(_3)\
     storage_dead(_2)\
+    _0 = ()\
     storage_dead(e)\
     return\
 }
