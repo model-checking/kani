@@ -38,10 +38,10 @@ done
 echo "[TEST] --export-json records the verification target"
 EXPORT_JSON="$TMP_DIR/export.json"
 kani riscv64.rs --target $TARGET -Z unstable-options --harness target_is_riscv64gc \
-    --export-json "$EXPORT_JSON" > /dev/null
+    -Z export-json --export-json "$EXPORT_JSON" > /dev/null
 python3 - "$EXPORT_JSON" << 'EOF'
 import json, sys
-print("metadata.target =", json.load(open(sys.argv[1]))["metadata"]["target"])
+print("target =", json.load(open(sys.argv[1]))["target"])
 EOF
 rm -rf "$TMP_DIR"
 

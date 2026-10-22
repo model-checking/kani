@@ -25,7 +25,7 @@ __CPROVER_architecture_arch = "riscv64"
 __CPROVER_architecture_char_is_unsigned = 1
 
 [TEST] --export-json records the verification target
-metadata.target = riscv64gc-unknown-linux-gnu
+target = riscv64gc-unknown-linux-gnu
 
 [TEST] cargo kani for riscv64
 Checking harness verify::elapsed_never_panics...
