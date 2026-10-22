@@ -10,7 +10,8 @@ use tracing::{debug, trace};
 /// A CBMC-level `assigns` contract that needs to be enforced on a function.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct AssignsContract {
-    /// The target of the contract
+    /// Mangled symbol of the generated closure that carries the contract.
+    /// The function the contract is for is in `HarnessKind::ProofForContract::target_fn`.
     pub contracted_function_name: String,
     /// A static global variable used to track recursion that must not be havocked.
     /// This is only needed if the function is tagged with `#[kani::recursive]`

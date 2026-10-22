@@ -11,12 +11,12 @@ use charon_lib::ast::meta::{
 };
 use charon_lib::ast::types::{Ty as CharonTy, TyKind as CharonTyKind};
 use charon_lib::ast::{
-    Abi as CharonAbi, AbortKind as CharonAbortKind, AggregateKind as CharonAggregateKind,
-    Assert as CharonAssert, BinOp as CharonBinOp, Binder as CharonBinder,
-    BinderKind as CharonBinderKind, Body as CharonBody, BorrowKind as CharonBorrowKind,
-    BuiltinAdt as CharonBuiltinAdt, BuiltinAssertKind as CharonBuiltinAssertKind,
-    BuiltinImplData as CharonBuiltinImplData, BuiltinPathElem as CharonBuiltinPathElem,
-    Call as CharonCall, CastKind as CharonCastKind, ConstGenericParam as CharonConstGenericVar,
+    Abi as CharonAbi, AggregateKind as CharonAggregateKind, Assert as CharonAssert,
+    BinOp as CharonBinOp, Binder as CharonBinder, BinderKind as CharonBinderKind,
+    Body as CharonBody, BorrowKind as CharonBorrowKind, BuiltinAdt as CharonBuiltinAdt,
+    BuiltinAssertKind as CharonBuiltinAssertKind, BuiltinImplData as CharonBuiltinImplData,
+    BuiltinPathElem as CharonBuiltinPathElem, Call as CharonCall, CallSafety as CharonCallSafety,
+    CastKind as CharonCastKind, ConstGenericParam as CharonConstGenericVar,
     ConstGenericVarId as CharonConstGenericVarId, ConstantExpr as CharonConstantExpr,
     ConstantExprKind as CharonRawConstantExpr, DeBruijnId as CharonDeBruijnId,
     DeBruijnVar as CharonDeBruijnVar, Disambiguator as CharonDisambiguator,
@@ -56,7 +56,7 @@ use charon_lib::ullbc_ast::{
     BlockData as CharonBlockData, BlockId as CharonBlockId, BodyContents as CharonBodyContents,
     BranchId as CharonBranchId, ExprBody as CharonExprBody, Statement as CharonStatement,
     StatementKind as CharonRawStatement, Terminator as CharonTerminator,
-    TerminatorKind as CharonRawTerminator,
+    TerminatorKind as CharonRawTerminator, UnwindKind as CharonUnwindKind,
 };
 use charon_lib::{error_assert, raise_error, register_error};
 use core::panic;
@@ -229,6 +229,11 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     def_id: trait_decl_id,
                     item_meta: self.translate_item_meta_from_defid(trait_def_id),
                     src: CharonTraitDeclSource::Normal,
+                    is_unsafe: self
+                        .tcx
+                        .trait_def(rustc_internal::internal(self.tcx, trait_def_id))
+                        .safety
+                        .is_unsafe(),
                     generics: self.generic_params_from_traitdecl(trait_decl),
                     implied_clauses: CharonVector::new(),
                     consts: Default::default(),
@@ -741,6 +746,9 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             layout: Default::default(),
             // Kani only translates sized ADTs.
             ptr_metadata: CharonPtrMetadata::None,
+            // Unknown: Kani does not compute which marker traits (`Sized`, `Freeze`, ...) a type
+            // implements, as Charon also leaves it for generic types.
+            marker_traits: None,
         };
         self.translated.type_decls.set_slot(c_typedeclid, typedecl.clone());
         typedecl
@@ -811,6 +819,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     kind: CharonTypeDeclKind::Struct(fields),
                     layout: Default::default(),
                     ptr_metadata: CharonPtrMetadata::Length,
+                    marker_traits: None,
                 };
                 self.translated.type_decls.set_slot(id, decl);
                 id
@@ -830,20 +839,32 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     ) -> Result<CharonItemMeta, CharonError> {
         let span = self.translate_instance_span(instance);
         let name = self.def_to_name(instance.def)?;
-        Ok(item_meta(span, name))
+        Ok(self.item_meta_of_def(span, name, instance.def.def_id()))
     }
 
     fn translate_item_meta_from_defid(&mut self, defid: DefId) -> CharonItemMeta {
         let def_id = rustc_internal::internal(self.tcx(), defid);
         let span = self.translate_span(rustc_internal::stable(self.tcx.def_span(def_id)));
         let name = self.defid_to_name(defid).unwrap();
-        item_meta(span, name)
+        self.item_meta_of_def(span, name, defid)
+    }
+
+    /// `item_meta`, plus what the item's definition says about where it comes from.
+    fn item_meta_of_def(&self, span: CharonSpan, name: CharonName, defid: DefId) -> CharonItemMeta {
+        let def_id = rustc_internal::internal(self.tcx, defid);
+        CharonItemMeta {
+            // Charon's passes keep the items reachable from the ones translation started from.
+            // Charon starts from the local crate by default (`--start-from crate`), so do the same.
+            started_from: def_id.is_local(),
+            is_extern: self.tcx.is_foreign_item(def_id),
+            ..item_meta(span, name)
+        }
     }
 
     fn translate_item_meta_adt(&mut self, adt: AdtDef) -> Result<CharonItemMeta, CharonError> {
         let span = self.translate_span(adt.span());
         let name = self.adtdef_to_name(adt)?;
-        Ok(item_meta(span, name))
+        Ok(self.item_meta_of_def(span, name, adt.def_id()))
     }
 
     fn is_builtin_fun(&mut self, func_def: InstanceDef) -> bool {
@@ -1058,11 +1079,14 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 (generics, CharonTraitDeclRef { id: trait_decl_id, generics: Box::new(args) })
             });
             let item_meta = self.translate_item_meta_from_defid(impl_def);
+            let header = self.tcx.impl_trait_header(impl_id);
             let trait_impl = CharonTraitImpl {
                 def_id: trait_impl_id,
                 item_meta,
                 src: CharonTraitImplSource::Normal,
                 impl_trait,
+                is_negative: matches!(header.polarity, rustc_middle::ty::ImplPolarity::Negative),
+                is_unsafe: header.safety.is_unsafe(),
                 generics,
                 implied_trait_refs: CharonVector::new(),
                 consts: Default::default(),
@@ -1222,10 +1246,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         // Add the synthetic block that aborts (Kani does not model unwinding).
         let abort_block = CharonBlockData {
             statements: Vec::new(),
-            terminator: CharonTerminator::new(
-                span,
-                CharonRawTerminator::Abort(CharonAbortKind::UndefinedBehavior),
-            ),
+            terminator: CharonTerminator::new(span, CharonRawTerminator::UndefinedBehavior),
+            kind: CharonUnwindKind::Regular,
         };
         body.push(abort_block);
         assert_eq!(self.abort_block.index(), body.len() - 1);
@@ -1447,7 +1469,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 let internal = rustc_internal::internal(self.tcx, def_id);
                 let builtin = self
                     .tcx
-                    .is_lang_item(internal, rustc_hir::attrs::lang_items::LangItem::OwnedBox)
+                    .is_lang_item(internal, rustc_attr_ir::lang_items::LangItem::OwnedBox)
                     .then_some(CharonBuiltinAdt::Box);
                 CharonTy::new(CharonTyKind::Adt(CharonTypeDeclRef {
                     id: c_typedeclid,
@@ -1521,7 +1543,9 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         if let Some(statement) = statement {
             statements.push(statement);
         }
-        CharonBlockData { statements, terminator }
+        // Kani does not model unwinding: every unwind edge goes to the abort block instead of a
+        // cleanup block, so no block is reached while unwinding.
+        CharonBlockData { statements, terminator, kind: CharonUnwindKind::Regular }
     }
 
     fn translate_statement(&mut self, stmt: &Statement) -> Option<CharonStatement> {
@@ -1559,9 +1583,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             TerminatorKind::Goto { target } => {
                 (None, CharonRawTerminator::Goto { target: CharonBlockId::from_usize(*target) })
             }
-            TerminatorKind::Unreachable => {
-                (None, CharonRawTerminator::Abort(CharonAbortKind::UndefinedBehavior))
-            }
+            TerminatorKind::Unreachable => (None, CharonRawTerminator::UndefinedBehavior),
             TerminatorKind::Drop { place, target, .. } => {
                 // Charon now carries the drop glue to run. Upstream reaches it through a trait
                 // proof for its synthetic `Destruct::drop_glue` method, which Kani does not model.
@@ -1606,6 +1628,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     func: c_func_op,
                     args: args.iter().map(|arg| self.translate_operand(arg)).collect(),
                     dest: self.translate_place(destination),
+                    safety: CharonCallSafety::Inherit,
                 };
                 (
                     None,
@@ -2053,6 +2076,7 @@ pub fn prepare_translated_crate(tcx: TyCtxt, translated: &mut CharonTranslatedCr
             kind: CharonTypeDeclKind::Opaque,
             layout: Default::default(),
             ptr_metadata: CharonPtrMetadata::None,
+            marker_traits: None,
         },
     );
 
@@ -2183,6 +2207,9 @@ fn item_meta(span: CharonSpan, name: CharonName) -> CharonItemMeta {
         // Since we want all reachable items (including those in external
         // crates) to be translated, always set `is_local` to true
         is_local: true,
+        // Set by `item_meta_of_def` for items that have a Rust definition.
+        started_from: false,
+        is_extern: false,
         // For now, assume all items are transparent
         opacity: CharonItemOpacity::Transparent,
         lang_item: None,
