@@ -18,7 +18,10 @@ const KANI_GIT_REVISION: &str = env!("KANI_GIT_REVISION");
 /// A summary of the rustc Kani was built with (and therefore uses), e.g.
 /// `using rustc 1.93.0-nightly (29a69716f 2025-11-10) (commit 29a69716 2025-11-10) with LLVM 21.1.5`.
 /// Captured at build time by `build.rs`; empty if it could not be determined.
-const KANI_RUSTC_VERSION: &str = env!("KANI_RUSTC_VERSION");
+pub(crate) const KANI_RUSTC_VERSION: &str = env!("KANI_RUSTC_VERSION");
+/// The release field of the same rustc, e.g. `1.93.0-nightly (29a69716f 2025-11-10)`.
+/// Captured at build time by `build.rs`; empty if it could not be determined.
+pub(crate) const KANI_RUSTC_RELEASE: &str = env!("KANI_RUSTC_RELEASE");
 
 /// Print Kani version. When `verbose` is true, this also appends the git build
 /// revision (issue #2617) and the underlying rustc version (issue #2872).
@@ -40,16 +43,16 @@ const CBMC_VERSION_VAR: &str = "CBMC_VERSION";
 /// `kani-dependencies`, so a runtime read would fail there.
 const KANI_DEPENDENCIES: &str = include_str!("../../kani-dependencies");
 
-/// The CBMC version found on `PATH`, or `None` if `cbmc` is absent or says
-/// nothing. Single source of truth for the `cbmc --version` probe (also used by
-/// `KaniSession::get_cbmc_info`).
+/// The trimmed `cbmc --version` output (e.g. `6.8.0 (cbmc-6.8.0)`), or `None` if `cbmc` is
+/// absent or says nothing. Single source of truth for the `cbmc --version` probe.
 pub(crate) fn cbmc_version_on_path() -> Option<String> {
     let output = Command::new("cbmc").arg("--version").output().ok()?;
     if !output.status.success() {
         return None;
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
-    stdout.split_whitespace().next().map(str::to_string)
+    let version = stdout.trim();
+    (!version.is_empty()).then(|| version.to_string())
 }
 
 fn pinned_cbmc_version() -> Option<String> {
@@ -69,7 +72,9 @@ fn parse_dependency_var(contents: &str, key: &str) -> Option<String> {
 /// Print the `PATH` CBMC version. Warn, but do not fail, when it does not
 /// match the pin: an unpinned CBMC must not block users.
 fn print_cbmc_version_info() {
-    let Some(found) = cbmc_version_on_path() else {
+    let Some(found) =
+        cbmc_version_on_path().and_then(|v| v.split_whitespace().next().map(str::to_string))
+    else {
         return;
     };
     println!("CBMC {found}");

@@ -1,0 +1,7 @@
+decreases_struct_field_harness.loop_decreases.1\
+	 - Status: SUCCESS\
+	 - Description: "Check variant decreases after step for loop decreases_struct_field_harness.0"
+
+wrong_decreases_struct_field_harness.loop_decreases.1\
+	 - Status: FAILURE\
+	 - Description: "Check variant decreases after step for loop wrong_decreases_struct_field_harness.0"
