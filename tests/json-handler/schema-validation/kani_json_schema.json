@@ -82,6 +82,7 @@
       "has_loop_contracts": "boolean",
       "is_bounded": "boolean",
       "has_refcount_caveat": "boolean",
+      "is_aliasing": "boolean",
       "attributes": {
         "kind": "named:attribute_kind",
         "should_panic": "boolean",

@@ -101,6 +101,10 @@ CASES = [
      "harnesses[0].has_refcount_caveat"),
     ("string has_refcount_caveat", COMPLETED, set_at(f"{H0}.has_refcount_caveat", "no"),
      "harnesses[0].has_refcount_caveat"),
+    ("missing is_aliasing", COMPLETED, delete_at(f"{H0}.is_aliasing"),
+     "harnesses[0].is_aliasing"),
+    ("string is_aliasing", COMPLETED, set_at(f"{H0}.is_aliasing", "no"),
+     "harnesses[0].is_aliasing"),
     # Elements of arrays that are empty in some fixtures.
     ("integer in cbmc_args", COMPLETED, set_at("configuration.cbmc_args", [5]),
      "configuration.cbmc_args[0]"),
