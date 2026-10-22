@@ -272,8 +272,8 @@ macro_rules! generate_arbitrary {
         #[doc(hidden)]
         pub fn any_byte_str_ref<const N: usize>(
             storage: &mut [u8; N],
-        ) -> &core_path::bstr::ByteStr {
-            core_path::bstr::ByteStr::new(any_slice_ref(storage))
+        ) -> &core_path::byte_str::ByteStr {
+            core_path::byte_str::ByteStr::new(any_slice_ref(storage))
         }
 
         /// Generate a WTF-8 string referring to the longest well-formed WTF-8 prefix of `storage`,
