@@ -74,6 +74,9 @@ impl GotocCtx<'_, '_> {
         debug!("codegen_never_return_intrinsic:\n\tinstance {:?}\n\tspan {:?}", instance, span);
 
         match intrinsic.as_str() {
+            // `abort` was renamed to `abort_immediate`; the current pinned toolchain
+            // only emits the latter. The `"abort"` arm is kept so the match still
+            // handles a toolchain that predates the rename.
             "abort" | "abort_immediate" => self.codegen_fatal_error(
                 PropertyClass::Assertion,
                 &format!("reached intrinsic::{intrinsic}"),
