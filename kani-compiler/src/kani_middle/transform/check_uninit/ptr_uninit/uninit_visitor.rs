@@ -660,6 +660,8 @@ fn can_skip_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::SimdDiv
         | Intrinsic::SimdRem
         | Intrinsic::SimdReduceAll
+        | Intrinsic::SimdReduceMax
+        | Intrinsic::SimdReduceMin
         | Intrinsic::SimdEq
         | Intrinsic::SimdExtract
         | Intrinsic::SimdGe

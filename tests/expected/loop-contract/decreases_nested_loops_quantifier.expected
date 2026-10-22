@@ -1,0 +1,5 @@
+nested_after_quantifier_harness.loop_decreases.1\
+	 - Status: FAILURE\
+	 - Description: "Check variant decreases after step for loop nested_after_quantifier_harness.1"
+
+VERIFICATION:- FAILED

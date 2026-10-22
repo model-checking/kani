@@ -10,7 +10,7 @@ use core::cmp;
 use core::intrinsics;
 use core::mem::{self, ManuallyDrop, MaybeUninit};
 use core::ops::Drop;
-use core::ptr::{self, NonNull, Unique};
+use core::ptr::{self, NonNull};
 use core::slice;
 
 #[cfg(not(no_global_oom_handling))]
@@ -33,14 +33,14 @@ enum AllocInit {
 /// involved. This type is excellent for building your own data structures like Vec and VecDeque.
 /// In particular:
 ///
-/// * Produces `Unique::dangling()` on zero-sized types.
-/// * Produces `Unique::dangling()` on zero-length allocations.
-/// * Avoids freeing `Unique::dangling()`.
+/// * Produces `NonNull::dangling()` on zero-sized types.
+/// * Produces `NonNull::dangling()` on zero-length allocations.
+/// * Avoids freeing `NonNull::dangling()`.
 /// * Catches all overflows in capacity computations (promotes them to "capacity overflow" panics).
 /// * Guards against 32-bit systems allocating more than isize::MAX bytes.
 /// * Guards against overflowing your length.
 /// * Calls `handle_alloc_error` for fallible allocations.
-/// * Contains a `ptr::Unique` and thus endows the user with all related benefits.
+/// * Contains a `NonNull`.
 /// * Uses the excess returned from the allocator to use the largest available capacity.
 ///
 /// This type does not in anyway inspect the memory that it manages. When dropped it *will*
@@ -52,7 +52,8 @@ enum AllocInit {
 /// `Box<[T]>`, since `capacity()` won't yield the length.
 #[allow(missing_debug_implementations)]
 pub(crate) struct RawVec<T, A: Allocator = Global> {
-    ptr: Unique<T>,
+    // Kani change: `core::ptr::Unique` was removed (rust-lang/rust#164146).
+    ptr: NonNull<T>,
     cap: usize,
     alloc: A,
 }
@@ -123,7 +124,7 @@ impl<T, A: Allocator> RawVec<T, A> {
     #[rustc_allow_const_fn_unstable(const_fn)]
     pub const fn new_in(alloc: A) -> Self {
         // `cap: 0` means "unallocated". zero-sized types are ignored.
-        Self { ptr: Unique::dangling(), cap: 0, alloc }
+        Self { ptr: NonNull::dangling(), cap: 0, alloc }
     }
 
     /// Like `with_capacity`, but parameterized over the choice of
@@ -196,7 +197,7 @@ impl<T, A: Allocator> RawVec<T, A> {
             // matches the size requested. If that ever changes, the capacity
             // here should change to `ptr.len() / mem::size_of::<T>()`.
             Self {
-                ptr: unsafe { Unique::new_unchecked(ptr.cast().as_ptr()) },
+                ptr: unsafe { NonNull::new_unchecked(ptr.cast().as_ptr()) },
                 cap: capacity,
                 alloc,
             }
@@ -215,11 +216,11 @@ impl<T, A: Allocator> RawVec<T, A> {
     /// guaranteed.
     #[inline]
     pub unsafe fn from_raw_parts_in(ptr: *mut T, capacity: usize, alloc: A) -> Self {
-        Self { ptr: unsafe { Unique::new_unchecked(ptr) }, cap: capacity, alloc }
+        Self { ptr: unsafe { NonNull::new_unchecked(ptr) }, cap: capacity, alloc }
     }
 
     /// Gets a raw pointer to the start of the allocation. Note that this is
-    /// `Unique::dangling()` if `capacity == 0` or `T` is zero-sized. In the former case, you must
+    /// `NonNull::dangling()` if `capacity == 0` or `T` is zero-sized. In the former case, you must
     /// be careful.
     #[inline]
     pub fn ptr(&self) -> *mut T {
@@ -367,7 +368,7 @@ impl<T, A: Allocator> RawVec<T, A> {
         // Allocators currently return a `NonNull<[u8]>` whose length matches
         // the size requested. If that ever changes, the capacity here should
         // change to `ptr.len() / mem::size_of::<T>()`.
-        self.ptr = unsafe { Unique::new_unchecked(ptr.cast().as_ptr()) };
+        self.ptr = unsafe { NonNull::new_unchecked(ptr.cast().as_ptr()) };
         self.cap = cap;
     }
 
