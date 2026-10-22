@@ -130,10 +130,6 @@ fn build_kani_lib(
         "host-config",
         "--profile",
         "dev",
-        // Disable debug assertions for now as a mitigation for
-        // https://github.com/model-checking/kani/issues/1740
-        "--config",
-        "profile.dev.debug-assertions=false",
         "--config",
         "host.rustflags=[\"--cfg=kani\", \"--cfg=kani_sysroot\"]",
         "--target",
