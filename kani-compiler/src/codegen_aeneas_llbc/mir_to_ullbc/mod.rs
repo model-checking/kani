@@ -66,7 +66,7 @@ use rustc_middle::ty::{TyCtxt, TypingEnv};
 use rustc_public::mir::mono::{Instance, InstanceDef};
 use rustc_public::mir::{
     AggregateKind, AssertMessage, BasicBlock, BinOp, Body, BorrowKind, CastKind, ConstOperand,
-    Local, Mutability, Operand, Place, ProjectionElem, Rvalue, Statement, StatementKind,
+    Local, LocalDecl, Mutability, Operand, Place, ProjectionElem, Rvalue, Statement, StatementKind,
     SwitchTargets, Terminator, TerminatorKind, UnOp, VarDebugInfoContents,
 };
 use rustc_public::rustc_internal;
@@ -96,6 +96,10 @@ pub struct Context<'a, 'tcx> {
     /// Block ID of the synthetic block that aborts. It is the target of every call's unwind edge
     /// (Kani does not model unwinding) and of the return edge of calls that never return.
     abort_block: CharonBlockId,
+    /// The locals of the MIR body being translated. This is the generic body of the function
+    /// (see `translate_function_body`), so their types refer to its generic parameters; the
+    /// body of `instance` has the monomorphized types instead.
+    body_locals: Vec<LocalDecl>,
     /// How Charon numbers the generic parameters of the item whose declaration is being
     /// translated (see [`ItemGenerics`]); `None` outside of declarations.
     item_generics: Option<ItemGenerics>,
@@ -147,6 +151,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             local_names,
             file_to_id,
             abort_block,
+            body_locals: Vec::new(),
             item_generics: None,
             binder_depth: 0,
         }
@@ -1232,6 +1237,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     fn translate_body(&mut self, mir_body: Body) -> CharonBody {
         let span = self.translate_span(mir_body.span);
         let arg_count = self.instance.fn_abi().unwrap().args.len();
+        self.body_locals = mir_body.locals().to_vec();
         let vars = self.translate_body_locals(&mir_body);
         let locals = CharonLocals { locals: vars, arg_count };
         // The synthetic abort block (see below) is appended after the translated
@@ -1590,7 +1596,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 // `resolve_drop_in_place` gives the glue for `T` directly: an instance of the
                 // `core::ptr::drop_glue` lang item (which `drop_in_place::<T>` merely wraps), and
                 // Kani already collects it.
-                let place_ty = place.ty(self.instance.body().unwrap().locals()).unwrap();
+                let place_ty = place.ty(&self.body_locals).unwrap();
                 let drop_glue = Instance::resolve_drop_in_place(place_ty);
                 let fn_ptr = self.translate_fn_ptr(drop_glue);
                 (
@@ -1738,9 +1744,9 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     }
 
     //Get the Ty of the Place
+    /// The type of `place` in the body being translated, after its projections.
     fn place_ty(&self, place: &Place) -> Ty {
-        let body = self.instance.body().unwrap();
-        body.local_decl(place.local).unwrap().ty
+        place.ty(&self.body_locals).unwrap()
     }
 
     fn translate_rvalue(&mut self, rvalue: &Rvalue) -> CharonRvalue {
@@ -1764,7 +1770,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             Rvalue::AddressOf(_, _) => todo!(),
             Rvalue::Len(place) => CharonRvalue::Len(
                 self.translate_place(place),
-                self.translate_ty(rvalue.ty(self.instance.body().unwrap().locals()).unwrap()),
+                self.translate_ty(rvalue.ty(&self.body_locals).unwrap()),
                 None,
             ),
             Rvalue::Cast(kind, operand, ty) => CharonRvalue::UnaryOp(
@@ -1797,8 +1803,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     (*operands).iter().map(|operand| self.translate_operand(operand)).collect();
                 // The type the aggregate builds, as `translate_ty` translates it: for ADTs and
                 // tuples this is the `TypeDeclRef` the aggregate names.
-                let agg_ty =
-                    self.translate_ty(rvalue.ty(self.instance.body().unwrap().locals()).unwrap());
+                let agg_ty = self.translate_ty(rvalue.ty(&self.body_locals).unwrap());
                 match agg_kind.clone() {
                     AggregateKind::Adt(adt_def, variant_id, _genarg, _user_anot, field_id) => {
                         let (c_variant_id, c_field_id) = match adt_def.kind() {
@@ -1919,7 +1924,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         targets: &SwitchTargets,
     ) -> (CharonSwitchData, CharonVector<CharonBranchId, CharonBlockId>) {
         trace!("translate_switch_targets: {discr:?} {targets:?}");
-        let ty = discr.ty(self.instance.body().unwrap().locals()).unwrap();
+        let ty = discr.ty(&self.body_locals).unwrap();
         let discr = self.translate_operand(discr);
         let switch_ty = self.translate_ty(ty);
         let switch_scalar_ty = *switch_ty.kind().as_scalar().unwrap();

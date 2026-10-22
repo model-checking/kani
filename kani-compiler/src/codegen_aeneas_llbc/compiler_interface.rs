@@ -383,9 +383,13 @@ fn charon_cli_options(print_llbc: bool) -> CliOpts {
 
 fn create_charon_transformation_context(tcx: TyCtxt) -> TransformCtx {
     let crate_name = tcx.crate_name(LOCAL_CRATE).as_str().into();
-    let mut translated = TranslatedCrate { crate_name, ..TranslatedCrate::default() };
+    let cli_options = charon_cli_options(false);
+    // Record the options in the crate: consumers check them (Aeneas rejects a crate that was not
+    // translated with `--preset=aeneas`).
+    let mut translated =
+        TranslatedCrate { crate_name, options: cli_options.clone(), ..TranslatedCrate::default() };
     prepare_translated_crate(tcx, &mut translated);
     let mut errors = ErrorCtx::new();
-    let options = TranslateOptions::new(&mut errors, &charon_cli_options(false));
+    let options = TranslateOptions::new(&mut errors, &cli_options);
     TransformCtx { options, translated, errors: std::cell::RefCell::new(errors) }
 }
