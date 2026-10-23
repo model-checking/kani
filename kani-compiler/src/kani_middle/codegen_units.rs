@@ -17,8 +17,8 @@ use crate::kani_middle::metadata::{
 use crate::kani_middle::reachability::filter_crate_items;
 use crate::kani_middle::stubbing::{check_compatibility, harness_stub_map};
 use crate::kani_middle::{
-    ArgSupport, SmartPointerModels, autoharness_supported_arg_ty, can_derive_arbitrary,
-    fmt_impl_self_ty, implements_arbitrary,
+    ArgSupport, SmartPointerModels, aliasable_arg_pairs, autoharness_supported_arg_ty,
+    can_derive_arbitrary, fmt_impl_self_ty, implements_arbitrary,
 };
 use crate::kani_queries::QueryDb;
 use kani_metadata::{
@@ -421,6 +421,7 @@ fn get_all_automatic_harnesses(
                 harness.mangled_name(),
                 caveats.is_bounded,
                 caveats.is_ctor_based,
+                caveats.is_aliasing,
             );
             (harness, metadata)
         })
@@ -1159,13 +1160,16 @@ fn choose_generic_instantiation(
 }
 
 /// The caveats that apply to a generated harness, reported in the summary table and stored in
-/// its metadata. They are independent: a harness can be both bounded and constructor-based.
+/// its metadata. They are independent: a harness can be bounded, constructor-based and aliasing
+/// at once.
 #[derive(Clone, Copy, Debug, Default)]
 struct AutoHarnessCaveats {
     /// Some argument uses *bounded* nondeterministic values, c.f. `--bounded-arguments`.
     is_bounded: bool,
     /// Some value is generated through a type's public constructor, c.f. `--constructor-args`.
     is_ctor_based: bool,
+    /// Some argument may alias an earlier one, c.f. `--alias-arguments`.
+    is_aliasing: bool,
 }
 
 /// Partition every function in the crate into (chosen, skipped), where `chosen` is a vector of the Instances for which we'll generate automatic harnesses,
@@ -1403,7 +1407,15 @@ fn automatic_harness_partition(
                             )
                         })
                     });
-                chosen.push((instance, AutoHarnessCaveats { is_bounded, is_ctor_based }));
+                // Whether the harness lets some argument alias an earlier one, which the
+                // summary reports as "(aliasing)". The harness generation inserts its aliasing
+                // choices for exactly these pairs.
+                let is_aliasing = args.autoharness_alias_arguments
+                    && !aliasable_arg_pairs(tcx, instance).is_empty();
+                chosen.push((
+                    instance,
+                    AutoHarnessCaveats { is_bounded, is_ctor_based, is_aliasing },
+                ));
             }
         }
     }
