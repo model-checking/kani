@@ -52,7 +52,7 @@ pub fn resolve_ty<'tcx>(
                     DefKind::Struct | DefKind::Union | DefKind::Enum
                 )?;
                 let ty = rustc_internal::stable(tcx.type_of(def_id)).value;
-                Ok(instantiate_path_args(tcx, current_module, path, ty))
+                instantiate_path_args(tcx, current_module, path, ty)
             }
         }
         Type::Array(array) => {
@@ -145,36 +145,57 @@ pub fn resolve_ty<'tcx>(
 /// concrete types (e.g. `Wrap<u8>`), so trait-implementation lookups can match a concrete
 /// impl. An omitted trailing parameter with a declared default is filled from the
 /// default, also when the path has no generic arguments at all (`Wrapper` for
-/// `struct Wrapper<T = u8>`). Returns `ty` unchanged when any argument cannot be
-/// resolved or a parameter without a default is missing, preserving the previous
-/// behavior for everything that resolved before.
+/// `struct Wrapper<T = u8>`). Returns `Ok(ty)` unchanged when any argument cannot be
+/// resolved or a parameter without a default is missing, preserving the previous behavior
+/// for everything that resolved before. Returns an `UnsupportedPath` error for a const-containing
+/// type path that has no type parameter to resolve through: this resolver does not instantiate
+/// const arguments, so such a path would otherwise leave a free const parameter that ICEs during
+/// instance resolution. A type that still carries a free type parameter (for example an omitted
+/// defaulted const) keeps its previous graceful behavior. This errors gracefully; it does not
+/// add support for instantiating const arguments.
 fn instantiate_path_args<'tcx>(
     tcx: TyCtxt<'tcx>,
     current_module: LocalDefId,
     path: &syn::Path,
     ty: Ty,
-) -> Ty {
+) -> Result<Ty, ResolveError<'tcx>> {
     // No generic arguments (`Wrapper`) is an empty list; parenthesized args keep `ty`.
     let syn_args: Vec<&syn::GenericArgument> = match path.segments.last().map(|seg| &seg.arguments)
     {
         Some(syn::PathArguments::AngleBracketed(args)) => args.args.iter().collect(),
         Some(syn::PathArguments::None) => Vec::new(),
-        _ => return ty,
+        _ => return Ok(ty),
     };
     let TyKind::RigidTy(RigidTy::Adt(adt_def, identity_args)) = ty.kind() else {
-        return ty;
+        return Ok(ty);
     };
-    // Resolve the user-written type arguments; lifetimes are erased below, and anything
-    // else (const arguments, associated-type bindings) keeps the uninstantiated type.
+    // A const-containing self-type cannot be instantiated here (this resolver does not
+    // instantiate const arguments). When no type parameter is left free to fail resolution
+    // gracefully first, the leftover free const parameter reaches instance resolution and
+    // ICEs. Refuse such a path up front with a clean error. A type that still carries a free
+    // type parameter (for example an omitted defaulted const on `Foo<T, const N = ...>`)
+    // falls through and keeps its previous graceful behavior.
+    let has_const = identity_args.0.iter().any(|arg| matches!(arg, GenericArgKind::Const(_)));
+    let has_type = identity_args.0.iter().any(|arg| matches!(arg, GenericArgKind::Type(_)));
+    if has_const && !has_type {
+        return Err(ResolveError::UnsupportedPath { kind: "const generic arguments" });
+    }
+    // Resolve the user-written type arguments; lifetimes are erased below, an associated-type
+    // binding keeps the uninstantiated type, and a const argument is refused (see below).
     let mut user_tys = Vec::new();
     for arg in syn_args {
         match arg {
             syn::GenericArgument::Type(syn_ty) => match resolve_ty(tcx, current_module, syn_ty) {
                 Ok(t) => user_tys.push(t),
-                Err(_) => return ty,
+                Err(_) => return Ok(ty),
             },
             syn::GenericArgument::Lifetime(_) => {}
-            _ => return ty,
+            // A written const argument (`Buf::<4>`) would leave a const parameter
+            // uninstantiated, which ICEs during instance resolution; refuse it with a clean error.
+            syn::GenericArgument::Const(_) => {
+                return Err(ResolveError::UnsupportedPath { kind: "const generic arguments" });
+            }
+            _ => return Ok(ty),
         }
     }
     // Substitute the definition's type parameters in declaration order; erase lifetime
@@ -191,19 +212,19 @@ fn instantiate_path_args<'tcx>(
                     .or_else(|| default_type_arg(tcx, &adt_def, param_index, &new_args));
                 match filled {
                     Some(t) => new_args.push(GenericArgKind::Type(t)),
-                    None => return ty,
+                    None => return Ok(ty),
                 }
             }
             GenericArgKind::Lifetime(_) => {
                 new_args.push(GenericArgKind::Lifetime(Region { kind: RegionKind::ReErased }))
             }
-            GenericArgKind::Const(_) => return ty,
+            GenericArgKind::Const(_) => return Ok(ty),
         }
     }
     if user_iter.next().is_some() {
-        return ty;
+        return Ok(ty);
     }
-    Ty::from_rigid_kind(RigidTy::Adt(adt_def, GenericArgs(new_args)))
+    Ok(Ty::from_rigid_kind(RigidTy::Adt(adt_def, GenericArgs(new_args))))
 }
 
 /// The declared default of `adt_def`'s `param_index`-th generic parameter, instantiated
