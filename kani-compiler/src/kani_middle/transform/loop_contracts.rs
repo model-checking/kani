@@ -800,10 +800,13 @@ impl LoopContractPass {
         let mut found_local_list = found_local_list;
         let localvars = self.get_storage_moving_variables(body);
         let forloopvars = self.get_kaniiter_variables(body);
+        let firstpat_vars: Vec<usize> =
+            self.get_first_pats_and_nth_pats(body).iter().map(|(first, ..)| *first).collect();
         let mut current_user_local = 0;
         let mut current_local_decl_blocks: Vec<BasicBlock> = Vec::new();
         let mut move_call_list: Vec<(usize, Vec<BasicBlock>)> = Vec::new();
         let mut kaniiter_blocks: Vec<usize> = Vec::new();
+        let mut moved_kaniiter: HashSet<usize> = HashSet::new();
         for (block_idx, block) in body.blocks().iter().enumerate() {
             let mut decl_current_user_local = false;
             let mut storage_live_block_stmt: Vec<Statement> = Vec::new();
@@ -841,13 +844,51 @@ impl LoopContractPass {
                 && dest.local == current_user_local
                 && current_user_local != 0
             {
-                move_call_list.push((closest_loop_head, current_local_decl_blocks.clone()));
+                // The splice helpers re-target each moved block's terminator via
+                // `get_mut_target_ref`, which only supports terminators with a single
+                // `target` (`Call` with a return target, `Goto`, `Assert`, `Drop`).
+                // A group spanning any other terminator (e.g. the `SwitchInt` of a
+                // branching initializer) cannot be moved; before this guard,
+                // attempting to move it panicked there.
+                let retargetable = current_local_decl_blocks.iter().all(|b| {
+                    matches!(
+                        b.terminator.kind,
+                        TerminatorKind::Call { target: Some(_), .. }
+                            | TerminatorKind::Goto { .. }
+                            | TerminatorKind::Assert { .. }
+                            | TerminatorKind::Drop { .. }
+                    )
+                });
+                // The for-loop machinery (kaniiter, firstpat tuples) keeps its
+                // move unconditionally. A nested `for` whose range reads
+                // outer-loop state computes its iterator once from the outer
+                // variable's value at entry.
+                let machinery = forloopvars.contains(&current_user_local)
+                    || firstpat_vars.contains(&current_user_local);
+                // The copy exists only so CBMC can infer an inner loop's assigns
+                // clause, so copy iff an inner loop writes the local.
+                let written_in_inner_loop = body.blocks().iter().enumerate().any(|(bb, blk)| {
+                    loop_head_map.get(&bb).is_some_and(|head| *head != closest_loop_head)
+                        && (blk.statements.iter().any(|s| {
+                            matches!(&s.kind, StatementKind::Assign(p, _) if p.local == current_user_local)
+                        }) || matches!(&blk.terminator.kind,
+                            TerminatorKind::Call { destination, .. } if destination.local == current_user_local))
+                });
+                if retargetable && (machinery || written_in_inner_loop) {
+                    move_call_list.push((closest_loop_head, current_local_decl_blocks.clone()));
+                    // Record only the kaniiter groups actually moved, so the goto below
+                    // leaves an unmoved `kani_into_iter` in place.
+                    if machinery {
+                        moved_kaniiter.insert(current_user_local);
+                    }
+                }
                 current_local_decl_blocks = Vec::new();
                 current_user_local = 0;
             }
 
             if let TerminatorKind::Call { destination: dest, .. } = terminatorkind
                 && forloopvars.contains(&dest.local)
+                && moved_kaniiter.contains(&dest.local)
             {
                 kaniiter_blocks.push(block_idx);
             }
