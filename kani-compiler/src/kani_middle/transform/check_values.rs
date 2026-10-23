@@ -28,9 +28,9 @@ use rustc_public::abi::{
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::visit::{Location, PlaceContext, PlaceRef};
 use rustc_public::mir::{
-    AggregateKind, BasicBlockIdx, BinOp, Body, CastKind, FieldIdx, Local, LocalDecl, MirVisitor,
-    Mutability, NonDivergingIntrinsic, Operand, Place, ProjectionElem, RawPtrKind, Rvalue,
-    Statement, StatementKind, Terminator, TerminatorKind, WithRetag,
+    AggregateKind, BasicBlockIdx, BinOp, Body, BorrowKind, CastKind, FieldIdx, Local, LocalDecl,
+    MirVisitor, Mutability, NonDivergingIntrinsic, Operand, Place, ProjectionElem, RawPtrKind,
+    Rvalue, Statement, StatementKind, Terminator, TerminatorKind, WithRetag,
 };
 use rustc_public::rustc_internal;
 use rustc_public::target::{MachineInfo, MachineSize};
@@ -294,10 +294,9 @@ enum SourceOp {
     /// Note that the same offset may have multiple ranges that may require being joined.
     BytesValidity { target_ty: Ty, rvalue: Rvalue, ranges: Vec<ValidValueReq> },
 
-    /// Similar to BytesValidity, but it stores any dereference that may be unsafe.
-    ///
-    /// This can happen for:
-    ///  - Raw pointer dereference
+    /// Check the value at an address without first producing a typed value from its bytes.
+    /// This includes values read, borrowed or dropped through raw pointers, and intermediate
+    /// pointer values needed to evaluate a place. The pointee may be just a projected field.
     DerefValidity { pointee_ty: Ty, rvalue: Rvalue, ranges: Vec<ValidValueReq> },
 
     /// Represents a range check Kani currently does not support.
@@ -326,18 +325,23 @@ struct UnsafeInstruction {
     operations: Vec<SourceOp>,
 }
 
-/// Extract any source that may potentially trigger UB due to the generation of an invalid value.
-///
-/// Generating an invalid value requires an unsafe operation, however, in MIR, it
-/// may just be represented as a regular assignment.
-///
-/// Thus, we have to instrument every assignment to an object that has niche and that the source
-/// is an object of a different source, e.g.:
-///   - Aggregate assignment
-///   - Transmute
-///   - MemCopy
-///   - Cast
+/// The operation consuming a place, independent of its mutability.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PlaceAccessKind {
+    /// Keep the existing checks for operations not yet classified here.
+    Conservative,
+    Drop,
+    MutableBorrow,
+    RawAddress,
+    Read,
+    SharedBorrow,
+    Store,
+}
+
+/// Extract operations that may generate invalid values, including assignments, transmutes,
+/// aggregate construction, and accesses through raw pointers.
 struct CheckValueVisitor<'a, 'b> {
+    access: PlaceAccessKind,
     tcx: TyCtxt<'b>,
     locals: &'a [LocalDecl],
     /// Whether we should skip the next instruction, since it might've been instrumented already.
@@ -363,6 +367,7 @@ impl<'a, 'b> CheckValueVisitor<'a, 'b> {
         skip_first: bool,
     ) -> Option<UnsafeInstruction> {
         let mut visitor = CheckValueVisitor {
+            access: PlaceAccessKind::Conservative,
             tcx,
             locals: body.locals(),
             skip_next: skip_first,
@@ -380,6 +385,95 @@ impl<'a, 'b> CheckValueVisitor<'a, 'b> {
             .target
             .get_or_insert_with(|| UnsafeInstruction { source: self.current, operations: vec![] });
         target.operations.push(op);
+    }
+
+    fn with_access(&mut self, access: PlaceAccessKind, visit: impl FnOnce(&mut Self)) {
+        let previous = self.access;
+        self.access = access;
+        visit(self);
+        self.access = previous;
+    }
+
+    /// Narrow checks only for an optional leading dereference and ordinary struct/tuple fields.
+    /// rustc's required `Derefer` pass separates other dereferences into temporary loads; its
+    /// runtime MIR validator rejects dereferences after the first projection (except in debug
+    /// info). Kani transforms bodies too, so explicitly fall back to the old conservative checks
+    /// for non-leading dereferences rather than assuming every input still has this shape.
+    /// Downcasts, unions and indexing also retain the old conservative checks.
+    fn supports_precise_access(&self, place: &Place) -> bool {
+        let mut ty = self.locals[place.local].ty;
+        for (idx, elem) in place.projection.iter().enumerate() {
+            match elem {
+                ProjectionElem::Deref if idx == 0 => {}
+                ProjectionElem::Field(_, field_ty) => {
+                    // The parent must support ordinary field projection. Some pattern
+                    // kinds have no stable representation, so inspect the internal kind first.
+                    if is_pattern_type(self.tcx, ty) {
+                        return false;
+                    }
+                    let ordinary_field = match ty.kind() {
+                        TyKind::RigidTy(RigidTy::Adt(def, _)) => def.kind() == AdtKind::Struct,
+                        TyKind::RigidTy(RigidTy::Tuple(_)) => true,
+                        _ => false,
+                    };
+                    if !ordinary_field {
+                        return false;
+                    }
+                    // A pattern field is not a union. Avoid stable kind conversion without
+                    // excluding final pattern fields from precise address/read/borrow checks.
+                    if !is_pattern_type(self.tcx, *field_ty) && field_ty.kind().is_union() {
+                        return false;
+                    }
+                }
+                ProjectionElem::Deref
+                | ProjectionElem::Downcast(_)
+                | ProjectionElem::OpaqueCast(_)
+                | ProjectionElem::Index(_)
+                | ProjectionElem::ConstantIndex { .. }
+                | ProjectionElem::Subslice { .. } => return false,
+            }
+            ty = elem.ty(ty).unwrap();
+        }
+        true
+    }
+
+    /// Form an address, rather than loading an aggregate to extract the field being checked.
+    fn check_place_value(&mut self, place: Place) {
+        let ty = place.ty(self.locals).unwrap();
+        match ty_validity_per_offset(self.tcx, &self.machine, ty, 0) {
+            Ok(ranges) if !ranges.is_empty() => {
+                self.push_target(SourceOp::DerefValidity {
+                    pointee_ty: ty,
+                    rvalue: Rvalue::AddressOf(RawPtrKind::Const, place),
+                    ranges,
+                });
+            }
+            Err(_) => self.push_target(SourceOp::UnsupportedCheck {
+                check: "raw pointer dereference".to_string(),
+                ty,
+            }),
+            _ => {}
+        }
+    }
+
+    /// Called only for places accepted by `supports_precise_access`.
+    ///
+    /// For `**ptr = value` or `&raw const **ptr`, rustc emits a separate load of the intermediate
+    /// pointer before the final store/address operation. `visit_operand` (or `CopyForDeref`)
+    /// classifies that load as Read, independently of the final operation's access kind.
+    fn check_place_access(&mut self, place: &Place) {
+        let through_raw_pointer = matches!(place.projection.first(), Some(ProjectionElem::Deref))
+            && self.locals[place.local].ty.kind().is_raw_ptr();
+        if through_raw_pointer {
+            match self.access {
+                PlaceAccessKind::Drop
+                | PlaceAccessKind::MutableBorrow
+                | PlaceAccessKind::Read
+                | PlaceAccessKind::SharedBorrow => self.check_place_value(place.clone()),
+                PlaceAccessKind::RawAddress | PlaceAccessKind::Store => {}
+                PlaceAccessKind::Conservative => unreachable!(),
+            }
+        }
     }
 }
 
@@ -399,8 +493,11 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                     });
                 }
                 StatementKind::Assign(place, rvalue) => {
-                    // First check rvalue.
-                    self.super_statement(stmt, location);
+                    // MIR Assign does not drop the old value. Drop terminators are visited
+                    // separately; rvalues and operands override the destination's access kind.
+                    self.with_access(PlaceAccessKind::Store, |visitor| {
+                        visitor.super_statement(stmt, location);
+                    });
                     // Then check the destination place.
                     let ranges = assignment_check_points(
                         self.tcx,
@@ -439,9 +536,10 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
             // Leave it as an exhaustive match to be notified when a new kind is added.
             match &term.kind {
                 TerminatorKind::Call { func, args, .. } => {
-                    // Note: For transmute, both Src and Dst must be valid type.
-                    // In this case, we need to save the Dst, and invoke super_terminator.
-                    self.super_terminator(term, location);
+                    // The return destination is a store; argument operands are reads.
+                    self.with_access(PlaceAccessKind::Store, |visitor| {
+                        visitor.super_terminator(term, location);
+                    });
                     match intrinsic_name(self.locals, func).as_deref() {
                         Some("write_bytes") => {
                             // The write bytes intrinsic may trigger UB in safe code.
@@ -486,13 +584,17 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                         _ => {}
                     }
                 }
+                TerminatorKind::Drop { .. } => {
+                    self.with_access(PlaceAccessKind::Drop, |visitor| {
+                        visitor.super_terminator(term, location);
+                    });
+                }
                 TerminatorKind::Goto { .. }
                 | TerminatorKind::SwitchInt { .. }
                 | TerminatorKind::Resume
                 | TerminatorKind::Abort
                 | TerminatorKind::Return
                 | TerminatorKind::Unreachable
-                | TerminatorKind::Drop { .. }
                 | TerminatorKind::Assert { .. }
                 | TerminatorKind::InlineAsm { .. } => self.super_terminator(term, location),
             }
@@ -500,6 +602,11 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
     }
 
     fn visit_place(&mut self, place: &Place, ptx: PlaceContext, location: Location) {
+        if self.access != PlaceAccessKind::Conservative && self.supports_precise_access(place) {
+            self.check_place_access(place);
+            self.super_place(place, ptx, location);
+            return;
+        }
         for (idx, elem) in place.projection.iter().enumerate() {
             let place_ref = PlaceRef { local: place.local, projection: &place.projection[..idx] };
             match elem {
@@ -533,7 +640,10 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                     }
                 }
                 ProjectionElem::Field(idx, target_ty) => {
-                    if target_ty.kind().is_union()
+                    // Complex projections can still reach pattern fields here.
+                    // A pattern is not a union; avoid converting its stable kind here too.
+                    if !is_pattern_type(self.tcx, *target_ty)
+                        && target_ty.kind().is_union()
                         && (!ptx.is_mutating() || place.projection.len() > idx + 1)
                     {
                         let validity =
@@ -568,6 +678,12 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
             }
         }
         self.super_place(place, ptx, location)
+    }
+
+    fn visit_operand(&mut self, operand: &Operand, location: Location) {
+        self.with_access(PlaceAccessKind::Read, |visitor| {
+            visitor.super_operand(operand, location);
+        });
     }
 
     fn visit_rvalue(&mut self, rvalue: &Rvalue, location: Location) {
@@ -717,7 +833,16 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
             | Rvalue::UnaryOp(_, _)
             | Rvalue::Use(..) => {}
         }
-        self.super_rvalue(rvalue, location);
+        let access = match rvalue {
+            Rvalue::AddressOf(_, _) => PlaceAccessKind::RawAddress,
+            Rvalue::Ref(_, BorrowKind::Mut { .. }, _) => PlaceAccessKind::MutableBorrow,
+            Rvalue::Ref(_, BorrowKind::Shared, _) => PlaceAccessKind::SharedBorrow,
+            Rvalue::CopyForDeref(_) => PlaceAccessKind::Read,
+            // In particular, Len, Discriminant and Reborrow are not ordinary value reads.
+            // Do not let them inherit Store from the containing assignment.
+            _ => PlaceAccessKind::Conservative,
+        };
+        self.with_access(access, |visitor| visitor.super_rvalue(rvalue, location));
     }
 }
 
