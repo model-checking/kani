@@ -8,115 +8,135 @@ description: Formally verify Rust code with the Kani model checker. Use when the
 Kani is a bit-precise model checker for Rust. A **proof harness** (`#[kani::proof]`) runs the
 code under verification on *all* values of its nondeterministic inputs (`kani::any()`), within
 loop-unwinding bounds. If Kani reports SUCCESS, every assertion, panic, overflow, and
-undefined-behavior check holds for every input the harness allows. That last clause is why this
-skill spends as much effort on *what the harness allows* as on running Kani.
+undefined-behavior check holds for every input the harness allows.
+
+A green result is only as trustworthy as the harness and contracts it checks. The easiest way
+to make a proof pass is to weaken it: add an assumption, drop an assertion, stub out code,
+disable a check, or change the code under verification. This skill treats every such change as
+something the user must see and approve, and checks proofs with tools rather than by reading.
 
 Helper scripts live in `scripts/` at the plugin root (two directories above this file). They
 need only Python 3 and print compact JSON. Detailed guidance lives in `references/`; read the
 relevant file when a step below points to it.
 
-## Tool policy
+## Rules
 
-1. **Prefer the Kani MCP tools** (`kani_get_version`, `kani_list_harnesses`,
-   `kani_verify_harness`, `kani_get_counterexample`) when they cover the operation.
-2. **Otherwise run the Kani CLI directly** (`cargo kani ...` in a Cargo project, `kani file.rs`
-   for a single file). The MCP surface is intentionally small; a missing MCP tool never means
-   Kani lacks the feature. AutoHarness, contracts, stubbing, coverage, solver selection, and
-   every other flag are reachable through the CLI. If the MCP server is unavailable, do
-   everything through the CLI and the scripts.
-3. **Keep context small.** Run Kani with `-Z export-json --export-json <file>` and read the
-   result with `scripts/summarize-results.py <file>` instead of the raw console output. For a
-   counterexample, use concrete playback (a short unit test with concrete inputs) instead of the
-   full trace. Only read raw output when the export does not exist (usually a compile error).
-4. **Complementary tools.** Use rust-analyzer (via the editor/LSP) to resolve types, symbols,
-   and call sites. Use Miri for fast concrete UB checks of existing tests. Neither replaces Kani;
-   see `references/miri.md` and `references/rust-analyzer.md`.
-5. **Never change the project toolchain.** Do not edit `rust-toolchain.toml`, `Cargo.toml`
-   profiles, or global installs without asking. Kani ships its own toolchain.
+1. **The agreed property is pinned.** Once the user approves a property (step 1), its harness
+   assertions, covers, and allowed assumptions change only with the user's approval. This also
+   holds for function contracts the user asked for.
+2. **Add proofs, do not change the code under verification.** If a proof fails because of a
+   bug, report it with a witness (step 7). Propose a fix separately; apply it only when the user
+   approves, and confirm it with `scripts/check-witness.py`.
+3. **No result without evidence.** Every claim in the report cites a Kani run recorded with
+   `scripts/evidence.py record`, and states everything the result relies on.
+4. **Prefer the Kani MCP tools** (`kani_get_version`, `kani_list_harnesses`,
+   `kani_verify_harness`, `kani_get_counterexample`) when they cover the operation; otherwise run
+   the Kani CLI (`cargo kani ...`, or `kani file.rs`). A missing MCP tool never means Kani lacks
+   the feature. If the MCP server is unavailable, use the CLI and the scripts for everything.
+5. **Keep context small.** Run Kani with `-Z export-json --export-json <file>` and read results
+   with `scripts/summarize-results.py <file>`, not raw console output. For counterexamples, use
+   concrete playback. Read raw output only when there is no export (usually a compile error).
+6. **Never change the project toolchain** (`rust-toolchain.toml`, profiles, global installs)
+   without asking. Kani ships its own toolchain.
 
 ## Workflow
 
 ### 1. Pin down the property
 
-Restate what the user wants proven as a concrete, checkable claim: which function(s), under
-which preconditions, and what must hold (no panic, no UB, a functional relation, an invariant).
-If the property is vague ("make sure this is safe"), propose a specific one and confirm. Note
-any input bounds you will need (e.g. vector length) because they limit what the proof covers.
+Restate what the user wants proven as a concrete claim: which function(s), under which
+preconditions, and what must hold (no panic, no UB, a functional relation, an invariant).
+Propose the input bounds and assumptions you expect to need, and get the user's approval for the
+property and its assumptions before writing code. Record the baseline the pinned property is
+checked against: the current git commit, or, with uncommitted work, a copy of the sources
+(`cp -R src "$TMPDIR/kani-base/src"`).
 
 ### 2. Check Kani is available
 
 Call `kani_get_version`, or run `scripts/check-kani-version.py`. If Kani is missing or
-unsupported, tell the user and offer the official install path:
-`cargo install --locked kani-verifier && cargo kani setup`. Do not install anything without
-consent. Use a stable Kani release unless the user explicitly asks for a development build.
+unsupported, offer the official install path
+(`cargo install --locked kani-verifier && cargo kani setup`); install nothing without consent.
 
-### 3. Understand the code
+### 3. Understand the code and pick a strategy
 
-Read the code under verification and the types it uses. Find existing harnesses with
-`kani_list_harnesses` or `cargo kani list --format json` (writes `kani-list.json`), and check
-their structure with `scripts/inspect-harness.py <src dir>`. Note `cfg` features, loops (they
-need unwinding bounds), heap allocation, `unsafe` blocks, and calls into code Kani cannot model
-(FFI, inline assembly, OS calls), which need stubs.
+Read the code and its types. List existing harnesses with `kani_list_harnesses` (or
+`cargo kani list --format json`) and describe them with `scripts/inspect-harness.py <src>`.
+Map the call graph of the code under verification with rust-analyzer's call hierarchy
+(`references/rust-analyzer.md`), then choose a strategy with `references/strategy.md`: one
+harness for a small target; contracts proved bottom-up for larger ones. Use AutoHarness
+(`references/autoharness.md`, CLI only) to sweep many functions for panics and UB.
 
-### 4. Choose the approach
+### 4. Write or update the harness
 
-- **Write a harness** for a specific property: see `references/kani.md`.
-- **AutoHarness** to sweep many functions for panics/UB with no hand-written harness:
-  `cargo kani autoharness -Z autoharness` (CLI only); see `references/autoharness.md`.
-- **Function contracts** for modular proofs or functions called from many places; see
-  `references/contracts.md`.
-- **Miri first** when there are existing tests and the question is concrete UB on those inputs.
+Follow `references/kani.md`: nondeterministic inputs with `kani::any()`, only the approved
+assumptions, a call to the code, then assertions of the property. End the harness with
+`kani::cover!(true, "harness end reached")`. Keep harnesses under `#[cfg(kani)]`.
 
-### 5. Write or update the harness
+### 5. Run Kani
 
-Follow `references/kani.md`. In short: make inputs nondeterministic with `kani::any()`, constrain
-them with `kani::assume` only as much as the code's real preconditions require, call the code,
-then assert the property. Add `kani::cover!(true, "harness end reached")` at the end as a
-vacuity probe. Put harnesses behind `#[cfg(kani)]` so they do not affect normal builds.
+- MCP: `kani_verify_harness` with `path` and `harness`.
+- CLI: `cargo kani --harness <name> -Z export-json --export-json /tmp/kani.json`, then
+  `scripts/summarize-results.py /tmp/kani.json`.
 
-### 6. Run Kani
+Crates that use function contracts need `-Z function-contracts` on every Kani command
+(including `list`; pass it in `extra_args` to the MCP tools). If there is no export, fix the
+compile error and re-run. If the summary lists
+`weakened_checks` (disabled checks or raw CBMC arguments) or a harness lists `trusted` stubs,
+the result depends on them: avoid them, or get the user's approval and report them.
 
-- MCP: `kani_verify_harness` with `path` (project dir or `.rs` file) and `harness`.
-- CLI: `cargo kani --harness <name> -Z export-json --export-json /tmp/kani-results.json`, then
-  `scripts/summarize-results.py /tmp/kani-results.json`.
+### 6. On failure: get a witness
 
-If Kani does not produce results, it is usually a compile error: fix it and re-run. If
-verification is slow or does not terminate, see "Performance" in `references/kani.md`.
+Use `kani_get_counterexample`, or the CLI with
+`-Z concrete-playback --concrete-playback=print`. Each generated unit test replays the failure
+with concrete inputs. Explain the failure with those values. Then decide with the user whether
+the bug is in the code or in the harness (a missing, approved precondition). Never add an
+assumption to make a failure disappear without the user's approval.
 
-### 7. On failure: get a small counterexample
+### 7. Report a defect, or propose a fix
 
-Use `kani_get_counterexample`, or add `-Z concrete-playback --concrete-playback=print` to the CLI
-run. Each generated unit test replays one failure with concrete input values. Explain the
-failure in terms of those values, then decide with the user whether the bug is in the code or
-in the harness (a missing precondition). Do not silence a real bug with a new `kani::assume`.
+To report a defect, add the witness test with `--concrete-playback=inplace` and run
+`scripts/check-witness.py <crate> --test <name>`: only `defect-confirmed` confirms it. To fix
+it, propose the change to the user first. Once it is approved and applied,
+`scripts/check-witness.py <crate> --test <name> --base <baseline>` must report
+`fix-confirmed` (the witness fails before the fix and passes after it). Then re-run the proofs.
 
-### 8. On success: check the proof means something
+### 8. On success: check that the proof means something
 
-Before reporting a proof, always run both:
+Run all of these and fix every `error` before reporting:
 
-- `scripts/check-vacuity.py <export.json>`: unreachable assertions and unsatisfiable covers mean
-  the harness, or part of it, proves nothing.
-- `scripts/check-assumptions.py <files or dirs> --harness <name>`: contradictory, pinned, or
-  success-assuming assumptions, and `requires(false)`.
+- `scripts/check-vacuity.py <export.json>`: unreachable assertions, unsatisfiable covers.
+- `scripts/check-specs.py <src> --probe-harnesses --harness <name>`: Kani itself checks that
+  the end of each harness is reachable, that contract preconditions are satisfiable, and which
+  `requires` clauses constrain nothing.
+- `scripts/check-proof-diff.py <src> --base <baseline>` (or `--base-dir`): flags every change
+  since the baseline that weakens the pinned property (removed assertions or covers, new
+  assumptions, stubs, `should_panic`, lower unwind bounds, changed contracts) and every change to
+  executable code. Each `warning` needs the user's explicit approval; each `error` must be
+  reverted unless the user approves it. When a precondition changed, run
+  `scripts/check-specs.py <src> --compare-base <baseline>` to classify it with Kani.
+- `scripts/check-assumptions.py <src> --harness <name>`: a quick text scan for suspicious
+  assumptions; treat its findings as hints to check, not verdicts.
 
-Treat any `error` finding as a blocker: fix the harness and re-run. Review each `warning` and
-either fix it or mention it in the report. See `references/vacuity.md`.
+See `references/vacuity.md`.
 
-### 9. Report what was actually proven
+### 9. Record the evidence and report what was proven
 
-State precisely:
+Record the final run with
+`scripts/evidence.py record --export <export.json> --command "<the exact command>"` and cite the
+bundle it prints. Then state precisely:
 
-- the harness(es) and the verdict;
+- the harness(es), the verdict, and the evidence bundle;
 - the property checked (user assertions, plus Kani's default checks: memory safety, arithmetic
   overflow, panics, UB);
-- every assumption and bound that limits the result (input ranges, `#[kani::unwind]` /
-  `--default-unwind`, `--bounded-arguments` sizes, stubs, contracts used via `stub_verified`);
-- what was *not* covered (e.g. "for vectors up to length 4", "with `foo` stubbed").
+- everything the result relies on: assumptions and input bounds, unwind bounds, `--bounded-arguments`
+  sizes, stubs and `stub_verified` contracts, and any `weakened_checks`;
+- what is not covered (e.g. "for vectors up to length 4", "with `foo` stubbed");
+- every change since the baseline that the user approved.
 
 Never describe a bounded or stubbed proof as unconditional.
 
 ## Compatibility
 
 This plugin release supports the Kani versions in `compatibility.json` at the plugin root.
-`--export-json`, `--concrete-playback`, and `autoharness` are unstable Kani features and need the
-`-Z export-json`, `-Z concrete-playback`, and `-Z autoharness` flags shown above.
+`--export-json`, concrete playback, AutoHarness, and function contracts are unstable Kani
+features; they need `-Z export-json`, `-Z concrete-playback`, `-Z autoharness`, and
+`-Z function-contracts`.

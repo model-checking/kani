@@ -40,6 +40,9 @@ vacuity = load("check-vacuity")
 assumptions = load("check-assumptions")
 inspect = load("inspect-harness")
 version = load("check-kani-version")
+proof_diff = load("check-proof-diff")
+specs = load("check-specs")
+DIFF = TESTS / "fixtures" / "rust" / "diff"
 
 
 class SummarizeTest(unittest.TestCase):
@@ -75,6 +78,23 @@ class SummarizeTest(unittest.TestCase):
             {"name": "b", "file": "f.rs", "line": 2, "outcome": {"kind": "TIMEOUT"}},
         ]}
         self.assertEqual([h["name"] for h in summarize.summarize(doc, failures_only=True)["harnesses"]], ["b"])
+
+    def test_weakened_checks_and_trusted(self):
+        doc = {"configuration": {"checks": {"overflow": False, "unwinding": True, "prove_safety_only": True},
+                                 "cbmc_args": ["--unwind", "2"]},
+               "harnesses": [{"name": "h", "file": "f.rs", "line": 1,
+                              "outcome": {"kind": "COMPLETED", "verdict": "SUCCESS"},
+                              "attributes": {"stubs": [{"original": "a", "replacement": "b"}],
+                                             "verified_stubs": ["c"]}}]}
+        s = summarize.summarize(doc)
+        self.assertEqual(s["weakened_checks"], ["--no-overflow-checks",
+                         "--prove-safety-only", "--cbmc-args --unwind 2"])
+        self.assertEqual(s["harnesses"][0]["trusted"], {"stubs": ["a -> b"], "verified_stubs": ["c"]})
+
+    def test_default_checks_are_not_weakened(self):
+        # The fixture enables every default check, but passes raw CBMC arguments.
+        _, s = run_main(summarize, [str(JSON_FIXTURES / "fixture-completed-failure.json")])
+        self.assertEqual(s["weakened_checks"], ["--cbmc-args --object-bits 16"])
 
     def test_unreadable_input(self):
         with contextlib.redirect_stderr(io.StringIO()):
@@ -180,6 +200,80 @@ class InspectTest(unittest.TestCase):
         self.assertEqual(
             self.by_name["clean"]["counts"], {
                 "nondet_inputs": 1, "assumptions": 1, "assertions": 1, "covers": 1})
+
+
+class ProofDiffTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        findings = proof_diff.diff_file(DIFF / "after.rs", (DIFF / "before.rs").read_text(),
+                                        (DIFF / "after.rs").read_text())
+        cls.rules = {(f["item"], f["rule"], f["severity"]) for f in findings}
+
+    def test_harness_weakening(self):
+        for rule, severity in [("assertion-removed", "error"), ("cover-removed", "warning"),
+                               ("assumption-changed", "warning"), ("stub-added", "warning"),
+                               ("should-panic-added", "error"), ("unwind-lowered", "warning")]:
+            self.assertIn(("check_helper", rule, severity), self.rules)
+
+    def test_harnesses_added_and_removed(self):
+        self.assertIn(("check_gone", "harness-removed", "error"), self.rules)
+        self.assertIn(("check_new", "harness-added", "info"), self.rules)
+
+    def test_contract_changes(self):
+        self.assertIn(("div", "requires-changed", "warning"), self.rules)
+        self.assertIn(("div", "ensures-removed", "warning"), self.rules)
+
+    def test_code_changes(self):
+        self.assertIn(("helper", "code-changed", "error"), self.rules)
+        self.assertIn(("added", "code-added", "warning"), self.rules)
+        self.assertIn(("removed_later", "code-removed", "error"), self.rules)
+
+    def test_unchanged_and_kani_only_code_is_quiet(self):
+        items = {item for item, _, _ in self.rules}
+        self.assertNotIn("method", items)
+        self.assertNotIn("kani_only_helper", items)
+        self.assertFalse(any(item == "div" and rule == "code-changed" for item, rule, _ in self.rules))
+
+    def test_no_changes(self):
+        src = (DIFF / "before.rs").read_text()
+        self.assertEqual(proof_diff.diff_file(DIFF / "before.rs", src, src), [])
+
+
+class SpecsPlanTest(unittest.TestCase):
+    def test_supported_types(self):
+        for ty in ["u8", "&u32", "&mut [u8; 4]", "(u8, bool)", "Option<i64>", "core::num::NonZeroU32", "Point"]:
+            self.assertTrue(specs.supported(ty, {"Point"}), ty)
+        for ty in ["&[u8]", "&str", "Vec<u8>", "*const u8", "&&u8", "Box<u8>"]:
+            self.assertFalse(specs.supported(ty, set()), ty)
+
+    def test_unsupported_functions_are_reported_unchecked(self):
+        src = """
+#[kani::requires(x.len() > 0)]
+fn slice(x: &[u8]) {}
+impl S { #[kani::requires(self.0 > 0)] fn m(&self) {} }
+#[kani::requires(true)]
+fn generic<T>(t: T) {}
+"""
+        plan = specs.Plan()
+        for fn in specs.parse_functions(src, "f.rs"):
+            specs.plan_function(plan, fn, None, set())
+        self.assertEqual(plan.checks, [])
+        self.assertEqual(len(plan.unchecked), 3)
+
+    def test_generated_checks(self):
+        src = "#[kani::requires(a != 0)]\n#[kani::requires(b < 10)]\nfn f(a: u8, b: &u8) -> u8 { a }\n"
+        plan = specs.Plan()
+        [fn] = specs.parse_functions(src, "f.rs")
+        specs.plan_function(plan, fn, ["a != 0"], set())
+        self.assertEqual([c["kind"] for c in plan.checks],
+                         ["sat", "clause", "clause", "new_implies_old", "old_implies_new"])
+        [(offset, text)] = plan.insertions["f.rs"]
+        self.assertEqual(offset, len(src) - 1)
+        self.assertIn("kani::cover!((a != 0) && (b < 10)", text)
+        self.assertIn("let b: &u8 = &__kani_spec_v_b;", text)
+
+    def test_arbitrary_types_are_discovered(self):
+        self.assertEqual(specs.arbitrary_types([TESTS / "fixtures" / "rust" / "assumptions.rs"]), set())
 
 
 class VersionTest(unittest.TestCase):

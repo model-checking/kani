@@ -14,14 +14,32 @@ useless. These failure modes are common, and Kani's verdict alone does not revea
    - `all-checks-unreachable`: nothing in the harness was checked;
    - `unsatisfiable-cover` / `unreachable-cover`: a cover the assumptions exclude;
    - `no-vacuity-probe` (info): the harness has no cover; add one.
-3. **`scripts/check-assumptions.py <paths> --harness <name>`** scans the source for
+3. **`scripts/check-specs.py <paths> --probe-harnesses --harness <name>`** asks Kani itself,
+   in a temporary copy of the crate, whether the end of each harness is reachable
+   (`harness-end-unreachable` means the proof is vacuous), whether each contract's preconditions
+   are satisfiable together (`requires-unsatisfiable`), and which precondition clauses hold for
+   every input (`requires-always-true`). A check that cannot run is reported as `unchecked`,
+   never as passing.
+4. **`scripts/check-proof-diff.py <paths> --base <baseline>`** compares the harnesses,
+   contracts, and code with the baseline the user agreed to, and flags every change that makes
+   the proof cover less (removed assertions or covers, new assumptions, stubs, `should_panic`,
+   lower unwind bounds, changed contracts), and every change to executable code.
+5. **`scripts/check-assumptions.py <paths> --harness <name>`** is a quick text scan of the source for
    contradictory bounds, `assume(false)`, pinned values (`x == 3`), assumptions that a call
    succeeds (`is_ok()`/`is_some()`), and assumptions placed after assertions.
-4. **`scripts/inspect-harness.py <paths> --harness <name>`** flags harnesses with no
+6. **`scripts/inspect-harness.py <paths> --harness <name>`** flags harnesses with no
    `kani::any()` (a unit test, not a proof), no assertions (only default checks), or loops
    without an unwind bound.
 
-Both checkers exit with status 2 when they report a `warning` or `error`.
+Each checker exits with status 2 when it reports a `warning` or `error`. The text-based
+scans (`check-assumptions.py`, `inspect-harness.py`) give hints; the Kani-backed checks decide.
+
+## What the result relies on
+
+`scripts/summarize-results.py` lists, for the run, `weakened_checks`: options that disable checks
+(`--no-overflow-checks`, `--no-unwinding-checks`, `--prove-safety-only`, ...) or pass raw CBMC
+arguments; and, per harness, `trusted`: stubs and `stub_verified` contracts. A SUCCESS holds only
+under them. Avoid them, or get the user's approval and list them in the report.
 
 ## Interpreting results
 

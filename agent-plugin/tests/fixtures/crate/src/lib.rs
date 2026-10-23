@@ -43,3 +43,26 @@ mod proofs {
         assert!(midpoint(a, a) == a);
     }
 }
+
+/// Integer division with a contract.
+#[cfg_attr(kani, kani::requires(divisor != 0))]
+#[cfg_attr(kani, kani::requires(dividend < 1000 || dividend >= 0))]
+pub fn checked_div(dividend: u32, divisor: u32) -> u32 {
+    dividend / divisor
+}
+
+/// A contract no input satisfies.
+#[cfg_attr(kani, kani::requires(x > 10 && x < 5))]
+pub fn impossible(x: u8) -> u8 {
+    x
+}
+
+#[cfg(kani)]
+mod contract_proofs {
+    use super::*;
+
+    #[kani::proof_for_contract(checked_div)]
+    fn check_div_contract() {
+        checked_div(kani::any(), kani::any());
+    }
+}

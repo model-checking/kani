@@ -104,7 +104,64 @@ fn summarize_harness(harness: &Value, max_failed: usize) -> Value {
     if !flags.is_empty() {
         out.insert("flags".into(), json!(flags));
     }
+    let trusted = trusted_constructs(harness);
+    if !trusted.is_empty() {
+        out.insert("trusted".into(), Value::Object(trusted));
+    }
     Value::Object(out)
+}
+
+/// Each entry: (`configuration.checks` key, value that weakens the proof, the flag that set it).
+const WEAKENING_CHECKS: &[(&str, bool, &str)] = &[
+    ("memory_safety", false, "--no-memory-safety-checks"),
+    ("overflow", false, "--no-overflow-checks"),
+    ("unwinding", false, "--no-unwinding-checks"),
+    ("undefined_function", false, "--no-undefined-function-checks"),
+    ("assertion_reach_checks", false, "--no-assertion-reach-checks"),
+    ("assert_contracts", false, "--no-assert-contracts"),
+    ("prove_safety_only", true, "--prove-safety-only"),
+    ("ignore_global_asm", true, "--ignore-global-asm"),
+];
+
+/// The Kani options of this run that disable checks or change what a SUCCESS means.
+fn weakened_checks(doc: &Value) -> Vec<String> {
+    let config = &doc["configuration"];
+    let mut weakened: Vec<String> = WEAKENING_CHECKS
+        .iter()
+        .filter(|(key, bad, _)| config["checks"][key].as_bool() == Some(*bad))
+        .map(|(_, _, flag)| flag.to_string())
+        .collect();
+    let cbmc_args: Vec<&str> =
+        config["cbmc_args"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
+    if !cbmc_args.is_empty() {
+        weakened.push(format!("--cbmc-args {}", cbmc_args.join(" ")));
+    }
+    weakened
+}
+
+/// What the harness's result relies on besides the code itself, as recorded by Kani.
+fn trusted_constructs(harness: &Value) -> Map<String, Value> {
+    let attributes = &harness["attributes"];
+    let stubs: Vec<String> = attributes["stubs"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|s| {
+            format!(
+                "{} -> {}",
+                s["original"].as_str().unwrap_or_default(),
+                s["replacement"].as_str().unwrap_or_default()
+            )
+        })
+        .collect();
+    let mut trusted = Map::new();
+    if !stubs.is_empty() {
+        trusted.insert("stubs".into(), json!(stubs));
+    }
+    if len(&attributes["verified_stubs"]) > 0 {
+        trusted.insert("verified_stubs".into(), attributes["verified_stubs"].clone());
+    }
+    trusted
 }
 
 pub fn summarize(doc: &Value, failures_only: bool, max_failed: usize) -> Value {
@@ -126,6 +183,10 @@ pub fn summarize(doc: &Value, failures_only: bool, max_failed: usize) -> Value {
         "failed": count("failed"),
         "harnesses": harnesses,
     });
+    let weakened = weakened_checks(doc);
+    if !weakened.is_empty() {
+        out["weakened_checks"] = json!(weakened);
+    }
     let unmatched = &doc["harness_selection"]["unmatched_filters"];
     if len(unmatched) > 0 {
         out["unmatched_filters"] = unmatched.clone();
@@ -152,5 +213,21 @@ mod tests {
         assert_eq!(harness["failed"][0]["location"], "test.rs:10");
         assert_eq!(harness["unsatisfiable_covers"], 1);
         assert!(harness.get("unreachable_checks").is_none());
+        assert_eq!(harness["trusted"]["stubs"], json!(["real_fn -> stub_fn"]));
+        assert_eq!(harness["trusted"]["verified_stubs"], json!(["verified_target_fn"]));
+    }
+
+    #[test]
+    fn reports_weakened_checks() {
+        let doc = json!({
+            "configuration": {
+                "checks": { "overflow": false, "memory_safety": true, "prove_safety_only": true },
+                "cbmc_args": ["--unwind", "3"]
+            }
+        });
+        assert_eq!(
+            summarize(&doc, false, 1)["weakened_checks"],
+            json!(["--no-overflow-checks", "--prove-safety-only", "--cbmc-args --unwind 3"])
+        );
     }
 }

@@ -69,9 +69,13 @@ All scripts print JSON and accept `--help`.
 | Script | Purpose |
 |--------|---------|
 | `check-kani-version.py` | Is the installed Kani supported by this plugin release? |
-| `summarize-results.py` | Compact summary of a `--export-json` file |
+| `summarize-results.py` | Compact summary of a `--export-json` file, including weakened checks and stubs the result relies on |
 | `check-vacuity.py` | Unreachable assertions, unsatisfiable covers, missing vacuity probes |
-| `check-assumptions.py` | Contradictory, pinned, or over-strong `kani::assume` / `requires` |
+| `check-specs.py` | Kani-backed checks: harness end reachable, preconditions satisfiable, precondition changes stronger or weaker |
+| `check-proof-diff.py` | Changes since a baseline that weaken the agreed property, and any change to the code under verification |
+| `check-witness.py` | Confirms a defect (the concrete playback witness fails) or a fix (fails before, passes after) |
+| `evidence.py` | Records the run behind a reported result, and re-checks it later |
+| `check-assumptions.py` | Quick text scan for contradictory, pinned, or over-strong `kani::assume` / `requires` |
 | `inspect-harness.py` | Harness structure: inputs, assertions, attributes, missing unwind bounds |
 
 ## Compatibility and versioning

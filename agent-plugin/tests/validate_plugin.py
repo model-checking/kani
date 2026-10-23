@@ -15,10 +15,10 @@ from pathlib import Path
 
 PLUGIN = Path(__file__).resolve().parent.parent
 REQUIRED_PLUGIN_FIELDS = ["name", "version", "description", "author", "keywords", "license", "repository"]
-REQUIRED_REFERENCES = ["kani", "autoharness", "contracts", "miri", "rust-analyzer", "vacuity"]
+REQUIRED_REFERENCES = ["kani", "autoharness", "contracts", "miri", "rust-analyzer", "strategy", "vacuity"]
 REQUIRED_SCRIPTS = [
-    "check-assumptions.py", "check-kani-version.py", "check-vacuity.py",
-    "inspect-harness.py", "summarize-results.py",
+    "check-assumptions.py", "check-kani-version.py", "check-proof-diff.py", "check-specs.py",
+    "check-vacuity.py", "check-witness.py", "evidence.py", "inspect-harness.py", "summarize-results.py",
 ]
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 SKILL_NAME = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")

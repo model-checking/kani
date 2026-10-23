@@ -4,6 +4,11 @@ rust-analyzer gives precise answers about the code that text search does not: th
 expression, where a symbol is defined, every caller of a function, which trait impl is used.
 Use it (through the editor's LSP integration, if the agent has one) to:
 
+- map the call graph of the code under verification, for the proof strategy
+  (`references/strategy.md`): `textDocument/prepareCallHierarchy` on a function, then
+  `callHierarchy/outgoingCalls` for its callees and `callHierarchy/incomingCalls` for its
+  callers. Expand outgoing calls recursively, stopping at functions outside the crate. Calls
+  through trait objects and generic parameters may be missing: check those call sites by hand;
 - find the exact path of the function under verification for `--harness`, `#[kani::stub]`, and
   `proof_for_contract`;
 - find all callers of a function before adding a contract or a stub;

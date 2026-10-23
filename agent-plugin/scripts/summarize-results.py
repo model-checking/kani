@@ -5,8 +5,10 @@
 
 Produces only the facts an agent needs to act on a verification run: per-harness verdict,
 the failed properties with their source locations, and the counts that matter for proof
-quality (unreachable checks, unsatisfiable covers, unsupported constructs). Empty fields are
-omitted to keep the output small.
+quality (unreachable checks, unsatisfiable covers, unsupported constructs). It also reports
+what a SUCCESS relies on: `weakened_checks` lists options of the run that disable checks, and
+each harness's `trusted` lists its stubs and `stub_verified` targets. Empty fields are omitted
+to keep the output small.
 
 Usage:
     cargo kani -Z export-json --export-json results.json ...
@@ -31,6 +33,39 @@ def location(prop):
     if prop.get("file") is None:
         return None
     return f"{prop['file']}:{prop['line']}" if prop.get("line") is not None else prop["file"]
+
+
+# Each entry: (configuration.checks key, value that weakens the proof, the flag that set it).
+WEAKENING_CHECKS = [
+    ("memory_safety", False, "--no-memory-safety-checks"),
+    ("overflow", False, "--no-overflow-checks"),
+    ("unwinding", False, "--no-unwinding-checks"),
+    ("undefined_function", False, "--no-undefined-function-checks"),
+    ("assertion_reach_checks", False, "--no-assertion-reach-checks"),
+    ("assert_contracts", False, "--no-assert-contracts"),
+    ("prove_safety_only", True, "--prove-safety-only"),
+    ("ignore_global_asm", True, "--ignore-global-asm"),
+]
+
+
+def weakened_checks(doc):
+    """The Kani options of this run that disable checks or change what a SUCCESS means."""
+    config = doc.get("configuration", {})
+    checks = config.get("checks", {})
+    weakened = [flag for key, bad, flag in WEAKENING_CHECKS if checks.get(key) is bad]
+    if config.get("cbmc_args"):
+        weakened.append("--cbmc-args " + " ".join(config["cbmc_args"]))
+    return weakened
+
+
+def trusted_constructs(harness):
+    """What the harness's result relies on besides the code itself, as recorded by Kani."""
+    attributes = harness.get("attributes", {})
+    trusted = {
+        "stubs": [f"{s['original']} -> {s['replacement']}" for s in attributes.get("stubs", [])],
+        "verified_stubs": list(attributes.get("verified_stubs", [])),
+    }
+    return {k: v for k, v in trusted.items() if v}
 
 
 def summarize_harness(harness, max_failed):
@@ -79,6 +114,9 @@ def summarize_harness(harness, max_failed):
     ]
     if flags:
         out["flags"] = flags
+    trusted = trusted_constructs(harness)
+    if trusted:
+        out["trusted"] = trusted
     return out
 
 
@@ -95,6 +133,9 @@ def summarize(doc, failures_only=False, max_failed=5):
         "failed": summary.get("failed", 0),
         "harnesses": harnesses,
     }
+    weakened = weakened_checks(doc)
+    if weakened:
+        out["weakened_checks"] = weakened
     unmatched = doc.get("harness_selection", {}).get("unmatched_filters", [])
     if unmatched:
         out["unmatched_filters"] = unmatched

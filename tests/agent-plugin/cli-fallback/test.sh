@@ -10,7 +10,7 @@ source "$(dirname "$0")/../../../agent-plugin/tests/smoke-lib.sh"
 cd "$FIXTURE"
 
 # Verify all harnesses. One harness fails, so Kani exits non-zero.
-if cargo kani -Z export-json --export-json "$WORK/all.json" > "$WORK/all.log" 2>&1; then
+if cargo kani -Z function-contracts -Z export-json --export-json "$WORK/all.json" > "$WORK/all.log" 2>&1; then
     fail "expected check_naive_midpoint to fail"
 fi
 [ -f "$WORK/all.json" ] || fail "no JSON export: $(tail -n 30 "$WORK/all.log")"
@@ -20,7 +20,7 @@ python3 - "$WORK/summary.json" <<'PY'
 import json, sys
 s = json.load(open(sys.argv[1]))
 by_name = {h["name"].split("::")[-1]: h for h in s["harnesses"]}
-assert s["total"] == 3 and s["failed"] == 1, s
+assert s["total"] == 4 and s["failed"] == 1, s
 assert by_name["check_midpoint"]["verdict"] == "SUCCESS", by_name
 naive = by_name["check_naive_midpoint"]
 assert naive["verdict"] == "FAILURE", naive
@@ -56,7 +56,7 @@ set -e
 python3 - "$WORK/assumptions.json" <<'PY'
 import json, sys
 r = json.load(open(sys.argv[1]))
-assert r["harnesses_checked"] == 3, r
+assert r["harnesses_checked"] == 4, r
 rules = {(f["harness"], f["rule"]) for f in r["findings"]}
 assert ("check_vacuous", "contradictory-bounds") in rules, rules
 assert not any(h == "check_midpoint" for h, _ in rules), rules

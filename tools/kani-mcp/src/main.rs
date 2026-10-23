@@ -87,7 +87,7 @@ fn tool_definitions() -> Value {
     let extra_args = json!({
         "type": "array",
         "items": { "type": "string" },
-        "description": "Extra Kani command-line arguments, passed through unchanged (e.g. [\"--default-unwind\", \"8\"])."
+        "description": "Extra Kani command-line arguments, passed through unchanged (e.g. [\"--default-unwind\", \"8\"]). Crates that use function contracts need [\"-Z\", \"function-contracts\"]."
     });
     json!([
         {
@@ -98,7 +98,11 @@ fn tool_definitions() -> Value {
         {
             "name": "kani_list_harnesses",
             "description": "List the proof harnesses and contracts in a Rust file or Cargo project (`kani list --format json`).",
-            "inputSchema": { "type": "object", "properties": { "path": path }, "required": ["path"] }
+            "inputSchema": {
+                "type": "object",
+                "properties": { "path": path, "extra_args": extra_args },
+                "required": ["path"]
+            }
         },
         {
             "name": "kani_verify_harness",
@@ -306,7 +310,9 @@ fn list_harnesses(args: &Value) -> Result<Value> {
     // unless it was already there, so the tool leaves the project as it found it.
     let list_file = target.dir.join("kani-list.json");
     let existed = list_file.exists();
-    let out = run(target.command(Some("list"), &["--format".into(), "json".into()]))?;
+    let mut list_args = vec!["--format".to_string(), "json".to_string()];
+    list_args.extend(string_list(args, "extra_args")?);
+    let out = run(target.command(Some("list"), &list_args))?;
     let contents = std::fs::read_to_string(&list_file);
     if !existed {
         let _ = std::fs::remove_file(&list_file);
@@ -400,8 +406,8 @@ fn get_counterexample(args: &Value) -> Result<Value> {
          panic check or a satisfiable cover). Inspect the failed properties instead."
     } else {
         "Each test replays one failure with concrete inputs. Add it to the crate with \
-         `--concrete-playback=inplace`, then run it with \
-         `cargo kani playback -Z concrete-playback -- <test name>`."
+         `--concrete-playback=inplace`, then confirm the defect with the plugin's \
+         `check-witness.py`, or run it with `cargo kani playback -Z concrete-playback -- <test name>`."
     });
     Ok(result)
 }

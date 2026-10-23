@@ -11,16 +11,16 @@ CLIENT="$PLUGIN/tests/mcp_client.py"
 
 "$CLIENT" "$KANI_MCP" \
     kani_get_version '{}' \
-    kani_list_harnesses "{\"path\": \"$FIXTURE\"}" \
-    kani_verify_harness "{\"path\": \"$FIXTURE\"}" \
-    kani_get_counterexample "{\"path\": \"$FIXTURE\", \"harness\": \"check_naive_midpoint\"}" \
+    kani_list_harnesses "{\"path\": \"$FIXTURE\", \"extra_args\": [\"-Z\", \"function-contracts\"]}" \
+    kani_verify_harness "{\"path\": \"$FIXTURE\", \"extra_args\": [\"-Z\", \"function-contracts\"]}" \
+    kani_get_counterexample "{\"path\": \"$FIXTURE\", \"harness\": \"check_naive_midpoint\", \"extra_args\": [\"-Z\", \"function-contracts\"]}" \
     kani_verify_harness "{\"path\": \"$FIXTURE\", \"harness\": \"check_midpoint\", \"extra_args\": [\"--no-such-flag\"]}" \
     > "$WORK/mcp.jsonl" || fail "MCP session failed"
 
 [ ! -e "$FIXTURE/kani-list.json" ] || fail "kani_list_harnesses left kani-list.json behind"
 
 # Same run through the CLI, for comparison with kani_verify_harness.
-(cd "$FIXTURE" && cargo kani -Z export-json --export-json "$WORK/cli.json" > /dev/null 2>&1) || true
+(cd "$FIXTURE" && cargo kani -Z export-json --export-json "$WORK/cli.json" -Z function-contracts > /dev/null 2>&1) || true
 "$SCRIPTS/summarize-results.py" "$WORK/cli.json" > "$WORK/cli-summary.json"
 
 python3 - "$WORK/mcp.jsonl" "$WORK/cli-summary.json" <<'PY'
@@ -33,11 +33,12 @@ print("kani_get_version: compatible", version["result"]["installed"])
 
 assert not listed["is_error"], listed
 assert listed["result"]["totals"]["standard-harnesses"] == 3, listed
+assert listed["result"]["totals"]["contract-harnesses"] == 1, listed
 print("kani_list_harnesses: 3 harnesses")
 
 assert not verified["is_error"], verified
 r = verified["result"]
-assert r["total"] == 3 and r["failed"] == 1 and r["exit_code"] != 0, r
+assert r["total"] == 4 and r["failed"] == 1 and r["exit_code"] != 0, r
 
 def strip_times(summary):
     return [{k: v for k, v in h.items() if k != "time_s"} for h in summary["harnesses"]]
