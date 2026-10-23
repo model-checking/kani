@@ -423,7 +423,7 @@ impl TestCx<'_> {
         // Open the `config.yml` file and extract its values
         let path_yml = self.testpaths.file.join("config.yml");
         let config_file = std::fs::File::open(path_yml).expect("couldn't open `config.yml`");
-        let exec_config_res = serde_yaml::from_reader(config_file);
+        let exec_config_res = serde_saphyr::from_reader(config_file);
         if let Err(error) = &exec_config_res {
             let err_msg = format!("couldn't parse `config.yml` file: {error}");
             fatal_error(&err_msg);
