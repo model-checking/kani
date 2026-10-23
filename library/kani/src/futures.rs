@@ -123,36 +123,35 @@ impl Scheduler {
         self.num_running += 1;
         JoinHandle { index }
     }
+}
 
-    /// Runs the scheduler with the given scheduling plan until all tasks have completed
-    fn run(&mut self, mut scheduling_plan: impl SchedulingStrategy) {
-        let waker = unsafe { Waker::from_raw(NOOP_RAW_WAKER) };
-        let cx = &mut Context::from_waker(&waker);
-        while self.num_running > 0 {
-            let (index, assumption) = scheduling_plan.pick_task(self.tasks.len());
-            let task = &mut self.tasks[index];
-            if let Some(fut) = task.as_mut() {
-                match fut.as_mut().poll(cx) {
-                    std::task::Poll::Ready(()) => {
-                        self.num_running -= 1;
-                        let _prev = task.take();
-                    }
-                    std::task::Poll::Pending => (),
-                }
-            } else if let SchedulingAssumption::CanAssumeRunning = assumption {
-                crate::assume(false); // useful so that we can assume that a nondeterministically picked task is still running
+/// The executor set by [`block_on_with_spawn`].
+///
+/// A task may call [`spawn`], which mutates the executor, so no reference to the executor may be
+/// live while a task runs. Every use goes through a new, short-lived reference from this function.
+///
+/// # Safety
+/// The executor must be set, and the reference must be dead before the next call.
+unsafe fn executor() -> &'static mut Scheduler {
+    let executor = &raw mut GLOBAL_EXECUTOR;
+    unsafe { (*executor).as_mut().unwrap() }
+}
+
+/// Runs the tasks of the global executor with the given scheduling plan until all of them complete
+fn run(mut scheduling_plan: impl SchedulingStrategy) {
+    let waker = unsafe { Waker::from_raw(NOOP_RAW_WAKER) };
+    let cx = &mut Context::from_waker(&waker);
+    while unsafe { executor() }.num_running > 0 {
+        let (index, assumption) = scheduling_plan.pick_task(unsafe { executor() }.tasks.len());
+        // Take the task out of the list while it runs: tasks it spawns may reallocate the list.
+        if let Some(mut fut) = unsafe { executor() }.tasks[index].take() {
+            match fut.as_mut().poll(cx) {
+                std::task::Poll::Ready(()) => unsafe { executor() }.num_running -= 1,
+                std::task::Poll::Pending => unsafe { executor() }.tasks[index] = Some(fut),
             }
+        } else if let SchedulingAssumption::CanAssumeRunning = assumption {
+            crate::assume(false); // useful so that we can assume that a nondeterministically picked task is still running
         }
-    }
-
-    /// Polls the given future and the tasks it may spawn until all of them complete
-    fn block_on<F: Future<Output = ()> + Sync + 'static>(
-        &mut self,
-        fut: F,
-        scheduling_plan: impl SchedulingStrategy,
-    ) {
-        self.spawn(fut);
-        self.run(scheduling_plan);
     }
 }
 
@@ -163,12 +162,12 @@ pub struct JoinHandle {
     index: usize,
 }
 
-#[allow(static_mut_refs)]
 impl Future for JoinHandle {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> std::task::Poll<Self::Output> {
-        if unsafe { GLOBAL_EXECUTOR.as_mut().unwrap().tasks[self.index].is_some() } {
+        // A task is out of the list only while it runs, and a task does not await itself.
+        if unsafe { executor() }.tasks[self.index].is_some() {
             std::task::Poll::Pending
         } else {
             cx.waker().wake_by_ref(); // For completeness. But Kani currently ignores wakers.
@@ -205,7 +204,8 @@ pub fn block_on_with_spawn<F: Future<Output = ()> + Sync + 'static>(
     unsafe {
         assert!(GLOBAL_EXECUTOR.is_none(), "`block_on_with_spawn` should not be nested");
         GLOBAL_EXECUTOR = Some(Scheduler::new());
-        GLOBAL_EXECUTOR.as_mut().unwrap().block_on(fut, scheduling_plan);
+        executor().spawn(fut);
+        run(scheduling_plan);
         GLOBAL_EXECUTOR = None;
     }
 }
