@@ -74,9 +74,14 @@ impl GotocCtx<'_, '_> {
         debug!("codegen_never_return_intrinsic:\n\tinstance {:?}\n\tspan {:?}", instance, span);
 
         match intrinsic.as_str() {
-            "abort" => {
-                self.codegen_fatal_error(PropertyClass::Assertion, "reached intrinsic::abort", span)
-            }
+            // `abort` was renamed to `abort_immediate`; the current pinned toolchain
+            // only emits the latter. The `"abort"` arm is kept so the match still
+            // handles a toolchain that predates the rename.
+            "abort" | "abort_immediate" => self.codegen_fatal_error(
+                PropertyClass::Assertion,
+                &format!("reached intrinsic::{intrinsic}"),
+                span,
+            ),
             // Transmuting to an uninhabited type is UB.
             "transmute" => self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,
@@ -512,6 +517,17 @@ impl GotocCtx<'_, '_> {
                 }
                 self.codegen_expr_to_place_stable(place, acc.cast_to(cbmc_ret_ty), loc)
             }
+            Intrinsic::SimdReduceMax => {
+                self.codegen_simd_reduce_max_min(true, fargs, place, farg_types, intrinsic_str, loc)
+            }
+            Intrinsic::SimdReduceMin => self.codegen_simd_reduce_max_min(
+                false,
+                fargs,
+                place,
+                farg_types,
+                intrinsic_str,
+                loc,
+            ),
             Intrinsic::SimdExtract => {
                 self.codegen_intrinsic_simd_extract(fargs, place, farg_types, ret_ty, span)
             }
@@ -1393,6 +1409,14 @@ impl GotocCtx<'_, '_> {
                     align: vtable.member("align", &self.symbol_table),
                 }
             }
+            TyKind::RigidTy(RigidTy::Foreign(_)) => {
+                // An `extern type` has no known size; rustc lays it out with size 0 and align 1,
+                // so only the fields before it count, as in rustc's own `dereferenceable` bounds.
+                SizeAlign {
+                    size: Type::size_t().zero(),
+                    align: Expr::int_constant(layout.align.abi.bytes(), usizet),
+                }
+            }
             TyKind::RigidTy(RigidTy::Slice(_)) | TyKind::RigidTy(RigidTy::Str) => {
                 let unit_t = match ty.kind() {
                     TyKind::RigidTy(RigidTy::Slice(et)) => et,
@@ -1552,6 +1576,41 @@ impl GotocCtx<'_, '_> {
             ],
             loc,
         )
+    }
+
+    /// `simd_reduce_max` (`is_max`) or `simd_reduce_min`. Both take integer vectors only (portable
+    /// SIMD's float `reduce_max`/`reduce_min` fold with `max`/`min` instead), so any other lane type
+    /// is reported as unsupported.
+    fn codegen_simd_reduce_max_min(
+        &mut self,
+        is_max: bool,
+        mut fargs: Vec<Expr>,
+        place: &Place,
+        farg_types: &[Ty],
+        intrinsic_str: &str,
+        loc: Location,
+    ) -> Stmt {
+        let (size, lane_ty) = self.simd_size_and_type(farg_types[0]);
+        if !lane_ty.kind().is_integral() {
+            return self.codegen_unimplemented_stmt(
+                &format!("`{intrinsic_str}` on non-integer lane type `{lane_ty}`"),
+                loc,
+                "https://github.com/model-checking/kani/issues/new/choose",
+            );
+        }
+        let arg = fargs.remove(0);
+        let (simd, simd_decl) = self.decl_temp_variable(arg.typ().clone(), Some(arg), loc);
+        let lane = |i: u64| simd.clone().index_array(Expr::int_constant(i, Type::size_t()));
+        // Folding into a variable keeps the expression linear in the number of lanes.
+        let (acc, acc_decl) = self.decl_temp_variable(lane(0).typ().clone(), Some(lane(0)), loc);
+        let mut stmts = vec![simd_decl, acc_decl];
+        for i in 1..size {
+            let keep = if is_max { acc.clone().ge(lane(i)) } else { acc.clone().le(lane(i)) };
+            stmts.push(acc.clone().assign(keep.ternary(acc.clone(), lane(i)), loc));
+        }
+        let ret_typ = self.codegen_ty_stable(self.place_ty_stable(place));
+        stmts.push(self.codegen_expr_to_place_stable(place, acc.cast_to(ret_typ), loc));
+        Stmt::block(stmts, loc)
     }
 
     /// Generates code for a SIMD vector comparison intrinsic, after checking that the result type

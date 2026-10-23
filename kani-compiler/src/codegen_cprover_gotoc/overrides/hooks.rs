@@ -885,8 +885,12 @@ impl GotocHook for LoopInvariantRegister {
                 stmt = stmt.with_loop_modifies(assigns.clone());
                 gcx.current_loop_modifies.clear();
             }
-            if let Some(decreases) = gcx.current_loop_decreases.take() {
-                stmt = stmt.with_loop_decreases(decreases);
+            // The decreases clause of this loop, if any, was attached to the head of the loop,
+            // which is the target of this latch (see `codegen_block`).
+            if let Some(decreases) =
+                gcx.current_fn_mut().loop_decreases_mut().by_head.remove(&target.unwrap())
+            {
+                stmt = stmt.with_loop_decreases(decreases.measure);
             }
 
             // Add `free(0)` to make sure the body of `free` won't be dropped to
@@ -906,7 +910,7 @@ impl GotocHook for LoopInvariantRegister {
             // goto target
             // Discard any decreases clause since it won't be checked without
             // the loop-contracts flag.
-            gcx.current_loop_decreases = None;
+            gcx.current_fn_mut().loop_decreases_mut().pending = None;
             Stmt::block(
                 vec![
                     unwrap_or_return_codegen_unimplemented_stmt!(
@@ -1080,6 +1084,19 @@ fn handle_quantifier(
     quantifier_kind: QuantifierKind,
 ) -> Stmt {
     let loc = gcx.codegen_span_stable(span);
+    // The predicate becomes part of a pure expression, which needs its body: `kani::forall!` and
+    // `kani::exists!` always pass a closure. A function pointer could be anything at runtime.
+    if find_closure_instance(&instance).is_none() {
+        let predicate_ty = instance.args().0.last().and_then(|arg| arg.ty().copied());
+        return gcx.codegen_unimplemented_stmt(
+            &format!(
+                "a quantifier whose predicate is not a closure (found `{}`)",
+                predicate_ty.map_or_else(|| "?".to_string(), |ty| ty.to_string())
+            ),
+            loc,
+            "https://github.com/model-checking/kani/issues/new/choose",
+        );
+    }
     let target = target.unwrap();
     let lower_bound = &fargs[0];
     let upper_bound = &fargs[1];
