@@ -1,0 +1,11 @@
+- Status: FAILURE\
+- Description: "Undefined Behavior: Invalid value of type `&mut bool`"\
+in function store_through_reference
+
+- Status: FAILURE\
+- Description: "Undefined Behavior: Invalid value of type `&mut bool`"\
+in function address_through_reference
+
+Verification failed for - invalid_intermediate_reference
+Verification failed for - invalid_intermediate_reference_raw_address
+Complete - 0 successfully verified harnesses, 2 failures, 2 total.

@@ -1,3 +1,0 @@
-Failed Checks: Undefined Behavior: Invalid value of type `pattern_type!(*const u8 is !null)`
-Verification failed for - invalid_not_null_field_read
-Complete - 0 successfully verified harnesses, 1 failures, 1 total.

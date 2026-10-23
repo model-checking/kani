@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Z valid-value-checks
-//! Keep explicit NotNull field projections safe from unsupported stable type conversion.
+//! Raw addresses and reads of pattern fields have different validity requirements.
 #![feature(pattern_types, pattern_type_macro)]
 
 // This is the same pattern kind used by NonNull's private pointer field.
@@ -35,4 +35,18 @@ fn raw_address_of_invalid_pattern_is_valid() {
     let field = unsafe { field_address(holder) };
     assert_eq!(field.cast::<*const u8>(), &raw const pointer);
     kani::cover!(true);
+}
+
+#[inline(never)]
+unsafe fn read_pointer(ptr: *const Holder) -> *const u8 {
+    unsafe { std::mem::transmute((*ptr).pointer) }
+}
+
+#[kani::proof]
+fn invalid_not_null_field_read() {
+    // Initialized bytes representing null, not uninitialized memory.
+    let pointer: *const u8 = std::ptr::null();
+    let holder = (&raw const pointer).cast::<Holder>();
+    let result = unsafe { read_pointer(holder) };
+    assert!(result.is_null());
 }

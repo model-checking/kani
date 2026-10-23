@@ -1,7 +1,0 @@
-not_null_field_projection.cover.1\
-- Status: SATISFIED
-
-raw_address_of_invalid_pattern_is_valid.cover.1\
-- Status: SATISFIED
-
-Complete - 2 successfully verified harnesses, 0 failures, 2 total.

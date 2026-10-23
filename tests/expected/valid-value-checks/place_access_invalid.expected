@@ -1,0 +1,26 @@
+- Status: FAILURE\
+- Description: "Undefined Behavior: Invalid value of type `bool`"\
+in function read_bool
+
+- Status: FAILURE\
+- Description: "Undefined Behavior: Invalid value of type `bool`"\
+in function read_second
+
+- Status: FAILURE\
+- Description: "Undefined Behavior: Invalid value of type `bool`"\
+in function borrow_shared_bool::<'_>
+
+- Status: FAILURE\
+- Description: "Undefined Behavior: Invalid value of type `bool`"\
+in function borrow_mut_bool::<'_>
+
+- Status: FAILURE\
+- Description: "Undefined Behavior: Invalid value of type `bool`"\
+in function borrow_nested::<'_>
+
+Verification failed for - invalid_bool_read
+Verification failed for - invalid_bool_field_read
+Verification failed for - invalid_bool_shared_borrow
+Verification failed for - invalid_bool_mut_borrow
+Verification failed for - invalid_nested_mut_borrow
+Complete - 0 successfully verified harnesses, 5 failures, 5 total.
