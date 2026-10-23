@@ -458,6 +458,18 @@ fn resolve_in_trait_impl<'tcx>(
     trait_args: Option<&syn::AngleBracketedGenericArguments>,
 ) -> Result<FnResolution, ResolveError<'tcx>> {
     debug!(?ty, ?trait_args, "resolve_in_trait_impl");
+    // A const-generic self type reaches this function with its const parameter
+    // uninstantiated: the resolver does not instantiate const arguments (see
+    // `instantiate_path_args`). `Instance::resolve` below then ICEs on the free const
+    // parameter, so refuse such a self type with a clean error first. Inherent-method
+    // lookups resolve without `Instance::resolve` and never reach here, so a const-generic
+    // self type still resolves for them.
+    if let TyKind::RigidTy(RigidTy::Adt(_, self_args)) = ty.kind() {
+        let has_const = self_args.0.iter().any(|arg| matches!(arg, GenericArgKind::Const(_)));
+        if has_const {
+            return Err(ResolveError::UnsupportedPath { kind: "const generic arguments" });
+        }
+    }
     // Given the `FnDef` of the *definition* of the trait method, see if there exists an Instance
     // that implements that method for `ty`.
     let trait_fn_fn_def = stable_fn_def(tcx, trait_fn_id).unwrap();
