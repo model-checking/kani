@@ -1,0 +1,15 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[package]
+name = "dep_generic_move"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dep = { path = "dep" }
+
+[package.metadata.kani.unstable]
+lean = true
+
+[package.metadata.kani.flags]
+print-llbc = true

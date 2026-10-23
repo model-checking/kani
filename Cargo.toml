@@ -72,6 +72,7 @@ exclude = [
   "tests/cargo-kani",
   "tests/perf",
   "tests/cargo-ui",
+  "tests/llbc-cargo",
   "tests/slow",
   "tests/std-checks",
   "tests/script-based-pre",

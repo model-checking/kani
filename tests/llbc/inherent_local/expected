@@ -34,6 +34,7 @@ pub fn main()\
     ↳⚡ undefined_behavior\
     storage_dead(_3)\
     storage_dead(_2)\
+    _0 = ()\
     storage_dead(c)\
     return\
 }
