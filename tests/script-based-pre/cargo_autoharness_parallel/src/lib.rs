@@ -18,3 +18,7 @@ pub fn f3(x: u32) -> u32 {
 pub fn f4(x: bool) -> bool {
     !x
 }
+
+pub fn f5(x: u8) {
+    assert!(x == 0);
+}

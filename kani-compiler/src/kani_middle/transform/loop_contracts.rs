@@ -322,13 +322,27 @@ impl LoopContractPass {
             .collect()
     }
 
+    /// Get the locals of the bindings of `#[kani::loop_decreases]` clauses (see `loop_decreases`
+    /// in `kani_macros`). They must not be copied to the head of an enclosing loop, since codegen
+    /// attaches a clause to the first loop head after the assignment of its binding.
+    fn get_loop_decreases_bindings(&self, body: &MutableBody) -> Vec<usize> {
+        body.var_debug_info()
+            .iter()
+            .filter(|info| info.name == "kani_loop_decreases")
+            .filter_map(|info| info.local())
+            .collect()
+    }
+
     // This Vec includes the user defined variables together with the tuple-typed variable
     // thst store the return of "kani::KaniIter::first" function
     fn get_storage_moving_variables(&self, body: &MutableBody) -> Vec<usize> {
         let first_nth_list = self.get_first_pats_and_nth_pats(body);
         let modifies_bindings = self.get_loop_modifies_bindings(body);
+        let decreases_bindings = self.get_loop_decreases_bindings(body);
         let mut moving_vars = self.get_user_defined_variables(body);
-        moving_vars.retain(|local| !modifies_bindings.contains(local));
+        moving_vars.retain(|local| {
+            !modifies_bindings.contains(local) && !decreases_bindings.contains(local)
+        });
         for (firstvar, _, _, _) in first_nth_list {
             if !moving_vars.contains(&firstvar) {
                 moving_vars.push(firstvar);
@@ -789,8 +803,11 @@ impl LoopContractPass {
         let mut add_assign_list: Vec<(usize, Statement)> = Vec::new();
         let mut found_local_list: Vec<usize> = Vec::new();
         let modifies_bindings = self.get_loop_modifies_bindings(body);
+        let decreases_bindings = self.get_loop_decreases_bindings(body);
         let mut localvars = self.get_user_defined_variables(body);
-        localvars.retain(|local| !modifies_bindings.contains(local));
+        localvars.retain(|local| {
+            !modifies_bindings.contains(local) && !decreases_bindings.contains(local)
+        });
         let mut blocks_stmts: Vec<(usize, Vec<Statement>)> = Vec::new();
         for (block_idx, block) in body.blocks().iter().enumerate() {
             if loop_head_map.get(&block_idx).is_none() {
