@@ -21,4 +21,3 @@ requirements.txt
 scripts/ci/copyright-exclude
 tests/remote-target-lists/.*
 tools/build-kani/license-notes.txt
-agent-plugin/assets/logo.svg

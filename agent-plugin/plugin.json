@@ -12,5 +12,5 @@
   "keywords": ["rust", "formal-verification", "model-checking", "kani", "unsafe", "proof"],
   "skills": "./skills/",
   "mcpServers": "./mcp.json",
-  "logo": "./assets/logo.svg"
+  "logo": "./assets/kani-logo.png"
 }

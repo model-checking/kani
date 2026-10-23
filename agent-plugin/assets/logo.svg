@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!-- Copyright Kani Contributors -->
-<!-- SPDX-License-Identifier: Apache-2.0 OR MIT -->
-<!-- Placeholder logo for the Kani agent plugin; replace with the official vector logo. -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Kani">
-  <rect x="4" y="4" width="120" height="120" rx="24" fill="#1f3a5f"/>
-  <path d="M34 66 L56 88 L96 42" fill="none" stroke="#ff7a45" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="64" y="116" font-family="sans-serif" font-size="18" font-weight="700" fill="#ffffff" text-anchor="middle">kani</text>
-</svg>

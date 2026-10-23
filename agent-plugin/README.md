@@ -1,3 +1,5 @@
+![](./assets/kani-logo.png)
+
 # Kani agent plugin
 
 An agent plugin that lets coding agents (Kiro, Claude Code, GitHub Copilot, Cursor, Codex, ...)
