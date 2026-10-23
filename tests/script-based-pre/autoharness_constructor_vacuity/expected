@@ -1,0 +1,35 @@
+ - Status: UNREACHABLE\
+ - Description: "autoharness: a generated input reaches `vacuous::m::P::boom_p`"
+ - Status: UNREACHABLE\
+ - Description: "autoharness: a generated input reaches `vacuous::m::Q::boom_q`"
+ - Status: SATISFIED\
+ - Description: "autoharness: a generated input reaches `vacuous::m::R::get`"
+ - Status: SATISFIED\
+ - Description: "autoharness: a generated input reaches `vacuous::m::opt`"
+ - Status: SATISFIED\
+ - Description: "autoharness: a generated input reaches `vacuous::m::P::new_unchecked`"
+Vacuous harness: no generated input reaches `vacuous::m::P::boom_p`
+Vacuous harness: no generated input reaches `vacuous::m::Q::boom_q`
+Vacuous harness: no generated input reaches `<vacuous::m::Q as std::fmt::Display>::fmt`
+Vacuous harness: no generated input reaches `vacuous::m::S::a`
+Vacuous harness: no generated input reaches `vacuous::m::S::b`
+Vacuous harness: no generated input reaches `vacuous::m::T::c`
+Vacuous harness: no generated input reaches `vacuous::m::T::d`
+Vacuous harness: no generated input reaches `vacuous::m::V::a`
+Vacuous harness: no generated input reaches `vacuous::m::V::b`
+Vacuous harness: no generated input reaches `vacuous::m::V::c`
+Vacuous harness: no generated input reaches `vacuous::m::V::d`
+| vacuous | m::P::boom_p                     | #[kani::proof] (ctor)     | Failure             |
+| vacuous | m::Q::boom_q                     | #[kani::proof] (ctor)     | Failure             |
+| vacuous | <m::Q as std::fmt::Display>::fmt | #[kani::proof] (ctor)     | Failure             |
+| vacuous | m::S::a                          | #[kani::proof] (ctor)     | Failure             |
+| vacuous | m::S::b                          | #[kani::proof] (ctor)     | Failure             |
+| vacuous | m::T::c                          | #[kani::proof] (ctor)     | Failure             |
+| vacuous | m::T::d                          | #[kani::proof] (ctor)     | Failure             |
+| vacuous | m::V::a                          | #[kani::proof] (ctor)     | Failure             |
+| vacuous | m::V::b                          | #[kani::proof] (ctor)     | Failure             |
+| vacuous | m::V::c                          | #[kani::proof] (ctor)     | Failure             |
+| vacuous | m::V::d                          | #[kani::proof] (ctor)     | Failure             |
+| vacuous | m::opt                           | #[kani::proof] (ctor)     | Success             |
+| vacuous | m::R::get                        | #[kani::proof] (ctor)     | Success             |
+Complete - 5 successfully verified functions, 13 failures, 18 total.
