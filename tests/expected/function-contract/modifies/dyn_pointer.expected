@@ -1,0 +1,6 @@
+Checking harness check_touch_other...
+Failed Checks: Check that *var_3 is assignable
+VERIFICATION:- FAILED
+Checking harness check_touch_dyn...
+VERIFICATION:- SUCCESSFUL
+Complete - 1 successfully verified harnesses, 1 failures, 2 total.
