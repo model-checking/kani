@@ -12,6 +12,8 @@ import contextlib
 import importlib.util
 import io
 import json
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -34,6 +36,9 @@ def run_main(module, argv):
         status = module.main(argv)
     return status, json.loads(out.getvalue())
 
+
+sys.path.insert(0, str(SCRIPTS))
+import kani_plugin_lib as lib  # noqa: E402
 
 summarize = load("summarize-results")
 vacuity = load("check-vacuity")
@@ -119,8 +124,17 @@ class VacuityTest(unittest.TestCase):
 
     def test_unreachable_assertion(self):
         rules = self.rules({"harnesses": [harness("h", unreachable=["h.assertion.1"], total=1)]})
-        self.assertIn(("h", "unreachable-assertion", "error"), rules)
-        self.assertIn(("h", "all-checks-unreachable", "error"), rules)
+        self.assertIn(("h", "unreachable-assertion", "warning"), rules)
+        self.assertIn(("h", "all-checks-unreachable", "warning"), rules)
+
+    def test_log_classifies_unreachable_checks(self):
+        log = ('Check 1: h.assertion.1\n\t - Status: UNREACHABLE\n\t - Description: "attempt to negate with overflow"\n'
+               'Check 2: h.assertion.2\n\t - Status: UNREACHABLE\n\t - Description: "assertion failed: x > 0"\n')
+        doc = {"harnesses": [harness("h", unreachable=["h.assertion.1", "h.assertion.2"], total=3)]}
+        found = {(f.get("property"), f["rule"], f["severity"])
+                 for f in vacuity.check(doc, vacuity.parse_log(log))["findings"]}
+        self.assertEqual(found, {("h.assertion.1", "unreachable-builtin-check", "info"),
+                                 ("h.assertion.2", "unreachable-assertion", "error")})
 
     def test_unreachable_default_check_is_not_an_assertion(self):
         rules = self.rules({"harnesses": [harness("h", unreachable=["h.arithmetic_overflow.1"], total=2)]})
@@ -239,6 +253,66 @@ class ProofDiffTest(unittest.TestCase):
         self.assertEqual(proof_diff.diff_file(DIFF / "before.rs", src, src), [])
 
 
+class ParserRegressionTest(unittest.TestCase):
+    """Cases from testing on real crates."""
+
+    def test_multiline_contract_attributes(self):
+        before = """impl Neg for Duration {
+    #[cfg_attr(kani, kani::ensures(|result: &Duration| {
+        result.total_nanoseconds() == -self.total_nanoseconds()
+    }))]
+    fn neg(self) -> Self { self }
+}
+"""
+        after = before.replace("== -self", "<= -self")
+        rules = {f["rule"] for f in proof_diff.diff_file(Path("ops.rs"), before, after)}
+        self.assertEqual(rules, {"ensures-changed"})
+
+    def test_assumptions_in_helpers_count(self):
+        before = """#[cfg(kani)]
+mod proofs {
+    fn any_small() -> u8 { let x: u8 = kani::any(); x }
+    #[kani::proof]
+    fn check() { let x = any_small(); assert!(x < 255 || x == 255); }
+}
+"""
+        after = before.replace("let x: u8 = kani::any(); x", "let x: u8 = kani::any(); kani::assume(x < 3); x")
+        rules = {(f["item"], f["rule"]) for f in proof_diff.diff_file(Path("p.rs"), before, after)}
+        self.assertIn(("check", "assumption-added"), rules)
+        self.assertNotIn(("any_small", "code-changed"), rules)
+        fns = proof_diff.parse_functions(after, "p.rs")
+        index = lib.helper_index(fns)
+        [check] = [f for f in fns if f.name == "check"]
+        [h] = lib.harnesses_of([check])
+        found = {f["rule"] for f in assumptions.check_harness(h, lib.helper_closure(check, index))}
+        self.assertEqual(found, set())  # one bound on x is not suspicious by itself
+        described = inspect.describe(h, lib.helper_closure(check, index))
+        self.assertEqual(described["counts"]["assumptions"], 1)
+        self.assertEqual(described["counts"]["nondet_inputs"], 1)
+        self.assertNotIn("no-nondeterminism", described["flags"])
+
+    def test_out_of_line_kani_modules(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "src"
+            (src / "kani_helpers").mkdir(parents=True)
+            (src / "lib.rs").write_text("#[cfg(kani)]\nmod proofs;\nmod real;\n")
+            (src / "proofs.rs").write_text("mod nested;\nfn clamp_total() {}\n")
+            (src / "proofs").mkdir()
+            (src / "proofs" / "nested.rs").write_text("fn any_string() {}\n")
+            (src / "real.rs").write_text("fn real() {}\n")
+            files = list(lib.rust_files([src]))
+            kani_only = {f.name for f in lib.kani_only_files(files)}
+            self.assertEqual(kani_only, {"proofs.rs", "nested.rs"})
+
+    def test_multiline_stub_is_normalized(self):
+        src = "#[kani::proof]\n#[kani::stub(\n    a::b,\n    c::d\n)]\nfn h() {}\n"
+        [h] = lib.harnesses_of(lib.parse_functions(src))
+        self.assertEqual(h.attributes["stub"], ["a::b, c::d"])
+
+    def test_loose_files_are_not_owned_by_an_enclosing_package(self):
+        self.assertEqual(lib.find_root(RUST), (None, None))
+
+
 class SpecsPlanTest(unittest.TestCase):
     def test_supported_types(self):
         for ty in ["u8", "&u32", "&mut [u8; 4]", "(u8, bool)", "Option<i64>", "core::num::NonZeroU32", "Point"]:
@@ -269,8 +343,35 @@ fn generic<T>(t: T) {}
                          ["sat", "clause", "clause", "new_implies_old", "old_implies_new"])
         [(offset, text)] = plan.insertions["f.rs"]
         self.assertEqual(offset, len(src) - 1)
-        self.assertIn("kani::cover!((a != 0) && (b < 10)", text)
-        self.assertIn("let b: &u8 = &__kani_spec_v_b;", text)
+        self.assertIn("fn __kani_spec_pred_f_3(a: u8, b: &u8) -> [bool; 4] { [(a != 0) && (b < 10), (a != 0), "
+                      "(b < 10), (a != 0)] }", text)
+        self.assertIn("__kani_spec_pred_f_3(a, &__kani_spec_v_b);", text)
+
+    def test_methods_use_an_inherent_impl(self):
+        src = """impl Neg for Duration {
+    #[cfg_attr(kani, kani::requires(self.total() != 0))]
+    fn neg(self) -> Self { self }
+}
+impl Duration {
+    #[kani::requires(days < 10.0)]
+    pub fn from_days(days: f64) -> Self { todo!() }
+}
+"""
+        plan = specs.Plan()
+        for fn in specs.parse_functions(src, "f.rs"):
+            specs.plan_function(plan, fn, None, {"Duration"})
+        self.assertEqual(plan.unchecked, [])
+        texts = [t for _, t in plan.insertions["f.rs"]]
+        self.assertIn("impl Duration {", texts[0])
+        self.assertIn("fn __kani_spec_pred_neg_3(self) -> [bool; 2]", texts[0])
+        self.assertIn("__kani_spec_self.__kani_spec_pred_neg_3()", texts[0])
+        self.assertIn("Duration::__kani_spec_pred_from_days_7(days)", texts[1])
+        self.assertEqual({o for o, _ in plan.insertions["f.rs"]}, {src.index("}\nimpl Duration") + 1, len(src) - 1})
+
+    def test_join_option_values(self):
+        self.assertEqual(specs.join_option_values(["src", "--kani-arg", "-Z", "--kani-arg", "quantifiers"],
+                                                  {"--kani-arg"}),
+                         ["src", "--kani-arg=-Z", "--kani-arg=quantifiers"])
 
     def test_arbitrary_types_are_discovered(self):
         self.assertEqual(specs.arbitrary_types([TESTS / "fixtures" / "rust" / "assumptions.rs"]), set())

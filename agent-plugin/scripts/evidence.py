@@ -5,9 +5,11 @@
 
 Every claim in a verification report should cite the run that established it. `record` saves
 a bundle: the `--export-json` results, the exact command and directory, the Kani/CBMC/rustc
-versions, the git commit (and whether the tree was dirty), and a SHA-256 of every source file
-holding a harness. `verify` checks that the bundle is intact, reports which sources changed
-since, and re-runs the recorded command to confirm every harness gets the same verdict.
+versions, the git state (commit, a hash of `git diff HEAD`, and the untracked files with their
+hashes), and a SHA-256 of every source file of the package (`.rs` files, `Cargo.toml`,
+`build.rs`) and of the workspace's `Cargo.toml` and `Cargo.lock`. `verify` checks that the
+bundle is intact, reports every source that changed since, and re-runs the recorded command to
+confirm every harness gets the same verdict.
 
 Usage:
     evidence.py record --export results.json --command "cargo kani ... --export-json results.json"
@@ -23,6 +25,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import os
 import shlex
 import shutil
 import subprocess
@@ -32,6 +35,8 @@ import time
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPTS))
+from kani_plugin_lib import find_root  # noqa: E402
 _spec = importlib.util.spec_from_file_location("summarize_results", SCRIPTS / "summarize-results.py")
 summarize_results = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(summarize_results)
@@ -41,14 +46,53 @@ def sha256(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+SOURCE_NAMES = {"Cargo.toml", "Cargo.lock", "build.rs", "rust-toolchain", "rust-toolchain.toml"}
+SKIPPED_DIRS = {".git", "target", "node_modules"}
+
+
+def source_files(cwd, doc):
+    """The files a run depends on: every source of the package, the workspace manifests, and
+    the harness files named in the export (whose paths may be relative to the workspace)."""
+    root, package = find_root(cwd)
+    files = set()
+    if package is not None:
+        for dirpath, dirnames, filenames in os.walk(package):
+            dirnames[:] = [d for d in dirnames if d not in SKIPPED_DIRS and not d.startswith("target")]
+            for name in filenames:
+                if name.endswith(".rs") or name in SOURCE_NAMES:
+                    files.add(Path(dirpath) / name)
+        for name in ("Cargo.toml", "Cargo.lock"):
+            if (root / name).exists():
+                files.add(root / name)
+    bases = [cwd, *cwd.parents]
+    for h in doc.get("harnesses", []):
+        found = next((b / h["file"] for b in bases if (b / h["file"]).exists()), None)
+        if found:
+            files.add(found)
+    return sorted(f.resolve() for f in files)
+
+
 def git_state(cwd):
-    def git(*args):
-        out = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
-        return out.stdout.strip() if out.returncode == 0 else None
+    def git(*args, text=True):
+        out = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=text)
+        if out.returncode != 0:
+            return None
+        return out.stdout.strip() if text else out.stdout
     commit = git("rev-parse", "HEAD")
     if commit is None:
         return None
-    return {"commit": commit, "dirty": bool(git("status", "--porcelain", "--untracked-files=no"))}
+    top = Path(git("rev-parse", "--show-toplevel"))
+    untracked = {}
+    for rel in (git("ls-files", "--others", "--exclude-standard") or "").splitlines():
+        f = top / rel
+        if f.is_file():
+            untracked[rel] = sha256(f)
+    return {
+        "commit": commit,
+        "dirty": bool(git("status", "--porcelain", "--untracked-files=no")),
+        "diff_sha256": hashlib.sha256(git("diff", "HEAD", "--binary", text=False) or b"").hexdigest(),
+        "untracked_sha256": untracked,
+    }
 
 
 def verdicts(doc):
@@ -71,11 +115,7 @@ def record(args):
     bundle = out_root / f"{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}-{digest[:8]}"
     bundle.mkdir(parents=True, exist_ok=True)
     shutil.copy2(export, bundle / "results.json")
-    sources = {}
-    for h in doc.get("harnesses", []):
-        f = cwd / h["file"]
-        if h["file"] not in sources and f.exists():
-            sources[h["file"]] = sha256(f)
+    sources = {os.path.relpath(f, cwd): sha256(f) for f in source_files(cwd, doc)}
     manifest = {
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "command": shlex.split(args.command),
@@ -106,9 +146,20 @@ def verify(args):
             differences.append(f"source {rel} no longer exists")
         elif sha256(f) != digest:
             differences.append(f"source {rel} changed since the run")
+    current = {os.path.relpath(f, cwd) for f in source_files(cwd, {})}
+    for rel in sorted(current - set(manifest["sources_sha256"])):
+        if rel.endswith(".rs"):
+            differences.append(f"source {rel} was added since the run")
     git = git_state(cwd)
-    if manifest["git"] and git and git["commit"] != manifest["git"]["commit"]:
-        differences.append(f"git HEAD is {git['commit']}, the run was at {manifest['git']['commit']}")
+    recorded = manifest["git"]
+    if recorded and git:
+        if git["commit"] != recorded["commit"]:
+            differences.append(f"git HEAD is {git['commit']}, the run was at {recorded['commit']}")
+        elif git.get("diff_sha256") != recorded.get("diff_sha256"):
+            differences.append("uncommitted changes differ from those at the time of the run")
+        for rel, digest in recorded.get("untracked_sha256", {}).items():
+            if git["untracked_sha256"].get(rel) != digest:
+                differences.append(f"untracked file {rel} changed or disappeared since the run")
     rerun = None
     if not args.no_rerun:
         cmd = list(manifest["command"])

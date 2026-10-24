@@ -24,3 +24,4 @@ fi
 grep -q "cargo install --locked kani-verifier" "$WORK/err.txt" \
     || fail "missing install hint: $(cat "$WORK/err.txt")"
 echo "check-kani-version.py reports a missing Kani with the install command"
+smoke_pass

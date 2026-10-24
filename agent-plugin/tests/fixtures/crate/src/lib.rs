@@ -66,3 +66,36 @@ mod contract_proofs {
         checked_div(kani::any(), kani::any());
     }
 }
+
+/// A distance, with a contract on a method. The `ensures` spans several lines on purpose.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[cfg_attr(kani, derive(kani::Arbitrary))]
+pub struct Meters(pub u32);
+
+impl Meters {
+    #[cfg_attr(kani, kani::requires(self.0 <= u32::MAX - other.0))]
+    #[cfg_attr(kani, kani::ensures(|result: &Meters| {
+        result.0 >= self.0
+    }))]
+    pub fn add(self, other: Meters) -> Meters {
+        Meters(self.0 + other.0)
+    }
+}
+
+#[cfg(kani)]
+mod method_proofs {
+    use super::*;
+
+    #[kani::proof_for_contract(Meters::add)]
+    fn check_meters_add() {
+        let a: Meters = kani::any();
+        let _ = a.add(kani::any());
+    }
+}
+
+/// Removed under `cfg(kani)`, like code a crate hides from Kani. The integration test in
+/// `tests/` uses it, so building every test target with `cfg(kani)` fails.
+#[cfg(not(kani))]
+pub fn not_for_kani() -> u32 {
+    1
+}

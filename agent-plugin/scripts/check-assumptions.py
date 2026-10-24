@@ -34,7 +34,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from kani_plugin_lib import emit, find_harnesses, line_of, rust_files, strip_comments_and_strings  # noqa: E402
+from kani_plugin_lib import (  # noqa: E402
+    emit, find_root, harnesses_of, helper_closure, helper_index, kani_only_files, line_of, parse_functions,
+    rust_files, strip_comments_and_strings)
 
 ASSUME = re.compile(r"\bkani::assume\s*\(")
 ASSERT = re.compile(
@@ -99,38 +101,44 @@ def finding(file, line, harness, severity, rule, message):
             "rule": rule, "message": message}
 
 
-def check_harness(h):
+def check_harness(h, helpers=()):
+    """Check the assumptions of harness `h`, including those in the Kani-only `helpers` it
+    calls (see `kani_plugin_lib.helper_closure`)."""
     findings = []
-    body = h.body
-    first_assert = ASSERT.search(body)
     per_var = {}
-    assumes = list(ASSUME.finditer(body))
-    for m in assumes:
+    assumes = []
+    for unit in [h, *helpers]:
+        first_assert = ASSERT.search(unit.body) if unit is h else None
+        for m in ASSUME.finditer(unit.body):
+            assumes.append((unit, m, first_assert))
+    for unit, m, first_assert in assumes:
+        body = unit.body
         cond = call_args(body, m.end() - 1).strip()
-        line = h.body_line + body.count("\n", 0, m.start())
+        line = unit.body_line + body.count("\n", 0, m.start())
+        h_file = unit.file
         if cond == "false":
-            findings.append(finding(h.file, line, h.name, "error", "assume-false",
+            findings.append(finding(h_file, line, h.name, "error", "assume-false",
                                     "`kani::assume(false)` makes every later check vacuous."))
             continue
         if cond == "true":
-            findings.append(finding(h.file, line, h.name, "info", "assume-true",
+            findings.append(finding(h_file, line, h.name, "info", "assume-true",
                                     "`kani::assume(true)` has no effect; remove it."))
             continue
         for var, op, n in bounds_in(cond):
             per_var.setdefault(var, []).append((op, n, line))
             if op == "==":
                 findings.append(finding(
-                    h.file, line, h.name, "warning", "pinned-value",
+                    h_file, line, h.name, "warning", "pinned-value",
                     f"`{var} == {n}` pins `{var}` to one value; the proof covers a single case "
                     "for it. Prefer a range, or drop the assumption."))
         if SUCCESS.search(cond):
             findings.append(finding(
-                h.file, line, h.name, "warning", "assume-success",
+                h_file, line, h.name, "warning", "assume-success",
                 "assuming a call succeeds (`is_ok`/`is_some`) hides its error path; check that "
                 "the failure case is verified elsewhere or is genuinely impossible."))
         if first_assert and m.start() > first_assert.start():
             findings.append(finding(
-                h.file, line, h.name, "warning", "assume-after-assert",
+                h_file, line, h.name, "warning", "assume-after-assert",
                 "assumption after an assertion: assertions below it are only checked on the "
                 "paths it allows. Move input constraints to the top of the harness."))
     for var, cs in per_var.items():
@@ -177,12 +185,20 @@ def main(argv=None):
     findings = []
     n_harnesses = 0
     try:
-        for f in rust_files(args.paths):
-            for h in find_harnesses(f):
-                if args.harness and h.name not in args.harness:
+        targets = list(rust_files(args.paths))
+        _, package = find_root(targets[0]) if targets else (None, None)
+        crate = list(rust_files([package])) if package else targets
+        kani_only = kani_only_files(crate)
+        parsed = {f.resolve(): parse_functions(f.read_text(encoding="utf-8", errors="replace"), f,
+                                               f.resolve() in kani_only) for f in {*crate, *targets}}
+        index = helper_index([fn for fns in parsed.values() for fn in fns])
+        for f in targets:
+            for fn in parsed[f.resolve()]:
+                hs = harnesses_of([fn])
+                if not hs or (args.harness and fn.name not in args.harness):
                     continue
                 n_harnesses += 1
-                findings.extend(check_harness(h))
+                findings.extend(check_harness(hs[0], helper_closure(fn, index)))
             findings.extend(check_requires(f))
     except OSError as e:
         print(f"error: {e}", file=sys.stderr)

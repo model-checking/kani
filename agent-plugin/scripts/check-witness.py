@@ -16,10 +16,17 @@ there if it does not exist yet). Reports one verdict:
 - fix-confirmed: the witness fails on the baseline and passes on the current code.
 - defect-still-present: the witness fails on both.
 - witness-does-not-reproduce: the witness passes where it should fail.
+- spurious-failure-likely: the harness uses `#[kani::stub]` or `#[kani::stub_verified]`, and
+  the real code passes on the witness input. Playback always runs the real code, so the failure
+  Kani reported most likely comes from a stub, or a callee contract whose `ensures` is too weak.
 - error: the witness could not be built or run; see `output_tail`.
 
 Usage:
-    check-witness.py PATH --test NAME [--base REV | --base-dir DIR]
+    check-witness.py PATH --test NAME [--base REV | --base-dir DIR] [--cargo-arg ARG]...
+
+`kani playback` builds every test target with `cfg(kani)`. If that fails (for example because
+the crate removes items under `cfg(kani)` that integration tests use) and no target is given,
+the script retries with `--lib`. Use `--cargo-arg` for features, packages, or targets.
 
 PATH is the Cargo project directory, or the `.rs` file for a single-file project. `--base-dir`
 holds a copy of the sources made before editing, with the same paths relative to the current
@@ -37,31 +44,16 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from kani_plugin_lib import emit, parse_functions, rust_files  # noqa: E402
+from kani_plugin_lib import emit, find_root, join_option_values, parse_functions, rust_files  # noqa: E402
 
 OUTPUT_TAIL_LINES = 40
 
 
-def find_root(path):
-    p = path.resolve()
-    start = p if p.is_dir() else p.parent
-    package = next((d for d in [start, *start.parents] if (d / "Cargo.toml").exists()), None)
-    if package is None:
-        return None, None
-    root = package
-    for d in package.parents:
-        manifest = d / "Cargo.toml"
-        if manifest.exists() and re.search(r"^\s*\[workspace\]", manifest.read_text(errors="replace"), re.M):
-            root = d
-    return root, package
-
-
-def run_witness(cwd, single_file, test):
-    """Run one playback test. Returns "fails", "passes", or "error", and the output."""
+def run_once(cwd, single_file, test, cargo_args):
     if single_file:
-        cmd = ["kani", "playback", "-Z", "concrete-playback", single_file, "--", test]
+        cmd = ["kani", "playback", "-Z", "concrete-playback", *cargo_args, single_file, "--", test]
     else:
-        cmd = ["cargo", "kani", "playback", "-Z", "concrete-playback", "--", test]
+        cmd = ["cargo", "kani", "playback", "-Z", "concrete-playback", *cargo_args, "--", test]
     out = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
     text = out.stdout + out.stderr
     if re.search(r"test result: ok\. [1-9]", text):
@@ -69,6 +61,20 @@ def run_witness(cwd, single_file, test):
     if "panicked at" in text and re.search(r"test result: FAILED", text):
         return "fails", text
     return "error", text
+
+
+def run_witness(cwd, single_file, test, cargo_args):
+    """Run one playback test. Returns "fails", "passes", or "error", the output, and the cargo
+    arguments used. Playback builds every test target with `cfg(kani)`; if that build fails and
+    no target was chosen, retry with only the library target, where witnesses usually live."""
+    result, text = run_once(cwd, single_file, test, cargo_args)
+    targets = {"--lib", "--bin", "--bins", "--test", "--tests", "--example", "--examples", "--bench", "--benches"}
+    if result == "error" and not single_file and not targets & set(a.split("=")[0] for a in cargo_args):
+        retry, retry_text = run_once(cwd, single_file, test, [*cargo_args, "--lib"])
+        if retry != "error":
+            return retry, retry_text, [*cargo_args, "--lib"]
+        text += "\n--- retry with --lib ---\n" + retry_text
+    return result, text, cargo_args
 
 
 def find_test(files, test):
@@ -92,12 +98,25 @@ def base_text(args, path):
     return out.stdout if out.returncode == 0 else None
 
 
+def replayed_harness(witness_src):
+    m = re.search(r"concrete_playback_run\s*\(\s*[^,]+,\s*([A-Za-z_][\w:]*)\s*\)", witness_src)
+    return m.group(1).split("::")[-1] if m else None
+
+
+def stubs_of(files, harness):
+    """The `#[kani::stub]` and `#[kani::stub_verified]` attributes of a harness."""
+    for f in files:
+        for fn in parse_functions(f.read_text(encoding="utf-8", errors="replace"), f):
+            if fn.name == harness:
+                return [f"{n}({a})" for n, a, _ in fn.attributes if n in ("kani::stub", "kani::stub_verified")]
+    return []
+
+
 def with_witness(base_src, witness_src, path):
     """Insert the witness test into the baseline source, right after the harness it replays."""
     if re.search(r"\bfn\s+" + re.escape(re.search(r"\bfn\s+(\w+)", witness_src).group(1)) + r"\b", base_src):
         return base_src
-    m = re.search(r"concrete_playback_run\s*\(\s*[^,]+,\s*([A-Za-z_][\w:]*)\s*\)", witness_src)
-    harness = m.group(1).split("::")[-1] if m else None
+    harness = replayed_harness(witness_src)
     for fn in parse_functions(base_src, path):
         if fn.name == harness:
             return base_src[:fn.end] + "\n\n" + witness_src + "\n" + base_src[fn.end:]
@@ -111,7 +130,10 @@ def main(argv=None):
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--base", help="git revision of the code before the change")
     group.add_argument("--base-dir", help="directory with a copy of the sources before the change")
-    args = parser.parse_args(argv)
+    parser.add_argument("--cargo-arg", action="append", default=[],
+                        help="argument for `cargo kani playback`, e.g. `--cargo-arg --lib`, "
+                             "`--cargo-arg --features --cargo-arg serde` (repeatable)")
+    args = parser.parse_args(join_option_values(argv, {"--cargo-arg"}))
 
     path = Path(args.path)
     root, package = find_root(path)
@@ -122,8 +144,15 @@ def main(argv=None):
         print(f"error: no function `{args.test}` found under {path}", file=sys.stderr)
         return 1
 
-    current, current_out = run_witness(path.parent if single_file else package, single_file, args.test)
+    cargo_args = args.cargo_arg
+    current, current_out, cargo_args = run_witness(path.parent if single_file else package, single_file,
+                                                   args.test, cargo_args)
     result = {"test": args.test, "current": current}
+    if cargo_args != args.cargo_arg:
+        result["cargo_args"] = cargo_args
+    stubs = stubs_of(files, replayed_harness(witness_src))
+    if stubs:
+        result["harness_stubs"] = stubs
     outputs = [current_out]
     if args.base or args.base_dir:
         with tempfile.TemporaryDirectory(prefix="kani-witness-") as tmp:
@@ -148,7 +177,7 @@ def main(argv=None):
                         return 1
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text(text, encoding="utf-8")
-            base, base_out = run_witness(cwd, single_file, args.test)
+            base, base_out, _ = run_witness(cwd, single_file, args.test, cargo_args)
         result["base"] = base
         outputs.append(base_out)
         if "error" in (base, current):
@@ -161,6 +190,16 @@ def main(argv=None):
             verdict = "witness-does-not-reproduce"
     else:
         verdict = {"fails": "defect-confirmed", "passes": "witness-does-not-reproduce"}.get(current, "error")
+    if stubs and verdict == "witness-does-not-reproduce" and not (args.base or args.base_dir):
+        # Playback runs the real code, not the stubs: a failure Kani found with stubs that the real
+        # code does not reproduce usually comes from a stub or a too-weak verified contract.
+        verdict = "spurious-failure-likely"
+        result["note"] = ("the harness uses stubs or verified contracts, but playback runs the real code, which "
+                          "passes on this input. The failure is most likely caused by a stub or a callee "
+                          "contract whose `ensures` is too weak.")
+    elif stubs:
+        result["note"] = ("the harness uses stubs or verified contracts, but playback runs the real code: this "
+                          "verdict is about the real code, not about what Kani checked.")
     result["verdict"] = verdict
     if verdict == "error":
         result["output_tail"] = "\n".join("\n".join(outputs).splitlines()[-OUTPUT_TAIL_LINES:])

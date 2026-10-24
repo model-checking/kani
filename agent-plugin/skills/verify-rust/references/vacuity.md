@@ -9,13 +9,17 @@ useless. These failure modes are common, and Kani's verdict alone does not revea
 1. **Vacuity probe.** End the harness with `kani::cover!(true, "harness end reached")`. Kani
    reports covers as SATISFIED (reachable) or UNSATISFIABLE. Unsatisfiable means the
    assumptions exclude every input.
-2. **`scripts/check-vacuity.py <export.json>`** reads Kani's JSON export and reports:
-   - `unreachable-assertion`: a user assertion that no execution reaches;
+2. **`scripts/check-vacuity.py <export.json> --log <kani.log>`** reads Kani's JSON export (and
+   the console output of the same run, to tell user assertions from built-in checks) and reports:
+   - `unreachable-assertion`: a user assertion that no execution reaches (an `error` with
+     `--log`; a `warning` without it, since Kani's built-in overflow and division checks share
+     the `assertion` class and are often unreachable because the solver proved they cannot fail);
+   - `unreachable-builtin-check` (info, with `--log`): a built-in check that cannot fail;
    - `all-checks-unreachable`: nothing in the harness was checked;
    - `unsatisfiable-cover` / `unreachable-cover`: a cover the assumptions exclude;
    - `no-vacuity-probe` (info): the harness has no cover; add one.
 3. **`scripts/check-specs.py <paths> --probe-harnesses --harness <name>`** asks Kani itself,
-   in a temporary copy of the crate, whether the end of each harness is reachable
+   in a copy of the crate, whether the end of each harness is reachable
    (`harness-end-unreachable` means the proof is vacuous), whether each contract's preconditions
    are satisfiable together (`requires-unsatisfiable`), and which precondition clauses hold for
    every input (`requires-always-true`). A check that cannot run is reported as `unchecked`,

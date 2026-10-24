@@ -107,7 +107,10 @@ in the report.
 - `-Z uninit-checks`, `-Z valid-value-checks`: extra UB checks, useful for `unsafe` code.
 - `#[kani::should_panic]`: the harness passes only if it panics.
 - `#[kani::solver(kissat)]` or `--solver kissat`: try another SAT solver when a proof is slow.
-- `-Z unstable-options --harness-timeout 10m`, `--jobs N`: bound time per harness and parallelism.
+- `-Z unstable-options --harness-timeout 10m`: bound the time per harness. It does not cover
+  the goto-instrument step, and a run that is killed writes no `--export-json` file, so also
+  bound the whole command (e.g. `timeout 3h cargo kani ...`) and verify a few harnesses per run.
+- `--jobs N --output-format terse`: verify harnesses in parallel (`--jobs` requires terse output).
 - Run `cargo kani --help` for the full list; this file covers only the common options.
 
 ## Performance
@@ -115,3 +118,19 @@ in the report.
 When a proof is slow: shrink input bounds and unwinding first, stub expensive callees, prove
 callees separately with contracts and use `stub_verified`, try `--solver kissat`/`cadical`, and
 split one large harness into several smaller ones. See the Kani book's "Debugging slow proofs".
+
+Common causes of blow-up:
+
+- **Recursive types and drop glue.** Dropping a recursive structure (trees, linked lists,
+  `Box<Node>` with `Vec<Node>` children) generates recursive drop code that Kani unrolls up to
+  the unwind bound, for every value the harness creates. Keep such inputs tiny (depth 1-2),
+  build them explicitly instead of with a generic `Arbitrary`, and, if dropping is not part of
+  the property, end the harness with `std::mem::forget(value)`. Say so in the report: drop code
+  is then not verified.
+- **Recursion in the code under verification.** Each recursive call is unrolled; use a
+  function contract and `stub_verified` for the recursive function (`references/contracts.md`).
+- **Unbounded loops over nondeterministic lengths**, and **string formatting** (`format!`,
+  `to_string`, `Display`): bound lengths tightly, and avoid formatting in harnesses.
+- **Floating point and wide multiplication/division**: these are expensive for SAT solvers;
+  split the input space (e.g. by sign) into several harnesses, or narrow ranges with approved
+  assumptions.

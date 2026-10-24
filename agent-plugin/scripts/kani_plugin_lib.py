@@ -9,6 +9,7 @@ parse it, so they never need a toolchain and can run before anything compiles. T
 
 import json
 import re
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -129,17 +130,95 @@ def parse_attributes(src, code, start, end):
     return attrs
 
 
+QUALIFIERS = re.compile(r'(?:\bpub\s*(?:\([^)]*\))?|\bconst|\bunsafe|\basync|\bdefault|\bextern\s*(?:"[^"]*")?)\s*$')
+
+
 def item_attr_start(code, item_start):
-    """Walk back from an item over its attribute lines, until the end of the previous item or a
-    blank line."""
-    attr_start = code.rfind("\n", 0, item_start) + 1
-    while attr_start > 0:
-        prev_start = code.rfind("\n", 0, attr_start - 1) + 1
-        prev = code[prev_start: attr_start - 1].strip()
-        if not prev or prev[-1] in ";{}":
+    """Walk back from an item's keyword over its qualifiers (`pub(crate)`, `const`, `unsafe`, ...)
+    and its attributes, matching brackets, so multi-line attributes such as
+    `#[kani::ensures(|r| { ... })]` are included."""
+    i = item_start
+    while True:
+        m = QUALIFIERS.search(code[max(0, i - 80):i])
+        if not m or m.start() == m.end():
             break
-        attr_start = prev_start
-    return attr_start
+        i -= len(m.group(0))
+    while True:
+        k = i
+        while k > 0 and code[k - 1].isspace():
+            k -= 1
+        if k == 0 or code[k - 1] != "]":
+            return i
+        depth, j = 0, k - 1
+        while j >= 0:
+            if code[j] == "]":
+                depth += 1
+            elif code[j] == "[":
+                depth -= 1
+                if depth == 0:
+                    break
+            j -= 1
+        if j <= 0 or code[j - 1] != "#":
+            return i
+        i = j - 1
+
+
+def find_root(path):
+    """The Cargo workspace root containing `path`, and its package directory; (None, None)
+    outside a Cargo project."""
+    p = Path(path).resolve()
+    start = p if p.is_dir() else p.parent
+    package = next((d for d in [start, *start.parents] if (d / "Cargo.toml").exists()), None)
+    if package is None:
+        return None, None
+    # A package only owns its source directories: a loose file elsewhere under the package
+    # directory (a fixture, a script) is a single-file target.
+    rel = p.relative_to(package).parts
+    if rel and rel[0] not in ("src", "tests", "benches", "examples", "build.rs"):
+        return None, None
+    root = package
+    for d in package.parents:
+        manifest = d / "Cargo.toml"
+        if manifest.exists() and re.search(r"^\s*\[workspace\]", manifest.read_text(errors="replace"), re.M):
+            root = d
+    return root, package
+
+
+MOD_DECL = re.compile(r"\bmod\s+(\w+)\s*;")
+
+
+def kani_only_files(files):
+    """Files that are only compiled for Kani: modules declared out of line as
+    `#[cfg(kani)] mod name;`, and the modules they declare in turn."""
+    files = {Path(f).resolve() for f in files}
+    decls = {}  # file -> [(module file candidates, under cfg(kani))]
+    for f in files:
+        src = f.read_text(encoding="utf-8", errors="replace")
+        code = strip_comments_and_strings(src)
+        base = f.parent if f.name in ("mod.rs", "lib.rs", "main.rs") else f.parent / f.stem
+        out = []
+        for m in MOD_DECL.finditer(code):
+            start = item_attr_start(code, m.start())
+            attrs = src[start:m.start()]
+            path_attr = re.search(r'#\[\s*path\s*=\s*"([^"]+)"\s*\]', attrs)
+            if path_attr:
+                candidates = [(f.parent / path_attr.group(1)).resolve()]
+            else:
+                candidates = [(base / f"{m.group(1)}.rs").resolve(), (base / m.group(1) / "mod.rs").resolve()]
+            out.append((candidates, bool(re.search(r"#\[\s*cfg\s*\(\s*kani\s*\)\s*\]", attrs))))
+        decls[f] = out
+    kani_only = set()
+    changed = True
+    while changed:
+        changed = False
+        for f, entries in decls.items():
+            for candidates, cfg_kani in entries:
+                if cfg_kani or f in kani_only:
+                    for c in candidates:
+                        if c in files and c not in kani_only:
+                            kani_only.add(c)
+                            changed = True
+    return kani_only
 
 
 @dataclass
@@ -154,6 +233,8 @@ class Function:
     params: list  # (pattern, type) pairs; `self` receivers have type None
     generic: bool
     scope: str  # "file", "mod", "impl", "trait", "fn", or "other"
+    scope_header: str  # source text before the enclosing block's `{` ("" at file level)
+    scope_end: int  # offset just past the enclosing block's `}` (len(src) at file level)
     in_kani: bool  # inside `#[cfg(kani)]` code, or a harness
     body: str  # body code, comments and strings blanked
     body_src: str  # body source
@@ -187,8 +268,9 @@ def _scopes(code):
     return spans
 
 
-def parse_functions(src, path="<src>"):
-    """Every function with a body in a Rust source text."""
+def parse_functions(src, path="<src>", all_in_kani=False):
+    """Every function with a body in a Rust source text. `all_in_kani` marks every function as
+    Kani-only (for files included through `#[cfg(kani)] mod name;`)."""
     code = strip_comments_and_strings(src)
     spans = _scopes(code)
     kani_mods = []
@@ -217,7 +299,10 @@ def parse_functions(src, path="<src>"):
         open_idx = k
         close_idx = matching(code, open_idx, "{", "}")
         enclosing = [s for s in spans if s[0] < fn.start() < s[1]]
-        scope = max(enclosing, key=lambda s: s[0])[2] if enclosing else "file"
+        inner = max(enclosing, key=lambda s: s[0]) if enclosing else None
+        scope = inner[2] if inner else "file"
+        scope_header = src[inner[3]:inner[0]] if inner else ""
+        scope_end = inner[1] + 1 if inner else len(src)
         attr_start = item_attr_start(code, fn.start())
         attributes = parse_attributes(src, code, attr_start, fn.start())
         signature = src[fn.start():open_idx]
@@ -230,7 +315,7 @@ def parse_functions(src, path="<src>"):
                     params.append((pat.strip(), None))  # `self`, `&self`, `&mut self`
                 else:
                     params.append((pat.strip(), ty.strip()))
-        in_kani = any(a < fn.start() < b for a, b in kani_mods) or any(
+        in_kani = all_in_kani or any(a < fn.start() < b for a, b in kani_mods) or any(
             n == "cfg" and re.fullmatch(r"\s*kani\s*", a) or n in ("kani::proof", "kani::proof_for_contract")
             for n, a, _ in attributes)
         functions.append(Function(
@@ -244,6 +329,8 @@ def parse_functions(src, path="<src>"):
             params=params,
             generic=code[fn.end():paren].strip().startswith("<") if paren != -1 else False,
             scope=scope,
+            scope_header=scope_header,
+            scope_end=scope_end,
             in_kani=in_kani,
             body=code[open_idx: close_idx + 1],
             body_src=src[open_idx: close_idx + 1],
@@ -274,10 +361,44 @@ def harnesses_of(functions):
         attributes = {}
         for n, arg, _ in f.attributes:
             if n.startswith("kani::"):
-                attributes.setdefault(n[len("kani::"):], []).append(arg)
+                attributes.setdefault(n[len("kani::"):], []).append(re.sub(r"\s+", " ", arg))
         target = (f.attrs("kani::proof_for_contract") or [None])[0]
         out.append(Harness(name=f.name, file=f.file, line=f.line, kind=kind, target=target or None,
                            attributes=attributes, body=f.body, body_line=f.body_line))
+    return out
+
+
+CALL = re.compile(r"(?<![!\w])((?:[A-Za-z_][A-Za-z0-9_]*::)*[A-Za-z_][A-Za-z0-9_]*)\s*(?:::<[^>]*>)?\s*\(")
+
+
+def is_harness_fn(f):
+    return any(n in ("kani::proof", "kani::proof_for_contract") for n, _, _ in f.attributes)
+
+
+def helper_index(functions):
+    """Kani-only helper functions (not harnesses) by name, for `helper_closure`."""
+    index = {}
+    for f in functions:
+        if f.in_kani and not is_harness_fn(f):
+            index.setdefault(f.name, []).append(f)
+    return index
+
+
+def helper_closure(fn, index):
+    """The Kani-only helpers `fn` calls, transitively, and the replacement functions of its
+    `#[kani::stub]` attributes: assumptions and nondeterministic inputs in them belong to the
+    harness."""
+    names = [arg.split(",")[-1].strip().split("::")[-1] for n, arg, _ in fn.attributes if n == "kani::stub"]
+    seen, out, todo = {fn.name}, [], [fn]
+    while todo:
+        f = todo.pop()
+        called = [c.split("::")[-1] for c in CALL.findall(f.body)]
+        for name in (names if f is fn else []) + called:
+            for h in index.get(name, []):
+                if h.name not in seen:
+                    seen.add(h.name)
+                    out.append(h)
+                    todo.append(h)
     return out
 
 
@@ -296,6 +417,21 @@ def rust_files(paths):
                     yield f
         elif p.suffix == ".rs":
             yield p
+
+
+def join_option_values(argv, options):
+    """Rewrite `--opt VALUE` as `--opt=VALUE` for pass-through options, so that values starting
+    with `-` (like `-Z`) are not mistaken for options by argparse."""
+    argv = list(sys.argv[1:] if argv is None else argv)
+    out, i = [], 0
+    while i < len(argv):
+        if argv[i] in options and i + 1 < len(argv):
+            out.append(f"{argv[i]}={argv[i + 1]}")
+            i += 2
+        else:
+            out.append(argv[i])
+            i += 1
+    return out
 
 
 def emit(obj):

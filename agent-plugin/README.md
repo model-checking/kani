@@ -57,10 +57,15 @@ this repository:
 | `kani_verify_harness` | `cargo kani -Z export-json ...`, summarized |
 | `kani_get_counterexample` | `cargo kani -Z concrete-playback --concrete-playback=print ...` |
 
-Each tool takes a `path` (a Cargo project directory or a single `.rs` file). The verification
-tools also take `harness`, `exact`, and `extra_args` (passed to Kani unchanged). The server
-communicates only over stdio, never opens a network connection, and runs the Kani installed on
-your machine.
+Each tool takes a `path` (a Cargo project directory or a single `.rs` file) and `extra_args`
+(passed to Kani unchanged). The verification tools also take `harness`, `exact`, `timeout_s`
+(default 1800; Kani and its children are killed on timeout), `harness_timeout_s`, and
+`export_path` / `log_path` to keep the results and console log; `kani_verify_harness` takes
+`jobs` for parallel verification. Long runs send MCP progress notifications when the client
+asks for them. `kani_list_harnesses` returns a summary unless `detail` is `full`.
+`kani_get_version` also verifies a trivial harness, to check that CBMC and goto-cc work. The
+server communicates only over stdio, never opens a network connection, and runs the Kani
+installed on your machine.
 
 ## Scripts
 

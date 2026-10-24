@@ -25,7 +25,7 @@ fn location(prop: &Value) -> Option<String> {
     })
 }
 
-fn len(value: &Value) -> usize {
+pub fn len(value: &Value) -> usize {
     value.as_array().map_or(0, Vec::len)
 }
 

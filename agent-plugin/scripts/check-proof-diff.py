@@ -38,7 +38,9 @@ from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from kani_plugin_lib import emit, parse_functions, rust_files, strip_comments_and_strings  # noqa: E402
+from kani_plugin_lib import (  # noqa: E402
+    emit, find_root, helper_closure, helper_index, kani_only_files, parse_functions, rust_files,
+    strip_comments_and_strings)
 
 ASSUME = re.compile(r"\bkani::assume\s*\(")
 ASSERT = re.compile(
@@ -50,9 +52,13 @@ def norm(text):
     return re.sub(r"\s+", " ", text).strip()
 
 
-def calls(fn, pattern):
-    """Normalized text of each call matching `pattern` in a function body, as a multiset."""
+def calls(fn, pattern, index=None):
+    """Normalized text of each call matching `pattern` in a function body and, given a helper
+    index, in the Kani-only helpers it calls, as a multiset."""
     out = Counter()
+    if index is not None:
+        for h in helper_closure(fn, index):
+            out += calls(h, pattern)
     for m in pattern.finditer(fn.body):
         open_paren = m.end() - 1
         depth = 0
@@ -89,19 +95,21 @@ def finding(file, line, item, severity, rule, message):
     return {"file": file, "line": line, "item": item, "severity": severity, "rule": rule, "message": message}
 
 
-def diff_harness(old, new):
+def diff_harness(old, new, old_index=None, new_index=None):
+    """Compare two versions of a harness. Assertions, covers, and assumptions in the Kani-only
+    helpers each version calls count as part of the harness."""
     out = []
     loc = (new.file, new.line, new.name)
-    removed_asserts = calls(old, ASSERT) - calls(new, ASSERT)
-    for a in removed_asserts.elements():
+    old_asserts, new_asserts = calls(old, ASSERT, old_index), calls(new, ASSERT, new_index)
+    for a in (old_asserts - new_asserts).elements():
         out.append(finding(*loc, "error", "assertion-removed",
                            f"assertion removed or changed: `{a}`. The proof no longer checks it."))
-    for a in (calls(new, ASSERT) - calls(old, ASSERT)).elements():
+    for a in (new_asserts - old_asserts).elements():
         out.append(finding(*loc, "info", "assertion-added", f"assertion added: `{a}`."))
-    for c in (calls(old, COVER) - calls(new, COVER)).elements():
+    for c in (calls(old, COVER, old_index) - calls(new, COVER, new_index)).elements():
         out.append(finding(*loc, "warning", "cover-removed",
                            f"cover removed or changed: `{c}`. Vacuity probes must stay."))
-    old_assumes, new_assumes = calls(old, ASSUME), calls(new, ASSUME)
+    old_assumes, new_assumes = calls(old, ASSUME, old_index), calls(new, ASSUME, new_index)
     added = new_assumes - old_assumes
     for a in added.elements():
         rule = "assumption-changed" if old_assumes - new_assumes else "assumption-added"
@@ -157,17 +165,27 @@ def code_fingerprint(f):
     return signature, norm(f.body)
 
 
-def diff_file(path, old_src, new_src):
+def diff_file(path, old_src, new_src, old_index=None, new_index=None, kani_only=False):
+    """Compare two versions of a file. The helper indexes cover the whole crate, so that helpers
+    defined in other files count; `kani_only` marks a file compiled only for Kani."""
     out = []
-    old = key_functions(parse_functions(old_src, path)) if old_src is not None else {}
-    new = key_functions(parse_functions(new_src, path))
+    old = key_functions(parse_functions(old_src, path, kani_only)) if old_src is not None else {}
+    new = key_functions(parse_functions(new_src, path, kani_only))
+    if new_index is None:
+        new_index = helper_index(new.values())
+    if old_index is None:
+        old_index = helper_index(old.values())
     for key, n in new.items():
         o = old.get(key)
         if is_harness(n):
             if o is None or not is_harness(o):
-                out.append(finding(n.file, n.line, n.name, "info", "harness-added", "new harness."))
+                assumes = sorted(calls(n, ASSUME, new_index).elements())
+                detail = (f" Its assumptions, including those in the helpers it calls: {assumes}. "
+                          "Confirm the user approved each one, then snapshot a new baseline."
+                          if assumes else " It has no assumptions.")
+                out.append(finding(n.file, n.line, n.name, "info", "harness-added", "new harness." + detail))
             else:
-                out.extend(diff_harness(o, n))
+                out.extend(diff_harness(o, n, old_index, new_index))
             continue
         if o is not None:
             out.extend(diff_contract(o, n))
@@ -193,6 +211,13 @@ def diff_file(path, old_src, new_src):
     return out
 
 
+def base_source(args, f):
+    if args.base_dir:
+        base_file = Path(args.base_dir) / os.path.relpath(f)
+        return base_file.read_text(encoding="utf-8", errors="replace") if base_file.exists() else None
+    return git_show(args.base, f)
+
+
 def git_show(rev, path):
     top = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=path.parent,
                          capture_output=True, text=True, check=True).stdout.strip()
@@ -212,15 +237,20 @@ def main(argv=None):
     findings = []
     files = 0
     try:
-        for f in rust_files(args.paths):
+        targets = list(rust_files(args.paths))
+        _, package = find_root(targets[0]) if targets else (None, None)
+        crate = list(rust_files([package])) if package else targets
+        kani_only = kani_only_files(crate)
+        new_srcs = {f.resolve(): f.read_text(encoding="utf-8", errors="replace") for f in crate + targets}
+        old_srcs = {f.resolve(): base_source(args, f) for f in crate + targets}
+        new_index = helper_index([fn for f, src in new_srcs.items()
+                                  for fn in parse_functions(src, f, f in kani_only)])
+        old_index = helper_index([fn for f, src in old_srcs.items() if src is not None
+                                  for fn in parse_functions(src, f, f in kani_only)])
+        for f in targets:
             files += 1
-            new_src = f.read_text(encoding="utf-8", errors="replace")
-            if args.base_dir:
-                base_file = Path(args.base_dir) / f
-                old_src = base_file.read_text(encoding="utf-8", errors="replace") if base_file.exists() else None
-            else:
-                old_src = git_show(args.base, f)
-            findings.extend(diff_file(f, old_src, new_src))
+            findings.extend(diff_file(f, old_srcs[f.resolve()], new_srcs[f.resolve()], old_index, new_index,
+                                      f.resolve() in kani_only))
     except (OSError, subprocess.CalledProcessError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1

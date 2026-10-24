@@ -20,7 +20,7 @@ python3 - "$WORK/summary.json" <<'PY'
 import json, sys
 s = json.load(open(sys.argv[1]))
 by_name = {h["name"].split("::")[-1]: h for h in s["harnesses"]}
-assert s["total"] == 4 and s["failed"] == 1, s
+assert s["total"] == 5 and s["failed"] == 1, s
 assert by_name["check_midpoint"]["verdict"] == "SUCCESS", by_name
 naive = by_name["check_naive_midpoint"]
 assert naive["verdict"] == "FAILURE", naive
@@ -35,7 +35,7 @@ echo "summarize-results.py reports the success, the overflow, and stays compact"
 
 # The vacuous harness passes, but check-vacuity.py must flag it; the real proof must be clean.
 set +e
-"$SCRIPTS/check-vacuity.py" "$WORK/all.json" > "$WORK/vacuity.json"
+"$SCRIPTS/check-vacuity.py" "$WORK/all.json" --log "$WORK/all.log" > "$WORK/vacuity.json"
 status=$?
 set -e
 [ "$status" -eq 2 ] || fail "check-vacuity.py should exit 2, got $status"
@@ -45,6 +45,14 @@ findings = json.load(open(sys.argv[1]))["findings"]
 blocking = {(f["harness"].split("::")[-1], f["rule"]) for f in findings if f["severity"] != "info"}
 assert ("check_vacuous", "unreachable-assertion") in blocking, findings
 assert not any(h == "check_midpoint" for h, _ in blocking), findings
+PY
+python3 - "$WORK/vacuity.json" <<'PY'
+import json, sys
+findings = json.load(open(sys.argv[1]))["findings"]
+# With the log, Kani's built-in checks are never reported as unreachable user assertions.
+for f in findings:
+    if f["rule"] == "unreachable-assertion":
+        assert not f["description"].strip('"').startswith("attempt to"), f
 PY
 echo "check-vacuity.py flags check_vacuous and accepts check_midpoint"
 
@@ -56,13 +64,15 @@ set -e
 python3 - "$WORK/assumptions.json" <<'PY'
 import json, sys
 r = json.load(open(sys.argv[1]))
-assert r["harnesses_checked"] == 4, r
+assert r["harnesses_checked"] == 5, r
 rules = {(f["harness"], f["rule"]) for f in r["findings"]}
 assert ("check_vacuous", "contradictory-bounds") in rules, rules
 assert not any(h == "check_midpoint" for h, _ in rules), rules
 PY
 echo "check-assumptions.py flags the contradictory assumptions"
 
+"$SCRIPTS/inspect-harness.py" src --summary > "$WORK/inspect-summary.json"
+[ "$(jq_py "$WORK/inspect-summary.json" 'd["harnesses"]')" = "5" ] || fail "inspect-harness.py --summary"
 "$SCRIPTS/inspect-harness.py" src --harness check_naive_midpoint > "$WORK/inspect.json"
 python3 - "$WORK/inspect.json" <<'PY'
 import json, sys
@@ -91,3 +101,4 @@ auto = [h for h in d["harnesses"] if h["is_automatically_generated"]]
 assert auto and all(h["outcome"].get("verdict") == "SUCCESS" for h in auto), d["harnesses"]
 PY
 echo "autoharness runs through the CLI and exports JSON"
+smoke_pass
