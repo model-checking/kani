@@ -694,7 +694,7 @@ where
                 return Err(ResolveError::UnsupportedPath { kind: "trait object self type" });
             }
             _ => {
-                unreachable!("Unexpected type {ty}")
+                return Err(ResolveError::UnsupportedPath { kind: "self type" });
             }
         },
         TyKind::Alias(_, _) => return Err(ResolveError::UnsupportedPath { kind: "alias" }),
