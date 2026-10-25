@@ -690,6 +690,9 @@ where
             RigidTy::Foreign(_) => {
                 return Err(ResolveError::UnsupportedPath { kind: "foreign type" });
             }
+            RigidTy::Dynamic(..) => {
+                return Err(ResolveError::UnsupportedPath { kind: "trait object self type" });
+            }
             _ => {
                 unreachable!("Unexpected type {ty}")
             }
