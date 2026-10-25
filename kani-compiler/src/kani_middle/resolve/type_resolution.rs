@@ -148,10 +148,26 @@ pub fn resolve_ty<'tcx>(
                         let def_id = resolve_path(tcx, current_module, &trait_bound.path)?;
                         validate_kind!(tcx, def_id, "trait", DefKind::Trait)?;
                         if tcx.trait_is_auto(def_id) {
+                            if !matches!(
+                                trait_bound.path.segments.last().map(|seg| &seg.arguments),
+                                None | Some(syn::PathArguments::None)
+                            ) {
+                                return unsupported(
+                                    "trait object with generic arguments on an auto trait",
+                                );
+                            }
                             autos.push(def_id);
                         } else if principal.is_some() {
                             return unsupported("trait object with two principal traits");
                         } else {
+                            if matches!(
+                                trait_bound.path.segments.last().map(|seg| &seg.arguments),
+                                Some(syn::PathArguments::Parenthesized(_))
+                            ) {
+                                return unsupported(
+                                    "trait object with parenthesized trait arguments",
+                                );
+                            }
                             let mut args = Vec::new();
                             if let Some(syn::PathArguments::AngleBracketed(syn_args)) =
                                 trait_bound.path.segments.last().map(|seg| &seg.arguments)
