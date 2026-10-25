@@ -1059,7 +1059,8 @@ pub fn is_c_str(tcx: TyCtxt, def: AdtDef) -> bool {
         == tcx.get_diagnostic_item(rustc_span::sym::cstr_type)
 }
 
-/// Whether `def` is `core::bstr::ByteStr`, which has no diagnostic item.
+/// Whether `def` is `core::byte_str::ByteStr` (`core::bstr` before rust-lang/rust#160912), which
+/// has no diagnostic item.
 ///
 /// Shared by the eligibility check and the harness generation, as `is_c_str` is.
 ///
@@ -1072,7 +1073,7 @@ pub fn is_byte_str(tcx: TyCtxt, def: AdtDef) -> bool {
         && tcx
             .opt_parent(def_id)
             .and_then(|module| tcx.opt_item_name(module))
-            .is_some_and(|name| name.as_str() == "bstr")
+            .is_some_and(|name| name.as_str() == "byte_str")
         && tcx.item_name(def_id).as_str() == "ByteStr"
 }
 
