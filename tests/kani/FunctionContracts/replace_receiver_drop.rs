@@ -33,10 +33,10 @@ impl Owned {
 }
 
 /// Required companion to the `stub_verified` harness below: Kani only accepts a
-/// verified stub when a `proof_for_contract` proves the contract holds. It does
-/// not assert the drop count -- Kani's contract-check instrumentation models the
-/// real body's own drops differently from the replace stub, and that path is not
-/// what this test guards.
+/// verified stub when a `proof_for_contract` harness proves the contract holds.
+/// It asserts only the contract. The drop-count guard lives in the replace
+/// harness below -- check mode runs the real body, which is not the path the
+/// receiver-move changes.
 #[kani::proof_for_contract(Owned::into_value)]
 fn check_owned_receiver_contract() {
     let v: u32 = kani::any_where(|v: &u32| *v < 100);
