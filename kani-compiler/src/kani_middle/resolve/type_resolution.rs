@@ -249,6 +249,12 @@ pub fn resolve_ty<'tcx>(
             // must match the remaining parameters exactly, and those must all be
             // type parameters. The kind guard also protects `TraitRef::new`, which
             // asserts argument kinds against the generics.
+            // This count also rejects a valid `dyn` whose principal trait has a
+            // lifetime parameter or a defaulted (type or const) parameter:
+            // lifetime args aren't in `principal_args`, and omitted defaults
+            // aren't filled here (unlike the struct path in
+            // `instantiate_path_args`). Such a `dyn` degrades to a clean
+            // resolution error; widening it is a follow-up.
             let generics = tcx.generics_of(principal_id);
             if generics.own_params.len() != principal_args.len() + 1 {
                 return unsupported("trait object with mismatched generic arguments");

@@ -10,12 +10,14 @@
 //     postcondition, so each harness only verifies against its own impl,
 //   * an auto-trait variant (`Box<dyn TA + Send>`) — a distinct type from
 //     `Box<dyn TA>`, discriminating the predicate list,
+//   * a two-auto-trait variant (`Box<dyn TA + Send + Sync>`) — the first case
+//     with more than one auto trait, exercising the auto-trait sort/dedup order,
 //   * a generic principal (`Box<dyn Get<u8>>`) — the trait's own argument resolves.
 // generic_trait_object_binding.rs (expected suite) guards that an
 // associated-type binding keeps the uninstantiated type and fails to resolve.
 
 use std::boxed::Box;
-use std::marker::Send;
+use std::marker::{Send, Sync};
 
 trait TA {
     fn a(&self) -> u8;
@@ -63,6 +65,16 @@ impl Probe for S<Box<dyn Get<u8>>> {
     }
 }
 
+// Two auto traits: exercises the auto-trait sort/dedup path — the arm orders the
+// `dyn`'s auto traits by `def_path_hash` to match rustc's canonical order (both
+// so the type matches this impl and so `mk_poly_existential_predicates` accepts it).
+impl Probe for S<Box<dyn TA + Send + Sync>> {
+    #[kani::ensures(|r| *r == 5)]
+    fn probe(&self) -> u32 {
+        5
+    }
+}
+
 struct ImplA;
 impl TA for ImplA {
     fn a(&self) -> u8 {
@@ -106,6 +118,12 @@ mod verify {
     #[kani::proof_for_contract(<S<Box<dyn Get<u8>>> as Probe>::probe)]
     fn check_dyn_get_u8() {
         let s = S(Box::new(ImplG) as Box<dyn Get<u8>>);
+        let _ = s.probe();
+    }
+
+    #[kani::proof_for_contract(<S<Box<dyn TA + Send + Sync>> as Probe>::probe)]
+    fn check_dyn_ta_send_sync() {
+        let s = S(Box::new(ImplA) as Box<dyn TA + Send + Sync>);
         let _ = s.probe();
     }
 }
