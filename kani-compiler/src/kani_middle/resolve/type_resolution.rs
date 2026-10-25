@@ -145,6 +145,11 @@ pub fn resolve_ty<'tcx>(
                         if !matches!(trait_bound.modifier, syn::TraitBoundModifier::None) {
                             return unsupported("`?`-modified trait object bound");
                         }
+                        // A higher-ranked binder (`dyn for<'a> Get<&'a u8>`) is erased along
+                        // with its lifetimes, like the `BareFn` arm above; a sibling impl bound
+                        // to a concrete region could match instead. Binding the late-bound
+                        // regions is the same follow-up tracked for bare fns
+                        // (https://github.com/model-checking/kani/issues/4933).
                         let def_id = resolve_path(tcx, current_module, &trait_bound.path)?;
                         validate_kind!(tcx, def_id, "trait", DefKind::Trait)?;
                         if tcx.trait_is_auto(def_id) {
