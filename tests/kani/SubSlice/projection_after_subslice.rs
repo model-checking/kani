@@ -33,14 +33,14 @@ fn tail_at(x: &[u8], i: usize) -> Option<u8> {
     }
 }
 
-/// `Subslice` after `Subslice`.
-fn tail_tail_len(x: &[u8]) -> usize {
+/// `Subslice` after `Subslice`: the inner subslice's length and first element.
+fn tail_tail(x: &[u8]) -> (usize, Option<u8>) {
     match x {
         [_, tail @ ..] => match tail {
-            [_, rest @ .., _] => rest.len(),
-            _ => 0,
+            [_, rest @ .., _] => (rest.len(), rest.first().copied()),
+            _ => (0, None),
         },
-        [] => 0,
+        [] => (0, None),
     }
 }
 
@@ -53,7 +53,8 @@ fn check_subslice_projections() {
     assert_eq!(tail_first(x), if len >= 2 { Some(arr[1]) } else { None });
     assert_eq!(tail_last(x), if len >= 2 { Some(arr[len - 1]) } else { None });
     assert_eq!(tail_at(x, i), if len >= 1 && i < len - 1 { Some(arr[i + 1]) } else { None });
-    assert_eq!(tail_tail_len(x), if len >= 3 { len - 3 } else { 0 });
+    let rest_first = if len >= 4 { Some(arr[2]) } else { None };
+    assert_eq!(tail_tail(x), if len >= 3 { (len - 3, rest_first) } else { (0, None) });
 }
 
 /// The reproducer from the issue.
