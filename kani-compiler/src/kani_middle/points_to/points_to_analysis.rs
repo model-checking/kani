@@ -40,8 +40,12 @@ use rustc_middle::{
     ty::{Instance, InstanceKind, List, TyCtxt, TyKind, TypingEnv},
 };
 use rustc_mir_dataflow::{Analysis, Forward, JoinSemiLattice};
-use rustc_public::mir::{Body as StableBody, mono::Instance as StableInstance};
+use rustc_public::mir::{
+    Body as StableBody,
+    mono::{Instance as StableInstance, InstanceKind as StableInstanceKind},
+};
 use rustc_public::rustc_internal;
+use rustc_public::ty::{RigidTy as StableRigidTy, Ty as StableTy, TyKind as StableTyKind};
 use rustc_span::{DUMMY_SP, Spanned};
 use std::collections::HashSet;
 
@@ -188,15 +192,12 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
         location: Location,
     ) {
         if let TerminatorKind::Call { func, args, destination, .. } = &terminator.kind {
-            // Attempt to resolve callee. For now, we panic if the callee cannot be resolved (e.g.,
-            // if a function pointer call is used), but we could leverage the call graph to resolve
-            // it.
-            let instance = match try_resolve_instance(self.body, func, self.tcx) {
-                Ok(instance) => instance,
-                Err(reason) => {
-                    unimplemented!("{reason}")
-                }
-            };
+            // Calls the analysis cannot follow add no edges here: the instrumentation guards each
+            // of them with an unsupported check, which stops execution before the call.
+            if unsupported_call(rustc_internal::stable(func.ty(self.body, self.tcx))).is_some() {
+                return;
+            }
+            let instance = try_resolve_instance(self.body, func, self.tcx);
             match instance.def {
                 // Intrinsics could introduce aliasing edges we care about, so need to handle them.
                 InstanceKind::Intrinsic(_) => {
@@ -342,29 +343,44 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
     }
 }
 
-/// Try retrieving instance for the given function operand.
+/// Why the analysis cannot follow a call to a callee of type `func_ty`, if it cannot: the callee of
+/// a call through a function pointer or a vtable is not known statically. Callers that rely on the
+/// analysis must guard such calls with an unsupported check.
+pub fn unsupported_call(func_ty: StableTy) -> Option<String> {
+    let reason = match func_ty.kind() {
+        StableTyKind::RigidTy(StableRigidTy::FnDef(def, args)) => {
+            match StableInstance::resolve(def, &args) {
+                Ok(instance) if !matches!(instance.kind, StableInstanceKind::Virtual { .. }) => {
+                    return None;
+                }
+                _ => "trait object method calls",
+            }
+        }
+        _ => "calls through function pointers",
+    };
+    Some(format!(
+        "Kani does not support memory initialization checks across {reason}. For more information about planned support, see https://github.com/model-checking/kani/issues/3300."
+    ))
+}
+
+/// The instance a call operand refers to, which `unsupported_call` has checked is a function item.
 fn try_resolve_instance<'tcx>(
     body: &Body<'tcx>,
     func: &Operand<'tcx>,
     tcx: TyCtxt<'tcx>,
-) -> Result<Instance<'tcx>, String> {
-    let ty = func.ty(body, tcx);
-    match ty.kind() {
-        TyKind::FnDef(def, args) => {
-            // Span here is used for error-reporting, which we don't expect to encounter anyway, so
-            // it is ok to use a dummy.
-            Ok(Instance::expect_resolve(
-                tcx,
-                TypingEnv::fully_monomorphized(),
-                *def,
-                args.skip_binder(),
-                DUMMY_SP,
-            ))
-        }
-        _ => Err(format!(
-            "Kani was not able to resolve the instance of the function operand `{ty:?}`. Currently, memory initialization checks in presence of function pointers and vtable calls are not supported. For more information about planned support, see https://github.com/model-checking/kani/issues/3300."
-        )),
-    }
+) -> Instance<'tcx> {
+    let TyKind::FnDef(def, args) = func.ty(body, tcx).kind() else {
+        unreachable!("`unsupported_call` rejects callees that are not function items")
+    };
+    // Span here is used for error-reporting, which we don't expect to encounter anyway, so it is ok
+    // to use a dummy.
+    Instance::expect_resolve(
+        tcx,
+        TypingEnv::fully_monomorphized(),
+        *def,
+        args.skip_binder(),
+        DUMMY_SP,
+    )
 }
 
 impl<'tcx> PointsToAnalysis<'_, 'tcx> {
