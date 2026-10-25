@@ -60,6 +60,12 @@ struct AnyModels {
     kani_any_formatter: FnDef,
     /// The FnDef of KaniModel::AnyWtf8Ref
     kani_any_wtf8_ref: FnDef,
+    /// The FnDef of KaniModel::AnyCharArraySearcher
+    kani_any_char_array_searcher: FnDef,
+    /// The FnDef of KaniModel::AnyCharArrayRefSearcher
+    kani_any_char_array_ref_searcher: FnDef,
+    /// The FnDef of KaniModel::AnyCharSliceSearcher
+    kani_any_char_slice_searcher: FnDef,
     /// The FnDef of KaniHook::Assume (used for layout-niche assumptions and constructor
     /// success).
     kani_assume: FnDef,
@@ -77,9 +83,11 @@ struct AnyModels {
     /// Whether --constructor-args is enabled: under this heuristic-filter umbrella, generated
     /// ADT values additionally assume the type's mined invariant conjuncts.
     constructor_args: bool,
-    /// The maximum length for nondeterministic `&[T]`/`&mut [T]` values.
+    /// The maximum length for nondeterministic `&[T]`/`&mut [T]` values, and for the needle of a
+    /// `core::str::pattern::CharSliceSearcher` value.
     slice_bound: u64,
-    /// The maximum length, in bytes, for nondeterministic `&str` values.
+    /// The maximum length, in bytes, for nondeterministic `&str` values, and for the haystack of a
+    /// `core::str::pattern` searcher value.
     string_bound: u64,
     /// The bound for nondeterministic values of types implementing `BoundedArbitrary`.
     bounded_arbitrary_bound: u64,
@@ -97,6 +105,15 @@ impl AnyModels {
             kani_any_byte_str_ref: *kani_fns.get(&KaniModel::AnyByteStrRef.into()).unwrap(),
             kani_any_formatter: *kani_fns.get(&KaniModel::AnyFormatter.into()).unwrap(),
             kani_any_wtf8_ref: *kani_fns.get(&KaniModel::AnyWtf8Ref.into()).unwrap(),
+            kani_any_char_array_searcher: *kani_fns
+                .get(&KaniModel::AnyCharArraySearcher.into())
+                .unwrap(),
+            kani_any_char_array_ref_searcher: *kani_fns
+                .get(&KaniModel::AnyCharArrayRefSearcher.into())
+                .unwrap(),
+            kani_any_char_slice_searcher: *kani_fns
+                .get(&KaniModel::AnyCharSliceSearcher.into())
+                .unwrap(),
             kani_assume: *kani_fns.get(&KaniHook::Assume.into()).unwrap(),
             kani_assert: *kani_fns.get(&KaniHook::Assert.into()).unwrap(),
             kani_assume_safe: *kani_fns.get(&KaniModel::AssumeSafe.into()).unwrap(),
@@ -1145,6 +1162,65 @@ impl UnboundedModels {
     }
 }
 
+/// Build a local holding a nondeterministic `[elem_ty; bound]` array, and a `&mut` reference to
+/// it under `region`. Both locals belong to the harness body being built, so they stay alive for
+/// as long as it executes. Returns the storage local and the reference local.
+///
+/// The array is built element-wise (rather than via `kani::any::<[T; N]>()`) so that element
+/// types whose Arbitrary implementation the compiler derives are supported: `<[T; N] as
+/// Arbitrary>::any` is unresolvable for such `T`, whereas each element can be generated through
+/// the same path as any other value of that type.
+#[allow(clippy::too_many_arguments)]
+fn build_any_array_storage_ref(
+    tcx: TyCtxt,
+    models: AnyModels,
+    body: &mut MutableBody,
+    elem_ty: Ty,
+    bound: u64,
+    region: Region,
+    source: &mut SourceInstruction,
+    invariant_cache: &mut FxHashMap<Ty, bool>,
+    mined_cache: &mut FxHashMap<Ty, Vec<MinedConjunct>>,
+) -> (Local, Local) {
+    let storage_ty = Ty::try_new_array(elem_ty, bound).unwrap();
+    let elem_lcls = (0..bound)
+        .map(|_| {
+            call_kani_any_for_ty(
+                tcx,
+                models,
+                body,
+                elem_ty,
+                Mutability::Not,
+                source,
+                invariant_cache,
+                mined_cache,
+            )
+        })
+        .collect::<Vec<_>>();
+    let storage_lcl = body.new_local(storage_ty, source.span(body.blocks()), Mutability::Mut);
+    body.assign_to(
+        Place::from(storage_lcl),
+        Rvalue::Aggregate(
+            AggregateKind::Array(elem_ty),
+            elem_lcls.into_iter().map(|lcl| Operand::Move(Place::from(lcl))).collect(),
+        ),
+        source,
+        InsertPosition::Before,
+    );
+
+    // Pass a mutable reference to the storage to the model.
+    let storage_ref_ty = Ty::new_ref(region.clone(), storage_ty, Mutability::Mut);
+    let storage_ref_lcl =
+        body.new_local(storage_ref_ty, source.span(body.blocks()), Mutability::Not);
+    body.assign_to(
+        Place::from(storage_ref_lcl),
+        Rvalue::Ref(region, BorrowKind::Mut { kind: MutBorrowKind::Default }, storage_lcl.into()),
+        source,
+        InsertPosition::Before,
+    );
+    (storage_lcl, storage_ref_lcl)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn call_kani_any_for_ty(
     tcx: TyCtxt,
@@ -1317,55 +1393,21 @@ fn call_kani_any_for_ty(
             _ => unreachable!(),
         };
 
-        // Generate the backing storage: a local holding a nondeterministic array of the
-        // element type. Since it is a local of the harness body, it stays alive for the
-        // entire harness. The array is built element-wise (rather than via
-        // `kani::any::<[T; N]>()`) so that element types whose Arbitrary implementation the
-        // compiler derives are supported: `<[T; N] as Arbitrary>::any` is unresolvable for
-        // such `T`, whereas each element can be generated through the same path as any other
-        // value of that type.
+        // Since it is a local of the harness body, the backing storage stays alive for the
+        // entire harness.
         let bound = if is_str { models.string_bound } else { models.slice_bound };
-        let storage_ty = Ty::try_new_array(elem_ty, bound).unwrap();
-        let elem_lcls = (0..bound)
-            .map(|_| {
-                call_kani_any_for_ty(
-                    tcx,
-                    models,
-                    body,
-                    elem_ty,
-                    Mutability::Not,
-                    source,
-                    invariant_cache,
-                    mined_cache,
-                )
-            })
-            .collect::<Vec<_>>();
-        let storage_lcl = body.new_local(storage_ty, source.span(body.blocks()), Mutability::Mut);
-        body.assign_to(
-            Place::from(storage_lcl),
-            Rvalue::Aggregate(
-                AggregateKind::Array(elem_ty),
-                elem_lcls.into_iter().map(|lcl| Operand::Move(Place::from(lcl))).collect(),
-            ),
+        let (_storage_lcl, storage_ref_lcl) = build_any_array_storage_ref(
+            tcx,
+            models,
+            body,
+            elem_ty,
+            bound,
+            region.clone(),
             source,
-            InsertPosition::Before,
+            invariant_cache,
+            mined_cache,
         );
-
-        // Pass a mutable reference to the storage to the model, which returns a slice of
-        // nondeterministic (bounded) length.
-        let storage_ref_ty = Ty::new_ref(region.clone(), storage_ty, Mutability::Mut);
-        let storage_ref_lcl =
-            body.new_local(storage_ref_ty, source.span(body.blocks()), Mutability::Not);
-        body.assign_to(
-            Place::from(storage_ref_lcl),
-            Rvalue::Ref(
-                region.clone(),
-                BorrowKind::Mut { kind: MutBorrowKind::Default },
-                storage_lcl.into(),
-            ),
-            source,
-            InsertPosition::Before,
-        );
+        // The model returns a slice of nondeterministic (bounded) length.
         let model_inst = Instance::resolve(model, &model_args).unwrap();
         // The slice model returns `&mut [T]`, to serve both mutabilities; the string models
         // return the shared reference, since a mutable one is not supported.
@@ -1505,6 +1547,188 @@ fn call_kani_any_for_ty(
             InsertPosition::Before,
         );
         pat_lcl
+    } else if let TyKind::RigidTy(RigidTy::Adt(def, args)) = ty.kind()
+        && let Some(kind) = crate::kani_middle::multi_char_eq_searcher_kind(tcx, def)
+    {
+        // These three `core::str::pattern` searcher types all have a lifetime generic arg, which
+        // `can_derive_arbitrary` (reached from the final `else` below via `arbitrary_or_derive`)
+        // always rejects; check this first, since each has its own by-value generation model.
+        //
+        // All three build their haystack the same way: a nondeterministic byte array backing
+        // `any_str_ref`, bounded like any other `&str` argument.
+        let haystack_bound = models.string_bound;
+        match kind {
+            crate::kani_middle::MultiCharEqSearcherKind::Array => {
+                // `CharArraySearcher<'a, const N: usize>`: one lifetime (the haystack borrow)
+                // and one const generic (the needle char count, the model's own `M`). The model
+                // generates the needle itself, so there is no separate needle storage here.
+                let [GenericArgKind::Lifetime(region), GenericArgKind::Const(needle_len)] =
+                    args.0.as_slice()
+                else {
+                    unreachable!(
+                        "CharArraySearcher<'_, N> should have one lifetime and one const generic arg, got {args:?}"
+                    );
+                };
+                let needle_len = needle_len.eval_target_usize().unwrap();
+
+                let (_, storage_ref_lcl) = build_any_array_storage_ref(
+                    tcx,
+                    models,
+                    body,
+                    Ty::unsigned_ty(UintTy::U8),
+                    haystack_bound,
+                    region.clone(),
+                    source,
+                    invariant_cache,
+                    mined_cache,
+                );
+                let model_inst = Instance::resolve(
+                    models.kani_any_char_array_searcher,
+                    &GenericArgs(vec![
+                        GenericArgKind::Const(
+                            TyConst::try_from_target_usize(haystack_bound).unwrap(),
+                        ),
+                        GenericArgKind::Const(TyConst::try_from_target_usize(needle_len).unwrap()),
+                    ]),
+                )
+                .unwrap();
+                let dest_lcl = body.new_local(ty, source.span(body.blocks()), mutability);
+                body.insert_call(
+                    &model_inst,
+                    source,
+                    InsertPosition::Before,
+                    vec![Operand::Move(Place::from(storage_ref_lcl))],
+                    Place::from(dest_lcl),
+                );
+                dest_lcl
+            }
+            crate::kani_middle::MultiCharEqSearcherKind::ArrayRef => {
+                // `CharArrayRefSearcher<'a, 'b, const N: usize>`: two lifetimes (haystack, then
+                // needle) and one const generic (the needle char count). Unlike
+                // `CharArraySearcher`, the needle is borrowed, so the caller (here, the harness
+                // body) owns its storage too.
+                let [
+                    GenericArgKind::Lifetime(haystack_region),
+                    GenericArgKind::Lifetime(needle_region),
+                    GenericArgKind::Const(needle_len),
+                ] = args.0.as_slice()
+                else {
+                    unreachable!(
+                        "CharArrayRefSearcher<'_, '_, N> should have two lifetimes and one const generic arg, got {args:?}"
+                    );
+                };
+                let needle_len = needle_len.eval_target_usize().unwrap();
+
+                let (_, storage_ref_lcl) = build_any_array_storage_ref(
+                    tcx,
+                    models,
+                    body,
+                    Ty::unsigned_ty(UintTy::U8),
+                    haystack_bound,
+                    haystack_region.clone(),
+                    source,
+                    invariant_cache,
+                    mined_cache,
+                );
+                let (_, needle_ref_lcl) = build_any_array_storage_ref(
+                    tcx,
+                    models,
+                    body,
+                    Ty::from_rigid_kind(RigidTy::Char),
+                    needle_len,
+                    needle_region.clone(),
+                    source,
+                    invariant_cache,
+                    mined_cache,
+                );
+                let model_inst = Instance::resolve(
+                    models.kani_any_char_array_ref_searcher,
+                    &GenericArgs(vec![
+                        GenericArgKind::Const(
+                            TyConst::try_from_target_usize(haystack_bound).unwrap(),
+                        ),
+                        GenericArgKind::Const(TyConst::try_from_target_usize(needle_len).unwrap()),
+                    ]),
+                )
+                .unwrap();
+                let dest_lcl = body.new_local(ty, source.span(body.blocks()), mutability);
+                body.insert_call(
+                    &model_inst,
+                    source,
+                    InsertPosition::Before,
+                    vec![
+                        Operand::Move(Place::from(storage_ref_lcl)),
+                        Operand::Move(Place::from(needle_ref_lcl)),
+                    ],
+                    Place::from(dest_lcl),
+                );
+                dest_lcl
+            }
+            crate::kani_middle::MultiCharEqSearcherKind::Slice => {
+                // `CharSliceSearcher<'a, 'b>`: two lifetimes, but (unlike the other two kinds)
+                // no const generic -- the needle's nondeterministic length (0..=M, c.f.
+                // `any_char_slice_searcher`) has no type-level representation, so there is no
+                // bound to read off `ty`. Use the general slice bound instead, as the closest
+                // existing analogue (a nondeterministic-length `&[char]`).
+                let [
+                    GenericArgKind::Lifetime(haystack_region),
+                    GenericArgKind::Lifetime(needle_region),
+                ] = args.0.as_slice()
+                else {
+                    unreachable!(
+                        "CharSliceSearcher<'_, '_> should have exactly two lifetime args, got {args:?}"
+                    );
+                };
+                let needle_bound = models.slice_bound;
+
+                let (_, storage_ref_lcl) = build_any_array_storage_ref(
+                    tcx,
+                    models,
+                    body,
+                    Ty::unsigned_ty(UintTy::U8),
+                    haystack_bound,
+                    haystack_region.clone(),
+                    source,
+                    invariant_cache,
+                    mined_cache,
+                );
+                let (_, needle_ref_lcl) = build_any_array_storage_ref(
+                    tcx,
+                    models,
+                    body,
+                    Ty::from_rigid_kind(RigidTy::Char),
+                    needle_bound,
+                    needle_region.clone(),
+                    source,
+                    invariant_cache,
+                    mined_cache,
+                );
+                let model_inst = Instance::resolve(
+                    models.kani_any_char_slice_searcher,
+                    &GenericArgs(vec![
+                        GenericArgKind::Const(
+                            TyConst::try_from_target_usize(haystack_bound).unwrap(),
+                        ),
+                        GenericArgKind::Const(
+                            TyConst::try_from_target_usize(needle_bound).unwrap(),
+                        ),
+                    ]),
+                )
+                .unwrap();
+                let dest_lcl = body.new_local(ty, source.span(body.blocks()), mutability);
+                body.insert_call(
+                    &model_inst,
+                    source,
+                    InsertPosition::Before,
+                    vec![
+                        Operand::Move(Place::from(storage_ref_lcl)),
+                        Operand::Move(Place::from(needle_ref_lcl)),
+                    ],
+                    Place::from(dest_lcl),
+                );
+                dest_lcl
+            }
+        }
     } else {
         // Prefer an unbounded nondeterministic value via (implemented or compiler-derived)
         // Arbitrary; fall back to a smart-pointer model (`Box`/`Rc`/`Arc` of a derivable pointee)
