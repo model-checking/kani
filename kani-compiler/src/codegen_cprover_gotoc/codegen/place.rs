@@ -822,7 +822,6 @@ impl GotocCtx<'_, '_> {
             }
             TyKind::RigidTy(RigidTy::Slice(elemt)) => {
                 let offset_e = Expr::int_constant(offset, Type::size_t());
-                //TODO, should we assert min_length? Or is that already handled by the typechecker?
                 let idxe = if from_end {
                     let length =
                         before.fat_ptr_goto_expr.clone().unwrap().member("len", &self.symbol_table);
