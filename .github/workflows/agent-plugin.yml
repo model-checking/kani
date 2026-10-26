@@ -1,0 +1,53 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+# Fast, Kani-free checks for the agent plugin (agent-plugin/) and its MCP server
+# (tools/kani-mcp/). The end-to-end smoke tests, which need a Kani build, run as the
+# `agent-plugin` suite of ./scripts/kani-regression.sh in the Kani CI workflow.
+name: Agent Plugin
+permissions:
+  contents: read
+on:
+  pull_request:
+    paths:
+      - 'agent-plugin/**'
+      - 'tools/kani-mcp/**'
+      - 'tests/agent-plugin/**'
+      - 'tests/json-handler/schema-validation/**'
+      - '.github/workflows/agent-plugin.yml'
+  merge_group:
+  push:
+    branches:
+      - 'main'
+
+jobs:
+  plugin:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v6
+
+      - name: Validate plugin metadata and skill structure
+        run: python3 agent-plugin/tests/validate_plugin.py
+
+      - name: Run script unit tests
+        run: python3 agent-plugin/tests/test_scripts.py
+
+      - name: Lint plugin Python code
+        run: |
+          pip3 install --upgrade autopep8 pyflakes
+          autopep8 --global-config scripts/pyproject.toml --diff --exit-code -r agent-plugin
+          python3 -m pyflakes agent-plugin
+
+  kani-mcp:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v6
+
+      # Cargo resolves the whole workspace, which has a path dependency on the charon submodule.
+      - name: Fetch the charon submodule
+        run: git submodule update --init --depth 1 charon
+
+      - name: Run kani-mcp unit tests
+        run: cargo test -p kani-mcp
