@@ -37,8 +37,12 @@ relevant file when a step below points to it.
    with `scripts/summarize-results.py <file>`, not raw console output. For counterexamples, use
    concrete playback. Read raw output only when there is no export (usually a compile error).
 6. **Never change the project toolchain** (`rust-toolchain.toml`, profiles, global installs)
-   without asking. Kani ships its own toolchain. Running plain `cargo` (even `cargo fetch`) in
-   a project with a `rust-toolchain.toml` makes rustup install that toolchain: ask first.
+   without asking. Kani ships its own toolchain. In a project with a `rust-toolchain.toml`,
+   rustup installs the pinned toolchain as soon as `cargo` runs, even `cargo kani` or
+   `cargo fetch`. The MCP tools and scripts prevent this themselves. For your own CLI runs,
+   prefix every `cargo` command with the `cli_env` that `kani_get_version` /
+   `check-kani-version.py` print (`RUSTUP_TOOLCHAIN=<Kani's toolchain> RUSTUP_AUTO_INSTALL=0`),
+   and ask before running anything that needs the pinned toolchain.
 7. **Bound every run.** Model checking can run for hours. Give each Kani run a time budget
    agreed with the user (`timeout_s` and `harness_timeout_s` on the MCP tools; `timeout` and
    `-Z unstable-options --harness-timeout` on the CLI), verify one harness or a small group
@@ -76,7 +80,10 @@ harness for a small target; contracts proved bottom-up for larger ones. Use Auto
 
 Follow `references/kani.md`: nondeterministic inputs with `kani::any()`, only the approved
 assumptions, a call to the code, then assertions of the property. End the harness with
-`kani::cover!(true, "harness end reached")`. Keep harnesses under `#[cfg(kani)]`.
+`kani::cover!(true, "harness end reached")`, and put a `kani::cover!` in every branch of the
+harness (each `if`/`match` arm, `unwrap_err`, error path): a branch the inputs never reach is
+checked on no execution, and only an UNSATISFIABLE cover shows it. Keep harnesses under
+`#[cfg(kani)]`.
 
 Show the harness (and any contract) to the user. **Once they approve it, snapshot a new
 baseline** (a commit, or `cp -R src "$TMPDIR/kani-approved/src"`): this pins the property.
@@ -113,9 +120,12 @@ assumption to make a failure disappear without the user's approval.
 ### 7. Report a defect, or propose a fix
 
 To report a defect, add the witness test with `--concrete-playback=inplace` and run
-`scripts/check-witness.py <crate> --test <name>`: only `defect-confirmed` confirms it. Pass
-crate options with `--cargo-arg` (e.g. `--cargo-arg --features --cargo-arg std`); if the test
-build fails under `cfg(kani)`, the script retries with `--lib`. To fix
+`scripts/check-witness.py <crate> --test <name>`: only `defect-confirmed` confirms it (the
+replay panics with the failure Kani reported; `different-failure` means another panic). Pass
+crate options with `--cargo-arg` (e.g. `--cargo-arg --features --cargo-arg std`). If the test
+build fails under `cfg(kani)`, the script retries with `--lib`, then in a copy without the
+crate's other tests. In a workspace member, `--concrete-playback=inplace` may fail: run it from
+the workspace root with `-p <package>`. To fix
 it, propose the change to the user first. Once it is approved and applied,
 `scripts/check-witness.py <crate> --test <name> --base <baseline>` must report
 `fix-confirmed` (the witness fails before the fix and passes after it). Then re-run the proofs.

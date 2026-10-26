@@ -11,9 +11,12 @@ proposed separately, with a concrete playback witness (see `check-witness.py`).
 Compares every function in the given Rust files with the same function in the baseline (a git
 revision, or a copy of the sources made before editing) and reports:
 
-- harness-removed (error), harness-added (info)
+- harness-removed (error), harness-attribute-removed (error: the function is still there but
+  is no longer a harness), harness-added (info)
 - assertion-removed (error), cover-removed (warning), assertion-added (info)
 - assumption-added / assumption-changed (warning): the inputs covered may have shrunk
+  (`kani::assume` and `kani::any_where` predicates, in the harness or in the Kani-only helpers
+  it calls)
 - should-panic-added (error); stub-added, stub-verified-added (warning); unwind-lowered (warning)
 - requires-added / requires-changed (warning), ensures-removed / ensures-changed (warning),
   modifies-changed (warning); `check-specs.py --compare-base` decides with Kani whether a changed
@@ -42,7 +45,8 @@ from kani_plugin_lib import (  # noqa: E402
     emit, find_root, helper_closure, helper_index, kani_only_files, parse_functions, rust_files,
     strip_comments_and_strings)
 
-ASSUME = re.compile(r"\bkani::assume\s*\(")
+# `kani::any_where(|x| cond)` restricts its value like an assumption.
+ASSUME = re.compile(r"\bkani::assume\s*\(|\bkani::any_where\s*\(")
 ASSERT = re.compile(
     r"\b(?:assert|assert_eq|assert_ne|debug_assert|debug_assert_eq|debug_assert_ne)!\s*\(|\bkani::assert\s*\(")
 COVER = re.compile(r"\bkani::cover!\s*\(")
@@ -143,17 +147,19 @@ def diff_contract(old, new):
         if o == n:
             continue
         section = name.split("::")[1]
+        rule = rule_added if not (o - n) else (f"{section}-changed" if n - o else rule_removed)
+        change = {rule_added: "added", rule_removed: "removed"}.get(rule, "changed")
         if section == "requires":
             sev = "warning"
-            msg = ("precondition changed: a stronger `requires` shrinks what the contract proof covers. "
+            msg = (f"precondition {change}: a stronger `requires` shrinks what the contract proof covers. "
                    "Run `check-specs.py --compare-base` to classify it, and get the user's approval.")
         elif section == "ensures":
-            sev = "warning" if o - n else "info"
-            msg = "postcondition removed or changed: callers may rely on what was guaranteed before."
+            sev = "info" if change == "added" else "warning"
+            msg = (f"postcondition {change}." if change == "added" else
+                   f"postcondition {change}: callers may rely on what was guaranteed before.")
         else:
             sev = "warning"
-            msg = "`modifies` changed: the frame of the contract is different."
-        rule = rule_added if not (o - n) else (f"{section}-changed" if n - o else rule_removed)
+            msg = f"`modifies` {change}: the frame of the contract is different."
         out.append(finding(*loc, sev, rule, f"{msg} Before: {sorted(o.elements())}; after: {sorted(n.elements())}."))
     return out
 
@@ -177,6 +183,11 @@ def diff_file(path, old_src, new_src, old_index=None, new_index=None, kani_only=
         old_index = helper_index(old.values())
     for key, n in new.items():
         o = old.get(key)
+        if o is not None and is_harness(o) and not is_harness(n):
+            out.append(finding(n.file, n.line, n.name, "error", "harness-attribute-removed",
+                               "`#[kani::proof]` (or `proof_for_contract`) was removed: Kani no longer runs "
+                               "this harness, and its property is no longer checked."))
+            continue
         if is_harness(n):
             if o is None or not is_harness(o):
                 assumes = sorted(calls(n, ASSUME, new_index).elements())

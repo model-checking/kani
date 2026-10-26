@@ -18,12 +18,16 @@ Exit status: 0 when a supported, working Kani is installed, 1 otherwise.
 
 import argparse
 import json
+import os
 import re
 import shlex
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from kani_plugin_lib import kani_env, kani_toolchain  # noqa: E402
 
 COMPATIBILITY = Path(__file__).resolve().parent.parent / "compatibility.json"
 INSTALL_HINT = "cargo install --locked kani-verifier && cargo kani setup"
@@ -41,7 +45,8 @@ def fmt(v):
 def installed_version(cmds):
     for cmd in cmds:
         try:
-            out = subprocess.run(shlex.split(cmd) + ["--version"], capture_output=True, text=True, timeout=60)
+            out = subprocess.run(shlex.split(cmd) + ["--version"], capture_output=True, text=True, timeout=60,
+                                 env=kani_env())
         except (OSError, subprocess.TimeoutExpired):
             continue
         if out.returncode == 0 and parse_version(out.stdout):
@@ -80,7 +85,8 @@ def toolchain_check(timeout=600):
     with tempfile.TemporaryDirectory(prefix="kani-check-") as tmp:
         Path(tmp, "check.rs").write_text("#[kani::proof]\nfn kani_plugin_toolchain_check() {}\n")
         try:
-            out = subprocess.run(["kani", "check.rs"], cwd=tmp, capture_output=True, text=True, timeout=timeout)
+            out = subprocess.run(["kani", "check.rs"], cwd=tmp, capture_output=True, text=True, timeout=timeout,
+                                 env=kani_env())
         except (OSError, subprocess.TimeoutExpired) as e:
             return False, str(e)
         text = out.stdout + out.stderr
@@ -100,6 +106,11 @@ def main(argv=None):
     else:
         cmd, text = installed_version(args.kani_cmd or ["cargo kani", "kani"])
     result = check(text, compat, cmd)
+    toolchain = os.environ.get("RUSTUP_TOOLCHAIN") or kani_toolchain()
+    if toolchain:
+        # Run `cargo kani` with this environment, so that rustup does not install the toolchain
+        # a project pins in its rust-toolchain.toml (Kani does not use it).
+        result["cli_env"] = f"RUSTUP_TOOLCHAIN={toolchain} RUSTUP_AUTO_INSTALL=0"
     if result["compatible"] and args.version_string is None and not args.no_toolchain_check:
         works, output = toolchain_check()
         result["toolchain_works"] = works

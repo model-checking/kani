@@ -38,7 +38,7 @@ from kani_plugin_lib import (  # noqa: E402
     emit, find_root, harnesses_of, helper_closure, helper_index, kani_only_files, line_of, parse_functions,
     rust_files, strip_comments_and_strings)
 
-ASSUME = re.compile(r"\bkani::assume\s*\(")
+ASSUME = re.compile(r"\bkani::assume\s*\(|\bkani::any_where\s*\(")
 ASSERT = re.compile(
     r"\b(?:assert|assert_eq|assert_ne|debug_assert|debug_assert_eq|debug_assert_ne)!\s*\(|\bkani::assert\s*\(")
 REQUIRES = re.compile(r"#\[\s*(?:cfg_attr\s*\(\s*kani\s*,\s*)?kani::requires\s*\(")
@@ -114,6 +114,9 @@ def check_harness(h, helpers=()):
     for unit, m, first_assert in assumes:
         body = unit.body
         cond = call_args(body, m.end() - 1).strip()
+        if m.group(0).startswith("kani::any_where"):
+            # `kani::any_where(|x| cond)`: the closure body is the assumption.
+            cond = re.sub(r"^\s*(?:move\s+)?\|[^|]*\|\s*", "", cond)
         line = unit.body_line + body.count("\n", 0, m.start())
         h_file = unit.file
         if cond == "false":

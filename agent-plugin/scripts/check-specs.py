@@ -51,8 +51,8 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from kani_plugin_lib import (  # noqa: E402
-    emit, find_root, join_option_values, kani_only_files, parse_functions, rust_files, split_top_level,
-    strip_comments_and_strings)
+    emit, find_root, join_option_values, kani_env, kani_only_files, parse_functions, rust_files, split_top_level,
+    mirror_workspace, strip_comments_and_strings)
 
 PRIMITIVES = {f"{s}{w}" for s in "iu" for w in ("8", "16", "32", "64", "128", "size")} | {
     "bool", "char", "f32", "f64", "()"}
@@ -262,26 +262,6 @@ def base_source(args, path):
     return out.stdout if out.returncode == 0 else ""
 
 
-IGNORED_DIRS = re.compile(r"^(target.*|\.git|node_modules)$")
-
-
-def sync_tree(src, dst):
-    """Make `dst` a copy of `src` (without build outputs), copying only files whose size or
-    modification time differ, so the copy's build cache stays valid between runs."""
-    for dirpath, dirnames, filenames in os.walk(src):
-        dirnames[:] = [d for d in dirnames if not IGNORED_DIRS.match(d)]
-        rel = Path(dirpath).relative_to(src)
-        (dst / rel).mkdir(parents=True, exist_ok=True)
-        for name in filenames:
-            s_file, d_file = Path(dirpath) / name, dst / rel / name
-            st = s_file.stat()
-            if d_file.exists():
-                dt = d_file.stat()
-                if dt.st_size == st.st_size and dt.st_mtime_ns == st.st_mtime_ns:
-                    continue
-            shutil.copy2(s_file, d_file, follow_symlinks=False)
-
-
 def run_kani(plan, files, kani_args, work_dir=None):
     """Apply the plan to a copy of the crate and run Kani once. Cargo projects are copied to a
     persistent work directory (default `<workspace>/target/kani-plugin/spec-checks`) so that
@@ -298,8 +278,8 @@ def run_kani(plan, files, kani_args, work_dir=None):
             mapping = {first.resolve(): work_file}
             cwd, cmd = tmp, ["kani", work_file.name]
         else:
-            copy = Path(work_dir) if work_dir else root / "target" / "kani-plugin" / "spec-checks"
-            sync_tree(root, copy)
+            work = Path(work_dir) if work_dir else root / "target" / "kani-plugin" / "spec-checks"
+            copy = mirror_workspace(root, work)
             mapping = {f.resolve(): copy / f.resolve().relative_to(root) for f in files}
             cwd, cmd = copy / package.relative_to(root), ["cargo", "kani"]
         for file, edits in plan.insertions.items():
@@ -313,7 +293,7 @@ def run_kani(plan, files, kani_args, work_dir=None):
         for h in plan.harness_filters:
             cmd += ["--harness", h]
         cmd += kani_args
-        out = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+        out = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=kani_env())
         text = out.stdout + out.stderr
         doc = json.loads(export.read_text()) if export.exists() else None
         return doc, text

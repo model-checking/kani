@@ -109,9 +109,11 @@ TEST="$(grep -o 'fn kani_concrete_playback_check_naive_midpoint_[0-9]*' src/lib.
 "$SCRIPTS/check-witness.py" . --test "$TEST" > "$WORK/witness.json" \
     || fail "defect not confirmed: $(cat "$WORK/witness.json")"
 [ "$(jq_py "$WORK/witness.json" 'd["verdict"]')" = "defect-confirmed" ] || fail "expected defect-confirmed"
-# The fixture's integration test does not build under cfg(kani), so playback falls back to --lib.
-[ "$(jq_py "$WORK/witness.json" 'd.get("cargo_args")')" = "['--lib']" ] || fail "expected the --lib fallback"
-echo "check-witness.py: the witness confirms the defect (with the --lib fallback)"
+# The fixture's tests do not build under cfg(kani), so playback runs in a copy without them.
+[ "$(jq_py "$WORK/witness.json" '"isolated" in d')" = "True" ] || fail "expected the isolated replay"
+[ "$(jq_py "$WORK/witness.json" 'd["expected"]["description"]')" = "attempt to add with overflow" ] \
+    || fail "the witness should reproduce the reported overflow: $(cat "$WORK/witness.json")"
+echo "check-witness.py: the witness reproduces the reported failure (replayed without the crate's other tests)"
 
 sed -i.bak 's|(a + b) / 2|((a as u64 + b as u64) / 2) as u32|' src/lib.rs && rm -f src/lib.rs.bak
 "$SCRIPTS/check-witness.py" . --test "$TEST" --base HEAD > "$WORK/fix.json" \
@@ -124,12 +126,17 @@ git checkout -q -- src
 mkdir "$WORK/stubbed" && cp "$PLUGIN/tests/fixtures/stubbed.rs" "$WORK/stubbed/"
 (cd "$WORK/stubbed" && kani stubbed.rs -Z stubbing -Z concrete-playback --concrete-playback=inplace \
     > "$WORK/stubbed.log" 2>&1) || true
-STEST="$(grep -o 'fn kani_concrete_playback_check_double_is_even_[0-9]*' "$WORK/stubbed/stubbed.rs" | cut -c4-)"
+STEST="$(grep -o 'fn kani_concrete_playback_check_double_is_even_[0-9][0-9]*' "$WORK/stubbed/stubbed.rs" | cut -c4-)"
 [ -n "$STEST" ] || fail "no playback test for the stubbed harness: $(tail -n 20 "$WORK/stubbed.log")"
 "$SCRIPTS/check-witness.py" "$WORK/stubbed/stubbed.rs" --test "$STEST" > "$WORK/spurious.json" || true
 [ "$(jq_py "$WORK/spurious.json" 'd["verdict"]')" = "spurious-failure-likely" ] \
     || fail "expected spurious-failure-likely: $(cat "$WORK/spurious.json")"
-echo "check-witness.py: a failure caused by a stub is reported as spurious"
+NTEST="$(grep -o 'fn kani_concrete_playback_check_double_is_even_nondet_stub_[0-9]*' "$WORK/stubbed/stubbed.rs" | cut -c4-)"
+[ -n "$NTEST" ] || fail "no playback test for the nondet stub harness"
+"$SCRIPTS/check-witness.py" "$WORK/stubbed/stubbed.rs" --test "$NTEST" > "$WORK/leftover.json" || true
+[ "$(jq_py "$WORK/leftover.json" 'd["verdict"]')" = "spurious-failure-likely" ] \
+    || fail "leftover concrete values should be spurious: $(cat "$WORK/leftover.json")"
+echo "check-witness.py: failures caused by a stub (wrong model, or leftover values) are reported as spurious"
 
 # Evidence: record a run, verify it by re-running, and detect a changed source.
 CMD="cargo kani --harness check_midpoint -Z export-json --export-json $WORK/ev.json"

@@ -10,6 +10,7 @@
 //! The surface is deliberately small. Anything not exposed here remains available through the
 //! Kani CLI, which the `verify-rust` skill uses as a fallback.
 
+mod partial;
 mod process;
 mod summary;
 
@@ -187,6 +188,62 @@ fn tool_result(value: Value, is_error: bool) -> Value {
     })
 }
 
+/// Find `program` on PATH.
+fn which(program: &str) -> Option<PathBuf> {
+    std::env::split_paths(&std::env::var_os("PATH")?)
+        .map(|dir| dir.join(program))
+        .find(|p| p.is_file())
+}
+
+/// An installed Rust toolchain to run Kani's `cargo` proxy with: Kani's own toolchain if it
+/// can be found, otherwise rustup's default toolchain.
+fn kani_toolchain() -> Option<String> {
+    if let Some(kani) = which("kani").or_else(|| which("cargo-kani")) {
+        // A development build: `scripts/kani` in a Kani checkout, next to its rust-toolchain.toml.
+        let real = std::fs::canonicalize(&kani).unwrap_or(kani);
+        if let Some(checkout) = real.parent().and_then(Path::parent)
+            && let Ok(text) = std::fs::read_to_string(checkout.join("rust-toolchain.toml"))
+            && let Some(channel) = text.lines().find_map(|l| {
+                let l = l.trim();
+                l.strip_prefix("channel")
+                    .and_then(|r| r.trim_start().strip_prefix('='))
+                    .map(|v| v.trim().trim_matches('"').to_string())
+            })
+        {
+            return Some(channel);
+        }
+        // A release: `$KANI_HOME/kani-<version>/rust-toolchain-version`.
+        let home = std::env::var_os("KANI_HOME")
+            .map(PathBuf::from)
+            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".kani")))?;
+        let mut versions: Vec<PathBuf> = std::fs::read_dir(&home)
+            .ok()?
+            .flatten()
+            .map(|e| e.path().join("rust-toolchain-version"))
+            .filter(|p| p.is_file())
+            .collect();
+        versions.sort();
+        if let Some(file) = versions.last() {
+            return std::fs::read_to_string(file).ok().map(|v| v.trim().to_string());
+        }
+    }
+    let out =
+        Command::new("rustup").arg("default").env("RUSTUP_AUTO_INSTALL", "0").output().ok()?;
+    String::from_utf8_lossy(&out.stdout).split_whitespace().next().map(String::from)
+}
+
+/// rustup's `cargo` proxy reads the project's `rust-toolchain.toml` before Kani starts, and
+/// installs that toolchain if it is missing; Kani does not need it (it uses its own). Pin the
+/// proxy to an installed toolchain and disable auto-install, unless the user chose one.
+fn apply_kani_env(cmd: &mut Command) {
+    cmd.env("RUSTUP_AUTO_INSTALL", "0");
+    if std::env::var_os("RUSTUP_TOOLCHAIN").is_none()
+        && let Some(toolchain) = kani_toolchain()
+    {
+        cmd.env("RUSTUP_TOOLCHAIN", toolchain);
+    }
+}
+
 /// How to invoke Kani on a target: `cargo kani` in a project directory, or `kani <file>` in
 /// the file's directory (so reported locations stay relative, as on the command line).
 struct Target {
@@ -226,6 +283,7 @@ impl Target {
             }
         };
         cmd.args(args).current_dir(&self.dir);
+        apply_kani_env(&mut cmd);
         cmd
     }
 }
@@ -297,6 +355,7 @@ fn toolchain_check(token: Option<&Value>) -> Result<Value> {
     )?;
     let mut cmd = Command::new("kani");
     cmd.arg("check.rs").current_dir(dir.path());
+    apply_kani_env(&mut cmd);
     let out = process::run(cmd, Duration::from_secs(SHORT_TIMEOUT_S), token)?;
     let ok = out.exit_code == Some(0) && out.text.contains("VERIFICATION:- SUCCESSFUL");
     let mut result = json!({ "works": ok });
@@ -321,7 +380,10 @@ fn get_version(token: Option<&Value>) -> Result<Value> {
         [("cargo kani", &["kani", "--version"]), ("kani", &["--version"])];
     let found = candidates.iter().find_map(|(name, args)| {
         let program = if *name == "kani" { "kani" } else { "cargo" };
-        let out = Command::new(program).args(*args).output().ok()?;
+        let mut cmd = Command::new(program);
+        cmd.args(*args);
+        apply_kani_env(&mut cmd);
+        let out = cmd.output().ok()?;
         let version = parse_version(&String::from_utf8_lossy(&out.stdout))?;
         out.status.success().then_some((*name, version))
     });
@@ -359,6 +421,11 @@ fn get_version(token: Option<&Value>) -> Result<Value> {
         "plugin_version": compat["plugin_version"],
         "supported_range": format!(">= {}, < {}", fmt(lo), fmt(hi)),
     });
+    if let Some(toolchain) = std::env::var("RUSTUP_TOOLCHAIN").ok().or_else(kani_toolchain) {
+        // Run `cargo kani` with this environment, so that rustup does not install the toolchain
+        // a project pins in its rust-toolchain.toml (Kani does not use it).
+        result["cli_env"] = json!(format!("RUSTUP_TOOLCHAIN={toolchain} RUSTUP_AUTO_INSTALL=0"));
+    }
     if compatible {
         let toolchain = toolchain_check(token)?;
         if toolchain["works"] == false {
@@ -380,7 +447,10 @@ fn list_harnesses(args: &Value, token: Option<&Value>) -> Result<Value> {
     let list_file = target.dir.join("kani-list.json");
     let existed = list_file.exists();
     let mut list_args = vec!["--format".to_string(), "json".to_string()];
-    list_args.extend(string_list(args, "extra_args")?);
+    // `kani list` does not take build options such as `--target-dir`: drop them, so the same
+    // `extra_args` can be used for listing and verification.
+    let (kept, ignored) = drop_list_unsupported(string_list(args, "extra_args")?);
+    list_args.extend(kept);
     let out = process::run(
         target.command(Some("list"), &list_args),
         timeout_arg(args, SHORT_TIMEOUT_S),
@@ -404,12 +474,65 @@ fn list_harnesses(args: &Value, token: Option<&Value>) -> Result<Value> {
     if detail == "full" && filter.is_none() {
         return Ok(full);
     }
-    Ok(summarize_list(&full, filter))
+    let targets = contract_targets(&target.dir);
+    let mut out = summarize_list(&full, filter, &targets);
+    if !ignored.is_empty() {
+        out["ignored_extra_args"] = json!(ignored);
+    }
+    Ok(out)
+}
+
+fn drop_list_unsupported(args: Vec<String>) -> (Vec<String>, Vec<String>) {
+    const WITH_VALUE: &[&str] = &["--target-dir"];
+    let (mut kept, mut ignored) = (vec![], vec![]);
+    let mut iter = args.into_iter();
+    while let Some(arg) = iter.next() {
+        if WITH_VALUE.contains(&arg.as_str()) {
+            ignored.push(arg);
+            ignored.extend(iter.next());
+        } else if WITH_VALUE.iter().any(|o| arg.starts_with(&format!("{o}="))) {
+            ignored.push(arg);
+        } else {
+            kept.push(arg);
+        }
+    }
+    (kept, ignored)
+}
+
+/// The last path segment of every `proof_for_contract(...)` target in the Rust sources under
+/// `dir`. `kani list` can miss the harnesses of contracts on methods, so the summary also
+/// checks the source.
+fn contract_targets(dir: &Path) -> Vec<String> {
+    let mut out = vec![];
+    let mut todo = vec![dir.to_path_buf()];
+    while let Some(d) = todo.pop() {
+        let Ok(entries) = std::fs::read_dir(&d) else { continue };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if path.is_dir() {
+                if !name.starts_with("target") && !name.starts_with('.') {
+                    todo.push(path);
+                }
+            } else if name.ends_with(".rs")
+                && let Ok(text) = std::fs::read_to_string(&path)
+            {
+                for part in text.split("proof_for_contract(").skip(1) {
+                    if let Some(end) = part.find(')') {
+                        let target = part[..end].trim();
+                        let last = target.rsplit("::").next().unwrap_or(target).trim();
+                        out.push(last.to_string());
+                    }
+                }
+            }
+        }
+    }
+    out
 }
 
 /// A compact view of `kani list` output: totals, harness counts per file, contracts without
 /// a harness, and, with `filter`, the matching harness and contract names.
-fn summarize_list(full: &Value, filter: Option<&str>) -> Value {
+fn summarize_list(full: &Value, filter: Option<&str>, source_targets: &[String]) -> Value {
     let per_file = |key: &str| -> Value {
         let counts: serde_json::Map<String, Value> = full[key]
             .as_object()
@@ -420,9 +543,14 @@ fn summarize_list(full: &Value, filter: Option<&str>) -> Value {
         Value::Object(counts)
     };
     let contracts = full["contracts"].as_array().cloned().unwrap_or_default();
+    let has_source_harness = |function: &str| {
+        let last = function.rsplit("::").next().unwrap_or(function);
+        source_targets.iter().any(|t| t == last)
+    };
     let without_harness: Vec<&Value> = contracts
         .iter()
         .filter(|c| c["harnesses"].as_array().is_none_or(Vec::is_empty))
+        .filter(|c| !c["function"].as_str().is_some_and(has_source_harness))
         .map(|c| &c["function"])
         .collect();
     let mut out = json!({
@@ -434,8 +562,8 @@ fn summarize_list(full: &Value, filter: Option<&str>) -> Value {
     });
     if !without_harness.is_empty() {
         out["note"] = json!(
-            "`kani list` can miss the harnesses of contracts on methods; check these by \
-             searching for `proof_for_contract` before writing new harnesses."
+            "No `proof_for_contract` harness was found for these contracts, by `kani list` or in \
+             the source (matched by function name)."
         );
     }
     if let Some(filter) = filter {
@@ -546,7 +674,27 @@ fn verify_harness(args: &Value, token: Option<&Value>) -> Result<Value> {
         kani_args.extend(["--jobs".into(), jobs.to_string(), "--output-format=terse".into()]);
     }
     let (doc, out, run_info) = run_with_export(&target, &kani_args, args, token)?;
-    let doc = doc.ok_or_else(|| no_results_error(&out))?;
+    let Some(doc) = doc else {
+        let partial = partial::parse(&out.text);
+        if out.timed_out && !partial.finished.is_empty() {
+            // Kani writes no export when it is killed; report what finished from its output.
+            return Ok(json!({
+                "run_state": "TIMED_OUT",
+                "complete": false,
+                "harnesses": partial.finished,
+                "unfinished": partial.unfinished,
+                "note": format!(
+                    "Stopped after {}s (`timeout_s`). These results were read from Kani's console \
+                     output, because Kani writes no `--export-json` when it is killed: they have no \
+                     proof-quality counts and cannot be recorded with evidence.py. Re-run the \
+                     unfinished harnesses separately.",
+                    out.elapsed_s
+                ),
+                "run": run_info,
+            }));
+        }
+        return Err(no_results_error(&out));
+    };
     let mut result = summary::summarize(&doc, false, summary::DEFAULT_MAX_FAILED);
     result["exit_code"] = json!(out.exit_code);
     result["run"] = run_info;
@@ -607,8 +755,20 @@ fn get_counterexample(args: &Value, token: Option<&Value>) -> Result<Value> {
         summary::len(&h["attributes"]["stubs"]) > 0
             || summary::len(&h["attributes"]["verified_stubs"]) > 0
     });
-    let mut note = if summary["harnesses"].as_array().is_some_and(|h| h.is_empty()) {
+    let verdicts: Vec<&str> = summary["harnesses"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|h| h["verdict"].as_str())
+        .collect();
+    let mut note = if verdicts.is_empty() {
         "All selected harnesses passed; there is no counterexample to reproduce.".to_string()
+    } else if !verdicts.contains(&"FAILURE") {
+        format!(
+            "No harness finished with a failure (verdicts: {}); there is no counterexample. \
+             A TIMEOUT or OUT_OF_MEMORY result is inconclusive.",
+            verdicts.join(", ")
+        )
     } else if failures.is_empty() {
         "Kani found failures but generated no failure witness (it needs a failing panic check). \
          Inspect the failed properties instead."
@@ -659,10 +819,21 @@ mod tests {
             "contract-harnesses": {},
             "contracts": [{ "function": "f", "file": "a.rs", "harnesses": [] }]
         });
-        let out = summarize_list(&full, Some("check_a"));
+        let out = summarize_list(&full, Some("check_a"), &[]);
         assert_eq!(out["standard_harnesses_per_file"]["a.rs"], 2);
         assert_eq!(out["contracts_without_harness"], json!(["f"]));
         assert_eq!(out["matching_standard_harnesses"], json!(["check_a"]));
+        let out = summarize_list(&full, None, &["f".to_string()]);
+        assert_eq!(out["contracts_without_harness"], json!([]));
+    }
+
+    #[test]
+    fn drops_build_options_from_list() {
+        let args =
+            ["-Z", "function-contracts", "--target-dir", "/t", "--target-dir=/u"].map(String::from);
+        let (kept, ignored) = drop_list_unsupported(args.to_vec());
+        assert_eq!(kept, ["-Z", "function-contracts"]);
+        assert_eq!(ignored, ["--target-dir", "/t", "--target-dir=/u"]);
     }
 
     #[test]

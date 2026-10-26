@@ -8,6 +8,7 @@ parse it, so they never need a toolchain and can run before anything compiles. T
 """
 
 import json
+import os
 import re
 import sys
 from dataclasses import dataclass, field
@@ -275,8 +276,8 @@ def parse_functions(src, path="<src>", all_in_kani=False):
     spans = _scopes(code)
     kani_mods = []
     for open_idx, close_idx, kind, header_start in spans:
-        # A module's header (the text since the previous item) includes its attributes.
-        if kind == "mod":
+        # A module's or impl's header (the text since the previous item) includes its attributes.
+        if kind in ("mod", "impl"):
             if any(n == "cfg" and re.fullmatch(r"\s*kani\s*", a)
                    for n, a, _ in parse_attributes(src, code, header_start, open_idx)):
                 kani_mods.append((open_idx, close_idx))
@@ -384,19 +385,49 @@ def helper_index(functions):
     return index
 
 
+EXTERNAL_ROOTS = {"kani", "std", "core", "alloc"}
+IMPL_TYPE = re.compile(r"\bimpl\b(?:\s*<[^{]*?>)?\s+(?:[^{]*?\bfor\s+)?([A-Za-z_]\w*)")
+
+
+def resolve_call(caller, path, index):
+    """The Kani-only helpers a call `path(...)` in `caller` may refer to. Calls into Kani and
+    the standard library never resolve; a qualified call must match the helper's module (file
+    or directory name) or, for `Type::f`, its impl block; an unqualified call resolves to free
+    functions, preferring those in the caller's file."""
+    segments = path.split("::")
+    if segments[0] in EXTERNAL_ROOTS:
+        return []
+    candidates = index.get(segments[-1], [])
+    if len(segments) >= 2:
+        qualifier = segments[-2]
+        if qualifier in ("self", "super", "crate"):
+            return [h for h in candidates if h.scope != "impl"]
+        return [h for h in candidates
+                if (h.scope == "impl" and re.search(rf"\b{re.escape(qualifier)}\b", h.scope_header))
+                or (h.scope != "impl" and (qualifier in Path(h.file).parts or Path(h.file).stem == qualifier))]
+    free = [h for h in candidates if h.scope != "impl"]
+    same_file = [h for h in free if h.file == caller.file]
+    return same_file or free
+
+
 def helper_closure(fn, index):
     """The Kani-only helpers `fn` calls, transitively, and the replacement functions of its
     `#[kani::stub]` attributes: assumptions and nondeterministic inputs in them belong to the
-    harness."""
-    names = [arg.split(",")[-1].strip().split("::")[-1] for n, arg, _ in fn.attributes if n == "kani::stub"]
-    seen, out, todo = {fn.name}, [], [fn]
+    harness. Method calls (`x.f()`) are not followed: their receiver type is unknown."""
+    stub_paths = [arg.split(",")[-1].strip() for n, arg, _ in fn.attributes if n == "kani::stub"]
+    seen, out, todo = {id(fn)}, [], [fn]
     while todo:
         f = todo.pop()
-        called = [c.split("::")[-1] for c in CALL.findall(f.body)]
-        for name in (names if f is fn else []) + called:
-            for h in index.get(name, []):
-                if h.name not in seen:
-                    seen.add(h.name)
+        paths = list(stub_paths) if f is fn else []
+        for m in CALL.finditer(f.body):
+            before = f.body[:m.start(1)].rstrip()
+            if before.endswith("."):
+                continue
+            paths.append(m.group(1))
+        for path in paths:
+            for h in resolve_call(f, path, index):
+                if id(h) not in seen:
+                    seen.add(id(h))
                     out.append(h)
                     todo.append(h)
     return out
@@ -417,6 +448,132 @@ def rust_files(paths):
                     yield f
         elif p.suffix == ".rs":
             yield p
+
+
+def kani_toolchain():
+    """An installed Rust toolchain to run Kani's `cargo` proxy with: Kani's own toolchain if it
+    can be found, otherwise rustup's default toolchain. None if rustup is not used."""
+    import shutil
+    import subprocess
+    kani = shutil.which("kani") or shutil.which("cargo-kani")
+    if kani:
+        # A development build: `scripts/kani` in a Kani checkout, next to its rust-toolchain.toml.
+        toolchain_file = Path(kani).resolve().parent.parent / "rust-toolchain.toml"
+        if toolchain_file.exists():
+            m = re.search(r'^\s*channel\s*=\s*"([^"]+)"', toolchain_file.read_text(), re.M)
+            if m:
+                return m.group(1)
+        # A release: `$KANI_HOME/kani-<version>/rust-toolchain-version`.
+        home = Path(os.environ.get("KANI_HOME", Path.home() / ".kani"))
+        for version_file in sorted(home.glob("kani-*/rust-toolchain-version"), reverse=True):
+            return version_file.read_text().strip()
+    if shutil.which("rustup"):
+        out = subprocess.run(["rustup", "default"], capture_output=True, text=True,
+                             env={**os.environ, "RUSTUP_AUTO_INSTALL": "0"})
+        if out.returncode == 0 and out.stdout.split():
+            return out.stdout.split()[0]
+    return None
+
+
+def kani_env():
+    """The environment for running Kani in a user's project. rustup's `cargo` proxy reads the
+    project's `rust-toolchain.toml` before Kani starts, and installs that toolchain if it is
+    missing; Kani does not need it (it uses its own toolchain). Pin the proxy to an installed
+    toolchain and disable auto-install, unless the user already chose a toolchain."""
+    env = dict(os.environ)
+    env["RUSTUP_AUTO_INSTALL"] = "0"
+    if "RUSTUP_TOOLCHAIN" not in env:
+        toolchain = kani_toolchain()
+        if toolchain:
+            env["RUSTUP_TOOLCHAIN"] = toolchain
+    return env
+
+
+IGNORED_DIRS = re.compile(r"^(target.*|\.git|node_modules)$")
+
+
+def sync_tree(src, dst):
+    """Make `dst` a copy of `src` (without build outputs), copying only files whose size or
+    modification time differ, so the copy's build cache stays valid between runs."""
+    import shutil
+    src, dst = Path(src), Path(dst)
+    for dirpath, dirnames, filenames in os.walk(src):
+        dirnames[:] = [d for d in dirnames if not IGNORED_DIRS.match(d)]
+        rel = Path(dirpath).relative_to(src)
+        (dst / rel).mkdir(parents=True, exist_ok=True)
+        for name in filenames:
+            s_file, d_file = Path(dirpath) / name, dst / rel / name
+            st = s_file.stat()
+            if d_file.exists():
+                dt = d_file.stat()
+                if dt.st_size == st.st_size and dt.st_mtime_ns == st.st_mtime_ns:
+                    continue
+            shutil.copy2(s_file, d_file, follow_symlinks=False)
+
+
+PATH_DEP = re.compile(r'\bpath\s*=\s*"([^"]+)"')
+
+
+def external_path_deps(root):
+    """Directories of `path` dependencies outside `root`, transitively: the copy must include
+    them at the same relative place, or their relative paths would not resolve."""
+    deps, todo = set(), [Path(root)]
+    while todo:
+        top = todo.pop()
+        for dirpath, dirnames, filenames in os.walk(top):
+            dirnames[:] = [d for d in dirnames if not (d.startswith("target") or d.startswith("."))]
+            if "Cargo.toml" not in filenames:
+                continue
+            text = (Path(dirpath) / "Cargo.toml").read_text(errors="replace")
+            for m in PATH_DEP.finditer(text):
+                dep = (Path(dirpath) / m.group(1)).resolve()
+                if dep.is_dir() and not dep.is_relative_to(root) and dep not in deps \
+                        and not any(dep.is_relative_to(d) for d in deps):
+                    deps.add(dep)
+                    todo.append(dep)
+    return deps
+
+
+def mirror_workspace(root, work):
+    """Copy the workspace `root` into `work` (incrementally, see `sync_tree`), together with its
+    external path dependencies, under their common ancestor, so that relative
+    `path = "../..."` dependencies still resolve. Returns the copy of `root`."""
+    root, work = Path(root), Path(work)
+    deps = external_path_deps(root)
+    anchor = Path(os.path.commonpath([root, *deps])) if deps else root
+    copy = work / root.relative_to(anchor)
+    sync_tree(root, copy)
+    for dep in deps:
+        sync_tree(dep, work / dep.relative_to(anchor))
+    return copy
+
+
+def test_only_ranges(src, keep):
+    """Source ranges of test-only code, other than the function `keep`: `#[test]` functions and
+    `#[cfg(test)]` modules. Removing them lets a single test build when the crate's other tests
+    do not compile under `cfg(kani)`."""
+    code = strip_comments_and_strings(src)
+    keep_span = next(((f.start, f.end) for f in parse_functions(src) if f.name == keep), None)
+    ranges = []
+    for open_idx, close_idx, kind, header_start in _scopes(code):
+        if kind != "mod":
+            continue
+        attrs = parse_attributes(src, code, header_start, open_idx)
+        if any(n == "cfg" and re.fullmatch(r"\s*test\s*", a) for n, a, _ in attrs):
+            start = next(off for n, a, off in attrs if n == "cfg")
+            if not (keep_span and start <= keep_span[0] < close_idx):
+                ranges.append((start, close_idx + 1))
+    for f in parse_functions(src):
+        if f.name != keep and re.search(r"#\[\s*test\s*\]", src[f.start:f.end]):
+            ranges.append((f.start, f.end))
+    # Drop ranges nested in others.
+    ranges.sort()
+    out = []
+    for r in ranges:
+        if out and r[0] < out[-1][1]:
+            continue
+        out.append(r)
+    return out
 
 
 def join_option_values(argv, options):

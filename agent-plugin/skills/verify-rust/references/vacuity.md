@@ -11,10 +11,13 @@ useless. These failure modes are common, and Kani's verdict alone does not revea
    assumptions exclude every input.
 2. **`scripts/check-vacuity.py <export.json> --log <kani.log>`** reads Kani's JSON export (and
    the console output of the same run, to tell user assertions from built-in checks) and reports:
-   - `unreachable-assertion`: a user assertion that no execution reaches (an `error` with
-     `--log`; a `warning` without it, since Kani's built-in overflow and division checks share
-     the `assertion` class and are often unreachable because the solver proved they cannot fail);
-   - `unreachable-builtin-check` (info, with `--log`): a built-in check that cannot fail;
+   - `unreachable-assertion`: an assertion in the harness that no execution reaches (an `error`
+     with `--log`; a `warning` without it, since Kani's built-in overflow and division checks
+     share the `assertion` class and are often unreachable because the solver proved they
+     cannot fail);
+   - `unreachable-callee-assertion` (warning, with `--log`): an assertion in code the harness
+     calls, or in a contract it uses, that the harness never exercises;
+   - `unreachable-builtin-check` (info, with `--log`): a built-in or library check that cannot fail;
    - `all-checks-unreachable`: nothing in the harness was checked;
    - `unsatisfiable-cover` / `unreachable-cover`: a cover the assumptions exclude;
    - `no-vacuity-probe` (info): the harness has no cover; add one.
@@ -50,6 +53,11 @@ under them. Avoid them, or get the user's approval and list them in the report.
 - **Reachable but weak**: the probe is SATISFIED, but the assumptions still exclude important
   inputs (for example, `len <= 2` when real inputs have length 1000). This is not vacuous, but
   the report must state the bound.
+- **Dead branches in the harness**: if the harness branches on its inputs (`match`, `if`,
+  `unwrap_err`), a branch the inputs can never reach is checked on no execution, and nothing
+  else reports it. For example, a harness documented as "up to N bytes" whose input is always
+  exactly N bytes never runs its short-input branch. Put a `kani::cover!` in every branch;
+  `inspect-harness.py` flags harnesses with branches and fewer than two covers.
 - **Covers as targeted probes**: `kani::cover!(result.is_err())` shows the error path is
   reachable; `kani::cover!(x > 1000)` shows large values are exercised. Add them for every
   branch the property depends on.

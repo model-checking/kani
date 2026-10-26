@@ -18,8 +18,9 @@ The export lists unreachable checks by ID only, and Kani's built-in checks (arit
 overflow, division by zero, index bounds) share the `assertion` class with user assertions.
 Without more information an unreachable `assertion` is therefore a `warning`: often it is a
 built-in check the solver proved cannot fail on any path. Pass Kani's console output with
-`--log` (regular output format, the default) to classify each one by its description: an
-unreachable user assertion is then an `error`, and an unreachable built-in check is `info`.
+`--log` (regular output format, the default) to classify each one by its description and
+location: an unreachable assertion in the harness is then an `error`, one in code the harness
+calls (or in a contract it uses) a `warning`, and a built-in or library check `info`.
 `check-specs.py --probe-harnesses` decides with Kani whether the harness end is reachable.
 
 Usage:
@@ -42,12 +43,34 @@ USER_ASSERTION_CLASSES = {"assertion", "assert", "kani::assert"}
 # Descriptions of checks the Rust compiler and Kani insert, as opposed to user assertions.
 BUILT_IN = re.compile(r'^"?(attempt to |index out of bounds|misaligned pointer|null pointer|unreachable code'
                       r'|`async fn` resumed|dereference failure|pointer arithmetic|arithmetic overflow)')
-LOG_CHECK = re.compile(r'^Check \d+: (\S+)\s*\n\s*- Status: (\w+)\s*\n\s*- Description: (.*)$', re.M)
+# Property names can contain spaces (`<impl Foo for Bar>::f.assertion.1`, `{closure@...}`).
+LOG_CHECK = re.compile(r'^Check \d+: (.+?)[ \t]*\n[ \t]*- Status: (\w+)[ \t]*\n[ \t]*- Description: (.*?)[ \t]*$'
+                       r'(?:\n[ \t]*- Location: (.*?)[ \t]*$)?', re.M)
+# Checks located in Kani's library or the Rust standard library are not user assertions.
+LIBRARY_FILE = re.compile(r"(^|/)(library/(core|std|alloc|kani|kani_core)/|kani_core/|\.kani/|rustlib/|"
+                          r"/rustc/|kani/library/)")
 
 
 def parse_log(text):
-    """Property ID -> description, from Kani's regular console output."""
-    return {m.group(1): m.group(3).strip() for m in LOG_CHECK.finditer(text)}
+    """Property ID -> {description, file, function}, from Kani's regular console output."""
+    out = {}
+    for m in LOG_CHECK.finditer(text):
+        entry = {"description": m.group(3).strip()}
+        loc = m.group(4)
+        if loc:
+            where, _, function = loc.partition(" in function ")
+            entry["file"] = where.rsplit(":", 2)[0] if where.count(":") >= 2 else where
+            entry["function"] = function.strip() or None
+        out[m.group(1).strip()] = entry
+    return out
+
+
+def in_harness(function, harness):
+    """Whether a check located in `function` is code of the harness itself (or a closure in it)."""
+    if not function:
+        return False
+    target = harness.split("::")[-1]
+    return target in re.split(r"::|\{|\}", function)
 
 
 def prop_class(prop_id):
@@ -66,19 +89,29 @@ def check_harness(harness, descriptions=None):
         pid for pid in checks.get("unreachable", []) if prop_class(pid) in USER_ASSERTION_CLASSES
     ]
     for pid in unreachable_asserts:
-        description = (descriptions or {}).get(pid)
-        if description is not None and BUILT_IN.match(description):
+        info = (descriptions or {}).get(pid)
+        description = info["description"] if info else None
+        if info is not None and (BUILT_IN.match(description) or LIBRARY_FILE.search(info.get("file") or "")):
             findings.append({
                 "harness": name, "severity": "info", "rule": "unreachable-builtin-check", "property": pid,
                 "description": description,
-                "message": "a built-in check is unreachable: the solver showed it cannot fail. Not a vacuity issue.",
+                "message": "a built-in or library check is unreachable: the solver showed it cannot fail. "
+                           "Not a vacuity issue.",
             })
-        elif description is not None:
+        elif info is not None and in_harness(info.get("function"), name):
             findings.append({
                 "harness": name, "severity": "error", "rule": "unreachable-assertion", "property": pid,
                 "description": description,
-                "message": "user assertion is never reached; it holds vacuously. Check the harness "
-                           "assumptions and the path to this assertion.",
+                "message": "an assertion in the harness is never reached; it holds vacuously. Check the "
+                           "harness assumptions and the path to this assertion.",
+            })
+        elif info is not None:
+            findings.append({
+                "harness": name, "severity": "warning", "rule": "unreachable-callee-assertion", "property": pid,
+                "description": description, "function": info.get("function"),
+                "message": f"an assertion in `{info.get('function')}` (code the harness calls, or a contract it "
+                "uses) is never reached: the harness does not exercise that path. Fine if the "
+                "property does not need it; otherwise widen the inputs.",
             })
         else:
             findings.append({

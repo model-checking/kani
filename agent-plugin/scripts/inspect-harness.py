@@ -14,6 +14,9 @@ assertions, and covers it has, and the functions it calls. Flags:
 - loop-without-unwind: the harness body has a loop but no `#[kani::unwind]`; verification
   may not terminate, or need `--default-unwind`.
 - should-panic: the harness passes only if it panics; report it that way.
+- branches-without-covers: the harness branches (`if`, `match`, `unwrap_err`, `unwrap_or`, ...)
+  but has fewer than two covers. A branch its inputs never reach is checked on no execution,
+  and no verdict shows it: add `kani::cover!` in each branch.
 
 Counts include the Kani-only helper functions a harness calls and its `#[kani::stub]`
 replacements, so inputs and assumptions made in helpers are attributed to the harness.
@@ -40,8 +43,10 @@ from kani_plugin_lib import (  # noqa: E402
     CALL, emit, find_root, harnesses_of, helper_closure, helper_index, kani_only_files, parse_functions, rust_files)
 
 ANY = re.compile(r"\bkani::any(?:_where)?\b|\bany_(?:modifies|slice_of_array)\b|\bkani::vec::(?:any|exact)_vec\b"
-                 r"|\bkani::bounded_any\b|\bkani::slice::any_slice_of_array(?:_mut)?\b")
-ASSUME = re.compile(r"\bkani::assume\s*\(")
+                 r"|\bkani::bounded_any\b|\bkani::slice::any_slice_of_array(?:_mut)?\b|\bany_array\b"
+                 r"|\bArbitrary\s*>?\s*::\s*any\b|\b[A-Z]\w*::any\s*\(")
+ASSUME = re.compile(r"\bkani::assume\s*\(|\bkani::any_where\s*\(")
+BRANCH = re.compile(r"\bif\b|\bmatch\b|\.(?:unwrap_err|unwrap_or|unwrap_or_else|map_err)\s*\(")
 ASSERT = re.compile(
     r"\b(?:assert|assert_eq|assert_ne|debug_assert|debug_assert_eq|debug_assert_ne)!\s*\(|\bkani::assert\s*\(")
 COVER = re.compile(r"\bkani::cover!\s*\(")
@@ -72,6 +77,10 @@ def describe(h, helpers=()):
         flags.append("loop-without-unwind")
     if "should_panic" in h.attributes:
         flags.append("should-panic")
+    if BRANCH.search(h.body) and counts["covers"] < 2:
+        # A branch the inputs never reach is checked on no execution at all, and no verdict
+        # shows it: put a `kani::cover!` in each branch.
+        flags.append("branches-without-covers")
     attrs = {k: v for k, v in h.attributes.items() if k not in ("proof", "proof_for_contract")}
     out = {
         "name": h.name,

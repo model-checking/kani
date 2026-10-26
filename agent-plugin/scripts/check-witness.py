@@ -12,12 +12,16 @@ Runs `kani playback` for the witness on the current code and, with `--base` or `
 on the code before the change (in a temporary copy; the witness is copied next to its harness
 there if it does not exist yet). Reports one verdict:
 
-- defect-confirmed: the witness fails on the current code (no baseline given).
+- defect-confirmed: the witness fails on the current code with the panic Kani reported
+  (no baseline given).
+- different-failure: the witness fails, but with another panic than the property Kani
+  reported; the reported failure is not reproduced.
 - fix-confirmed: the witness fails on the baseline and passes on the current code.
 - defect-still-present: the witness fails on both.
 - witness-does-not-reproduce: the witness passes where it should fail.
 - spurious-failure-likely: the harness uses `#[kani::stub]` or `#[kani::stub_verified]`, and
-  the real code passes on the witness input. Playback always runs the real code, so the failure
+  the real code passes on the witness input, or the replay ends with concrete values left over
+  (the stubs consumed nondeterministic values that the real code does not). Playback always runs the real code, so the failure
   Kani reported most likely comes from a stub, or a callee contract whose `ensures` is too weak.
 - error: the witness could not be built or run; see `output_tail`.
 
@@ -26,7 +30,9 @@ Usage:
 
 `kani playback` builds every test target with `cfg(kani)`. If that fails (for example because
 the crate removes items under `cfg(kani)` that integration tests use) and no target is given,
-the script retries with `--lib`. Use `--cargo-arg` for features, packages, or targets.
+the script retries with `--lib`, and then with `--lib` in a temporary copy without the crate's
+other tests (`#[test]` functions and `#[cfg(test)]` modules; the code under verification is not
+changed). Use `--cargo-arg` for features, packages, or targets.
 
 PATH is the Cargo project directory, or the `.rs` file for a single-file project. `--base-dir`
 holds a copy of the sources made before editing, with the same paths relative to the current
@@ -37,16 +43,42 @@ input errors.
 import argparse
 import os
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from kani_plugin_lib import emit, find_root, join_option_values, parse_functions, rust_files  # noqa: E402
+from kani_plugin_lib import (  # noqa: E402
+    emit, find_root, join_option_values, kani_env, parse_functions, rust_files, strip_comments_and_strings,
+    mirror_workspace, test_only_ranges)
 
 OUTPUT_TAIL_LINES = 40
+
+
+PANIC = re.compile(r"panicked at ([^\n]+?):(\d+):\d+:\n(.*)")
+LEFTOVER = "concrete values left over"
+
+
+def panic_of(text):
+    """(location, message) of the first panic in a test's output, or None."""
+    m = PANIC.search(text)
+    return (f"{m.group(1)}:{m.group(2)}", m.group(3).strip()) if m else None
+
+
+def expected_failure(witness_src):
+    """The property a playback test was generated for: (class, description), from its doc
+    comment ``/// Check for `assertion`: "attempt to add with overflow"``."""
+    m = re.search(r'///\s*Check for `([^`]+)`:\s*"(.*)"\s*$', witness_src, re.M)
+    return (m.group(1), m.group(2).strip('"')) if m else (None, None)
+
+
+def matches(panic, description):
+    """Whether a panic message is the failure Kani reported."""
+    if panic is None or not description:
+        return False
+    message = panic[1].strip('"')
+    return description in message or message in description
 
 
 def run_once(cwd, single_file, test, cargo_args):
@@ -54,7 +86,7 @@ def run_once(cwd, single_file, test, cargo_args):
         cmd = ["kani", "playback", "-Z", "concrete-playback", *cargo_args, single_file, "--", test]
     else:
         cmd = ["cargo", "kani", "playback", "-Z", "concrete-playback", *cargo_args, "--", test]
-    out = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+    out = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=kani_env())
     text = out.stdout + out.stderr
     if re.search(r"test result: ok\. [1-9]", text):
         return "passes", text
@@ -77,13 +109,28 @@ def run_witness(cwd, single_file, test, cargo_args):
     return result, text, cargo_args
 
 
+def isolate(package_dir, keep):
+    """Remove test-only code other than the test `keep` from the library sources of a copy."""
+    for f in rust_files([Path(package_dir) / "src"]):
+        src = f.read_text(encoding="utf-8", errors="replace")
+        ranges = test_only_ranges(src, keep)
+        if ranges:
+            for start, end in reversed(ranges):
+                src = src[:start] + src[end:]
+            f.write_text(src, encoding="utf-8")
+
+
 def find_test(files, test):
     """The witness test function and the file it is in."""
     for f in files:
         src = f.read_text(encoding="utf-8", errors="replace")
+        code = strip_comments_and_strings(src)
         for fn in parse_functions(src, f):
             if fn.name == test:
-                return f, src[fn.start:fn.end]
+                # Include the doc comment, which Kani separates from `#[test]` with a blank line:
+                # it names the property the witness reproduces.
+                start = max(code.rfind(c, 0, fn.start) for c in "{};") + 1
+                return f, src[start:fn.end].strip("\n")
     return None, None
 
 
@@ -147,9 +194,33 @@ def main(argv=None):
     cargo_args = args.cargo_arg
     current, current_out, cargo_args = run_witness(path.parent if single_file else package, single_file,
                                                    args.test, cargo_args)
-    result = {"test": args.test, "current": current}
+    isolated = False
+    if current == "error" and not single_file:
+        # The crate's other tests may not build under cfg(kani): replay in a copy without them.
+        with tempfile.TemporaryDirectory(prefix="kani-witness-") as tmp:
+            copy = mirror_workspace(root, Path(tmp) / "src")
+            copy_package = copy / package.relative_to(root)
+            isolate(copy_package, args.test)
+            retry, retry_out = run_once(copy_package, None, args.test, [*cargo_args, "--lib"])
+        if retry != "error":
+            current, current_out, isolated = retry, retry_out, True
+            cargo_args = [*cargo_args, "--lib"]
+        else:
+            current_out += "\n--- retry without other tests ---\n" + retry_out
+    expected_class, expected_desc = expected_failure(witness_src)
+    current_panic = panic_of(current_out)
+    leftover = current_panic is not None and LEFTOVER in current_panic[1]
+    if current == "fails" and not leftover and not matches(current_panic, expected_desc):
+        current = "fails-differently"
+    result = {"test": args.test, "current": current, "expected": {"class": expected_class,
+                                                                  "description": expected_desc}}
+    if current_panic:
+        result["panic"] = {"location": current_panic[0], "message": current_panic[1]}
     if cargo_args != args.cargo_arg:
         result["cargo_args"] = cargo_args
+    if isolated:
+        result["isolated"] = ("replayed in a temporary copy without the crate's other tests (`#[test]` functions and "
+                              "`#[cfg(test)]` modules), because they do not build under cfg(kani)")
     stubs = stubs_of(files, replayed_harness(witness_src))
     if stubs:
         result["harness_stubs"] = stubs
@@ -161,10 +232,9 @@ def main(argv=None):
                 copy_files = {path.resolve(): tmp / path.name}
                 cwd = tmp
             else:
-                shutil.copytree(root, tmp / "src", symlinks=True,
-                                ignore=shutil.ignore_patterns("target", "target-*", ".git"))
-                copy_files = {f.resolve(): tmp / "src" / f.resolve().relative_to(root) for f in files}
-                cwd = tmp / "src" / package.relative_to(root)
+                copy = mirror_workspace(root, tmp / "src")
+                copy_files = {f.resolve(): copy / f.resolve().relative_to(root) for f in files}
+                cwd = copy / package.relative_to(root)
             for f, target in copy_files.items():
                 text = base_text(args, Path(os.path.relpath(f)))
                 if text is None:
@@ -177,27 +247,39 @@ def main(argv=None):
                         return 1
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text(text, encoding="utf-8")
+            if isolated:
+                isolate(cwd, args.test)
             base, base_out, _ = run_witness(cwd, single_file, args.test, cargo_args)
+            if base == "fails" and not matches(panic_of(base_out), expected_desc):
+                base = "fails-differently"
         result["base"] = base
         outputs.append(base_out)
         if "error" in (base, current):
             verdict = "error"
         elif base == "fails" and current == "passes":
             verdict = "fix-confirmed"
-        elif base == "fails":
+        elif base == "fails" and current == "fails":
             verdict = "defect-still-present"
+        elif "fails-differently" in (base, current):
+            verdict = "different-failure"
         else:
             verdict = "witness-does-not-reproduce"
     else:
-        verdict = {"fails": "defect-confirmed", "passes": "witness-does-not-reproduce"}.get(current, "error")
-    if stubs and verdict == "witness-does-not-reproduce" and not (args.base or args.base_dir):
+        verdict = {"fails": "defect-confirmed", "passes": "witness-does-not-reproduce",
+                   "fails-differently": "different-failure"}.get(current, "error")
+    if leftover:
+        verdict = "spurious-failure-likely"
+        result["note"] = ("the replay ended with concrete values left over: Kani's model (with its stubs) consumed "
+                          "nondeterministic values that the real code does not, so this witness does not describe "
+                          "an execution of the real code.")
+    elif stubs and verdict == "witness-does-not-reproduce" and not (args.base or args.base_dir):
         # Playback runs the real code, not the stubs: a failure Kani found with stubs that the real
         # code does not reproduce usually comes from a stub or a too-weak verified contract.
         verdict = "spurious-failure-likely"
         result["note"] = ("the harness uses stubs or verified contracts, but playback runs the real code, which "
                           "passes on this input. The failure is most likely caused by a stub or a callee "
                           "contract whose `ensures` is too weak.")
-    elif stubs:
+    elif stubs and "note" not in result:
         result["note"] = ("the harness uses stubs or verified contracts, but playback runs the real code: this "
                           "verdict is about the real code, not about what Kani checked.")
     result["verdict"] = verdict

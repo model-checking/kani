@@ -17,11 +17,13 @@ Usage:
     evidence.py verify BUNDLE_DIR [--no-rerun]
 
 The default output directory is `target/kani-evidence` in a Cargo project (already ignored by
-git in most projects), and `.kani-evidence` otherwise. Exit status: 0 on success, 2 when
-`verify` finds a difference, 1 on input errors.
+git in most projects), and `.kani-evidence` otherwise. Sources are hashed when `record` runs;
+`record` warns (and exits 2) if any changed after the Kani run started. Exit status: 0 on
+success, 2 when `record` sees such a change or `verify` finds a difference, 1 on input errors.
 """
 
 import argparse
+import calendar
 import hashlib
 import importlib.util
 import json
@@ -36,7 +38,7 @@ from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS))
-from kani_plugin_lib import find_root  # noqa: E402
+from kani_plugin_lib import find_root, kani_env  # noqa: E402
 _spec = importlib.util.spec_from_file_location("summarize_results", SCRIPTS / "summarize-results.py")
 summarize_results = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(summarize_results)
@@ -83,7 +85,8 @@ def git_state(cwd):
         return None
     top = Path(git("rev-parse", "--show-toplevel"))
     untracked = {}
-    for rel in (git("ls-files", "--others", "--exclude-standard") or "").splitlines():
+    # `ls-files` prints paths relative to the directory it runs in: run it at the top.
+    for rel in (git("-C", str(top), "ls-files", "--others", "--exclude-standard") or "").splitlines():
         f = top / rel
         if f.is_file():
             untracked[rel] = sha256(f)
@@ -115,7 +118,15 @@ def record(args):
     bundle = out_root / f"{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}-{digest[:8]}"
     bundle.mkdir(parents=True, exist_ok=True)
     shutil.copy2(export, bundle / "results.json")
-    sources = {os.path.relpath(f, cwd): sha256(f) for f in source_files(cwd, doc)}
+    files = source_files(cwd, doc)
+    sources = {os.path.relpath(f, cwd): sha256(f) for f in files}
+    # Files are hashed now, not when Kani ran: flag any that changed after the run started.
+    started = doc.get("started_at")
+    modified_after_run = []
+    if started:
+        start = calendar.timegm(time.strptime(started, "%Y-%m-%dT%H:%M:%SZ"))
+        # `started_at` has whole seconds: allow one second of slack.
+        modified_after_run = [os.path.relpath(f, cwd) for f in files if f.stat().st_mtime > start + 1]
     manifest = {
         "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "command": shlex.split(args.command),
@@ -126,11 +137,15 @@ def record(args):
         "sources_sha256": sources,
         "verdicts": verdicts(doc),
         "weakened_checks": summarize_results.weakened_checks(doc),
+        "modified_after_run": modified_after_run,
     }
     (bundle / "bundle.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(json.dumps({"bundle": str(bundle), "verdicts": manifest["verdicts"], "git": manifest["git"]},
-                     indent=2, sort_keys=True))
-    return 0
+    out = {"bundle": str(bundle), "verdicts": manifest["verdicts"], "git": manifest["git"]}
+    if modified_after_run:
+        out["warning"] = ("these sources changed after the Kani run started, so the recorded hashes may not be "
+                          f"what Kani verified: {modified_after_run}. Re-run Kani, then record again.")
+    print(json.dumps(out, indent=2, sort_keys=True))
+    return 2 if modified_after_run else 0
 
 
 def verify(args):
@@ -169,7 +184,7 @@ def verify(args):
                 cmd[cmd.index("--export-json") + 1] = new_export
             else:
                 cmd += ["-Z", "export-json", "--export-json", new_export]
-            subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+            subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=kani_env())
             if Path(new_export).exists():
                 rerun = verdicts(json.loads(Path(new_export).read_text(encoding="utf-8")))
             else:

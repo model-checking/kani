@@ -127,9 +127,32 @@ class VacuityTest(unittest.TestCase):
         self.assertIn(("h", "unreachable-assertion", "warning"), rules)
         self.assertIn(("h", "all-checks-unreachable", "warning"), rules)
 
+    def test_log_names_with_spaces_and_locations(self):
+        log = ("Check 1: <impl std::ops::Neg for Duration>::neg.assertion.1\n\t - Status: UNREACHABLE\n"
+               "\t - Description: \"attempt to negate with overflow\"\n\t - Location: src/ops.rs:3:4 in function neg\n"
+               "Check 2: h::{closure#0}.assertion.1\n\t - Status: UNREACHABLE\n"
+               "\t - Description: \"assertion failed: ok\"\n\t - Location: src/lib.rs:9:9 in function h::{closure#0}\n"
+               "Check 3: callee.assertion.1\n\t - Status: UNREACHABLE\n"
+               "\t - Description: \"assertion failed: y\"\n\t - Location: src/lib.rs:20:5 in function callee\n"
+               "Check 4: ptr.assertion.1\n\t - Status: UNREACHABLE\n"
+               "\t - Description: \"Cannot compute offset of a ZST\"\n"
+               "\t - Location: /x/kani/library/kani_core/src/mem.rs:1:1 in function kani::mem::offset\n")
+        ids = ["<impl std::ops::Neg for Duration>::neg.assertion.1", "h::{closure#0}.assertion.1",
+               "callee.assertion.1", "ptr.assertion.1"]
+        doc = {"harnesses": [harness("h", unreachable=ids, total=9)]}
+        found = {(f.get("property"), f["rule"], f["severity"])
+                 for f in vacuity.check(doc, vacuity.parse_log(log))["findings"]}
+        self.assertEqual(found, {
+            (ids[0], "unreachable-builtin-check", "info"),
+            (ids[1], "unreachable-assertion", "error"),
+            (ids[2], "unreachable-callee-assertion", "warning"),
+            (ids[3], "unreachable-builtin-check", "info"),
+        })
+
     def test_log_classifies_unreachable_checks(self):
         log = ('Check 1: h.assertion.1\n\t - Status: UNREACHABLE\n\t - Description: "attempt to negate with overflow"\n'
-               'Check 2: h.assertion.2\n\t - Status: UNREACHABLE\n\t - Description: "assertion failed: x > 0"\n')
+               'Check 2: h.assertion.2\n\t - Status: UNREACHABLE\n\t - Description: "assertion failed: x > 0"\n'
+               '\t - Location: f.rs:1:1 in function h\n')
         doc = {"harnesses": [harness("h", unreachable=["h.assertion.1", "h.assertion.2"], total=3)]}
         found = {(f.get("property"), f["rule"], f["severity"])
                  for f in vacuity.check(doc, vacuity.parse_log(log))["findings"]}
@@ -308,6 +331,49 @@ mod proofs {
         src = "#[kani::proof]\n#[kani::stub(\n    a::b,\n    c::d\n)]\nfn h() {}\n"
         [h] = lib.harnesses_of(lib.parse_functions(src))
         self.assertEqual(h.attributes["stub"], ["a::b, c::d"])
+
+    def test_harness_attribute_removed(self):
+        before = "#[cfg(kani)]\nmod p {\n    #[kani::proof]\n    fn check() { assert!(true); }\n}\n"
+        after = before.replace("    #[kani::proof]\n", "")
+        rules = {(f["item"], f["rule"], f["severity"]) for f in proof_diff.diff_file(Path("p.rs"), before, after)}
+        self.assertEqual(rules, {("check", "harness-attribute-removed", "error")})
+
+    def test_helpers_resolve_by_path(self):
+        src = """#[cfg(kani)]
+mod proofs {
+    #[kani::proof]
+    fn check() { let x = kani::any::<u32>(); let q = Queue::any(); let y = small(); let z = q.any(); }
+    fn small() -> u32 { kani::any() }
+}
+#[cfg(kani)]
+impl kani::Arbitrary for Queue { fn any() -> Self { kani::assume(true); Queue } }
+#[cfg(kani)]
+impl kani::Arbitrary for Other { fn any() -> Self { kani::assume(false); Other } }
+"""
+        fns = lib.parse_functions(src, "q.rs")
+        index = lib.helper_index(fns)
+        [check] = [f for f in fns if f.name == "check"]
+        found = sorted((h.name, lib.IMPL_TYPE.search(h.scope_header).group(1) if h.scope == "impl" else "")
+                       for h in lib.helper_closure(check, index))
+        self.assertEqual(found, [("any", "Queue"), ("small", "")])
+
+    def test_any_where_is_an_assumption(self):
+        before = "#[cfg(kani)]\nmod p {\n    #[kani::proof]\n    fn check() { let l: usize = kani::any(); }\n}\n"
+        after = before.replace("kani::any()", "kani::any_where(|l| *l <= 4)")
+        rules = {f["rule"] for f in proof_diff.diff_file(Path("p.rs"), before, after)}
+        self.assertEqual(rules, {"assumption-added"})
+
+    def test_added_ensures_is_described_as_added(self):
+        before = "fn f(x: u8) -> u8 { x }\n"
+        after = "#[kani::ensures(|r: &u8| *r == x)]\n" + before
+        [f] = proof_diff.diff_file(Path("f.rs"), before, after)
+        self.assertEqual((f["rule"], f["severity"]), ("ensures-added", "info"))
+        self.assertIn("postcondition added", f["message"])
+
+    def test_inspect_recognizes_more_generators(self):
+        src = "#[kani::proof]\nfn h() { let a: [u8; 4] = kani::Arbitrary::any_array::<4>(); assert!(a.len() == 4); }\n"
+        [h] = lib.harnesses_of(lib.parse_functions(src))
+        self.assertNotIn("no-nondeterminism", inspect.describe(h)["flags"])
 
     def test_loose_files_are_not_owned_by_an_enclosing_package(self):
         self.assertEqual(lib.find_root(RUST), (None, None))

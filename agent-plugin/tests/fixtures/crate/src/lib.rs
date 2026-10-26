@@ -99,3 +99,13 @@ mod method_proofs {
 pub fn not_for_kani() -> u32 {
     1
 }
+
+// Like the integration test, this unit test does not build under `cfg(kani)`, so even
+// `cargo kani playback --lib` fails: witnesses must be replayed without the other tests.
+#[cfg(test)]
+mod unit_tests {
+    #[test]
+    fn uses_not_for_kani() {
+        assert_eq!(super::not_for_kani(), 1);
+    }
+}
