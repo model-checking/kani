@@ -1,0 +1,21 @@
+- Status: FAILURE\
+- Description: "Check that t is assignable"\
+in function both_loops_with_clause
+
+- Status: FAILURE\
+- Description: "Check that t is assignable"\
+in function outer_loop_with_clause
+
+- Status: FAILURE\
+- Description: "Check that t is assignable"\
+in function join_before_outer_loop
+
+- Status: FAILURE\
+- Description: "Check that t is assignable"\
+in function sequential_loops
+
+- Status: FAILURE\
+- Description: "Check that t is assignable"\
+in function three_levels
+
+Complete - 0 successfully verified harnesses, 5 failures, 5 total.
