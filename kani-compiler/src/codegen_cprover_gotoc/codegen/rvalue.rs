@@ -711,7 +711,7 @@ impl GotocCtx<'_, '_> {
                         let meta = self.codegen_operand_stable(&operands[1]);
                         slice_fat_ptr(typ, data_cast, meta, &self.symbol_table)
                     }
-                    TyKind::RigidTy(RigidTy::Adt(..)) => {
+                    TyKind::RigidTy(RigidTy::Adt(..)) | TyKind::RigidTy(RigidTy::Tuple(..)) => {
                         let layout = LayoutOf::new(pointee_ty);
                         let pointee_goto_typ = self.codegen_ty_stable(pointee_ty);
                         let data_cast =
