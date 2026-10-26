@@ -103,33 +103,33 @@ impl MirVisitor for InitialTargetVisitor {
     }
 
     fn visit_terminator(&mut self, term: &Terminator, location: Location) {
-        if let TerminatorKind::Call { func, args, .. } = &term.kind {
-            let instance = try_resolve_instance(self.body.locals(), func).unwrap();
-            if instance.kind == InstanceKind::Intrinsic {
-                match Intrinsic::from_instance(&instance) {
-                    Intrinsic::Copy => {
-                        // Here, `dst` is the second argument.
-                        self.push_operand(&args[1]);
-                    }
-                    Intrinsic::VolatileCopyMemory | Intrinsic::VolatileCopyNonOverlappingMemory => {
-                        // Here, `dst` is the first argument.
-                        self.push_operand(&args[0]);
-                    }
-                    _ => {}
+        // Only calls to the copy intrinsics write to a target here. A call through a function
+        // pointer or a vtable cannot be one (intrinsics cannot be coerced to function pointers),
+        // and whatever its callee writes is collected when visiting the callee's own body.
+        if let TerminatorKind::Call { func, args, .. } = &term.kind
+            && let Some(instance) = try_resolve_instance(self.body.locals(), func)
+            && instance.kind == InstanceKind::Intrinsic
+        {
+            match Intrinsic::from_instance(&instance) {
+                Intrinsic::Copy => {
+                    // Here, `dst` is the second argument.
+                    self.push_operand(&args[1]);
                 }
+                Intrinsic::VolatileCopyMemory | Intrinsic::VolatileCopyNonOverlappingMemory => {
+                    // Here, `dst` is the first argument.
+                    self.push_operand(&args[0]);
+                }
+                _ => {}
             }
         }
         self.super_terminator(term, location);
     }
 }
 
-/// Try retrieving instance for the given function operand.
-fn try_resolve_instance(locals: &[LocalDecl], func: &Operand) -> Result<Instance, String> {
-    let ty = func.ty(locals).unwrap();
-    match ty.kind() {
-        TyKind::RigidTy(RigidTy::FnDef(def, args)) => Ok(Instance::resolve(def, &args).unwrap()),
-        _ => Err(format!(
-            "Kani was not able to resolve the instance of the function operand `{ty:?}`. Currently, memory initialization checks in presence of function pointers and vtable calls are not supported. For more information about planned support, see https://github.com/model-checking/kani/issues/3300."
-        )),
+/// The instance a call operand refers to, if it is a function item rather than a function pointer.
+fn try_resolve_instance(locals: &[LocalDecl], func: &Operand) -> Option<Instance> {
+    match func.ty(locals).unwrap().kind() {
+        TyKind::RigidTy(RigidTy::FnDef(def, args)) => Some(Instance::resolve(def, &args).unwrap()),
+        _ => None,
     }
 }
