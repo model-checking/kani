@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! This test checks that we emit an error when the argument of `simd_splat`
+//! This test checks that we report an unsupported construct when the argument of `simd_splat`
 //! (the value to be broadcast) has a type different to the return vector's
 //! element type. `simd_splat<T, U>(value: U) -> T` has independent generic
 //! parameters, so such an instantiation type-checks in the frontend and must
