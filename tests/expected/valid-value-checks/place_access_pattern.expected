@@ -1,0 +1,12 @@
+not_null_field_projection.cover.1\
+- Status: SATISFIED
+
+raw_address_of_invalid_pattern_is_valid.cover.1\
+- Status: SATISFIED
+
+- Status: FAILURE\
+- Description: "Undefined Behavior: Invalid value of type `pattern_type!(*const u8 is !null)`"\
+in function read_pointer
+
+Verification failed for - invalid_not_null_field_read
+Complete - 2 successfully verified harnesses, 1 failures, 3 total.
