@@ -303,7 +303,11 @@ impl Intrinsic {
                 }
             }
             "catch_unwind" => {
-                assert_sig_matches!(sig, RigidTy::FnPtr(_), RigidTy::RawPtr(_, Mutability::Mut), RigidTy::FnPtr(_) => RigidTy::Bool);
+                // Don't assert the return type: rustc changed it from `i32` to `bool`
+                // (rust-lang/rust#156867) and the stale assertion ICEd in Kani 0.68.0
+                // (https://github.com/model-checking/kani/issues/4813). It is never
+                // used here, the intrinsic is unimplemented.
+                assert_sig_matches!(sig, RigidTy::FnPtr(_), RigidTy::RawPtr(_, Mutability::Mut), RigidTy::FnPtr(_) => _);
                 Self::Unimplemented {
                     name: intrinsic_str,
                     issue_link: "https://github.com/model-checking/kani/issues/267".into(),
