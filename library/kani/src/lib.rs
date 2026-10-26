@@ -27,6 +27,8 @@
 #![feature(f128)]
 #![feature(convert_float_to_int)]
 #![feature(sized_hierarchy)]
+// Used by `any_char_array_searcher` to build a `std::str::pattern::CharArraySearcher`.
+#![feature(pattern)]
 
 // Allow us to use `kani::` to access crate features.
 extern crate self as kani;

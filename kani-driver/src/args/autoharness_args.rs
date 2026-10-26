@@ -33,8 +33,9 @@ pub struct CommonAutoharnessArgs {
     #[arg(long)]
     pub bounded_arguments: bool,
 
-    /// The maximum length for nondeterministic `&[T]`/`&mut [T]` arguments generated under
-    /// `--bounded-arguments`. Verification results only hold up to this bound.
+    /// The maximum length for nondeterministic `&[T]`/`&mut [T]` arguments, and for the needle of
+    /// a `core::str::pattern::CharSliceSearcher` argument, generated under `--bounded-arguments`.
+    /// Verification results only hold up to this bound.
     #[arg(
         long,
         default_value_t = AUTOHARNESS_SLICE_BOUND,
@@ -43,8 +44,9 @@ pub struct CommonAutoharnessArgs {
     )]
     pub slice_bound: u64,
 
-    /// The maximum length, in bytes, for nondeterministic `&str` arguments generated under
-    /// `--bounded-arguments`. Verification results only hold up to this bound.
+    /// The maximum length, in bytes, for nondeterministic `&str` arguments, and for the haystack
+    /// of a `core::str::pattern` searcher argument, generated under `--bounded-arguments`.
+    /// Verification results only hold up to this bound.
     #[arg(
         long,
         default_value_t = AUTOHARNESS_STR_BOUND,

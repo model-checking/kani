@@ -275,6 +275,23 @@ actually used.
 nondeterministic and its width and precision bounded by the slice bound. The sink never fails, so
 paths that handle a write error are not reached.
 
+The `core::str::pattern` searchers `CharArraySearcher<'_, N>`, `CharArrayRefSearcher<'_, '_, N>`
+and `CharSliceSearcher<'_, '_>` (the searchers for `[char; N]`, `&[char; N]` and `&[char]`
+patterns) are also supported as arguments, by value or by reference (also requiring
+`--bounded-arguments`). The harness builds the searcher through the public `Pattern::into_searcher`
+API over a nondeterministic haystack (a `&str` bounded by the string bound), and then advances it
+a nondeterministic number of steps from each end, so that searchers in partially advanced states
+are also generated. Because the searcher is only ever constructed and advanced through the public
+API, it satisfies the library's internal invariants as long as its haystack is valid UTF-8. The
+haystack comes from the same generator as `&str` arguments, so it shares their current limitation:
+under verify-std it can be invalid UTF-8 and cause spurious failures (see
+[#5030](https://github.com/model-checking/kani/issues/5030)). The needle of a `CharArraySearcher` or
+`CharArrayRefSearcher` is a nondeterministic `[char; N]` whose length `N` is fixed by the type; the
+needle of a `CharSliceSearcher` is a nondeterministic `&[char]` of up to the slice bound. The
+`Debug::fmt` methods of these searchers are verified as ordinary functions, with both the searcher
+and the `&mut Formatter` generated as bounded arguments, rather than through the approach described
+in [Formatting Trait Implementations](#formatting-trait-implementations).
+
 Additionally (also requiring `--bounded-arguments`), for arguments whose type implements
 [`BoundedArbitrary`](../bounded_arbitrary.md)
 (e.g. `Vec<T>`, `String`, or user types deriving it), the harness generates a bounded

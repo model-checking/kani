@@ -1245,6 +1245,8 @@ fn automatic_harness_partition(
         // The self type is generated with `kani::any`, so it must implement (or be able to
         // derive) Arbitrary; argument-position-only support (raw/smart pointers, bounded types)
         // does not apply here, and these harnesses are therefore never bounded.
+        // The `core::str::pattern` searcher types are the exception: `fmt_impl_self_ty` does not
+        // report their `fmt` methods, which are checked as ordinary functions below.
         if let Some((_, self_ty)) = fmt_impl_self_ty(tcx, instance) {
             return if implements_arbitrary(self_ty, kani_any_def, &mut ty_arbitrary_cache)
                 || can_derive_arbitrary(self_ty, kani_any_def, &mut ty_arbitrary_cache)
