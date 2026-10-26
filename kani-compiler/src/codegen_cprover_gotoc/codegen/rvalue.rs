@@ -1019,8 +1019,7 @@ impl GotocCtx<'_, '_> {
                     let discr_mir_ty = self.codegen_enum_discr_typ_stable(ty);
                     let discr_type = self.codegen_ty_stable(discr_mir_ty);
                     let niche_val = self.codegen_get_niche(e, offset.bytes() as usize, discr_type);
-                    let relative_discr =
-                        wrapping_sub(&niche_val, u64::try_from(*niche_start).unwrap());
+                    let relative_discr = wrapping_sub(&niche_val, *niche_start);
                     let relative_max = niche_variants.last.as_u32() - niche_variants.start.as_u32();
                     let is_niche = if relative_max == 0 {
                         relative_discr.clone().is_zero()
@@ -1885,7 +1884,7 @@ impl GotocCtx<'_, '_> {
 /// Perform a wrapping subtraction of an Expr with a constant "expr - constant"
 /// where "-" is wrapping subtraction, i.e., the result should be interpreted as
 /// an unsigned value (2's complement).
-fn wrapping_sub(expr: &Expr, constant: u64) -> Expr {
+fn wrapping_sub(expr: &Expr, constant: u128) -> Expr {
     let unsigned_expr = if expr.typ().is_pointer() {
         expr.clone()
     } else {
