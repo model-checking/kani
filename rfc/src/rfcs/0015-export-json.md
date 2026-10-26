@@ -418,7 +418,7 @@ The narrower `INCOMPLETE` marker follows its presence matrix below.
 | `configuration.cbmc_args` | array of strings | never null, may be empty | Verbatim (UTF-8-lossy) `--cbmc-args`; a comparability signal, not a replayable argv. |
 | `outcome.kind` (run level) | `"COMPLETED"` | — | Always `COMPLETED` in a terminal document; absent in the marker. No run-level `CRASHED` value. |
 | `run_state` | `"INCOMPLETE"` \| `"COMPLETE"` \| `"PARTIAL"` \| `"NO_HARNESSES_SELECTED"` | — | Trust is based on this field; see Completeness under Reading the results. |
-| `target` | string | — | The Rust target triple Kani itself was built for. |
+| `target` | string | — | The Rust target triple verified for: the `--target` value when given, otherwise the triple Kani itself was built for. |
 | `started_at` | string | — | UTC, `YYYY-MM-DDTHH:MM:SSZ` (second resolution). Taken after the build, when target selection starts. |
 | `wall_time_s` | number | — | Seconds from target selection to the start of the export write: target selection, verification and coverage output. The build is not included. Volatile between runs by design (see "Interaction with other flags"). |
 | `harnesses[]` | array of harness objects | never null, may be empty (e.g. under `NO_HARNESSES_SELECTED`) | Sorted by `(crate_name, file, line, name)`. |

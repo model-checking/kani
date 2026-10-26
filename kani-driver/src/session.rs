@@ -1,6 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
+use crate::args::HOST_TARGET;
 use crate::args::Timeout;
 use crate::args::VerificationArgs;
 use crate::args::autoharness_args::AutoharnessBounds;
@@ -307,6 +308,24 @@ fn bin_folder() -> Result<PathBuf> {
 /// Return the path for the folder where the pre-compiled rust libraries are located.
 pub fn lib_folder() -> Result<PathBuf> {
     Ok(base_folder()?.join("lib"))
+}
+
+/// Return the folder with the pre-compiled rust libraries for verifying `target`.
+/// The host's are in `lib/`. Any other target's are in `targets/<target>/lib/`, which is a
+/// sysroot of its own, built by `cargo build-dev --lib-target <target>`.
+pub fn lib_folder_for(target: &str) -> Result<PathBuf> {
+    if target == HOST_TARGET {
+        return lib_folder();
+    }
+    let path = base_folder()?.join("targets").join(target).join("lib");
+    if !path.is_dir() {
+        bail!(
+            "Kani's libraries have not been built for target `{target}` (expected them in `{}`). \
+            From a Kani source checkout, build them with `cargo build-dev --lib-target {target}`.",
+            path.display()
+        );
+    }
+    Ok(path)
 }
 
 /// Return the path for the folder where the pre-compiled rust libraries are located.

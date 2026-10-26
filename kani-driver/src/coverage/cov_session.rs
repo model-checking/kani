@@ -26,7 +26,7 @@ impl KaniSession {
     }
 
     fn save_coverage_metadata_cargo(&self, project: &Project, stamp: &String) -> Result<()> {
-        let build_target = env!("TARGET");
+        let build_target = self.args.verification_target();
         let metadata = self.cargo_metadata(build_target)?;
         let target_dir = self
             .args
@@ -109,7 +109,7 @@ impl KaniSession {
         results: &Vec<HarnessResult>,
         stamp: &String,
     ) -> Result<()> {
-        let build_target = env!("TARGET");
+        let build_target = self.args.verification_target();
         let metadata = self.cargo_metadata(build_target)?;
         let target_dir = self
             .args

@@ -1,0 +1,69 @@
+# Verifying for another target
+
+By default Kani verifies a crate as it would be compiled for the host: the same pointer width,
+endianness, `cfg(target_arch)` and C type sizes. With `--target`, Kani verifies it for another
+target triple instead, from the same host. This is useful for code that only compiles for a
+platform you do not develop on, such as a kernel's `riscv64` modules on an x86_64 or Apple
+Silicon machine.
+
+This is an experimental feature, tracked in [#2402](https://github.com/model-checking/kani/issues/2402).
+
+## Supported targets
+
+A target needs a CBMC machine model in Kani. These are the targets that have one:
+
+| Target | Notes |
+|--------|-------|
+| `x86_64-unknown-linux-gnu` | |
+| `aarch64-unknown-linux-gnu` | |
+| `riscv64gc-unknown-linux-gnu` | LP64D data model |
+| `x86_64-apple-darwin` | |
+| `aarch64-apple-darwin` | |
+
+Kani refuses any other `--target`, and `cargo build-dev --lib-target`, with an error that lists
+these.
+
+The bare-metal `riscv64gc-unknown-none-elf`, which kernels usually build for, is not supported.
+Verifying such a crate as `riscv64gc-unknown-linux-gnu` instead sets `target_os = "linux"` and
+makes `std` available, so code behind `cfg(target_os = "none")` is compiled out and the `linux`
+branch, if there is one, is what Kani verifies.
+
+## Building the libraries
+
+Kani verifies against its own build of the standard library and of the `kani` crate, compiled for
+the target. Release bundles contain these for the host only, so today `--target` needs Kani
+built from source ([build from source](../../build-from-source.md)), with each extra target named:
+
+```bash
+cargo build-dev --lib-target riscv64gc-unknown-linux-gnu
+```
+
+The option may be repeated. Each target's libraries go to `targets/<TRIPLE>/lib/` beside the
+host's `lib/`, so one Kani installation can verify for several targets. A later `cargo build-dev`
+rebuilds every target already under `targets/`, named or not, so they stay in step with
+`library/`. The rustup target itself does not need to be installed: the standard library is built
+from the `rust-src` component.
+
+## Usage
+
+```bash
+kani file.rs --target riscv64gc-unknown-linux-gnu -Z unstable-options
+cargo kani --target riscv64gc-unknown-linux-gnu -Z unstable-options
+```
+
+## Limitations
+
+* `--concrete-playback` is rejected with a non-host `--target`, because the generated test runs
+  on the host.
+* The `verify-std` subcommand and `autoharness --std` do not support `--target`.
+* `--c-lib` is rejected with a non-host `--target`. `goto-cc` compiles C sources with the host's
+  C configuration, and a source compiled as part of the link would replace the target's machine
+  model in the linked program.
+* Kani's machine model has no operating system, so `__CPROVER_architecture_os` in the linked
+  program is the host's, as it is for a host run. A `riscv64gc-unknown-linux-gnu` run on macOS
+  therefore has `os = "macos"`. CBMC reads this setting in a few places when it processes C, such
+  as the arm64 `va_list` layout.
+* Inline assembly is unsupported on every target, as it is on the host. Code behind
+  `core::arch::asm!` has to be [stubbed](stubbing.md) to be verified.
+* Only 64-bit little-endian targets are supported. A 32-bit target needs `goto-cc -m32` and a
+  review of Kani's 64-bit assumptions ([#2086](https://github.com/model-checking/kani/issues/2086)).

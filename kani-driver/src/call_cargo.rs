@@ -1,11 +1,11 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use crate::args::VerificationArgs;
+use crate::args::{HOST_TARGET, VerificationArgs};
 use crate::call_single_file::LibConfig;
 use crate::project::Artifact;
 use crate::session::{
-    KaniSession, get_cargo_path, lib_folder, lib_no_core_folder, setup_cargo_command,
+    KaniSession, get_cargo_path, lib_folder_for, lib_no_core_folder, setup_cargo_command,
     setup_cargo_command_inner,
 };
 use crate::util;
@@ -97,7 +97,7 @@ crate-type = ["lib"]
         ]));
 
         let mut cargo_args: Vec<CargoArg> = vec!["build".into()];
-        cargo_args.append(&mut cargo_config_args());
+        cargo_args.append(&mut cargo_config_args(HOST_TARGET));
 
         // Configuration needed to parse cargo compilation status.
         cargo_args.push("--message-format".into());
@@ -140,7 +140,8 @@ crate-type = ["lib"]
 
     /// Calls `cargo_build` to generate `*.symtab.json` files in `target_dir`
     pub fn cargo_build(&mut self, keep_going: bool) -> Result<CargoOutputs> {
-        let build_target = env!("TARGET"); // see build.rs
+        let build_target = self.args.verification_target().to_string();
+        let build_target = build_target.as_str();
         let metadata = self.cargo_metadata(build_target)?;
         let target_dir = self
             .args
@@ -157,7 +158,7 @@ crate-type = ["lib"]
             fs::remove_dir_all(&target_dir)?;
         }
 
-        let lib_path = lib_folder().unwrap();
+        let lib_path = lib_folder_for(build_target)?;
         let mut rustc_args = self.kani_rustc_flags(LibConfig::new(lib_path));
         rustc_args.push(encode_as_rustc_arg(&self.kani_compiler_dependency_flags()));
 
@@ -177,7 +178,7 @@ crate-type = ["lib"]
         // declare the same features. This matches cargo's behavior.
         let requested_features = self.args.cargo.features();
 
-        cargo_args.append(&mut cargo_config_args());
+        cargo_args.append(&mut cargo_config_args(build_target));
 
         cargo_args.push("--target-dir".into());
         cargo_args.push(target_dir.into());
@@ -499,10 +500,12 @@ crate-type = ["lib"]
     }
 }
 
-pub fn cargo_config_args() -> Vec<CargoArg> {
+/// The cargo arguments that build for `target`, which is the host's triple unless the user asked
+/// for another with `--target`.
+pub fn cargo_config_args(target: &str) -> Vec<CargoArg> {
     [
         "--target",
-        env!("TARGET"),
+        target,
         // Propagate `--cfg=kani_host` to build scripts.
         "-Zhost-config",
         "-Ztarget-applies-to-host",
