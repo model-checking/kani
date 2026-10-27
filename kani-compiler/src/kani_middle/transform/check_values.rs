@@ -1068,8 +1068,27 @@ pub fn ty_validity_per_offset(
                                 } => {
                                     Err(format!("Unsupported Enum `{}` check", def.trimmed_name()))?
                                 }
-                                VariantsShape::Multiple { variants, .. } => {
-                                    let enum_validity = ty_req();
+                                VariantsShape::Multiple { tag, tag_field, variants, .. } => {
+                                    // Check the discriminant tag's valid range. A scalar or
+                                    // scalar-pair enum already gets this from `ty_req()` (the
+                                    // tag is its first scalar). An aggregate layout has no such
+                                    // scalar, so check the tag here. The tag is the layout's
+                                    // sole field, so `offsets[tag_field]` is its offset.
+                                    let mut enum_validity = ty_req();
+                                    if !matches!(
+                                        layout.value_repr,
+                                        ValueRepr::Scalar(..) | ValueRepr::ScalarPair { .. }
+                                    ) && let Scalar::Initialized { value, valid_range } = tag
+                                    {
+                                        let tag_req = ValidValueReq {
+                                            offset: current_offset + offsets[tag_field].bytes(),
+                                            size: value.size(machine_info),
+                                            valid_range: ValidityRange::Single(valid_range),
+                                        };
+                                        if !tag_req.is_full() {
+                                            enum_validity.push(tag_req);
+                                        }
+                                    }
                                     let mut fields_validity = vec![];
                                     for (index, variant) in variants.iter().enumerate() {
                                         let fields = ty_variants[index].fields();
