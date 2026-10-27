@@ -87,6 +87,10 @@ CASES = [
      "harnesses[0].attributes.kind"),
     ("missing required field", COMPLETED, delete_at(f"{H0}.resources.verification_time_s"),
      "harnesses[0].resources.verification_time_s"),
+    ("missing is_refcount_bounded", COMPLETED, delete_at(f"{H0}.is_refcount_bounded"),
+     "harnesses[0].is_refcount_bounded"),
+    ("string is_refcount_bounded", COMPLETED, set_at(f"{H0}.is_refcount_bounded", "no"),
+     "harnesses[0].is_refcount_bounded"),
     # Elements of arrays that are empty in some fixtures.
     ("integer in cbmc_args", COMPLETED, set_at("configuration.cbmc_args", [5]),
      "configuration.cbmc_args[0]"),
