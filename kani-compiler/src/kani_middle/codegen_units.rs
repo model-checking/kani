@@ -421,6 +421,7 @@ fn get_all_automatic_harnesses(
                 harness.mangled_name(),
                 caveats.is_bounded,
                 caveats.is_ctor_based,
+                caveats.is_refcount_bounded,
             );
             (harness, metadata)
         })
@@ -1159,13 +1160,17 @@ fn choose_generic_instantiation(
 }
 
 /// The caveats that apply to a generated harness, reported in the summary table and stored in
-/// its metadata. They are independent: a harness can be both bounded and constructor-based.
+/// its metadata. They are independent: a harness can be, e.g., both bounded and constructor-based.
 #[derive(Clone, Copy, Debug, Default)]
 struct AutoHarnessCaveats {
     /// Some argument uses *bounded* nondeterministic values, c.f. `--bounded-arguments`.
     is_bounded: bool,
     /// Some value is generated through a type's public constructor, c.f. `--constructor-args`.
     is_ctor_based: bool,
+    /// Some generated value contains an `Rc`/`Arc`, whose reference counts are modeled with
+    /// finitely many states, c.f. `contains_refcounted_ptr`. Unlike `is_bounded`, this does not
+    /// require (or depend on) `--bounded-arguments`.
+    is_refcount_bounded: bool,
 }
 
 /// Partition every function in the crate into (chosen, skipped), where `chosen` is a vector of the Instances for which we'll generate automatic harnesses,
@@ -1403,7 +1408,31 @@ fn automatic_harness_partition(
                             )
                         })
                     });
-                chosen.push((instance, AutoHarnessCaveats { is_bounded, is_ctor_based }));
+                // Whether any generated value contains an `Rc`/`Arc`, whose reference-count
+                // state is only modeled finitely, which the summary reports as "(refcount)".
+                // Formatting trait harnesses generate a value of the impl's self type rather
+                // than of the function's arguments (`&self`, `&mut Formatter`), c.f.
+                // `fmt_impl_self_ty`.
+                let is_refcount_bounded = match fmt_impl_self_ty(tcx, instance) {
+                    Some((_, self_ty)) => crate::kani_middle::contains_refcounted_ptr(
+                        tcx,
+                        self_ty,
+                        &mut FxHashSet::default(),
+                    ),
+                    None => instance.body().is_some_and(|body| {
+                        body.arg_locals().iter().any(|arg| {
+                            crate::kani_middle::contains_refcounted_ptr(
+                                tcx,
+                                arg.ty,
+                                &mut FxHashSet::default(),
+                            )
+                        })
+                    }),
+                };
+                chosen.push((
+                    instance,
+                    AutoHarnessCaveats { is_bounded, is_ctor_based, is_refcount_bounded },
+                ));
             }
         }
     }

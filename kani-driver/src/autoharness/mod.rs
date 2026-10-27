@@ -24,6 +24,30 @@ use kani_metadata::{AutoHarnessSkipReason, HarnessMetadata, KaniMetadata};
 const AUTOHARNESS_TIMEOUT: &str = "60s";
 const LOOP_UNWIND_DEFAULT: u32 = 20;
 
+/// Printed after the summary table if some harness is marked "(refcount)", c.f.
+/// `HarnessMetadata::is_refcount_bounded`. Deliberately states only that the modeled counts are
+/// finite, not which ones: the representatives are an implementation detail of the `Rc`/`Arc`
+/// generators (<https://github.com/model-checking/kani/issues/4752>).
+const REFCOUNT_NOTE: &str = "Note: harnesses marked \"(refcount)\" generate Rc/Arc values whose reference counts are modeled with only finitely many states\n\
+     (this needs no --bounded-arguments). Their verification results do not cover every reference count a caller could produce,\n\
+     e.g. code that compares strong_count/weak_count against specific values may not be fully verified.";
+
+/// The "Kind of Automatic Harness" column of the summary table: the harness kind, followed by a
+/// marker for each caveat that restricts which inputs its verification result covers.
+fn harness_kind_label(harness: &HarnessMetadata) -> String {
+    let mut kind = harness.attributes.kind.to_string();
+    if harness.is_bounded {
+        kind.push_str(" (bounded)");
+    }
+    if harness.is_ctor_based {
+        kind.push_str(" (ctor)");
+    }
+    if harness.is_refcount_bounded {
+        kind.push_str(" (refcount)");
+    }
+    kind
+}
+
 pub fn autoharness_cargo(args: CargoAutoharnessArgs) -> Result<()> {
     let mut session = KaniSession::new(args.verify_opts)?;
     setup_session(&mut session, &args.common_autoharness_args);
@@ -276,26 +300,18 @@ impl KaniSession {
             "Verification Result",
         ]);
 
-        let harness_kind = |harness: &HarnessMetadata| {
-            let mut kind = harness.attributes.kind.to_string();
-            if harness.is_bounded {
-                kind.push_str(" (bounded)");
-            }
-            if harness.is_ctor_based {
-                kind.push_str(" (ctor)");
-            }
-            kind
-        };
         let mut any_bounded = false;
         let mut any_ctor = false;
+        let mut any_refcount = false;
 
         for success in successes {
             any_bounded |= success.harness.is_bounded;
             any_ctor |= success.harness.is_ctor_based;
+            any_refcount |= success.harness.is_refcount_bounded;
             verified_fns.add_row(vec![
                 success.harness.crate_name.clone(),
                 success.harness.pretty_name.clone(),
-                harness_kind(success.harness),
+                harness_kind_label(success.harness),
                 success.result.status.to_string(),
             ]);
         }
@@ -303,10 +319,11 @@ impl KaniSession {
         for failure in failures {
             any_bounded |= failure.harness.is_bounded;
             any_ctor |= failure.harness.is_ctor_based;
+            any_refcount |= failure.harness.is_refcount_bounded;
             verified_fns.add_row(vec![
                 failure.harness.crate_name.clone(),
                 failure.harness.pretty_name.clone(),
-                harness_kind(failure.harness),
+                harness_kind_label(failure.harness),
                 failure.result.status.to_string(),
             ]);
         }
@@ -331,6 +348,9 @@ impl KaniSession {
                  their verification results only cover values reachable through that constructor."
             );
         }
+        if any_refcount {
+            println!("{REFCOUNT_NOTE}");
+        }
 
         if failing > 0 {
             println!(
@@ -348,5 +368,42 @@ impl KaniSession {
         } else {
             println!("No functions were eligible for automatic verification.");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{REFCOUNT_NOTE, harness_kind_label};
+    use crate::metadata::tests::mock_proof_harness;
+
+    /// Each caveat adds its own marker; "(refcount)" is independent of "(bounded)", since
+    /// `Rc`/`Arc` arguments need no --bounded-arguments (#4752).
+    #[test]
+    fn harness_kind_label_marks_each_caveat() {
+        let mut h = mock_proof_harness("f", None, None, None);
+        assert_eq!(harness_kind_label(&h), "#[kani::proof]");
+        h.is_refcount_bounded = true;
+        assert_eq!(harness_kind_label(&h), "#[kani::proof] (refcount)");
+        h.is_bounded = true;
+        h.is_ctor_based = true;
+        assert_eq!(harness_kind_label(&h), "#[kani::proof] (bounded) (ctor) (refcount)");
+    }
+
+    /// The marker fits the summary table's "Kind of Automatic Harness" header, so marking a
+    /// proof harness does not widen the column (and shift every row) of existing tables.
+    #[test]
+    fn refcount_label_fits_kind_column_header() {
+        let mut h = mock_proof_harness("f", None, None, None);
+        h.is_refcount_bounded = true;
+        assert!(harness_kind_label(&h).len() <= "Kind of Automatic Harness".len());
+    }
+
+    /// The note names the marker, says it needs no --bounded-arguments, and does not claim
+    /// complete coverage.
+    #[test]
+    fn refcount_note_states_the_caveat() {
+        assert!(REFCOUNT_NOTE.contains("\"(refcount)\""));
+        assert!(REFCOUNT_NOTE.contains("no --bounded-arguments"));
+        assert!(REFCOUNT_NOTE.contains("do not cover every reference count"));
     }
 }
