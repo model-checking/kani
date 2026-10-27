@@ -1659,11 +1659,6 @@ impl AutomaticArbitraryPass {
     /// arguments and panic paths converted into assumptions
     /// (c.f. [find_unchecked_constructor][crate::kani_middle::find_unchecked_constructor]).
     /// Returns None if the constructor body contains constructs the inliner does not support.
-    ///
-    /// Soundness caveat: if the constructor is unsatisfiable for `ty` (every argument trips an
-    /// assertion), the generated body assumes `false` on all paths and the harness becomes
-    /// vacuous, reporting Success without checking anything. Not yet detected; tracked in
-    /// <https://github.com/model-checking/kani/issues/4757>.
     fn generate_unchecked_ctor_body(
         &self,
         tcx: TyCtxt,
@@ -2024,6 +2019,8 @@ pub struct AutomaticHarnessPass {
     init_contracts_hook: Instance,
     reset_clause_depth: Instance,
     kani_autoharness_intrinsic: FnDef,
+    /// The FnDef of KaniHook::Cover, c.f. `cover_function_reached`.
+    kani_cover: FnDef,
     /// Whether --check-invariants is enabled: check values returned by verified functions
     /// against the type's mined invariant conjuncts.
     check_invariants: bool,
@@ -2044,6 +2041,7 @@ impl AutomaticHarnessPass {
             *kani_fns.get(&KaniModel::ResetContractClauseDepth.into()).unwrap();
         let reset_clause_depth =
             Instance::resolve(reset_clause_depth, &GenericArgs(vec![])).unwrap();
+        let kani_cover = *kani_fns.get(&KaniHook::Cover.into()).unwrap();
         let check_invariants = query_db.args().autoharness_check_invariants;
         Self {
             models: AnyModels::new(query_db),
@@ -2051,8 +2049,44 @@ impl AutomaticHarnessPass {
             init_contracts_hook,
             reset_clause_depth,
             kani_autoharness_intrinsic,
+            kani_cover,
             check_invariants,
         }
+    }
+
+    /// Under --constructor-args, emit `kani::cover(true, msg)` at `source`, where the harness is
+    /// about to call `function` (directly, or through a formatting model). The assumptions made
+    /// while generating the arguments (a constructor that never returns, mined conditions that
+    /// contradict it or each other) can exclude every input, so that the harness checks nothing;
+    /// the driver then reports the harness as vacuous
+    /// (<https://github.com/model-checking/kani/issues/4757>).
+    fn cover_function_reached(
+        &self,
+        body: &mut MutableBody,
+        source: &mut SourceInstruction,
+        function: Instance,
+    ) {
+        if !self.models.constructor_args {
+            return;
+        }
+        let cover_inst = Instance::resolve(self.kani_cover, &GenericArgs(vec![])).unwrap();
+        let span = source.span(body.blocks());
+        let true_op = Operand::Constant(ConstOperand {
+            span,
+            user_ty: None,
+            const_: MirConst::from_bool(true),
+        });
+        // kani-driver recognizes this cover by its description (`VACUITY_COVER_DESC`).
+        let msg = format!("autoharness: a generated input reaches `{}`", function.name());
+        let msg_op = body.new_str_operand(&msg, span);
+        let unit_lcl = body.new_local(Ty::new_tuple(&[]), span, Mutability::Not);
+        body.insert_call(
+            &cover_inst,
+            source,
+            InsertPosition::Before,
+            vec![true_op, msg_op],
+            Place::from(unit_lcl),
+        );
     }
 }
 
@@ -2121,6 +2155,7 @@ impl TransformPass for AutomaticHarnessPass {
                 source.span(harness_body.blocks()),
                 Mutability::Not,
             );
+            self.cover_function_reached(&mut harness_body, &mut source, fn_to_verify);
             harness_body.insert_call(
                 &model_inst,
                 &mut source,
@@ -2201,6 +2236,8 @@ impl TransformPass for AutomaticHarnessPass {
             func_to_verify_ret.mutability,
         );
         let ret_place = Place::from(ret_lcl);
+
+        self.cover_function_reached(&mut harness_body, &mut source, fn_to_verify);
 
         // Call `fn_to_verify` on the nondeterministic arguments generated above.
         harness_body.insert_call(

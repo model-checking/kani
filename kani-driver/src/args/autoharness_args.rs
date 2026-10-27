@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 use crate::args::list_args::Format;
-use crate::args::{ValidateArgs, VerificationArgs, validate_std_path};
+use crate::args::{OutputFormat, ValidateArgs, VerificationArgs, validate_std_path};
 use crate::util::warning;
 use clap::{Error, Parser, error::ErrorKind};
 use kani_metadata::{
@@ -244,6 +244,16 @@ impl ValidateArgs for CargoAutoharnessArgs {
             ));
         }
 
+        if self.common_autoharness_args.constructor_args
+            && self.verify_opts.output_format() == OutputFormat::Old
+        {
+            return Err(Error::raw(
+                ErrorKind::ArgumentConflict,
+                "Conflicting options: --constructor-args isn't compatible with \
+                    --output-format=old, since `old` cannot detect a vacuous harness.",
+            ));
+        }
+
         Ok(())
     }
 }
@@ -293,6 +303,16 @@ impl ValidateArgs for StandaloneAutoharnessArgs {
             return Err(Error::raw(
                 ErrorKind::ArgumentConflict,
                 "The autoharness subcommand does not support concrete playback",
+            ));
+        }
+
+        if self.common_autoharness_args.constructor_args
+            && self.verify_opts.output_format() == OutputFormat::Old
+        {
+            return Err(Error::raw(
+                ErrorKind::ArgumentConflict,
+                "Conflicting options: --constructor-args isn't compatible with \
+                    --output-format=old, since `old` cannot detect a vacuous harness.",
             ));
         }
 
@@ -351,5 +371,34 @@ mod tests {
         assert_eq!(args.slice_bound, AUTOHARNESS_SLICE_BOUND);
         assert_eq!(args.string_bound, AUTOHARNESS_STR_BOUND);
         assert_eq!(args.bounded_arbitrary_bound, AUTOHARNESS_BOUNDED_ARBITRARY_BOUND);
+    }
+
+    /// Both subcommand forms reject `--constructor-args` with `--output-format=old`, and accept
+    /// either option on its own.
+    #[test]
+    fn constructor_args_reject_old_output_format() {
+        // `validate` also checks the standalone input is a regular file, so use a real one.
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("input.rs");
+        std::fs::write(&input, "").unwrap();
+        let validate = |options: &[&str]| {
+            let mut args = vec!["autoharness", "-Z", "autoharness"];
+            args.extend_from_slice(options);
+            let cargo = CargoAutoharnessArgs::try_parse_from(&args).unwrap().validate();
+            args.push(input.to_str().unwrap());
+            let standalone = StandaloneAutoharnessArgs::try_parse_from(&args).unwrap().validate();
+            [cargo, standalone]
+        };
+
+        for result in validate(&["--constructor-args", "--output-format=old"]) {
+            let err = result.expect_err("expected --constructor-args to reject old output");
+            assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
+            assert!(err.to_string().contains("--constructor-args"), "{err}");
+        }
+        for options in [["--constructor-args"], ["--output-format=old"]] {
+            for result in validate(&options) {
+                assert!(result.is_ok(), "{options:?}: {:?}", result.err());
+            }
+        }
     }
 }
