@@ -792,6 +792,7 @@ impl GotocCtx<'_, '_> {
                     p,
                     place_ref.clone(),
                     self.place_ty_stable(p),
+                    matches!(rv, Rvalue::Ref(..)),
                     &loc,
                 ) {
                     Some((ptr_alignment_check_expr, ptr_validity_check_expr)) => {
