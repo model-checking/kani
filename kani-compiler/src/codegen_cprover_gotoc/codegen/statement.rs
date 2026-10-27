@@ -238,6 +238,27 @@ impl GotocCtx<'_, '_> {
         self.tcx.dcx().span_warn(rustc_internal::internal(self.tcx, span), msg);
     }
 
+    /// `StorageLive(var_id)`: see the `StorageLive` and `StorageDead` case of
+    /// [GotocCtx::codegen_statement].
+    pub fn codegen_storage_live(&mut self, var_id: Local, location: Location) -> Stmt {
+        if !self.current_fn().is_address_taken_local(var_id) {
+            Stmt::skip(location)
+        } else {
+            let global_dead_object = cbmc::global_dead_object(&self.symbol_table);
+            Stmt::assign(
+                global_dead_object.clone(),
+                global_dead_object
+                    .clone()
+                    .eq(self
+                        .codegen_local(var_id, location)
+                        .address_of()
+                        .cast_to(global_dead_object.typ().clone()))
+                    .ternary(global_dead_object.typ().null(), global_dead_object),
+                location,
+            )
+        }
+    }
+
     /// Generate Goto-C for MIR [Statement]s.
     /// This does not cover all possible "statements" because MIR distinguishes between ordinary
     /// statements and [Terminator]s, which can exclusively appear at the end of a basic block.
@@ -372,24 +393,7 @@ impl GotocCtx<'_, '_> {
             // This approach will also work when there are multiple occurrences of StorageLive (or
             // StorageDead) on a path, or across control-flow branches, and even when StorageDead
             // occurs without a preceding StorageLive.
-            StatementKind::StorageLive(var_id) => {
-                if !self.current_fn().is_address_taken_local(*var_id) {
-                    Stmt::skip(location)
-                } else {
-                    let global_dead_object = cbmc::global_dead_object(&self.symbol_table);
-                    Stmt::assign(
-                        global_dead_object.clone(),
-                        global_dead_object
-                            .clone()
-                            .eq(self
-                                .codegen_local(*var_id, location)
-                                .address_of()
-                                .cast_to(global_dead_object.typ().clone()))
-                            .ternary(global_dead_object.typ().null(), global_dead_object),
-                        location,
-                    )
-                }
-            }
+            StatementKind::StorageLive(var_id) => self.codegen_storage_live(*var_id, location),
             StatementKind::StorageDead(var_id) => {
                 if !self.current_fn().is_address_taken_local(*var_id) {
                     Stmt::skip(location)

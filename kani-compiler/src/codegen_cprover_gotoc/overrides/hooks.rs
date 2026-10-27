@@ -881,6 +881,7 @@ impl GotocHook for LoopInvariantRegister {
             let mut stmt = Stmt::goto(bb_label(target.unwrap()), loc)
                 .with_loop_contracts(func_exp.call(fargs).cast_to(Type::CInteger(CIntType::Bool)));
             let current_fn = gcx.current_fn().instance_stable();
+            let mut storage_live = Vec::new();
             if let Some(mut assigns) = gcx.loop_modifies.remove(&(current_fn, instance)) {
                 // The user wrote a loop modifies clause, possibly without any target. Add the
                 // locals that the loop contract transformation makes live across iterations of
@@ -888,6 +889,12 @@ impl GotocHook for LoopInvariantRegister {
                 // clause instead).
                 let generated =
                     gcx.transformer.generated_loop_modifies(current_fn, instance).to_vec();
+                // The storage of such a local can end in the loop body, which can make it the
+                // dead object (see `codegen_storage_live`) when the latch jumps back to the
+                // loop head, where the loop havocs it. It is dead there: mark its storage live,
+                // as its `StorageLive` in the body would.
+                storage_live =
+                    generated.iter().map(|local| gcx.codegen_storage_live(*local, loc)).collect();
                 assigns.extend(generated.into_iter().map(|local| gcx.codegen_local(local, loc)));
                 if assigns.is_empty() {
                     // The clause has no target (e.g. `#[kani::loop_modifies()]`, or only targets
@@ -913,15 +920,14 @@ impl GotocHook for LoopInvariantRegister {
 
             // Add `free(0)` to make sure the body of `free` won't be dropped to
             // satisfy the requirement of DFCC.
-            Stmt::block(
-                vec![
-                    BuiltinFn::Free
-                        .call(vec![Expr::pointer_constant(0, Type::void_pointer())], loc)
-                        .as_stmt(loc),
-                    stmt,
-                ],
-                loc,
-            )
+            let mut stmts = vec![
+                BuiltinFn::Free
+                    .call(vec![Expr::pointer_constant(0, Type::void_pointer())], loc)
+                    .as_stmt(loc),
+            ];
+            stmts.extend(storage_live);
+            stmts.push(stmt);
+            Stmt::block(stmts, loc)
         } else {
             // When loop-contracts is not enabled, codegen
             // assign_to = true
