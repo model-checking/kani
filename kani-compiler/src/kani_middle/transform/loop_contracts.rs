@@ -17,6 +17,9 @@ use crate::rustc_public::CrateDef;
 use itertools::Itertools;
 use rustc_middle::ty::TyCtxt;
 use rustc_public::mir::mono::Instance;
+use rustc_public::mir::visit::{
+    Location, MirVisitor, PlaceContext, statement_location, terminator_location,
+};
 use rustc_public::mir::{
     AggregateKind, BasicBlock, BasicBlockIdx, Body, ConstOperand, Local, Operand, Place,
     ProjectionElem, Rvalue, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
@@ -169,6 +172,33 @@ impl FirstPatRenamer<'_> {
                 *local = *nthlocal;
             }
         }
+    }
+}
+
+/// The locals that a statement or terminator reads, for [LoopContractPass::live_at_block_starts].
+#[derive(Default)]
+struct LocalsCollector(Vec<usize>);
+
+impl MirVisitor for LocalsCollector {
+    fn visit_local(&mut self, local: &Local, _ptx: PlaceContext, _location: Location) {
+        self.0.push(*local);
+    }
+}
+
+impl LocalsCollector {
+    /// A write to `place`: the local that it defines if it writes the whole local, or else (a
+    /// write to a part) a read of the local and of the indices.
+    fn write_to(&mut self, place: &Place) -> Option<usize> {
+        if place.projection.is_empty() {
+            return Some(place.local);
+        }
+        self.0.push(place.local);
+        for elem in &place.projection {
+            if let ProjectionElem::Index(local) = elem {
+                self.0.push(*local);
+            }
+        }
+        None
     }
 }
 
@@ -1379,6 +1409,12 @@ impl LoopContractPass {
         let mut new_latches: Vec<(usize, usize)> =
             self.new_loop_latches.iter().map(|(head, latch)| (*head, *latch)).collect();
         new_latches.sort();
+        if new_latches.is_empty() {
+            return;
+        }
+        let live = Self::live_at_block_starts(body);
+        let variables: HashSet<usize> =
+            body.var_debug_info().iter().filter_map(|info| info.local()).collect();
         for (loop_head, new_latch) in new_latches {
             let Some((register_fn, loop_id)) = self.register_fn(body, tcx, new_latch) else {
                 continue;
@@ -1404,6 +1440,54 @@ impl LoopContractPass {
             if let Some(locals) = self.generated_loop_locals.get(&loop_head) {
                 candidates.extend(locals.iter().copied());
             }
+            // The temporaries, and the variables that the loop body declares, that are dead at
+            // the loop head, where the loop havocs its write set: the target of the latch (the
+            // block of the original head runs before it, once). CBMC still requires them in the
+            // write set when the loop is left while they hold a value, e.g. a `let` in the loop
+            // body that a `return` in it reads. A variable declared before the loop is not
+            // added, even if it is dead at the loop head: the user names it in the clause.
+            let heads = body.blocks()[new_latch].terminator.successors();
+            let loop_span: Vec<usize> = loop_id.split('_').filter_map(|n| n.parse().ok()).collect();
+            let declared_in_loop = |local: usize| {
+                let lines = body.locals()[local].span.get_lines();
+                let start = (lines.start_line, lines.start_col);
+                loop_span.len() == 4
+                    && start > (loop_span[0], loop_span[1])
+                    && start < (loop_span[2], loop_span[3])
+            };
+            // A local whose storage the loop both starts and ends is local to the loop, and CBMC
+            // already allows the loop to write it. The others are declared at the start of the
+            // function, or are still live when the loop is left (e.g. the scrutinee of a `match`
+            // with a `return` arm).
+            let in_loop = Self::natural_loop(body, new_latch);
+            let (mut started, mut ended_outside) = (HashSet::new(), HashSet::new());
+            for (bb, block) in body.blocks().iter().enumerate() {
+                for stmt in &block.statements {
+                    match stmt.kind {
+                        StatementKind::StorageLive(local) if in_loop.contains(&bb) => {
+                            started.insert(local);
+                        }
+                        StatementKind::StorageDead(local) if !in_loop.contains(&bb) => {
+                            ended_outside.insert(local);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            let storage_live_in_loop: HashSet<usize> =
+                started.difference(&ended_outside).copied().collect();
+            // Not for a loop in another loop with a contract: the write set that CBMC infers for
+            // the outer loop does not have these locals, so its inclusion check would fail.
+            let nested = loop_positions
+                .iter()
+                .any(|(head, latch)| *head < loop_head && *loop_latch <= *latch);
+            candidates.extend(
+                (body.arg_count() + 1..body.locals().len())
+                    .filter(|_| !nested)
+                    .filter(|local| !storage_live_in_loop.contains(local))
+                    .filter(|local| heads.iter().all(|head| !live[*head].contains(local)))
+                    .filter(|local| !variables.contains(local) || declared_in_loop(*local)),
+            );
             // Only keep the locals that the loop writes to, e.g., not a `kaniiter` whose
             // initialization was moved to the head of an outer loop.
             let written = Self::locals_written_in(body, loop_head + 1..=*loop_latch);
@@ -1450,6 +1534,104 @@ impl LoopContractPass {
         let name = fn_def.name();
         let loop_id = name.rsplit("::").next()?.strip_prefix("kani_register_loop_contract")?;
         Some((Instance::resolve(fn_def, &args).ok()?, loop_id.to_string()))
+    }
+
+    /// The blocks of the loop whose new latch is `new_latch`: the target of the latch (the head of
+    /// the loop in the generated code), and the blocks that reach the latch without passing it.
+    fn natural_loop(body: &MutableBody, new_latch: usize) -> HashSet<usize> {
+        let mut predecessors = vec![Vec::new(); body.blocks().len()];
+        for (bb, block) in body.blocks().iter().enumerate() {
+            for succ in block.terminator.successors() {
+                predecessors[succ].push(bb);
+            }
+        }
+        let mut blocks: HashSet<usize> =
+            body.blocks()[new_latch].terminator.successors().into_iter().collect();
+        let mut stack = vec![new_latch];
+        while let Some(bb) = stack.pop() {
+            if blocks.insert(bb) {
+                stack.extend(&predecessors[bb]);
+            }
+        }
+        blocks
+    }
+
+    /// The locals that are live at the start of each block: read (in whole or in part, or
+    /// borrowed) on some path from there before the path overwrites them as a whole or ends
+    /// their storage. A loop can havoc a local that is not live at its head: no value of it
+    /// reaches the loop body from before the loop or from an earlier iteration.
+    fn live_at_block_starts(body: &MutableBody) -> Vec<HashSet<usize>> {
+        // `statement_location` needs a `Body`; the spread argument and the span do not matter.
+        let body = Body::new(
+            body.blocks().to_vec(),
+            body.locals().to_vec(),
+            body.arg_count(),
+            body.var_debug_info().clone(),
+            None,
+            body.locals()[0].span,
+        );
+        // The locals that each block reads before it defines them, and those it defines.
+        let mut uses = vec![HashSet::new(); body.blocks.len()];
+        let mut defs = vec![HashSet::new(); body.blocks.len()];
+        for (bb, block) in body.blocks.iter().enumerate() {
+            let mut access = |reads: Vec<usize>, def: Option<usize>| {
+                for local in reads {
+                    if !defs[bb].contains(&local) {
+                        uses[bb].insert(local);
+                    }
+                }
+                if let Some(local) = def {
+                    defs[bb].insert(local);
+                }
+            };
+            for (idx, stmt) in block.statements.iter().enumerate() {
+                let location = statement_location(&body, &bb, idx);
+                let mut reads = LocalsCollector::default();
+                let def = match &stmt.kind {
+                    StatementKind::StorageLive(local) | StatementKind::StorageDead(local) => {
+                        Some(*local)
+                    }
+                    StatementKind::Assign(place, rvalue) => {
+                        reads.visit_rvalue(rvalue, location);
+                        reads.write_to(place)
+                    }
+                    _ => {
+                        reads.visit_statement(stmt, location);
+                        None
+                    }
+                };
+                access(reads.0, def);
+            }
+            let location = terminator_location(&body, &bb);
+            let mut reads = LocalsCollector::default();
+            let def = match &block.terminator.kind {
+                TerminatorKind::Call { func, args, destination, .. } => {
+                    reads.visit_operand(func, location);
+                    args.iter().for_each(|arg| reads.visit_operand(arg, location));
+                    reads.write_to(destination)
+                }
+                _ => {
+                    reads.visit_terminator(&block.terminator, location);
+                    None
+                }
+            };
+            access(reads.0, def);
+        }
+        let mut live = uses.clone();
+        let mut changed = true;
+        while changed {
+            changed = false;
+            for bb in (0..body.blocks.len()).rev() {
+                for succ in body.blocks[bb].terminator.successors() {
+                    let flowing: Vec<usize> =
+                        live[succ].iter().filter(|l| !defs[bb].contains(*l)).copied().collect();
+                    for local in flowing {
+                        changed |= live[bb].insert(local);
+                    }
+                }
+            }
+        }
+        live
     }
 
     /// The locals that are assigned (as the root of the assigned place, or as the destination
