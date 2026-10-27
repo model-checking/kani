@@ -81,6 +81,7 @@
       "is_automatically_generated": "boolean",
       "has_loop_contracts": "boolean",
       "is_bounded": "boolean",
+      "is_aliasing": "boolean",
       "attributes": {
         "kind": "named:attribute_kind",
         "should_panic": "boolean",

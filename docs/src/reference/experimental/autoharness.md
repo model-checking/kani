@@ -219,7 +219,9 @@ precondition, which excludes the invalid pointer states.
 Current limitations of the generated pointers:
 - Pointers are always aligned; misaligned-pointer bugs are not covered.
 - No pointers to deallocated objects are generated (Kani's memory predicates cannot reason about those).
-- Distinct pointer arguments never alias each other, and the pointee is always initialized in the valid state.
+- By default, distinct pointer arguments never alias each other; pass `--alias-arguments` to let them alias,
+  c.f. [Reference and Pointer Arguments](#reference-and-pointer-arguments).
+- The pointee is always initialized in the valid state.
 - Raw pointers are only supported as direct arguments (possibly nested in other raw pointers), not behind
   references or inside user-defined types.
 
@@ -326,15 +328,78 @@ Note that this automatic derivation feature is only available for autoharness.
 
 ### Reference and Pointer Arguments
 Each reference, pointer, slice, or string argument is generated from its own independent
-nondeterministic storage. Autoharness therefore does *not* explore aliasing *between* distinct
-arguments: for example, given `fn f(a: &T, b: &T)`, the generated harness always passes two
+nondeterministic storage. By default, autoharness therefore does *not* explore aliasing *between*
+distinct arguments: for example, given `fn f(a: &T, b: &T)`, the generated harness always passes two
 references to separate allocations, so `a` and `b` never share an address (`core::ptr::eq(a, b)`
 is always `false`), even though a caller could pass the same reference twice. A successful
 automatic harness is thus an underapproximation with respect to caller-controlled aliasing, in
 the same way that verifying a single monomorphization is an underapproximation for [generic
 functions](#generic-functions). This applies to all reference/pointer arguments and is
 independent of the length bound that `--bounded-arguments` introduces.
-Modeling caller-controlled aliasing between arguments is tracked in
+
+The `--alias-arguments` option makes Kani explore some of this aliasing. With it, an argument that
+is a shared reference (`&T`, including `&[T]` and `&str`) or a raw pointer (`*const T`, `*mut T`) is
+nondeterministically either generated from its own storage, as above, or the very same reference or
+pointer as an earlier argument of the same type. Raw pointers alias whatever their mutability: a
+`*const T` and a `*mut T` may be the same pointer, as in `fn copy(dst: *mut T, src: *const T)`.
+`&mut T` arguments never alias anything: a `&mut T` is exclusive, so a caller cannot pass aliasing
+ones without undefined behavior. For `fn f(a: &T, b: &T)`, `a` and `b` then either refer to separate
+allocations or are the same reference, and for three arguments of one type every combination is
+covered: none aliasing, any two aliasing, and all three aliasing. For example, given:
+```rust
+fn bump(a: &Cell<u8>, b: &Cell<u8>) {
+    let old = b.get();
+    a.set(old.wrapping_add(1));
+    assert!(b.get() == old);
+}
+```
+the automatic harness for `bump` succeeds by default and fails with `--alias-arguments`, since the
+assertion does not hold if a caller passes the same `Cell` twice. The option does not change which
+functions get a harness, and the harness of a function that does not have at least two arguments
+that may alias each other is unaffected.
+
+Harnesses in which some argument may alias an earlier one are marked **"(aliasing)"** in the
+"Kind of Automatic Harness" column of the summary table, and a note after the table explains the
+marker. Unlike "(bounded)" and "(ctor)", the marker does not restrict a result: it tells you that
+the result of that harness, success or failure, also accounts for callers that pass the same
+reference or pointer for those arguments. A harness without the marker is the same one that Kani
+generates without the option.
+
+If a function is not meant to be called with aliasing arguments, say so in a [function
+contract](./contracts.md): the automatic contract harness assumes the precondition, so the
+aliasing arguments it excludes are not considered. For example, the harness for the following
+function succeeds with `--alias-arguments` as well:
+```rust
+#[kani::requires(!core::ptr::eq(a, b))]
+#[kani::modifies(a)]
+fn bump(a: &Cell<u8>, b: &Cell<u8>) {
+    let old = b.get();
+    a.set(old.wrapping_add(1));
+    assert!(b.get() == old);
+}
+```
+(The `modifies` clause is needed with or without the option, since the function writes through
+`a`.)
+
+The following limitations remain, so a successful harness is still an underapproximation with
+respect to aliasing:
+- A shared reference only aliases shared references of the same type, and a raw pointer only
+  aliases raw pointers to the same pointee type (of either mutability). References and pointers
+  to different types never share an address. Types that differ only in lifetimes count as the
+  same type.
+- A `&T` does not alias a raw pointer. For a `*mut T` this is deliberate: while the `&T` is
+  live, a write through the `*mut T` to the same value is undefined behavior under Rust's
+  aliasing model. Aliasing between a `&T` and a `*const T` is not modeled yet.
+- Smart pointer arguments (`Rc<T>`, `Arc<T>`) do not alias each other, even though a caller can pass
+  two clones of the same `Rc`.
+- Aliasing arguments are identical: slices and strings do not partially overlap, and an argument
+  never points into the middle of another one (e.g. a `&u8` into a `&[u8]`, or to a field of a
+  struct that another argument refers to).
+- Only the arguments themselves are considered. References and pointers nested in an argument, such
+  as the pointee of a `*const *const T`, always refer to their own storage, and so does the `self`
+  value of a [formatting trait implementation](#formatting-trait-implementations).
+
+Modeling the remaining cases is tracked in
 [#4750](https://github.com/model-checking/kani/issues/4750).
 
 ### Generic Functions

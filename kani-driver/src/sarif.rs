@@ -301,6 +301,7 @@ mod tests {
             is_automatically_generated: false,
             is_bounded: false,
             is_ctor_based: false,
+            is_aliasing: false,
         }
     }
 

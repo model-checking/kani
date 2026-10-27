@@ -145,6 +145,11 @@ pub struct Arguments {
     /// Check mined type invariants on values returned by autoharness-verified functions.
     #[arg(long = "autoharness-check-invariants")]
     pub autoharness_check_invariants: bool,
+
+    /// Model caller-controlled aliasing between the shared reference and raw pointer
+    /// arguments of autoharness-verified functions.
+    #[arg(long = "autoharness-alias-arguments")]
+    pub autoharness_alias_arguments: bool,
 }
 
 #[derive(Debug, Clone, Copy, AsRefStr, EnumString, VariantNames, PartialEq, Eq)]
