@@ -1,0 +1,12 @@
+Checking harness check_valid_slice_elem...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_invalid_slice_elem_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `bool`
+VERIFICATION:- FAILED
+
+Checking harness check_invalid_slice_elem_symbolic_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `bool`
+VERIFICATION:- FAILED
+
+Complete - 1 successfully verified harnesses, 2 failures, 3 total.

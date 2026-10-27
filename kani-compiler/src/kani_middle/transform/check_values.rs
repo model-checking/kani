@@ -562,9 +562,44 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                 }
                 ProjectionElem::Downcast(_) => {}
                 ProjectionElem::OpaqueCast(_) => {}
-                ProjectionElem::Index(_)
-                | ProjectionElem::ConstantIndex { .. }
-                | ProjectionElem::Subslice { .. } => { /* safe */ }
+                ProjectionElem::Index(_) | ProjectionElem::ConstantIndex { .. } => {
+                    // Check the one element being read. A slice `[T]` has no
+                    // static length, so the whole-slice deref above checks no
+                    // elements; a single index reads a sized `T`, and a symbolic
+                    // index makes CBMC cover every element with no length loop.
+                    // Sized arrays are already checked element-wise by the deref,
+                    // so only slices need this. Writes are not UB until read.
+                    let base_ty = place_ref.ty(self.locals).unwrap();
+                    if let TyKind::RigidTy(RigidTy::Slice(elem_ty)) = base_ty.kind()
+                        && (!ptx.is_mutating() || place.projection.len() > idx + 1)
+                    {
+                        let validity =
+                            ty_validity_per_offset(self.tcx, &self.machine, elem_ty, 0);
+                        match validity {
+                            Ok(ranges) if !ranges.is_empty() => {
+                                self.push_target(SourceOp::BytesValidity {
+                                    target_ty: elem_ty,
+                                    rvalue: Rvalue::Use(
+                                        Operand::Copy(Place {
+                                            local: place.local,
+                                            projection: place.projection[..=idx].to_vec(),
+                                        }),
+                                        WithRetag::No,
+                                    ),
+                                    ranges,
+                                })
+                            }
+                            Err(_msg) => self.push_target(SourceOp::UnsupportedCheck {
+                                check: "slice element read".to_string(),
+                                ty: elem_ty,
+                            }),
+                            _ => {}
+                        }
+                    }
+                }
+                // A subslice is still an unsized `[T]`; checking all its elements
+                // needs a runtime-length loop this pass does not have.
+                ProjectionElem::Subslice { .. } => { /* safe */ }
             }
         }
         self.super_place(place, ptx, location)
