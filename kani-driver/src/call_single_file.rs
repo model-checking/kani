@@ -238,6 +238,11 @@ impl KaniSession {
             }
         }
 
+        if self.args.is_stubbing_enabled() {
+            flags.push("-Z".into());
+            flags.push("inline-mir=no".into());
+        }
+
         if self.args.coverage {
             flags.push("-Zmir-enable-passes=-SingleUseConsts".into());
         }
