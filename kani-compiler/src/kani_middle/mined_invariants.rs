@@ -85,6 +85,27 @@ impl std::hash::Hash for MinedExpr {
 }
 
 impl MinedExpr {
+    /// Rebase a getter's field reads onto its receiver in the caller.
+    fn prepend_fields(self, prefix: &[(usize, Ty)]) -> Option<Self> {
+        if prefix.is_empty() {
+            return Some(self);
+        }
+        Some(match self {
+            MinedExpr::Field(path) => {
+                MinedExpr::Field(prefix.iter().copied().chain(path).collect())
+            }
+            // The AST can only represent a downcast at the root, not below a field.
+            MinedExpr::DowncastField(..) => return None,
+            constant @ MinedExpr::Const(..) => constant,
+            MinedExpr::BinOp(op, a, b) => MinedExpr::BinOp(
+                op,
+                Box::new(a.prepend_fields(prefix)?),
+                Box::new(b.prepend_fields(prefix)?),
+            ),
+            MinedExpr::UnOp(op, a) => MinedExpr::UnOp(op, Box::new(a.prepend_fields(prefix)?)),
+        })
+    }
+
     pub fn ty(&self) -> Option<Ty> {
         match self {
             MinedExpr::Field(path) => path.last().map(|(_, t)| *t),
@@ -271,8 +292,9 @@ fn extract_place(body: &Body, place: &Place, depth: usize) -> Option<MinedExpr> 
 }
 
 /// Extract the expression computed by a getter call `self.m()`: the sole argument must be
-/// (a reference to) `self`, and the callee's return local must have a unique, extractable
-/// definition in terms of ITS `self` (which is the same value). Depth-limited.
+/// (a reference to) `self` or one of its fields, and the callee's return local must have a
+/// unique, extractable definition. Rebase that definition onto the caller's receiver.
+/// Depth-limited.
 fn extract_getter_call(
     body: &Body,
     term: &rustc_public::mir::Terminator,
@@ -282,17 +304,16 @@ fn extract_getter_call(
         return None;
     }
     let TerminatorKind::Call { func, args, .. } = &term.kind else { return None };
-    // Sole argument: self (possibly behind a fresh reference temp).
+    // Sole argument: self or a field of self (possibly behind a fresh reference temp).
     if args.len() != 1 {
         return None;
     }
-    let self_rooted = match &args[0] {
-        Operand::Copy(p) | Operand::Move(p) => p.local == 1 || place_is_ref_to_self(body, p),
-        _ => false,
+    let receiver = match &args[0] {
+        Operand::Copy(p) | Operand::Move(p) if p.local == 1 => p.clone(),
+        Operand::Copy(p) | Operand::Move(p) if p.projection.is_empty() => unique_ref_def(body, p)?,
+        _ => return None,
     };
-    if !self_rooted {
-        return None;
-    }
+    let receiver_path = getter_receiver_path(&receiver)?;
     let fn_ty = func.ty(body.locals()).ok()?;
     let TyKind::RigidTy(RigidTy::FnDef(def, fn_args)) = fn_ty.kind() else { return None };
     let inst = Instance::resolve(def, &fn_args).ok()?;
@@ -327,7 +348,7 @@ fn extract_getter_call(
             return None;
         }
     }
-    ret_def
+    ret_def?.prepend_fields(&receiver_path)
 }
 
 /// If `p` (a projection-free temp) is uniquely defined as `&<place>`, return that place.
@@ -359,30 +380,22 @@ fn unique_ref_def(body: &Body, p: &Place) -> Option<Place> {
     found
 }
 
-/// Whether `p` is a temp holding `&self` (defined once as `Ref(.., self-place)`).
-fn place_is_ref_to_self(body: &Body, p: &Place) -> bool {
-    if !p.projection.is_empty() {
-        return false;
+/// Field path from the caller's self to the getter receiver. Only the leading dereference
+/// of `&self` can be elided; dereferencing a field would require a different expression AST.
+fn getter_receiver_path(receiver: &Place) -> Option<Vec<(usize, Ty)>> {
+    use rustc_public::mir::ProjectionElem;
+    if receiver.local != 1 {
+        return None;
     }
-    let mut found = false;
-    for block in &body.blocks {
-        for stmt in &block.statements {
-            if let StatementKind::Assign(dest, rv) = &stmt.kind
-                && dest.local == p.local
-            {
-                match rv {
-                    Rvalue::Ref(_, _, inner) if inner.local == 1 => {
-                        if found {
-                            return false;
-                        }
-                        found = true;
-                    }
-                    _ => return false,
-                }
-            }
+    let mut path = vec![];
+    for (index, elem) in receiver.projection.iter().enumerate() {
+        match elem {
+            ProjectionElem::Deref if index == 0 => {}
+            ProjectionElem::Field(field, ty) => path.push((*field, *ty)),
+            _ => return None,
         }
     }
-    found
+    Some(path)
 }
 
 /// Mine the invariant conjuncts of `ty` (a struct ADT) from its inherent `&self` methods.
