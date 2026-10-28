@@ -523,6 +523,9 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                     has_interior_mutabity,
                     is_definitely_const,
                 );
+                // Only constant allocations may be shared. Statics have their own storage
+                // and must never be reused for a constant with the same bytes.
+                self.alloc_map.insert(alloc.clone(), alloc_name.clone());
                 alloc_name
             }
             Some(name) => name.clone(),
@@ -614,8 +617,6 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             loc,
             init_fn,
         );
-
-        self.alloc_map.insert(alloc, name);
     }
 
     /// This is an internal helper function for `codegen_alloc_in_memory`.
