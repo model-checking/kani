@@ -1409,6 +1409,14 @@ impl GotocCtx<'_, '_> {
                     align: vtable.member("align", &self.symbol_table),
                 }
             }
+            TyKind::RigidTy(RigidTy::Foreign(_)) => {
+                // An `extern type` has no known size; rustc lays it out with size 0 and align 1,
+                // so only the fields before it count, as in rustc's own `dereferenceable` bounds.
+                SizeAlign {
+                    size: Type::size_t().zero(),
+                    align: Expr::int_constant(layout.align.abi.bytes(), usizet),
+                }
+            }
             TyKind::RigidTy(RigidTy::Slice(_)) | TyKind::RigidTy(RigidTy::Str) => {
                 let unit_t = match ty.kind() {
                     TyKind::RigidTy(RigidTy::Slice(et)) => et,
