@@ -4,13 +4,50 @@ impl<T, U> "impl_Tr_for_Wrapper" Tr<U> for Wrapper<T> {\
 }
 
 // Full name: test::{impl Tr<U> for Wrapper<T>}::m\
-pub fn impl_Tr_for_Wrapper::m<'_0, T, U>(self: &'_0 Wrapper<T>, u: U) -> U
+pub fn impl_Tr_for_Wrapper::m<'_0, T, U>(self: &'_0 Wrapper<T>, u: U) -> U\
+where\
+    TypeOutlives0: T: '_0,\
+{\
+    let _0: U; // return\
+    let self: &'_ Wrapper<T>; // arg #1\
+    let u: U; // arg #2\
+\
+    storage_live(_0)\
+    _0 = move u\
+    storage_dead(u)\
+    storage_dead(self)\
+    return\
+}
 
 // Full name: test::{Wrapper<T>}::get\
-pub fn get<'_0, T>(self: &'_0 Wrapper<T>) -> T
+pub fn get<'_0, T>(self: &'_0 Wrapper<T>) -> T\
+where\
+    TypeOutlives0: T: '_0,\
+{\
+    let _0: T; // return\
+    let self: &'_ Wrapper<T>; // arg #1\
+\
+    storage_live(_0)\
+    _0 = copy (*self).v\
+    storage_dead(self)\
+    return\
+}
 
 // Full name: test::{impl Tr<u8> for &'a u32}::m\
-pub fn {impl Tr<u8> for &'a u32}::m<'a, '_1>(self: &'_1 &'a u32, u: u8) -> u8
+pub fn {impl Tr<u8> for &'a u32}::m<'a, '_1>(self: &'_1 &'a u32, u: u8) -> u8\
+where\
+    RegionOutlives0: 'a: '_1,\
+{\
+    let _0: u8; // return\
+    let self: &'_ &'_ u32; // arg #1\
+    let u: u8; // arg #2\
+\
+    storage_live(_0)\
+    _0 = copy u\
+    storage_dead(u)\
+    storage_dead(self)\
+    return\
+}
 
 // Full name: test::{impl Tr<u8> for &'a u32}\
 impl<'a> Tr<u8> for &'a u32 {\

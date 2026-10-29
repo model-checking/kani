@@ -3,9 +3,13 @@ pub fn is_zero(i: i32) -> bool\
 {\
     let _0: bool; // return\
     let i: i32; // arg #1\
+    let _2: i32; // anonymous local\
 \
     storage_live(_0)\
-    _0 = copy i == const 0i32\
+    storage_live(_2)\
+    _2 = copy i\
+    _0 = move _2 == const 0i32\
+    storage_dead(_2)\
     storage_dead(i)\
     return\
 }
@@ -22,5 +26,6 @@ pub fn main()\
     _1 = is_zero(const 0i32)\
     ↳⚡ undefined_behavior\
     storage_dead(_1)\
+    _0 = ()\
     return\
 }

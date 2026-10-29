@@ -1,6 +1,8 @@
 // Full name: core::num::{u8}::wrapping_add\
 pub fn wrapping_add(_1: u8, _2: u8) -> u8\
-= <opaque>
+= <opaque>\
+\
+pub opaque type ()
 
 // Full name: test::wrap\
 pub fn wrap(a: u8, b: u8) -> u8\
@@ -8,10 +10,18 @@ pub fn wrap(a: u8, b: u8) -> u8\
     let _0: u8; // return\
     let a: u8; // arg #1\
     let b: u8; // arg #2\
+    let _3: u8; // anonymous local\
+    let _4: u8; // anonymous local\
 \
     storage_live(_0)\
-    _0 = wrapping_add(copy a, copy b)\
+    storage_live(_3)\
+    storage_live(_4)\
+    _3 = copy a\
+    _4 = copy b\
+    _0 = wrapping_add(move _3, move _4)\
     ↳⚡ undefined_behavior\
+    storage_dead(_4)\
+    storage_dead(_3)\
     storage_dead(b)\
     storage_dead(a)\
     return\
@@ -29,5 +39,6 @@ pub fn main()\
     _1 = wrap(const 200u8, const 100u8)\
     ↳⚡ undefined_behavior\
     storage_dead(_1)\
+    _0 = ()\
     return\
 }

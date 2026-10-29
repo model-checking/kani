@@ -1,0 +1,39 @@
+// Full name: dep::put\
+pub fn put<T>(s: Slot<T>, x: T) -> Slot<T>\
+{\
+    let _0: Slot<T>; // return\
+    let s: Slot<T>; // arg #1\
+    let x: T; // arg #2\
+    let count: u8; // local\
+    let _4: Option<T>; // anonymous local\
+    let _5: T; // anonymous local\
+    let _6: u8; // anonymous local\
+    let _7: u8; // anonymous local\
+    let _8: u8; // anonymous local\
+\
+    storage_live(_0)\
+    storage_live(count)\
+    storage_live(_4)\
+    storage_live(_5)\
+    storage_live(_6)\
+    storage_live(_7)\
+    storage_live(_8)\
+    count = copy s.count\
+    _5 = move x\
+    _4 = Option::Some { _0: move _5 }\
+    storage_dead(_5)\
+    _7 = copy count\
+    _8 = copy _7 panic.+ const 1u8\
+    _6 = move _8\
+    storage_dead(_7)\
+    _0 = Slot { value: move _4, count: move _6 }\
+    storage_dead(_6)\
+    storage_dead(_4)\
+    storage_dead(count)\
+    drop[drop_glue<'_, Slot<T>>] s\
+    ↳⚡ undefined_behavior\
+    storage_dead(_8)\
+    storage_dead(x)\
+    storage_dead(s)\
+    return\
+}

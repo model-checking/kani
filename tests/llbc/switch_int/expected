@@ -36,5 +36,6 @@ pub fn main()\
     _1 = classify(const 1u8)\
     ↳⚡ undefined_behavior\
     storage_dead(_1)\
+    _0 = ()\
     return\
 }
