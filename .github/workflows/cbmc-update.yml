@@ -67,6 +67,21 @@ jobs:
             echo "next_step=none" >> $GITHUB_ENV
           fi
 
+      # Record the new CBMC's source hash in `nix/versions.json` in the same pull request, so that
+      # `nix develop` keeps working on `main` (see `nix/README.md`). This must not block the CBMC
+      # upgrade: if it fails, `nix-versions-update.yml` records the hash at its next run.
+      - name: Install Nix
+        if: ${{ env.next_step == 'create_pr' }}
+        continue-on-error: true
+        uses: cachix/install-nix-action@v31
+
+      - name: Record the new CBMC for Nix
+        if: ${{ env.next_step == 'create_pr' }}
+        continue-on-error: true
+        run: |
+          nix run .#update-versions -- --checkout
+          git diff nix/versions.json
+
       - name: Create Pull Request
         if: ${{ env.next_step == 'create_pr' }}
         uses: peter-evans/create-pull-request@v8
