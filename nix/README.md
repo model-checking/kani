@@ -172,8 +172,9 @@ CBMC and Kissat versions, and of the CaDiCaL version each CBMC version builds wi
 generated; update it with:
 
 ```bash
-nix run .#update-versions              # the version in Cargo.toml
-nix run .#update-versions -- 0.67.0    # specific versions
+nix run .#update-versions                # the version in Cargo.toml
+nix run .#update-versions -- 0.67.0      # specific versions
+nix run .#update-versions -- --checkout  # no release, only kani-dependencies' CBMC and Kissat
 ```
 
 Each release is read from its git tag (`kani-<version>`), not from the working tree: after a
@@ -183,7 +184,8 @@ command also records the hashes of the CBMC and Kissat versions in the working t
 
 The `nix-versions-update.yml` workflow runs this automatically when a release is published, and
 weekly in case it missed one, and opens a pull request with the result. It can also be run by
-hand for a given version.
+hand for a given version. `cbmc-update.yml` also runs `update-versions -- --checkout` when it
+upgrades CBMC, so the new CBMC's source hash lands in the same pull request.
 
 Bundle hashes come from the SHA-256 digests GitHub publishes for release assets, so the bundles
 are not downloaded. A bundle without a digest is downloaded to compute its hash. Set

@@ -10,10 +10,13 @@
 
 usage() {
   cat <<EOF
-Usage: update-versions [<version>...]
+Usage: update-versions [--checkout | <version>...]
 
   (no arguments)  record the version in Cargo.toml
   <version>...    record the given versions, e.g. 0.67.0
+  --checkout      record no release, only the CBMC and Kissat versions in kani-dependencies
+
+The CBMC and Kissat versions in kani-dependencies are recorded in every case.
 EOF
 }
 
@@ -26,6 +29,7 @@ case "${1:-}" in
     usage
     exit 0
     ;;
+  --checkout) versions=() ;;
   "") versions=("$(yq -p toml -oy '.package.version' Cargo.toml)") ;;
   *) versions=("$@") ;;
 esac
