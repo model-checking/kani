@@ -23,6 +23,16 @@ fn main() {
     if let Some(git_dir) = run("git", &["rev-parse", "--git-dir"]).map(|s| s.trim().to_string()) {
         println!("cargo:rerun-if-changed={git_dir}/HEAD");
         println!("cargo:rerun-if-changed={git_dir}/index");
+
+        // Commit and dirty flag for `--export-json`. As in `git describe --dirty` above, only
+        // changes to tracked files count; untracked files do not.
+        if let Some(sha) = run("git", &["rev-parse", "HEAD"]).map(|s| s.trim().to_string())
+            && let Some(dirty) = run("git", &["status", "--porcelain", "--untracked-files=no"])
+                .map(|out| !out.trim().is_empty())
+        {
+            println!("cargo:rustc-env=KANI_GIT_SHA={sha}");
+            println!("cargo:rustc-env=KANI_GIT_DIRTY={dirty}");
+        }
     }
 
     // Capture the version of the exact rustc Kani is built with (and therefore
@@ -31,16 +41,28 @@ fn main() {
     // `rustc` at runtime, which would report whatever toolchain happens to be
     // active in the user's environment rather than the one Kani bundles.
     let rustc = var("RUSTC").unwrap_or_else(|_| "rustc".to_string());
-    let rustc_info = run(&rustc, &["--version", "--verbose"])
-        .map(|out| format_rustc_version(&out))
-        .unwrap_or_default();
+    let rustc_verbose = run(&rustc, &["--version", "--verbose"]);
+    let rustc_info = rustc_verbose.as_deref().map(format_rustc_version).unwrap_or_default();
     println!("cargo:rustc-env=KANI_RUSTC_VERSION={rustc_info}");
+    // The bare release, e.g. `1.98.0-nightly (14210df0e 2026-05-31)`, for `--export-json`.
+    let rustc_release = rustc_verbose.as_deref().map(format_rustc_release).unwrap_or_default();
+    println!("cargo:rustc-env=KANI_RUSTC_RELEASE={rustc_release}");
 }
 
 /// Run `cmd args...` and return its stdout on success, or `None` on any failure.
 fn run(cmd: &str, args: &[&str]) -> Option<String> {
     let output = Command::new(cmd).args(args).output().ok()?;
     if output.status.success() { String::from_utf8(output.stdout).ok() } else { None }
+}
+
+/// The first line of `rustc --version --verbose` without its `rustc ` prefix, e.g.
+/// `1.96.0-nightly (80381278a 2026-03-01)`.
+fn format_rustc_release(verbose_output: &str) -> String {
+    verbose_output
+        .lines()
+        .find_map(|line| line.strip_prefix("rustc "))
+        .map(|release| release.trim().to_string())
+        .unwrap_or_default()
 }
 
 /// Turn `rustc --version --verbose` output into a one-line summary such as

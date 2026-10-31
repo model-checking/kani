@@ -25,7 +25,7 @@ VALIDATOR="$PROJECT_ROOT/scripts/validate_json_export.py"
 # `z_passes` completes before `a_fails` aborts the run. The run exits non-zero by
 # design (a harness fails), so only this invocation is exempted from `set -e`.
 set +e
-kani -Z unstable-options test.rs --fail-fast --export-json "$OUTPUT_FILE"
+kani -Z export-json test.rs --fail-fast --export-json "$OUTPUT_FILE"
 CODE=$?
 set -e
 
@@ -58,18 +58,17 @@ def check(condition, message):
         failures.append(message)
 
 
-# The completed pass must survive the abort, in the counters and in the results.
-summary = data['verification_results']['summary']
-for field, want in [('executed', 2), ('successful', 1), ('failed', 1)]:
+# The completed pass must survive the abort, in the counters and in the harnesses.
+summary = data['summary']
+for field, want in [('total', 2), ('successful', 1), ('failed', 1)]:
     check(summary[field] == want,
           f"summary.{field} should be {want}, got {summary[field]}")
 
-results = {r.get('harness_id'): r.get('status')
-           for r in data['verification_results']['results']}
-check(results.get('z_passes') == 'Success',
-      f"z_passes should be Success in results, got {results.get('z_passes')}")
-check(results.get('a_fails') == 'Failure',
-      f"a_fails should be Failure in results, got {results.get('a_fails')}")
+verdicts = {h.get('name'): h.get('outcome', {}).get('verdict') for h in data['harnesses']}
+check(verdicts.get('z_passes') == 'SUCCESS',
+      f"z_passes should be SUCCESS, got {verdicts.get('z_passes')}")
+check(verdicts.get('a_fails') == 'FAILURE',
+      f"a_fails should be FAILURE, got {verdicts.get('a_fails')}")
 
 if failures:
     for failure in failures:
