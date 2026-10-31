@@ -27,4 +27,5 @@ fn for_loop_symbolic_range() {
     for _i in start..end {
         count += 1;
     }
+    assert!(count == if end > start { end - start } else { 0 });
 }
