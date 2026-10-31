@@ -1,0 +1,15 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[package]
+name = "stubbing-inlined-function"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+# Enable the MIR inliner for the crate under verification.
+[profile.dev]
+opt-level = 2
+
+[package.metadata.kani.unstable]
+stubbing = true
