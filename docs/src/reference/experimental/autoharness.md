@@ -91,7 +91,7 @@ Complete - 0 successfully verified functions, 1 failures, 1 total.
 
 Autoharness considers functions defined in the crate being verified, including free functions, inherent methods, trait-implementation methods, and trait methods with default implementations. Functions from dependencies are not candidates. For each eligible function, Kani selects one automatic harness; functions that fail a selection check are skipped. Kani reports selected functions and visible skip reasons before verification, unless `--quiet` is specified.
 
-Selection first attempts to instantiate generic functions, then applies the include and exclude patterns, and finally checks whether the function's arguments can be generated. The details of argument generation are described in [Generating harnesses](#generating-harnesses).
+Each candidate function goes through a fixed sequence of selection checks, and the first check it fails determines its skip reason. Kani-internal and compile-time-only functions are rejected before generic instantiation. Generic functions are then instantiated (see [Generic Functions](#generic-functions)), and the instantiated function is checked, in order, for a body, excluded if it is a proof harness or a Kani trait implementation, matched against the include and exclude patterns, checked for an unsupported calling convention, and finally checked for whether its arguments can be generated. The details of argument generation are described in [Generating harnesses](#generating-harnesses).
 
 ### Include and exclude patterns
 
@@ -128,9 +128,9 @@ To match only `foo_` functions inside modules, use a more specific pattern, e.g.
 
 Patterns match the **instantiated name** of a generic function. For example, `my_crate::foo::<i32>` does not match `^my_crate::foo$`, although an unanchored `foo` pattern matches it. Regular expressions are unanchored unless explicitly anchored; invalid expressions and patterns containing whitespace are rejected. Kani also warns if an include-pattern string contains an exclude-pattern string.
 
-Generic instantiation happens before include/exclude filtering. Consequently, a generic function for which Kani cannot find an instantiation is reported with the `Generic Function` skip reason even if the function would not match the supplied filters.
+Generic instantiation happens before include/exclude filtering. Consequently, a generic function for which Kani cannot find an instantiation is reported with the `Generic Function` skip reason even if the function would not match the supplied filters. The same applies to compile-time-only functions, which are rejected even before instantiation.
 
-### Listing functions (--list)
+### Listing functions
 
 Autoharness also accepts `--list`, which compiles the project and runs the [list subcommand](../list.md), including automatic harnesses, **without running verification**. Unless `--quiet` is passed, Kani first prints the selected-functions and skipped-functions tables.
 
@@ -156,7 +156,7 @@ cargo kani autoharness -Z autoharness --list --format json
 
 ### Skip reasons
 
-Autoharness records one skip reason per skipped function: the first failed check in its selection process. The skipped-functions table has `Crate`, `Skipped Function`, and `Reason for Skipping` columns. Reasons visible to users include:
+Autoharness records one skip reason per skipped function: the first failed check in its selection process. The skipped-functions table has `Crate`, `Skipped Function`, and `Reason for Skipping` columns. Reasons visible to users include, in the order the checks run:
 
 | Reason shown | Meaning |
 | --- | --- |
@@ -168,7 +168,7 @@ Autoharness records one skip reason per skipped function: the first failed check
 | `Missing Arbitrary implementation for argument(s) x: T, y: U` | At least one argument cannot be generated using a supported argument model. The argument names and types depend on the function. |
 | `Requires --bounded-arguments for argument(s) x: T` | At least one argument requires opting into bounded generation. The argument names and types depend on the function. |
 
-Missing argument names are displayed as `_`. If a function has both unsupported arguments and arguments requiring bounded generation, `Missing Arbitrary implementation` is the skip reason reported. See [Generating harnesses](#generating-harnesses) for the supported argument models and [Bounded Arguments](#bounded-arguments-opt-in---bounded-arguments) for the opt-in behavior.
+Missing argument names are displayed as `_`. If a function has both unsupported arguments and arguments requiring bounded generation, `Missing Arbitrary implementation` is the skip reason reported. See [Generating harnesses](#generating-harnesses) for the supported argument models and [Bounded Arguments](#bounded-argument-generation) for the opt-in behavior.
 
 Kani's internal implementation functions and functions already used as proof harnesses may be excluded internally with the `Kani implementation` reason, but these entries are **not displayed** in the skipped-functions table. The selected-functions table contains `Crate` and `Selected Function` columns. Where a generic instantiation is chosen, the tables display the instantiated function name (for example, `foo::<i32>`); a generic function that cannot be instantiated is listed under its uninstantiated name.
 
@@ -232,7 +232,7 @@ derivation is available only for autoharness and does not require adding a deriv
 to the type. The argument models below do not make unsupported field types derivable.
 
 The following sections describe additional argument models. Types that require a bounded
-generator are covered under [Bounded Arguments](#bounded-arguments-opt-in---bounded-arguments).
+generator are covered under [Bounded Arguments](#bounded-argument-generation).
 
 ##### Raw Pointers
 For a function with raw pointer arguments (`*const T`/`*mut T`, including nested raw pointers),
@@ -314,7 +314,7 @@ implementation. See [Other limitations](#other-limitations) for what this means 
 ##### Formatting Trait Implementations
 For the `fmt` methods of `Debug`, `Display`, `Binary`, `Octal`, `LowerHex`, `UpperHex`, `LowerExp`,
 `UpperExp` and `Pointer` implementations, Kani uses a special harness rather than the
-general [bounded `Formatter` model](#bounded-arguments-opt-in---bounded-arguments). It formats a
+general [bounded `Formatter` model](#bounded-argument-generation). It formats a
 nondeterministic value of the implementing type into a sink that discards the output: the
 `Formatter` is constructed by the core formatting machinery (so it is always valid), and panics
 or undefined behavior inside the `fmt` implementation are detected as usual.
@@ -338,7 +338,7 @@ Current limitations:
 
 #### Opt-in under-approximations
 
-##### Bounded Arguments (opt-in: `--bounded-arguments`)
+##### Bounded argument generation
 Some argument types require a bounded generator, including strings and slices whose
 elements are not primitive integers or floats. Because a bug requiring a larger input
 would be missed, these generators are **disabled by default** and require
@@ -389,7 +389,7 @@ These argument models do not synthesize nested slice references (e.g. `&&[u8]`) 
 slice fields inside user-defined types; a source-defined `Arbitrary` implementation can
 supply such fields.
 
-##### Constructor-based generation (--constructor-args)
+##### Constructor-based generation
 
 By default, when a type does not implement `Arbitrary`, Kani synthesizes values field by field.
 For types whose private fields carry a representation invariant (e.g. a date type storing a
@@ -593,7 +593,7 @@ To change either value, pass the option explicitly. When any automatic harness f
 prints a reminder of these two defaults after the summary table, because the failure may come
 from a timeout or an insufficient unwinding bound rather than from a bug in the function. In
 that case, try larger values or, where possible, add a [loop contract](./loop-contracts.md).
-The default bounds for [bounded arguments](#bounded-arguments-opt-in---bounded-arguments) are
+The default bounds for [bounded arguments](#bounded-argument-generation) are
 chosen to stay below the unwinding bound, and Kani warns if a configured bound reaches it.
 
 Verification itself runs in parallel by default; see
@@ -624,7 +624,7 @@ may carry one or both of these markers:
   to them.
 - **"(ctor)"**: some values were generated through one of a type's own constructors, or
   constrained by mined invariants, under
-  [`--constructor-args`](#constructor-based-generation-constructor-args). A note after the
+  [`--constructor-args`](#constructor-based-generation). A note after the
   table repeats that the result only covers values reachable through that constructor.
   Harnesses filtered only by the mined invariants of a type with its own `Arbitrary`
   implementation are currently not marked; see
@@ -671,7 +671,7 @@ Modeling caller-controlled aliasing between arguments is tracked in
 ### Bounded arguments
 
 Harnesses marked "(bounded)" use bounded nondeterministic values for some arguments, which
-`--bounded-arguments` enables (see [Bounded Arguments](#bounded-arguments-opt-in---bounded-arguments)).
+`--bounded-arguments` enables (see [Bounded Arguments](#bounded-argument-generation)).
 Their results only hold for inputs up to those bounds: a bug that needs a longer slice or string,
 or a larger `BoundedArbitrary` value, is not found. The bounds a run used are printed in a note
 after the summary table. Arguments that are generated without bounds by default, such as slices
@@ -680,7 +680,7 @@ and `Vec`s of primitive integers or floats, are not affected.
 ### Vacuous constructors
 
 This applies to harnesses marked "(ctor)", i.e. runs with `--constructor-args` (see
-[Constructor-based generation](#constructor-based-generation-constructor-args)). If the chosen
+[Constructor-based generation](#constructor-based-generation)). If the chosen
 constructor is *unsatisfiable* for the generated type — an assert-guarded constructor every
 argument of which trips an assertion, or a checked constructor that always returns
 `None`/`Err` — the generated body assumes `false` on all paths and the harness becomes
