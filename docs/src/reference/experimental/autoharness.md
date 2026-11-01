@@ -87,6 +87,67 @@ Verification failed for - estimate_size
 Complete - 0 successfully verified functions, 1 failures, 1 total.
 ```
 
+## How it works
+
+For each selected function, autoharness builds the harness you would otherwise write by
+hand: generate nondeterministic arguments, call the function, and check the result. It
+works in three phases:
+
+```text
+                         ┌────────────────────────────────────┐
+                         │      AUTOHARNESS: the core idea    │
+                         │  "for each fn: x = any(); f(x)"    │
+                         └─────────────────┬──────────────────┘
+                                           │
+        ┌──────────────────────────────────┼──────────────────────────────────┐
+        ▼                                  ▼                                  ▼
+┌────────────────┐            ┌─────────────────────────┐          ┌────────────────────┐
+│ 1. SELECT      │            │ 2. GENERATE             │          │ 3. VERIFY & REPORT │
+│ which fns?     │            │ what goes in each       │          │ run it, read it    │
+│                │            │ harness?                │          │                    │
+├────────────────┤            ├─────────────────────────┤          ├────────────────────┤
+│ • include /    │            │ 2a. ARGUMENTS           │          │ • parallel / -j    │
+│   exclude regex│            │   Unbounded (default):  │          │ • terse vs regular │
+│ • --list       │            │   ├ Arbitrary / derive  │          │ • 60s timeout,     │
+│ • skip reasons │            │   ├ raw pointers        │          │   unwind 20        │
+│ • generics:    │            │   ├ Box / Rc / Arc      │          │ • summary table    │
+│   pick one     │            │   ├ prim. slices / Vec  │          │ • (bounded) /      │
+│   instantiation│            │   ├ Fn-bound closures   │          │   (ctor) markers   │
+│   (Fn bounds,  │            │   └ fmt-trait impls     │          │ • bounds note      │
+│   SIMD, const) │            │   Opt-in (under-approx):│          └────────────────────┘
+└────────────────┘            │   ├ --bounded-arguments │
+                              │   └ --constructor-args  │
+                              │ 2b. ASSUMPTIONS         │
+                              │   ├ contracts (requires)│
+                              │   ├ Invariant::is_safe  │
+                              │   ├ layout niches       │
+                              │   └ mined inv. (ctor)   │
+                              │ 2c. CHECKS              │
+                              │   ├ UB / panics (always)│
+                              │   ├ contracts (ensures) │
+                              │   └ --check-invariants  │
+                              └─────────────────────────┘
+                                           │
+        ┌──────────────────────────────────┴──────────────────────────────────┐
+        ▼                                                                     ▼
+┌───────────────────────────────────────┐   ┌──────────────────────────────────────────┐
+│ SOUNDNESS CAVEATS (what "Success"     │   │ ARCHITECTURE (for contributors)          │
+│ does NOT mean)                        │   │ driver → partition → harness pass →      │
+│ • one monomorphization only           │   │ codegen → CBMC → summary                 │
+│ • no aliasing between args (#4750)    │   │ (see Architecture below)                 │
+│ • bounded args only up to bound       │   └──────────────────────────────────────────┘
+│ • ctor may be vacuous (#4757)         │
+│ • mined-invariant heuristic (#4763)   │
+└───────────────────────────────────────┘
+```
+
+1. [Selecting functions](#selecting-functions): which functions get a harness, and why others are skipped.
+2. [Generating harnesses](#generating-harnesses): the arguments, assumptions and checks in each harness.
+3. [Verifying and reading results](#verifying-and-reading-results): running the harnesses and reading the summary.
+
+[Soundness caveats](#soundness-caveats) explains what a "Success" result does not mean, and
+[Architecture (for contributors)](#architecture-for-contributors) shows how the pieces are implemented.
+
 ## Selecting functions
 
 Autoharness considers functions defined in the crate being verified, including free functions, inherent methods, trait-implementation methods, and trait methods with default implementations. Functions from dependencies are not candidates. For each eligible function, Kani selects one automatic harness; functions that fail a selection check are skipped. Kani reports selected functions and visible skip reasons before verification, unless `--quiet` is specified.
