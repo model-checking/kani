@@ -543,15 +543,17 @@ impl MirVisitor for CheckUninitVisitor {
                             });
                         }
                     } else if let (
-                        TyKind::RigidTy(RigidTy::RawPtr(from_ty, _)),
+                        TyKind::RigidTy(RigidTy::RawPtr(..)),
                         TyKind::RigidTy(RigidTy::Ref(_, to_ty, _)),
                     ) = (operand_ty.kind(), ty.kind())
                     {
-                        // Assert that we can only cast this way if types are the same.
-                        assert!(from_ty == to_ty);
                         // When transmuting from a raw pointer to a reference, need to check that
-                        // the value pointed by the raw pointer is initialized.
-                        self.push_target(MemoryInitOp::Check { operand: operand.clone() });
+                        // the value the reference points to is initialized. That is a `to_ty`,
+                        // whatever the pointer pointed to before.
+                        self.push_target(MemoryInitOp::CheckAs {
+                            operand: operand.clone(),
+                            pointee_ty: to_ty,
+                        });
                     }
                 }
                 _ => {}
