@@ -91,10 +91,9 @@ Complete - 0 successfully verified functions, 1 failures, 1 total.
 
 For each selected function, autoharness builds the harness you would otherwise write by
 hand: generate nondeterministic arguments, call the function, and check the result. It
-works in three phases:
+works in three phases; click a box to jump to its section:
 
-```text
-                         ┌────────────────────────────────────┐
+<pre><code class="language-text">                         ┌────────────────────────────────────┐
                          │      AUTOHARNESS: the core idea    │
                          │  "for each fn: x = any(); f(x)"    │
                          └─────────────────┬──────────────────┘
@@ -102,7 +101,7 @@ works in three phases:
         ┌──────────────────────────────────┼──────────────────────────────────┐
         ▼                                  ▼                                  ▼
 ┌────────────────┐            ┌─────────────────────────┐          ┌────────────────────┐
-│ 1. SELECT      │            │ 2. GENERATE             │          │ 3. VERIFY & REPORT │
+│ <a href="#selecting-functions">1. SELECT</a>      │            │ <a href="#generating-harnesses">2. GENERATE</a>             │          │ <a href="#verifying-and-reading-results">3. VERIFY &amp; REPORT</a> │
 │ which fns?     │            │ what goes in each       │          │ run it, read it    │
 │                │            │ harness?                │          │                    │
 ├────────────────┤            ├─────────────────────────┤          ├────────────────────┤
@@ -131,22 +130,15 @@ works in three phases:
         ┌──────────────────────────────────┴──────────────────────────────────┐
         ▼                                                                     ▼
 ┌───────────────────────────────────────┐   ┌──────────────────────────────────────────┐
-│ SOUNDNESS CAVEATS (what "Success"     │   │ ARCHITECTURE (for contributors)          │
+│ <a href="#soundness-caveats">SOUNDNESS CAVEATS</a> (what "Success"     │   │ <a href="#architecture-for-contributors">ARCHITECTURE (for contributors)</a>          │
 │ does NOT mean)                        │   │ driver → partition → harness pass →      │
 │ • one monomorphization only           │   │ codegen → CBMC → summary                 │
-│ • no aliasing between args (#4750)    │   │ (see Architecture below)                 │
+│ • no aliasing between args (#4750)    │   │ (see the architecture diagram below)     │
 │ • bounded args only up to bound       │   └──────────────────────────────────────────┘
 │ • ctor may be vacuous (#4757)         │
 │ • mined-invariant heuristic (#4763)   │
 └───────────────────────────────────────┘
-```
-
-1. [Selecting functions](#selecting-functions): which functions get a harness, and why others are skipped.
-2. [Generating harnesses](#generating-harnesses): the arguments, assumptions and checks in each harness.
-3. [Verifying and reading results](#verifying-and-reading-results): running the harnesses and reading the summary.
-
-[Soundness caveats](#soundness-caveats) explains what a "Success" result does not mean, and
-[Architecture (for contributors)](#architecture-for-contributors) shows how the pieces are implemented.
+</code></pre>
 
 ## Selecting functions
 
