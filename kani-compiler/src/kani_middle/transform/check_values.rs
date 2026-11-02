@@ -294,9 +294,10 @@ enum SourceOp {
     /// Note that the same offset may have multiple ranges that may require being joined.
     BytesValidity { target_ty: Ty, rvalue: Rvalue, ranges: Vec<ValidValueReq> },
 
-    /// Check the value at an address without first producing a typed value from its bytes.
-    /// This includes values read, borrowed or dropped through raw pointers, and intermediate
-    /// pointer values needed to evaluate a place. The pointee may be just a projected field.
+    /// Similar to BytesValidity, but it stores any dereference that may be unsafe.
+    ///
+    /// This can happen for:
+    ///  - Raw pointer dereference
     DerefValidity { pointee_ty: Ty, rvalue: Rvalue, ranges: Vec<ValidValueReq> },
 
     /// Represents a range check Kani currently does not support.
@@ -325,7 +326,7 @@ struct UnsafeInstruction {
     operations: Vec<SourceOp>,
 }
 
-/// The operation consuming a place, independent of its mutability.
+/// How a place is used.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum PlaceAccessKind {
     /// Keep the existing checks for operations not yet classified here.
@@ -338,8 +339,17 @@ enum PlaceAccessKind {
     Store,
 }
 
-/// Extract operations that may generate invalid values, including assignments, transmutes,
-/// aggregate construction, and accesses through raw pointers.
+/// Extract any source that may potentially trigger UB due to the generation of an invalid value.
+///
+/// Generating an invalid value requires an unsafe operation, however, in MIR, it
+/// may just be represented as a regular assignment.
+///
+/// Thus, we have to instrument every assignment to an object that has niche and that the source
+/// is an object of a different source, e.g.:
+///   - Aggregate assignment
+///   - Transmute
+///   - MemCopy
+///   - Cast
 struct CheckValueVisitor<'a, 'b> {
     access: PlaceAccessKind,
     tcx: TyCtxt<'b>,
@@ -395,19 +405,14 @@ impl<'a, 'b> CheckValueVisitor<'a, 'b> {
     }
 
     /// Narrow checks only for an optional leading dereference and ordinary struct/tuple fields.
-    /// rustc's required `Derefer` pass separates other dereferences into temporary loads; its
-    /// runtime MIR validator rejects dereferences after the first projection (except in debug
-    /// info). Kani transforms bodies too, so explicitly fall back to the old conservative checks
-    /// for non-leading dereferences rather than assuming every input still has this shape.
-    /// Downcasts, unions and indexing also retain the old conservative checks.
+    /// Other projections retain the existing conservative checks.
     fn supports_precise_access(&self, place: &Place) -> bool {
         let mut ty = self.locals[place.local].ty;
         for (idx, elem) in place.projection.iter().enumerate() {
             match elem {
                 ProjectionElem::Deref if idx == 0 => {}
                 ProjectionElem::Field(_, field_ty) => {
-                    // The parent must support ordinary field projection. Some pattern
-                    // kinds have no stable representation, so inspect the internal kind first.
+                    // Avoid stable kind conversion for pattern parents.
                     if is_pattern_type(self.tcx, ty) {
                         return false;
                     }
@@ -419,8 +424,7 @@ impl<'a, 'b> CheckValueVisitor<'a, 'b> {
                     if !ordinary_field {
                         return false;
                     }
-                    // A pattern field is not a union. Avoid stable kind conversion without
-                    // excluding final pattern fields from precise address/read/borrow checks.
+                    // Pattern fields are not unions; avoid converting their stable kind.
                     if !is_pattern_type(self.tcx, *field_ty) && field_ty.kind().is_union() {
                         return false;
                     }
@@ -493,8 +497,8 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                     });
                 }
                 StatementKind::Assign(place, rvalue) => {
-                    // MIR Assign does not drop the old value. Drop terminators are visited
-                    // separately; rvalues and operands override the destination's access kind.
+                    // First check rvalue.
+                    // The destination is a store; rvalues and operands override this context.
                     self.with_access(PlaceAccessKind::Store, |visitor| {
                         visitor.super_statement(stmt, location);
                     });
@@ -536,6 +540,8 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
             // Leave it as an exhaustive match to be notified when a new kind is added.
             match &term.kind {
                 TerminatorKind::Call { func, args, .. } => {
+                    // Note: For transmute, both Src and Dst must be valid type.
+                    // In this case, we need to save the Dst, and invoke super_terminator.
                     // The return destination is a store; argument operands are reads.
                     self.with_access(PlaceAccessKind::Store, |visitor| {
                         visitor.super_terminator(term, location);
@@ -640,8 +646,7 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                     }
                 }
                 ProjectionElem::Field(idx, target_ty) => {
-                    // Complex projections can still reach pattern fields here.
-                    // A pattern is not a union; avoid converting its stable kind here too.
+                    // Pattern fields are not unions; avoid converting their stable kind.
                     if !is_pattern_type(self.tcx, *target_ty)
                         && target_ty.kind().is_union()
                         && (!ptx.is_mutating() || place.projection.len() > idx + 1)
@@ -838,8 +843,7 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
             Rvalue::Ref(_, BorrowKind::Mut { .. }, _) => PlaceAccessKind::MutableBorrow,
             Rvalue::Ref(_, BorrowKind::Shared, _) => PlaceAccessKind::SharedBorrow,
             Rvalue::CopyForDeref(_) => PlaceAccessKind::Read,
-            // In particular, Len, Discriminant and Reborrow are not ordinary value reads.
-            // Do not let them inherit Store from the containing assignment.
+            // Unclassified rvalues must not inherit Store from the assignment.
             _ => PlaceAccessKind::Conservative,
         };
         self.with_access(access, |visitor| visitor.super_rvalue(rvalue, location));
