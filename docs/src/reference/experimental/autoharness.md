@@ -63,7 +63,8 @@ type parameters. These models are unavailable with `--std`. Affected arguments a
 with bounded values where `core` provides a bounded generator and `--bounded-arguments` is
 passed; otherwise the function is skipped.
 
-Concrete playback (`-Z concrete-playback`) is not supported by the `autoharness` subcommand.
+Concrete playback (`-Z concrete-playback`) is not supported by the `autoharness` subcommand
+([#5109](https://github.com/model-checking/kani/issues/5109)).
 
 ## Example
 Using the `estimate_size` example from [First Steps](../../tutorial-first-steps.md) again:
