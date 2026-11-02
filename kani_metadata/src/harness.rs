@@ -53,6 +53,14 @@ pub struct HarnessMetadata {
     /// verification result only covers constructor-reachable values.
     #[serde(default)]
     pub is_ctor_based: bool,
+    /// Whether some nondeterministic value of the (automatically generated) harness contains an
+    /// `Rc` or `Arc`, whose reference-count state Kani models with only finitely many
+    /// representatives. Its verification result therefore does not cover every reference
+    /// count a caller could produce, even though `Rc`/`Arc` arguments need no
+    /// `--bounded-arguments` and do not set `is_bounded`
+    /// (<https://github.com/model-checking/kani/issues/4752>).
+    #[serde(default)]
+    pub is_refcount_bounded: bool,
 }
 
 /// The attributes added by the user to control how a harness is executed.

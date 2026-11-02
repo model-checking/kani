@@ -60,6 +60,7 @@
       "is_automatically_generated": false,
       "has_loop_contracts": false,
       "is_bounded": false,
+      "is_refcount_bounded": false,
       "attributes": {
         "kind": {
           "ProofForContract": {
