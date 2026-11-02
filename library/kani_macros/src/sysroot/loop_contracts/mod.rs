@@ -914,10 +914,21 @@ pub fn loop_modifies(attr: TokenStream, item: TokenStream) -> TokenStream {
     let loop_assign_stmt: Stmt = parse_quote! {
         let #loop_assign_ident = (#(#assigns),*);
     };
+    // Pass a reference to the binding to a function so rustc's MIR optimizations keep its
+    // assignment, which codegen reads for the assignable targets. Without a reader it is removed
+    // at `-Zmir-opt-level=2`+ and the modifies clause goes unenforced.
+    // The marker excludes this function from autoharness.
+    let loop_assign_keep_stmts: Vec<Stmt> = parse_quote! {
+        #[inline(never)]
+        #[kanitool::fn_marker = "kani_keep_loop_modifies_binding"]
+        const fn kani_keep_loop_modifies_binding<T>(_binding: &T) {}
+        kani_keep_loop_modifies_binding(&#loop_assign_ident);
+    };
     let loop_stmt: Stmt = syn::parse(item.clone()).unwrap();
     let ret: TokenStream = quote!(
     {
         #loop_assign_stmt
+        #(#loop_assign_keep_stmts)*
         #loop_stmt
     })
     .into();
