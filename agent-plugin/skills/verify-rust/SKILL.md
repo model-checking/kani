@@ -30,7 +30,8 @@ relevant file when a step below points to it.
 3. **No result without evidence.** Every claim in the report cites a Kani run recorded with
    `scripts/evidence.py record`, and states everything the result relies on.
 4. **Prefer the Kani MCP tools** (`kani_get_version`, `kani_list_harnesses`,
-   `kani_verify_harness`, `kani_get_counterexample`) when they cover the operation; otherwise run
+   `kani_verify_harness`, `kani_autoharness`, `kani_get_counterexample`) when they cover the
+   operation; otherwise run
    the Kani CLI (`cargo kani ...`, or `kani file.rs`). A missing MCP tool never means Kani lacks
    the feature. If the MCP server is unavailable, use the CLI and the scripts for everything.
 5. **Keep context small.** Run Kani with `-Z export-json --export-json <file>` and read results
@@ -74,7 +75,8 @@ default; `filter` for names) or `cargo kani list --format json`, and describe th
 Map the call graph of the code under verification with rust-analyzer's call hierarchy
 (`references/rust-analyzer.md`), then choose a strategy with `references/strategy.md`: one
 harness for a small target; contracts proved bottom-up for larger ones. Use AutoHarness
-(`references/autoharness.md`, CLI only) to sweep many functions for panics and UB.
+(`kani_autoharness`; `references/autoharness.md`) to sweep many functions for panics and UB:
+list first, because it also runs every manual harness, with a different default unwind bound.
 
 ### 4. Write or update the harness
 
@@ -148,6 +150,10 @@ Run all of these and fix every `error` before reporting:
   since the starting commit. Each `warning` needs the user's explicit approval; each `error`
   must be reverted unless the user approves it. When a precondition changed, run
   `scripts/check-specs.py <src> --compare-base <baseline>` to classify it with Kani.
+- `scripts/summarize-coverage.py --log <kani.log>` after a run with
+  `-Z source-coverage --coverage`: which regions of the code no harness exercises. Classify each
+  uncovered region (dead code, a gap in the proof, a dead branch in the harness) and report it
+  (`references/coverage.md`). Do this for existing harnesses too: it finds gaps in them.
 - `scripts/check-assumptions.py <src> --harness <name>`: a quick text scan for suspicious
   assumptions; treat its findings as hints to check, not verdicts.
 
@@ -165,7 +171,8 @@ bundle it prints. For an MCP run, use the `export_path` you passed and the `run.
   overflow, panics, UB);
 - everything the result relies on: assumptions and input bounds, unwind bounds, `--bounded-arguments`
   sizes, stubs and `stub_verified` contracts, and any `weakened_checks`;
-- what is not covered (e.g. "for vectors up to length 4", "with `foo` stubbed");
+- what is not covered (e.g. "for vectors up to length 4", "with `foo` stubbed"), including the
+  regions coverage shows no harness exercises;
 - every change since the baseline that the user approved.
 
 Never describe a bounded or stubbed proof as unconditional.

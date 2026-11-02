@@ -55,13 +55,16 @@ this repository:
 | `kani_get_version` | `cargo kani --version`, checked against `compatibility.json` |
 | `kani_list_harnesses` | `cargo kani list --format json` |
 | `kani_verify_harness` | `cargo kani -Z export-json ...`, summarized |
+| `kani_autoharness` | `cargo kani autoharness ...`: sweep, or `list_only` to see what would be generated |
 | `kani_get_counterexample` | `cargo kani -Z concrete-playback --concrete-playback=print ...` |
 
 Each tool takes a `path` (a Cargo project directory or a single `.rs` file) and `extra_args`
 (passed to Kani unchanged). The verification tools also take `harness`, `exact`, `timeout_s`
 (default 1800; Kani and its children are killed on timeout), `harness_timeout_s`, and
 `export_path` / `log_path` to keep the results and console log; `kani_verify_harness` takes
-`jobs` for parallel verification. Long runs send MCP progress notifications when the client
+`jobs` for parallel verification. `kani_autoharness` takes `include_patterns`, `exclude_patterns`,
+`bounded_arguments`, and `list_only` (which functions would get a harness, and why the others are
+skipped). Long runs send MCP progress notifications when the client
 asks for them. `kani_list_harnesses` returns a summary unless `detail` is `full`.
 `kani_get_version` also verifies a trivial harness, to check that CBMC and goto-cc work. The
 server communicates only over stdio, never opens a network connection, and runs the Kani
@@ -80,6 +83,7 @@ All scripts print JSON and accept `--help`.
 | `check-proof-diff.py` | Changes since a baseline that weaken the agreed property, and any change to the code under verification |
 | `check-witness.py` | Confirms a defect (the concrete playback witness fails) or a fix (fails before, passes after) |
 | `evidence.py` | Records the run behind a reported result, and re-checks it later |
+| `summarize-coverage.py` | Merges source coverage across harnesses: regions no harness exercises |
 | `check-assumptions.py` | Quick text scan for contradictory, pinned, or over-strong `kani::assume` / `requires` |
 | `inspect-harness.py` | Harness structure: inputs, assertions, attributes, missing unwind bounds |
 

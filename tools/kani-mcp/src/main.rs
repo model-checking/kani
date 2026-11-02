@@ -10,6 +10,7 @@
 //! The surface is deliberately small. Anything not exposed here remains available through the
 //! Kani CLI, which the `verify-rust` skill uses as a fallback.
 
+mod autoharness;
 mod partial;
 mod process;
 mod summary;
@@ -143,6 +144,30 @@ fn tool_definitions() -> Value {
             }
         },
         {
+            "name": "kani_autoharness",
+            "description": "Run Kani's AutoHarness (`kani autoharness`): generate a harness for each eligible function and check it for panics, overflow, and UB on all inputs. With `list_only`, only report which functions get a harness and why the others are skipped. AutoHarness also runs every manual harness in the crate, first, whatever the patterns say, and with a default unwind bound of 20 (kani#5103): results are split into automatic and manual harnesses.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "path": path,
+                    "list_only": { "type": "boolean", "description": "Only list the selected and skipped functions (`--list`); nothing is verified." },
+                    "filter": { "type": "string", "description": "With `list_only`: only list function names containing this string." },
+                    "include_patterns": { "type": "array", "items": { "type": "string" }, "description": "Only generate harnesses for functions matching these regular expressions (`--include-pattern`). Patterns cannot contain spaces: use `.`, e.g. `Mul<Foo>.for.Bar`." },
+                    "exclude_patterns": { "type": "array", "items": { "type": "string" }, "description": "Do not generate harnesses for functions matching these regular expressions (`--exclude-pattern`); takes precedence over include." },
+                    "bounded_arguments": { "type": "boolean", "description": "Also cover functions taking slices, `&str`, `Vec`, with bounded inputs (`--bounded-arguments`); results hold only up to the bounds." },
+                    "slice_bound": { "type": "integer", "description": "Maximum slice length under `bounded_arguments` (`--slice-bound`)." },
+                    "string_bound": { "type": "integer", "description": "Maximum `&str` length in bytes under `bounded_arguments` (`--string-bound`)." },
+                    "failures_only": { "type": "boolean", "description": "Only list harnesses that did not succeed (default true); counts always cover all." },
+                    "timeout_s": timeout,
+                    "harness_timeout_s": harness_timeout,
+                    "export_path": export_path,
+                    "log_path": log_path,
+                    "extra_args": extra_args
+                },
+                "required": ["path"]
+            }
+        },
+        {
             "name": "kani_get_counterexample",
             "description": "Verify one harness with concrete playback and return the generated unit tests: `failure_witnesses` replay a failed check with concrete inputs, `cover_witnesses` show inputs that satisfy a `kani::cover!`. Playback runs the real code, not stubs.",
             "inputSchema": {
@@ -168,6 +193,7 @@ fn call_tool(params: &Value) -> Value {
     let args = params.get("arguments").cloned().unwrap_or(json!({}));
     let token = params.get("_meta").and_then(|m| m.get("progressToken"));
     let result = match name {
+        "kani_autoharness" => autoharness_tool(&args, token),
         "kani_get_counterexample" => get_counterexample(&args, token),
         "kani_get_version" => get_version(token),
         "kani_list_harnesses" => list_harnesses(&args, token),
@@ -608,6 +634,7 @@ fn run_options(args: &Value) -> Result<Vec<String>> {
 /// the console output is also written to `log_path` if given.
 fn run_with_export(
     target: &Target,
+    subcommand: Option<&str>,
     args: &[String],
     tool_args: &Value,
     token: Option<&Value>,
@@ -631,7 +658,7 @@ fn run_with_export(
         export.display().to_string(),
     ];
     all_args.extend_from_slice(args);
-    let cmd = target.command(None, &all_args);
+    let cmd = target.command(subcommand, &all_args);
     let mut run_info =
         json!({ "command": command_line(&cmd), "cwd": target.dir.display().to_string() });
     let out = process::run(cmd, timeout_arg(tool_args, DEFAULT_TIMEOUT_S), token)?;
@@ -667,35 +694,128 @@ fn no_results_error(out: &Output) -> anyhow::Error {
     )
 }
 
+/// Kani wrote no export. If the run was stopped by the timeout, report the harnesses that
+/// finished, read from Kani's console output; otherwise the run failed.
+fn partial_or_error(out: &Output, run_info: Value) -> Result<Value> {
+    let partial = partial::parse(&out.text);
+    if out.timed_out && !partial.finished.is_empty() {
+        return Ok(json!({
+            "run_state": "TIMED_OUT",
+            "complete": false,
+            "harnesses": partial.finished,
+            "unfinished": partial.unfinished,
+            "note": format!(
+                "Stopped after {}s (`timeout_s`). These results were read from Kani's console \
+                 output, because Kani writes no `--export-json` when it is killed: they have no \
+                 proof-quality counts and cannot be recorded with evidence.py. Re-run the \
+                 unfinished harnesses separately.",
+                out.elapsed_s
+            ),
+            "run": run_info,
+        }));
+    }
+    Err(no_results_error(out))
+}
+
 fn verify_harness(args: &Value, token: Option<&Value>) -> Result<Value> {
     let target = Target::from_args(args)?;
     let mut kani_args = run_options(args)?;
     if let Some(jobs) = args.get("jobs").and_then(Value::as_u64) {
         kani_args.extend(["--jobs".into(), jobs.to_string(), "--output-format=terse".into()]);
     }
-    let (doc, out, run_info) = run_with_export(&target, &kani_args, args, token)?;
-    let Some(doc) = doc else {
-        let partial = partial::parse(&out.text);
-        if out.timed_out && !partial.finished.is_empty() {
-            // Kani writes no export when it is killed; report what finished from its output.
-            return Ok(json!({
-                "run_state": "TIMED_OUT",
-                "complete": false,
-                "harnesses": partial.finished,
-                "unfinished": partial.unfinished,
-                "note": format!(
-                    "Stopped after {}s (`timeout_s`). These results were read from Kani's console \
-                     output, because Kani writes no `--export-json` when it is killed: they have no \
-                     proof-quality counts and cannot be recorded with evidence.py. Re-run the \
-                     unfinished harnesses separately.",
-                    out.elapsed_s
-                ),
-                "run": run_info,
-            }));
-        }
-        return Err(no_results_error(&out));
-    };
+    let (doc, out, run_info) = run_with_export(&target, None, &kani_args, args, token)?;
+    let Some(doc) = doc else { return partial_or_error(&out, run_info) };
     let mut result = summary::summarize(&doc, false, summary::DEFAULT_MAX_FAILED);
+    result["exit_code"] = json!(out.exit_code);
+    result["run"] = run_info;
+    Ok(result)
+}
+
+/// Counts of harnesses by verdict, among those with `automatic == generated`.
+fn verdict_counts(doc: &Value, generated: bool) -> Value {
+    let (mut total, mut success, mut failure) = (0, 0, 0);
+    for h in doc["harnesses"].as_array().into_iter().flatten() {
+        if (h["is_automatically_generated"] == true) != generated {
+            continue;
+        }
+        total += 1;
+        match h["outcome"]["verdict"].as_str() {
+            Some("SUCCESS") => success += 1,
+            Some("FAILURE") => failure += 1,
+            _ => {}
+        }
+    }
+    json!({ "total": total, "success": success, "failure": failure, "other": total - success - failure })
+}
+
+fn regex_args(args: &Value, key: &str, flag: &str) -> Result<Vec<String>> {
+    let mut out = vec![];
+    for pattern in string_list(args, key)? {
+        if pattern.contains(' ') {
+            bail!(
+                "`{key}`: pattern `{pattern}` contains a space; Kani rejects spaces: write `.` instead"
+            );
+        }
+        out.extend([flag.to_string(), pattern]);
+    }
+    Ok(out)
+}
+
+fn autoharness_tool(args: &Value, token: Option<&Value>) -> Result<Value> {
+    let target = Target::from_args(args)?;
+    let mut kani_args = vec!["-Z".to_string(), "autoharness".into()];
+    kani_args.extend(regex_args(args, "include_patterns", "--include-pattern")?);
+    kani_args.extend(regex_args(args, "exclude_patterns", "--exclude-pattern")?);
+    if args.get("bounded_arguments").and_then(Value::as_bool).unwrap_or(false) {
+        kani_args.push("--bounded-arguments".into());
+    }
+    for (key, flag) in [("slice_bound", "--slice-bound"), ("string_bound", "--string-bound")] {
+        if let Some(n) = args.get(key).and_then(Value::as_u64) {
+            kani_args.extend([flag.to_string(), n.to_string()]);
+        }
+    }
+    if args.get("list_only").and_then(Value::as_bool).unwrap_or(false) {
+        // `--list` writes `kani-list.json` into the working directory: leave no trace.
+        let list_file = target.dir.join("kani-list.json");
+        let existed = list_file.exists();
+        kani_args.extend(["--list".to_string(), "--format".into(), "json".into()]);
+        kani_args.extend(string_list(args, "extra_args")?);
+        let out = process::run(
+            target.command(Some("autoharness"), &kani_args),
+            timeout_arg(args, SHORT_TIMEOUT_S),
+            token,
+        )?;
+        if !existed {
+            let _ = std::fs::remove_file(&list_file);
+        }
+        if !out.text.contains("Selected Function") && !out.text.contains("Skipped Function") {
+            bail!(
+                "`kani autoharness --list` printed no function tables (exit code {:?}{}):\n{}",
+                out.exit_code,
+                if out.timed_out { ", timed out" } else { "" },
+                tail(&out.text, OUTPUT_TAIL_LINES)
+            );
+        }
+        let filter = args.get("filter").and_then(Value::as_str);
+        return Ok(autoharness::list_summary(&out.text, filter));
+    }
+    kani_args.extend(run_options(args)?);
+    let (doc, out, run_info) =
+        run_with_export(&target, Some("autoharness"), &kani_args, args, token)?;
+    let Some(doc) = doc else { return partial_or_error(&out, run_info) };
+    let failures_only = args.get("failures_only").and_then(Value::as_bool).unwrap_or(true);
+    let mut result = summary::summarize(&doc, failures_only, summary::DEFAULT_MAX_FAILED);
+    let (automatic, manual) = (verdict_counts(&doc, true), verdict_counts(&doc, false));
+    if manual["total"].as_u64().unwrap_or(0) > 0 {
+        result["note"] = json!(
+            "AutoHarness also ran the crate's manual harnesses, first and whatever the patterns \
+             say, and with a default unwind bound of 20 (kani#5103): a manual harness without its \
+             own `#[kani::unwind]` can fail here but pass under `cargo kani`. Compare it with a \
+             plain run before trusting such a failure."
+        );
+    }
+    result["automatic_harnesses"] = automatic;
+    result["manual_harnesses"] = manual;
     result["exit_code"] = json!(out.exit_code);
     result["run"] = run_info;
     Ok(result)
@@ -737,7 +857,7 @@ fn get_counterexample(args: &Value, token: Option<&Value>) -> Result<Value> {
     }
     let mut kani_args = run_options(args)?;
     kani_args.extend(["-Z", "concrete-playback", "--concrete-playback=print"].map(String::from));
-    let (doc, out, run_info) = run_with_export(&target, &kani_args, args, token)?;
+    let (doc, out, run_info) = run_with_export(&target, None, &kani_args, args, token)?;
     let doc = doc.ok_or_else(|| no_results_error(&out))?;
     let summary = summary::summarize(&doc, true, summary::DEFAULT_MAX_FAILED);
     let (covers, failures): (Vec<String>, Vec<String>) =
@@ -879,6 +999,7 @@ mod tests {
                 "kani_get_version",
                 "kani_list_harnesses",
                 "kani_verify_harness",
+                "kani_autoharness",
                 "kani_get_counterexample"
             ]
         );

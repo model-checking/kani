@@ -17,6 +17,9 @@ CLIENT="$PLUGIN/tests/mcp_client.py"
     kani_verify_harness "{\"path\": \"$FIXTURE\", \"harness\": \"check_midpoint\", \"extra_args\": [\"--no-such-flag\"]}" \
     kani_verify_harness "{\"path\": \"$FIXTURE\", \"harness\": \"check_midpoint\", \"timeout_s\": 0, \"extra_args\": [\"-Z\", \"function-contracts\"]}" \
     kani_list_harnesses "{\"path\": \"$FIXTURE\", \"filter\": \"midpoint\", \"extra_args\": [\"-Z\", \"function-contracts\"]}" \
+    kani_autoharness "{\"path\": \"$FIXTURE\", \"list_only\": true, \"filter\": \"midpoint\"}" \
+    kani_autoharness "{\"path\": \"$FIXTURE\", \"include_patterns\": [\"agent_plugin_fixture::midpoint\"], \"export_path\": \"$WORK/auto.json\"}" \
+    kani_autoharness "{\"path\": \"$FIXTURE\", \"include_patterns\": [\"Mul<Foo> for Bar\"]}" \
     > "$WORK/mcp.jsonl" || fail "MCP session failed"
 
 [ ! -e "$FIXTURE/kani-list.json" ] || fail "kani_list_harnesses left kani-list.json behind"
@@ -27,7 +30,8 @@ CLIENT="$PLUGIN/tests/mcp_client.py"
 
 python3 - "$WORK/mcp.jsonl" "$WORK/cli-summary.json" <<'PY'
 import json, sys
-version, listed, verified, cex, bad_flag, timed_out, filtered = [json.loads(l) for l in open(sys.argv[1])]
+(version, listed, verified, cex, bad_flag, timed_out, filtered, auto_list, auto_run,
+ auto_space) = [json.loads(l) for l in open(sys.argv[1])]
 cli = json.load(open(sys.argv[2]))
 
 assert not version["is_error"] and version["result"]["compatible"], version
@@ -71,5 +75,21 @@ print("kani_verify_harness: stops at timeout_s")
 assert filtered["result"]["matching_standard_harnesses"] == [
     "proofs::check_midpoint", "proofs::check_naive_midpoint"], filtered
 print("kani_list_harnesses: filter")
+
+r = auto_list["result"]
+assert not auto_list["is_error"] and r["selected"] == ["midpoint", "naive_midpoint"], auto_list
+assert r["selected_count"] >= 2 and "skipped_by_reason" in r, auto_list
+print("kani_autoharness: list_only reports the selected functions")
+
+assert not auto_run["is_error"], auto_run
+r = auto_run["result"]
+assert r["automatic_harnesses"] == {"total": 1, "success": 1, "failure": 0, "other": 0}, r
+assert r["manual_harnesses"]["total"] == 5 and r["manual_harnesses"]["failure"] == 1, r
+assert "kani#5103" in r["note"] and r["run"]["export_path"].endswith("auto.json"), r
+print("kani_autoharness: runs, and separates automatic from manual harnesses")
+
+assert auto_space["is_error"] and "contains a space" in auto_space["result"]["error"], auto_space
+print("kani_autoharness: rejects patterns with spaces")
 PY
+[ ! -e "$FIXTURE/kani-list.json" ] || fail "kani_autoharness left kani-list.json behind"
 smoke_pass

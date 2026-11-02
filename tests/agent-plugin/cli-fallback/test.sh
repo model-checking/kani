@@ -89,8 +89,8 @@ grep -q "Concrete playback unit test for \`proofs::check_naive_midpoint\`" "$WOR
 grep -q "kani::concrete_playback_run" "$WORK/playback.log" || fail "malformed playback test"
 echo "concrete playback produces a reproducer for the failing harness"
 
-# AutoHarness has no MCP tool; it must work through the CLI, with JSON export. It also runs
-# the manual harnesses, so the intentional failure makes it exit non-zero.
+# AutoHarness must work through the CLI too, with JSON export. It also runs the manual
+# harnesses, so the intentional failure makes it exit non-zero.
 cargo kani autoharness -Z autoharness --include-pattern 'agent_plugin_fixture::midpoint' \
     -Z export-json --export-json "$WORK/auto.json" > "$WORK/auto.log" 2>&1 || true
 [ -f "$WORK/auto.json" ] || fail "autoharness produced no export: $(tail -n 30 "$WORK/auto.log")"
@@ -101,4 +101,26 @@ auto = [h for h in d["harnesses"] if h["is_automatically_generated"]]
 assert auto and all(h["outcome"].get("verdict") == "SUCCESS" for h in auto), d["harnesses"]
 PY
 echo "autoharness runs through the CLI and exports JSON"
+
+# Coverage: the vacuous harness never reaches `midpoint`, so no harness covers it.
+cargo kani -Z function-contracts -Z source-coverage --coverage --harness check_vacuous \
+    > "$WORK/cov.log" 2>&1 || fail "coverage run failed: $(tail -n 20 "$WORK/cov.log")"
+"$SCRIPTS/summarize-coverage.py" --log "$WORK/cov.log" --file src/lib.rs > "$WORK/cov.json" \
+    || fail "summarize-coverage.py failed"
+python3 - "$WORK/cov.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+[f] = d["files"]
+assert f["file"] == "src/lib.rs" and f["percent"] < 100, f
+assert "midpoint" in {r["function"] for r in f["uncovered"]}, f
+PY
+cargo kani -Z function-contracts -Z source-coverage --coverage --harness check_midpoint \
+    > "$WORK/cov2.log" 2>&1 || fail "coverage run failed: $(tail -n 20 "$WORK/cov2.log")"
+"$SCRIPTS/summarize-coverage.py" --log "$WORK/cov2.log" --file src/lib.rs > "$WORK/cov2.json"
+python3 - "$WORK/cov2.json" <<'PY'
+import json, sys
+[f] = json.load(open(sys.argv[1]))["files"]
+assert "midpoint" not in {r["function"] for r in f.get("uncovered", [])}, f
+PY
+echo "summarize-coverage.py: finds the code no harness exercises, and sees it covered once a harness reaches it"
 smoke_pass

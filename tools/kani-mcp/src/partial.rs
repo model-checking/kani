@@ -25,8 +25,18 @@ pub fn parse(text: &str) -> Partial {
             Some((n, rest)) if n.chars().all(|c| c.is_ascii_digit()) => (n.to_string(), rest),
             _ => (String::new(), raw),
         };
-        if let Some(name) = line.strip_prefix("Checking harness ") {
-            let name = name.trim_end_matches("...").trim().to_string();
+        // Manual harnesses: `Checking harness NAME...`; automatic ones (autoharness):
+        // `Autoharness: Checking function NAME against all possible inputs...`.
+        let started_name = line
+            .strip_prefix("Checking harness ")
+            .map(|n| n.trim_end_matches("..."))
+            .or_else(|| {
+                line.strip_prefix("Autoharness: Checking function ").map(|n| {
+                    n.trim_end_matches("against all possible inputs...").trim_end_matches("...")
+                })
+            });
+        if let Some(name) = started_name {
+            let name = name.trim().to_string();
             current.insert(key.clone(), name.clone());
             failed.remove(&key);
             started.push(name);
@@ -88,6 +98,19 @@ mod tests {
             })]
         );
         assert_eq!(p.unfinished, vec!["proofs::b".to_string()]);
+    }
+
+    #[test]
+    fn reads_autoharness_output() {
+        let text = "Thread 4: Autoharness: Checking function Meters::add against all possible inputs...\n\
+                    Thread 4: VERIFICATION:- SUCCESSFUL\nThread 4: Verification Time: 2.5s\n\
+                    Thread 5: Autoharness: Checking function <A as B>::f against all possible inputs...\n";
+        let p = parse(text);
+        assert_eq!(
+            p.finished,
+            vec![json!({ "name": "Meters::add", "verdict": "SUCCESS", "time_s": 2.5 })]
+        );
+        assert_eq!(p.unfinished, vec!["<A as B>::f".to_string()]);
     }
 
     #[test]

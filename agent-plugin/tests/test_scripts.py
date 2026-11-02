@@ -41,6 +41,7 @@ sys.path.insert(0, str(SCRIPTS))
 import kani_plugin_lib as lib  # noqa: E402
 
 summarize = load("summarize-results")
+coverage = load("summarize-coverage")
 vacuity = load("check-vacuity")
 assumptions = load("check-assumptions")
 inspect = load("inspect-harness")
@@ -237,6 +238,54 @@ class InspectTest(unittest.TestCase):
         self.assertEqual(
             self.by_name["clean"]["counts"], {
                 "nondet_inputs": 1, "assumptions": 1, "assertions": 1, "covers": 1})
+
+
+class CoverageTest(unittest.TestCase):
+    def raw(self, directory, name, regions):
+        """Write a `*_kaniraw.json` file; regions are (file, start line, end line, function, status)."""
+        data = {}
+        for file, start, end, function, status in regions:
+            data.setdefault(file, []).append({
+                "function": function, "term": {"Counter": 0}, "status": status,
+                "region": {"file": file, "start": [start, 1], "end": [end, 2]}})
+        (Path(directory) / f"{name}_kaniraw.json").write_text(json.dumps({"data": data}))
+
+    def test_merge_covers_a_region_when_any_harness_covers_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.raw(tmp, "h1", [("src/a.rs", 1, 3, "f", "COVERED"), ("src/a.rs", 5, 6, "f", "UNCOVERED"),
+                                 ("src/b.rs", 1, 2, "g", "UNCOVERED")])
+            self.raw(tmp, "h2", [("src/a.rs", 1, 3, "f", "UNCOVERED"), ("src/a.rs", 5, 6, "f", "COVERED"),
+                                 ("src/b.rs", 1, 2, "g", "UNCOVERED")])
+            regions, n = coverage.merge([tmp])
+            self.assertEqual(n, 2)
+            s = coverage.summarize(regions)
+            self.assertEqual(s["total"], {"covered": 2, "regions": 3, "percent": 67})
+            [a, b] = s["files"]
+            self.assertEqual((a["file"], a["covered"], a["total"], "uncovered" in a), ("src/a.rs", 2, 2, False))
+            self.assertEqual(b["uncovered"], [{"line": 1, "end_line": 2, "function": "g"}])
+            self.assertEqual([f["file"] for f in coverage.summarize(regions, "b.rs")["files"]], ["src/b.rs"])
+
+    def test_uncovered_list_is_limited(self):
+        regions = {("a.rs", (i, 1), (i, 2), "f"): False for i in range(1, 6)}
+        f = coverage.summarize(regions, max_uncovered=2)["files"][0]
+        self.assertEqual((len(f["uncovered"]), f["uncovered_omitted"]), (2, 3))
+
+    def test_compare_and_log(self):
+        with tempfile.TemporaryDirectory() as one, tempfile.TemporaryDirectory() as two:
+            self.raw(one, "h", [("a.rs", 1, 2, "f", "COVERED"), ("a.rs", 4, 5, "f", "UNCOVERED")])
+            self.raw(two, "h", [("a.rs", 1, 2, "f", "UNCOVERED"), ("a.rs", 4, 5, "f", "COVERED")])
+            a, _ = coverage.merge([one])
+            b, _ = coverage.merge([two])
+            diff = coverage.compare(a, b)
+            self.assertEqual([r["line"] for r in diff["covered_only_in_first"]], [1])
+            self.assertEqual([r["line"] for r in diff["covered_only_in_second"]], [4])
+            log = Path(one) / "kani.log"
+            log.write_text(f"[info] Coverage results saved to {two}\n")
+            self.assertEqual(coverage.dirs_from_log(log), [two])
+
+    def test_no_data_is_an_error(self):
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(coverage.main(["/nonexistent"]), 1)
 
 
 class ProofDiffTest(unittest.TestCase):
