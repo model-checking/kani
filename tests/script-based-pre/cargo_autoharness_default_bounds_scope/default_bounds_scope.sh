@@ -14,7 +14,8 @@ run() {
     status=$?
     echo "$output"
     echo "$output" | awk -v label="$label" '
-        /^Checking harness / { name = $3; sub(/\.\.\.$/, "", name) }
+        { sub(/^Thread [0-9]+: /, "") }
+        /^Checking harness /{ name = $3; sub(/\.\.\.$/, "", name) }
         /^Autoharness: Checking function / { name = $4 }
         /^VERIFICATION:- / { print "[" label "] result: " name " " $2 }
     '
