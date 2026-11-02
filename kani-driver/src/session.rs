@@ -44,6 +44,16 @@ pub struct KaniSession {
     /// autoharness summary. Only meaningful if the autoharness subcommand is enabled.
     pub autoharness_bounds: AutoharnessBounds,
 
+    /// The loop unwinding bound automatic harnesses fall back to when nothing else sets one, c.f.
+    /// `resolve_unwind_value`. Kept apart from `args.default_unwind`, which applies to every
+    /// harness, so that it does not leak into manual harnesses (#5103). `None` outside autoharness.
+    pub autoharness_default_unwind: Option<u32>,
+
+    /// The timeout automatic harnesses fall back to when `--harness-timeout` is not passed, c.f.
+    /// `resolve_harness_timeout`. Like `autoharness_default_unwind`, it only applies to automatic
+    /// harnesses. `None` outside autoharness.
+    pub autoharness_harness_timeout: Option<Timeout>,
+
     /// The location we found the 'kani_rustc' command
     pub kani_compiler: PathBuf,
     /// The location we found 'kani_lib.c'
@@ -75,6 +85,8 @@ impl KaniSession {
             args,
             autoharness_compiler_flags: None,
             autoharness_bounds: AutoharnessBounds::default(),
+            autoharness_default_unwind: None,
+            autoharness_harness_timeout: None,
             kani_compiler: install.kani_compiler()?,
             kani_lib_c: install.kani_lib_c()?,
             temporaries: Mutex::new(vec![]),
@@ -137,12 +149,12 @@ impl KaniSession {
 
     /// Call [run_terminal_timeout] with the verbosity configured by the user.
     /// The `bool` value indicates whether the command timed out
-    pub fn run_terminal_timeout(&self, cmd: TokioCommand) -> Result<bool> {
-        self.runtime.block_on(run_terminal_timeout(
-            &self.args.common_args,
-            cmd,
-            self.args.harness_timeout,
-        ))
+    pub fn run_terminal_timeout(
+        &self,
+        cmd: TokioCommand,
+        timeout: Option<Timeout>,
+    ) -> Result<bool> {
+        self.runtime.block_on(run_terminal_timeout(&self.args.common_args, cmd, timeout))
     }
 
     /// Call [run_suppress] with the verbosity configured by the user.
