@@ -8,7 +8,10 @@ use crate::kani_middle::transform::body::{
     InsertPosition, MutableBody, SourceInstruction, synthetic_source_info,
 };
 use rustc_public::{
-    mir::{FieldIdx, Mutability, Operand, Place, RawPtrKind, Rvalue, Statement, StatementKind},
+    mir::{
+        CastKind, FieldIdx, Mutability, Operand, Place, RawPtrKind, Rvalue, Statement,
+        StatementKind,
+    },
     ty::{RigidTy, Ty},
 };
 use strum_macros::AsRefStr;
@@ -19,6 +22,9 @@ pub enum MemoryInitOp {
     /// Check memory initialization of data bytes in a memory region starting from the pointer
     /// `operand` and of length `sizeof(operand)` bytes.
     Check { operand: Operand },
+    /// Check memory initialization of the data bytes of a `pointee_ty` at the pointer `operand`,
+    /// which may point to a value of another type.
+    CheckAs { operand: Operand, pointee_ty: Ty },
     /// Set memory initialization state of data bytes in a memory region starting from the pointer
     /// `operand` and of length `sizeof(operand)` bytes.
     Set { operand: Operand, value: bool, position: InsertPosition },
@@ -67,6 +73,9 @@ impl MemoryInitOp {
             | MemoryInitOp::Set { operand, .. }
             | MemoryInitOp::CheckSliceChunk { operand, .. }
             | MemoryInitOp::SetSliceChunk { operand, .. } => operand.clone(),
+            MemoryInitOp::CheckAs { operand, pointee_ty } => {
+                mk_cast(operand, *pointee_ty, body, statements, source)
+            }
             MemoryInitOp::CheckRef { operand, .. }
             | MemoryInitOp::SetRef { operand, .. }
             | MemoryInitOp::CreateUnion { operand, .. }
@@ -116,6 +125,7 @@ impl MemoryInitOp {
             | MemoryInitOp::Set { operand, .. }
             | MemoryInitOp::CheckSliceChunk { operand, .. }
             | MemoryInitOp::SetSliceChunk { operand, .. } => operand.ty(body.locals()).unwrap(),
+            MemoryInitOp::CheckAs { pointee_ty, .. } => Ty::new_ptr(*pointee_ty, Mutability::Not),
             MemoryInitOp::SetRef { operand, .. }
             | MemoryInitOp::CheckRef { operand, .. }
             | MemoryInitOp::CreateUnion { operand, .. }
@@ -161,6 +171,7 @@ impl MemoryInitOp {
             | MemoryInitOp::SetSliceChunk { count, .. }
             | MemoryInitOp::Copy { count, .. } => count.clone(),
             MemoryInitOp::Check { .. }
+            | MemoryInitOp::CheckAs { .. }
             | MemoryInitOp::Set { .. }
             | MemoryInitOp::CheckRef { .. }
             | MemoryInitOp::SetRef { .. }
@@ -180,6 +191,7 @@ impl MemoryInitOp {
             | MemoryInitOp::SetRef { value, .. } => *value,
             MemoryInitOp::CreateUnion { .. } => true,
             MemoryInitOp::Check { .. }
+            | MemoryInitOp::CheckAs { .. }
             | MemoryInitOp::CheckSliceChunk { .. }
             | MemoryInitOp::CheckRef { .. }
             | MemoryInitOp::Unsupported { .. }
@@ -195,6 +207,7 @@ impl MemoryInitOp {
         match self {
             MemoryInitOp::CreateUnion { field, .. } => Some(*field),
             MemoryInitOp::Check { .. }
+            | MemoryInitOp::CheckAs { .. }
             | MemoryInitOp::CheckSliceChunk { .. }
             | MemoryInitOp::CheckRef { .. }
             | MemoryInitOp::Set { .. }
@@ -215,6 +228,7 @@ impl MemoryInitOp {
             | MemoryInitOp::SetSliceChunk { position, .. }
             | MemoryInitOp::SetRef { position, .. } => *position,
             MemoryInitOp::Check { .. }
+            | MemoryInitOp::CheckAs { .. }
             | MemoryInitOp::CheckSliceChunk { .. }
             | MemoryInitOp::CheckRef { .. }
             | MemoryInitOp::Unsupported { .. }
@@ -260,6 +274,27 @@ impl InitRelevantInstruction {
 
 /// A helper to generate instrumentation for taking a reference to a given operand. Returns the
 /// operand which is a reference and stores all instrumentation in the statements vector passed.
+/// A new local holding `operand`, a raw pointer, cast to `*const pointee_ty`.
+fn mk_cast(
+    operand: &Operand,
+    pointee_ty: Ty,
+    body: &mut MutableBody,
+    statements: &mut Vec<Statement>,
+    source: &mut SourceInstruction,
+) -> Operand {
+    let span = source.span(body.blocks());
+    let ptr_ty = Ty::new_ptr(pointee_ty, Mutability::Not);
+    let result = body.new_local(ptr_ty, span, Mutability::Not);
+    statements.push(Statement {
+        kind: StatementKind::Assign(
+            Place::from(result),
+            Rvalue::Cast(CastKind::PtrToPtr, operand.clone(), ptr_ty),
+        ),
+        source_info: synthetic_source_info(span),
+    });
+    Operand::Copy(Place::from(result))
+}
+
 fn mk_ref(
     operand: &Operand,
     body: &mut MutableBody,
