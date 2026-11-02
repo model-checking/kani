@@ -1,0 +1,19 @@
+"contract-harnesses": {\
+"src/dur/mod.rs": [\
+"dur::check_dur_half_after"\
+],\
+"src/dur/proofs.rs": [\
+"dur::proofs::check_dur_half"\
+]\
+},
+"contracts": [\
+{\
+"function": "dur::Dur::half",\
+"file": "src/dur/mod.rs",\
+"harnesses": [\
+"dur::proofs::check_dur_half",\
+"dur::check_dur_half_after"\
+]\
+}\
+],
+"functions-under-contract": 1
