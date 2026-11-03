@@ -1075,9 +1075,12 @@ impl GotocCtx<'_, '_> {
         self.store_concurrent_construct(intrinsic, loc);
         let var1_ref = fargs.remove(0);
         let var1 = var1_ref.dereference().with_location(loc);
+        let var2 = fargs.remove(0).with_location(loc);
+        if self.place_ty_stable(place).kind().is_unit() {
+            return Stmt::atomic_block(vec![var1.assign(var2, loc)], loc);
+        }
         let (tmp, decl_stmt) =
             self.decl_temp_variable(var1.typ().clone(), Some(var1.to_owned()), loc);
-        let var2 = fargs.remove(0).with_location(loc);
         let assign_stmt = var1.assign(var2, loc);
         let res_stmt = self.codegen_expr_to_place_stable(place, tmp, loc);
         Stmt::atomic_block(vec![decl_stmt, assign_stmt, res_stmt], loc)
