@@ -1,6 +1,6 @@
 - **Feature Name:** Aliasing checks (`aliasing-checks`)
 - **Feature Request Issue:** [#314](https://github.com/model-checking/kani/issues/314)
-- **RFC PR:** *to be filled in*
+- **RFC PR:** [#5111](https://github.com/model-checking/kani/pull/5111)
 - **Status:** Under Review
 - **Version:** 0
 - **Proof-of-concept:** branch [`aliasing-core`](https://github.com/feliperodri/kani/tree/aliasing-core)
