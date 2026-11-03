@@ -69,26 +69,27 @@ pub fn gen_contracts_metadata(
         let attributes = KaniAttributes::for_def_id(tcx, item.def_id());
 
         if attributes.has_contract() {
-            fn_to_data
-                .insert(item.def_id(), ContractedFunction { function, file, harnesses: vec![] });
+            // A harness declared earlier may already have created this entry (#5099), so
+            // keep its harnesses instead of replacing the entry.
+            fn_to_data.entry(item.def_id()).or_insert_with(|| ContractedFunction {
+                function,
+                file,
+                harnesses: vec![],
+            });
         // This logic finds manual contract harnesses only (automatic harnesses are a Kani intrinsic, not crate items annotated with the proof_for_contract attribute).
         } else if let Some(def) = attributes.interpret_for_contract_attribute() {
-            let target_def_id = def.def_id();
-            if let Some(cf) = fn_to_data.get_mut(&target_def_id) {
-                cf.harnesses.push(function);
-            } else {
-                fn_to_data.insert(
-                    target_def_id,
-                    ContractedFunction {
-                        // Note that we use the item's (crate-relative) name, rather than the
-                        // target name specified in the attribute.
-                        // This is necessary for the automatic contract harness lookup, see below.
-                        function: strip_local_crate_prefix(item.name()),
-                        file,
-                        harnesses: vec![function],
-                    },
-                );
-            }
+            fn_to_data
+                .entry(def.def_id())
+                .or_insert_with(|| ContractedFunction {
+                    // Note that we use the target's (crate-relative) name, rather than the
+                    // target name specified in the attribute.
+                    // This is necessary for the automatic contract harness lookup, see below.
+                    function: strip_local_crate_prefix(def.name()),
+                    file: SourceLocation::new(def.span()).filename,
+                    harnesses: vec![],
+                })
+                .harnesses
+                .push(function);
         }
     }
 
