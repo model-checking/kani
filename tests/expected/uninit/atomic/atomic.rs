@@ -43,13 +43,32 @@ fn atomic_store_null() {
 }
 
 #[kani::proof]
+fn volatile_atomic_store_null() {
+    unsafe {
+        atomic_store::<u8, { AtomicOrdering::Relaxed }, true>(std::ptr::null_mut(), 1);
+    }
+}
+
+#[kani::proof]
 fn store_does_not_initialize_next_value() {
-    let layout = Layout::array::<u64>(2).unwrap();
+    let layout = Layout::array::<std::sync::atomic::AtomicU64>(2).unwrap();
+    let ptr = unsafe { alloc(layout) }.cast::<u64>();
+    kani::assume(!ptr.is_null());
+    unsafe {
+        atomic_store::<u64, { AtomicOrdering::Relaxed }, true>(ptr, 1);
+        atomic_load::<u64, { AtomicOrdering::Relaxed }, false>(ptr.add(1));
+        dealloc(ptr.cast(), layout);
+    }
+}
+
+#[kani::proof]
+fn nonvolatile_store_preserves_initialization_check() {
+    // Preserve Kani's existing requirement while the `from_ptr` contract is unresolved.
+    let layout = Layout::new::<std::sync::atomic::AtomicU64>();
     let ptr = unsafe { alloc(layout) }.cast::<u64>();
     kani::assume(!ptr.is_null());
     unsafe {
         atomic_store::<u64, { AtomicOrdering::Relaxed }, false>(ptr, 1);
-        atomic_load::<u64, { AtomicOrdering::Relaxed }, false>(ptr.add(1));
         dealloc(ptr.cast(), layout);
     }
 }

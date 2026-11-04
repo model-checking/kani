@@ -25,7 +25,7 @@ use rustc_public::{
         mono::{Instance, InstanceKind},
         visit::{Location, PlaceContext},
     },
-    ty::{AdtKind, ConstantKind, RigidTy, Ty, TyKind},
+    ty::{AdtKind, ConstantKind, RigidTy, Ty, TyConstKind, TyKind},
 };
 
 pub struct CheckUninitVisitor {
@@ -292,6 +292,25 @@ impl MirVisitor for CheckUninitVisitor {
                             | Intrinsic::AtomicXsub => {
                                 self.push_target(MemoryInitOp::Check { operand: args[0].clone() });
                             }
+                            Intrinsic::AtomicStore => {
+                                let is_volatile = matches!(
+                                    instance.args().0[2].expect_const().kind(),
+                                    TyConstKind::Value(_, allocation)
+                                        if allocation.read_bool().is_ok_and(|value| value)
+                                );
+                                // Preserve the existing check for non-volatile stores, which are
+                                // specified in terms of creating a reference with `from_ptr`.
+                                if !is_volatile {
+                                    self.push_target(MemoryInitOp::Check {
+                                        operand: args[0].clone(),
+                                    });
+                                }
+                                self.push_target(MemoryInitOp::Set {
+                                    operand: args[0].clone(),
+                                    value: true,
+                                    position: InsertPosition::After,
+                                });
+                            }
                             Intrinsic::CompareBytes => {
                                 self.push_target(MemoryInitOp::CheckSliceChunk {
                                     operand: args[0].clone(),
@@ -329,9 +348,7 @@ impl MirVisitor for CheckUninitVisitor {
                             Intrinsic::VolatileLoad | Intrinsic::UnalignedVolatileLoad => {
                                 self.push_target(MemoryInitOp::Check { operand: args[0].clone() });
                             }
-                            Intrinsic::AtomicStore
-                            | Intrinsic::VolatileStore
-                            | Intrinsic::UnalignedVolatileStore => {
+                            Intrinsic::VolatileStore | Intrinsic::UnalignedVolatileStore => {
                                 self.push_target(MemoryInitOp::Set {
                                     operand: args[0].clone(),
                                     value: true,
