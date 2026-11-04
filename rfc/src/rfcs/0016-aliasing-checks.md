@@ -29,7 +29,9 @@ What users get:
 - harnesses that already exist, such as those of the verify-rust-std challenges, check aliasing
   with one extra flag;
 - a check that never reports success for an access it could not follow. It gives up instead,
-  with a message that says so.
+  with a message that says so;
+- the check works with loop and function contracts, so unbounded loops and recursive functions
+  can be verified free of aliasing violations, not only up to an unwinding bound.
 
 The downsides:
 - **Cost:** the checks are expensive. On the verify-rust-std challenges we ran, harnesses take 10
@@ -45,7 +47,9 @@ The downsides:
 ## User Experience
 
 The check is enabled with `-Z aliasing-checks`, for `kani`, `cargo kani`, `kani verify-std` and
-`autoharness`. No library API or attribute changes. Existing harnesses work as they are.
+`autoharness`. No library API or attribute changes. Existing harnesses work as they are, including
+those with loop contracts and function contracts: users don't write anything about tags or
+permissions in invariants, `requires`, `ensures` or `modifies`.
 
 ```rust
 #[kani::proof]
@@ -117,11 +121,62 @@ inconclusive but can't make it pass.
 
 **The monitor is proved against Tree Borrows' rules.** The monitor's transition functions are
 plain Rust in a macro that a Verus crate also expands, so the proof is about the code Kani
-compiles. The proof has 126 verified obligations and no failures. Its theorems state that each
+compiles. The proof has 131 verified obligations and no failures. Its theorems state that each
 operation's result and new state refine the Tree Borrows rules on the abstract tree. Those
 operations are: access, reborrow, deallocation, exposure, wildcard access and function return.
 Verus isn't needed to build or use Kani. Running the proof in CI would add Verus as a CI
 dependency; the proof-of-concept doesn't do that yet.
+
+**Loop contracts.** A loop contract replaces the loop with one arbitrary iteration: CBMC havocs
+what the loop may write, assumes the invariant, runs the body once and checks the invariant again.
+The borrow state is part of the program state, so the instrumentation must say which borrow states
+an arbitrary iteration can start from. Havocking it completely would report spurious violations
+on every reference used after the loop. Keeping it as at loop entry would be unsound: a reference
+that the first iteration invalidates would still look valid in the second.
+
+The check uses the fact that Tree Borrows permissions only move one way. A tag's permission moves
+along reserved, active, frozen, disabled, possibly skipping steps but never back, and its
+ancestors never change. So at the loop head,
+the instrumentation snapshots the monitor on entry and havocs it to any state where:
+- every tag that existed on entry still has the same ancestors;
+- its permission is the one on entry or a later one in that order.
+
+Every monitor operation keeps this relation, so it holds after any number of iterations of any
+loop body. It is an invariant the check generates itself, with no user annotation. The Verus proof
+covers the facts it relies on: each transition only moves permissions forward, and a child access
+never disables, freezes or conflicts an ancestor (used for the access roots below). Not proved
+yet: that the havoc in the monitor's code allows every state the relation allows.
+
+That relation alone loses precision: a reference the loop never uses would also be havocked to
+"maybe disabled". The instrumentation refines it with the loop's *access roots*: tags that are
+ancestors of every tag the loop accesses through. Every access in the loop is a child access for
+them, so they stay valid across iterations. This is what lets a loop write through a reborrow of
+`&mut x` and the code use `x` after the loop.
+
+Three smaller pieces complete the loop abstraction:
+- Tags created by earlier iterations are not kept. The tag locals of pointers the loop assigns are
+  set to the unknown tag at the head, so a reference an earlier iteration created is inconclusive
+  if used, never unchecked. The pass also adds those tag locals to the loop's write set, so CBMC
+  never havocs one into another reference's tag.
+- Shadow tags of memory the loop may write are invalidated at the head.
+- The invariant itself is evaluated in *spec mode*: monitor operations are no-ops while it runs,
+  so reading through a reference in an invariant doesn't change the borrow state.
+
+**Function contracts.** `proof_for_contract` checks the function with the aliasing checks, as any
+harness. A call replaced by its contract (`stub_verified`) is summarized with what Tree Borrows
+already provides, without new contract clauses:
+- reference arguments are retagged and protected for the call, as for a real call;
+- each `modifies` target is havocked through the argument's tag, as a write access, so the
+  replaced call invalidates the references a real write would. Pointers stored in the target lose
+  their shadow tags;
+- the `requires` and `ensures` clauses run in spec mode.
+
+The summary relies on one assumption, which the callee's own `proof_for_contract` does not
+check: the callee accesses the caller's memory only through pointers derived from its arguments.
+`modifies` checks which memory the callee writes, but not through which pointer. Globals and
+exposed pointers are where this assumption can fail.
+Recursive functions work the same way: the recursive call inside `proof_for_contract` is replaced
+by the contract.
 
 **CBMC dependency.** Shadow tags need a CBMC simplification that folds casts of integer pointer
 constants ([diffblue/cbmc#9238](https://github.com/diffblue/cbmc/pull/9238)). Without it, values
@@ -129,11 +184,21 @@ read from shadow memory stay symbolic, and many harnesses run out of memory. The
 in CBMC but not released. This feature should merge only once Kani's CBMC pin moves to a release
 that contains it.
 
+Loop contracts need a second change,
+[diffblue/cbmc#9392](https://github.com/diffblue/cbmc/pull/9392) (open). To infer a loop's write
+set, CBMC's contracts instrumentation inlines every call in the harness, which now includes the
+monitor: on a trivial loop it ran out of 16 GB. It also havocs objects that only functions it does
+not instrument write. With the change, those functions stay out of the inference, and the same
+loop takes 190 MB and 6 s. Without it, aliasing checks and loop contracts can't be combined.
+
 **Small changes elsewhere:**
 - `kani-driver` keeps CBMC's shadow-memory field declarations bodiless when it generates bodies
   for missing functions, and passes the flag through.
 - `kani_metadata` gets the new unstable feature.
-- The proc macros don't change.
+- The proc macros change in two places: the loop-invariant closure is marked, so the pass doesn't
+  instrument it, and the guard around a contract clause ends with the clause.
+- Loop-contract harnesses keep the monitor's statics deterministic (CBMC's contracts
+  instrumentation makes every static nondeterministic by default).
 
 ### Current results
 
@@ -163,6 +228,15 @@ harness, two jobs.
 
   The 3 real UB reports in Challenge 6 came from the harnesses, not from `NonNull`. Miri confirmed
   them, and the cause was fixed in Kani's `PointerGenerator` (#5108).
+
+- **Contracts**, on small programs where Miri runs the unrolled loop or the concrete call:
+  - 10 loops with contracts, 5 with UB and 5 without, including UB that only happens in a later
+    iteration, a reborrow created in the loop, and a loop with a nondeterministic trip count
+    (4 s). Kani and Miri agree on all 10. Before the loop abstraction, the UB in a later iteration
+    verified.
+  - 7 function-contract harnesses, `stub_verified` and recursive `proof_for_contract`, 4 with UB.
+    Kani and Miri agree on all 7. The recursive UB case needs about 10 GB.
+  - Kani's existing loop-contract and function-contract test suites pass with the change.
 
 The cost comes mainly from symbolic tag counts: when program paths that created different numbers
 of references merge, every later monitor operation works on a symbolic count. Challenge 13's
@@ -216,7 +290,11 @@ concrete inputs.
   (Challenge 13) come first? Users can enable the check per harness or per run.
 - `&self` method calls through `&dyn Trait` are inconclusive today. They are common in real code.
   Should carrying the receiver's tag through vtable calls be required before the first release?
-- How should the CBMC dependency be handled if a CBMC release with #9238 takes long?
+- How should the CBMC dependency be handled if a CBMC release with #9238 and #9392 takes long?
+- Is the automatic loop invariant precise enough? It keeps access roots valid but forgets the
+  exact permission of every other tag the loop touches. Users can't state more, because there are
+  no aliasing predicates for invariants yet (see below). We haven't yet run it on loops from real
+  code, such as those of the verify-rust-std challenges.
 
 ## Out of scope / Future Improvements
 
@@ -225,6 +303,11 @@ concrete inputs.
 - Weak protectors (`Box` arguments), the implicit access when a protector ends, and deallocation
   as a write access.
 - Stacked Borrows as an alternative model.
+- Predicates for loop invariants and contracts such as `can_read(r)` or `can_write(r)`, for loops
+  where the automatic invariant is too coarse. Permissions only move one way, so "at least this
+  permission" facts survive induction.
+- Loops whose write set CBMC infers (no `loop_modifies`) report spurious dereference failures
+  along with the real result; explicit `loop_modifies` avoids them.
 - Lowering the cost of symbolic tag counts after loops with nondeterministic trip counts.
 - Applying the check to the crates.io ecosystem with `autoharness`; an experiment on the top 50
   crates is planned.
