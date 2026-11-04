@@ -1055,16 +1055,9 @@ impl GotocCtx<'_, '_> {
         Stmt::atomic_block(vec![decl_stmt, success_decl, cond_update_stmt, res_stmt], loc)
     }
 
-    /// An atomic store updates the value referenced in
-    /// its primary argument and returns its previous value
-    /// -------------------------
-    /// var = atomic_store(var1, var2)
-    /// -------------------------
-    /// unsigned char tmp;
-    /// tmp = *var1;
-    /// *var1 = var2;
-    /// var = tmp;
-    /// -------------------------
+    /// Code generation shared by atomic stores and exchanges.
+    /// A store writes the new value without reading the old one.
+    /// An exchange also reads and returns the previous value.
     fn codegen_atomic_store(
         &mut self,
         intrinsic: &str,
