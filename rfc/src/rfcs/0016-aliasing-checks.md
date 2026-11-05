@@ -194,8 +194,9 @@ what each monitor function writes instead of its body, and the same loop takes 2
 Without it, aliasing checks and loop contracts can't be combined. CBMC also leaves out of the
 inferred write set writes through pointers loaded from memory
 ([diffblue/cbmc#9393](https://github.com/diffblue/cbmc/issues/9393)). This is unsound for
-functions it doesn't instrument, such as the monitor's. The monitor doesn't rely on CBMC to havoc
-its state at a loop head: it replaces that state itself (above).
+functions it doesn't instrument, such as the monitor's. The borrow state doesn't rely on CBMC's
+havoc, since the loop head replaces it (above). Whether other state the monitor's functions write
+through such pointers is affected has not been checked yet.
 
 **Small changes elsewhere:**
 - `kani-driver` keeps CBMC's shadow-memory field declarations bodiless when it generates bodies
