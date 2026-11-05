@@ -211,6 +211,7 @@ dependencies = [
  "anyhow",
  "cargo_metadata",
  "clap",
+ "kani_metadata",
  "which 8.0.6",
 ]
 

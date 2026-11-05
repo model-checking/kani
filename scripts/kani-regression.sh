@@ -30,8 +30,9 @@ check_kissat_version.sh
 # Formatting check
 ${SCRIPT_DIR}/kani-fmt.sh --check
 
-# Build kani
-cargo build-dev
+# Build kani, with the libraries for one non-host target so that `--target` is tested
+# (tests/script-based-pre/target_riscv64).
+cargo build-dev --lib-target riscv64gc-unknown-linux-gnu
 
 # Unit tests
 cargo test -p cprover_bindings

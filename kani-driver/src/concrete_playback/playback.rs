@@ -3,6 +3,7 @@
 //! Implements the logic related to the playback subcommand
 //! This can be achieved with <kani|cargo kani> playback --test <test_name>
 
+use crate::args::HOST_TARGET;
 use crate::args::common::Verbosity;
 use crate::args::playback_args::{CargoPlaybackArgs, KaniPlaybackArgs, MessageFormat};
 use crate::call_cargo::cargo_config_args;
@@ -114,7 +115,8 @@ fn cargo_test(args: CargoPlaybackArgs) -> Result<()> {
     }
 
     cargo_args.append(&mut args.cargo.to_cargo_args());
-    cargo_args.append(&mut cargo_config_args());
+    // Playback runs the test on the host.
+    cargo_args.append(&mut cargo_config_args(HOST_TARGET));
 
     // These have to be the last arguments to cargo test.
     if !args.playback.test_args.is_empty() {

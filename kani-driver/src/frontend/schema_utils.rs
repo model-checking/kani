@@ -41,6 +41,7 @@ struct RunContext {
     harness_selection: HarnessSelectionExport,
     harness_timeout_s: Option<f64>,
     configuration: ConfigurationExport,
+    target: String,
     started_at: OffsetDateTime,
     wall_time: Duration,
 }
@@ -103,6 +104,7 @@ impl KaniSession {
             },
             harness_timeout_s: self.args.harness_timeout.map(|t| Duration::from(t).as_secs_f64()),
             configuration: configuration_from(&self.args),
+            target: self.args.verification_target().to_string(),
             started_at,
             wall_time,
         }
@@ -299,7 +301,7 @@ struct ExportedRun {
     configuration: ConfigurationExport,
     outcome: RunOutcome,
     run_state: RunState,
-    target: &'static str,
+    target: String,
     started_at: String,
     wall_time_s: f64,
     harnesses: Vec<HarnessExport>,
@@ -658,7 +660,7 @@ impl ExportedRun {
             configuration: ctx.configuration,
             outcome: RunOutcome::Completed,
             run_state,
-            target: env!("TARGET"),
+            target: ctx.target,
             started_at: format_started_at(ctx.started_at),
             wall_time_s: ctx.wall_time.as_secs_f64(),
             harnesses,
@@ -884,6 +886,7 @@ mod tests {
             },
             harness_timeout_s: None,
             configuration: test_ctx_config(),
+            target: crate::args::HOST_TARGET.to_string(),
             started_at: started(),
             wall_time: Duration::from_millis(1),
         }
@@ -1828,6 +1831,16 @@ mod tests {
         let hr = HarnessResult { harness: &h, result: success_result(vec![]) };
         let v = serde_json::to_value(export_one(hr)).unwrap();
         assert!(v["harness_timeout_s"].is_null());
+    }
+
+    #[test]
+    fn export_target_is_the_verification_target() {
+        let h = harness("h");
+        let hr = HarnessResult { harness: &h, result: success_result(vec![]) };
+        let ctx =
+            RunContext { target: "riscv64gc-unknown-linux-gnu".to_string(), ..test_context() };
+        let v = serde_json::to_value(export_with(&[hr], ctx)).unwrap();
+        assert_eq!(v["target"], "riscv64gc-unknown-linux-gnu");
     }
 
     #[test]
