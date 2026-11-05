@@ -121,7 +121,7 @@ inconclusive but can't make it pass.
 
 **The monitor is proved against Tree Borrows' rules.** The monitor's transition functions are
 plain Rust in a macro that a Verus crate also expands, so the proof is about the code Kani
-compiles. The proof has 131 verified obligations and no failures. Its theorems state that each
+compiles. The proof has 162 verified obligations and no failures. Its theorems state that each
 operation's result and new state refine the Tree Borrows rules on the abstract tree. Those
 operations are: access, reborrow, deallocation, exposure, wildcard access and function return.
 Verus isn't needed to build or use Kani. Running the proof in CI would add Verus as a CI
@@ -143,9 +143,11 @@ the instrumentation snapshots the monitor on entry and havocs it to any state wh
 
 Every monitor operation keeps this relation, so it holds after any number of iterations of any
 loop body. It is an invariant the check generates itself, with no user annotation. The Verus proof
-covers the facts it relies on: each transition only moves permissions forward, and a child access
-never disables, freezes or conflicts an ancestor (used for the access roots below). Not proved
-yet: that the havoc in the monitor's code allows every state the relation allows.
+covers it in three parts: every monitor operation keeps the relation, including the access roots
+below; dropping the tags of earlier iterations keeps the state well formed; and the havoc in the
+monitor's code can produce every state the relation allows, up to the abstraction, and only
+well-formed ones. What the proof takes from the instrumentation, unproved: the loop's accesses
+act through descendants of its roots, and no access acts through a tag of an earlier iteration.
 
 That relation alone loses precision: a reference the loop never uses would also be havocked to
 "maybe disabled". The instrumentation refines it with the loop's *access roots*: tags that are
@@ -187,9 +189,13 @@ that contains it.
 Loop contracts need a second change,
 [diffblue/cbmc#9392](https://github.com/diffblue/cbmc/pull/9392) (open). To infer a loop's write
 set, CBMC's contracts instrumentation inlines every call in the harness, which now includes the
-monitor: on a trivial loop it ran out of 16 GB. It also havocs objects that only functions it does
-not instrument write. With the change, those functions stay out of the inference, and the same
-loop takes 190 MB and 6 s. Without it, aliasing checks and loop contracts can't be combined.
+monitor: on a trivial loop it ran out of 16 GB. With the change, the inference inlines a summary of
+what each monitor function writes instead of its body, and the same loop takes 2.2 GB and 10 s.
+Without it, aliasing checks and loop contracts can't be combined. CBMC also leaves out of the
+inferred write set writes through pointers loaded from memory
+([diffblue/cbmc#9393](https://github.com/diffblue/cbmc/issues/9393)). This is unsound for
+functions it doesn't instrument, such as the monitor's. The monitor doesn't rely on CBMC to havoc
+its state at a loop head: it replaces that state itself (above).
 
 **Small changes elsewhere:**
 - `kani-driver` keeps CBMC's shadow-memory field declarations bodiless when it generates bodies
@@ -300,8 +306,6 @@ concrete inputs.
 
 - Tags through function pointers and `&dyn` method calls.
 - Tags moved by multi-element copies of pointer-holding values.
-- Weak protectors (`Box` arguments), the implicit access when a protector ends, and deallocation
-  as a write access.
 - Stacked Borrows as an alternative model.
 - Predicates for loop invariants and contracts such as `can_read(r)` or `can_write(r)`, for loops
   where the automatic invariant is too coarse. Permissions only move one way, so "at least this
