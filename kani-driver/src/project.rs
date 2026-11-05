@@ -16,6 +16,7 @@ use rayon::prelude::*;
 use std::collections::HashSet;
 use std::env::current_dir;
 use std::fs;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use tracing::{debug, trace};
@@ -341,20 +342,67 @@ pub(crate) fn std_project(std_path: &Path, session: &KaniSession) -> Result<Proj
     fs::create_dir_all(&outdir)?; // This is a no-op if directory exists.
     let outdir = outdir.canonicalize()?;
 
-    // Create dummy crate needed to build using `cargo -Z build-std`
+    // Create dummy crate needed to build using `cargo -Z build-std`.
+    // Cargo does not check the standard library sources for changes, so the
+    // dummy crate, and with it the previous build, is kept only if a
+    // fingerprint of the build inputs is unchanged.
+    let std_path = std_path.canonicalize()?;
     let dummy_crate = outdir.join("kani_verify_std");
-    if dummy_crate.exists() {
-        fs::remove_dir_all(&dummy_crate)?;
+    let fingerprint_file = dummy_crate.join("kani-build-inputs.fingerprint");
+    let fingerprint = std_build_fingerprint(&std_path, &outdir, session)?;
+    let reuse = fs::read_to_string(&fingerprint_file).is_ok_and(|old| old == fingerprint);
+    if !reuse {
+        if dummy_crate.exists() {
+            fs::remove_dir_all(&dummy_crate)?;
+        }
+        session.cargo_init_lib(&dummy_crate)?;
     }
-    session.cargo_init_lib(&dummy_crate)?;
 
     // Build cargo project for dummy crate.
-    let std_path = std_path.canonicalize()?;
     let outputs = session.cargo_build_std(std_path.parent().unwrap(), &dummy_crate)?;
+    if !reuse {
+        fs::write(&fingerprint_file, &fingerprint)?;
+    }
 
     // Get the metadata and return a Kani project.
     let metadata = outputs.iter().map(|md_file| from_json(md_file)).collect::<Result<Vec<_>>>()?;
     Project::try_new(session, outdir, None, metadata, None)
+}
+
+/// Fingerprint of what a `verify-std` build depends on: the path, size and
+/// modification time of every file under `std_path` (except `outdir`), the
+/// Kani compiler binary, the command line and `RUSTFLAGS`.
+fn std_build_fingerprint(std_path: &Path, outdir: &Path, session: &KaniSession) -> Result<String> {
+    fn hash_tree(dir: &Path, skip: &Path, hasher: &mut DefaultHasher) -> Result<()> {
+        let mut entries = fs::read_dir(dir)?.collect::<Result<Vec<_>, _>>()?;
+        entries.sort_by_key(|entry| entry.file_name());
+        for entry in entries {
+            let path = entry.path();
+            let file_type = entry.file_type()?;
+            if path == skip || entry.file_name() == ".git" {
+                continue;
+            }
+            if file_type.is_dir() {
+                hash_tree(&path, skip, hasher)?;
+            } else {
+                hash_file(&path, hasher)?;
+            }
+        }
+        Ok(())
+    }
+    fn hash_file(path: &Path, hasher: &mut DefaultHasher) -> Result<()> {
+        let metadata = fs::metadata(path)?;
+        path.hash(hasher);
+        metadata.len().hash(hasher);
+        metadata.modified()?.hash(hasher);
+        Ok(())
+    }
+    let mut hasher = DefaultHasher::new();
+    hash_tree(std_path, outdir, &mut hasher)?;
+    hash_file(&session.kani_compiler, &mut hasher)?;
+    std::env::args().collect::<Vec<_>>().hash(&mut hasher);
+    std::env::var_os("RUSTFLAGS").hash(&mut hasher);
+    Ok(format!("{:016x}", hasher.finish()))
 }
 
 #[cfg(test)]

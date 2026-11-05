@@ -27,6 +27,14 @@ VERIFICATION:- SUCCESSFUL
 
 Complete - 7 successfully verified harnesses, 0 failures, 7 total.
 
+[TEST] Run kani verify-std again without changes
+No rebuild of core as expected
+Complete - 7 successfully verified harnesses, 0 failures, 7 total.
+
+[TEST] Run kani verify-std after editing the library
+Rebuild of core after the edit as expected
+Complete - 7 successfully verified harnesses, 0 failures, 7 total.
+
 [TEST] Run kani verify-std -Z uninit-checks
 
 Checking harness verify::check_add_one...
