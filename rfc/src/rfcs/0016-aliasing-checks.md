@@ -119,9 +119,22 @@ variants), as bit masks. Each step is a few bitwise operations, which keeps symb
 cheap. A reborrow past 64 live tags gets the unknown tag, so the bound can make a result
 inconclusive but can't make it pass.
 
+Tags are dropped once nothing can reach them, so that loops don't run into the bound: a returning
+function drops the tags it created, except the ones it returns, stores in memory or exposes; and a
+reference that nothing else holds the tag of (assigned once by a reborrow, and otherwise only used
+through a dereference) has its tag dropped when its storage ends. Only the most recent tag is
+dropped, so a tag with a live child stays.
+
+**Code that can only panic** is not checked: a standard-library function that never returns, other
+than `exit` and `abort`, runs with the monitor off, and so do its callees. These are the functions
+that build a panic message on the way to the panic. The execution fails at that panic anyway, so
+skipping them can't turn a failure into a success; it only hides undefined behavior inside panic
+formatting. Harnesses with `#[kani::should_panic]` keep the checks there, since an expected panic
+isn't a failure. On the Challenge 13 reduction below, this halves the symbolic execution.
+
 **The monitor is proved against Tree Borrows' rules.** The monitor's transition functions are
 plain Rust in a macro that a Verus crate also expands, so the proof is about the code Kani
-compiles. The proof has 162 verified obligations and no failures. Its theorems state that each
+compiles. The proof has 163 verified obligations and no failures. Its theorems state that each
 operation's result and new state refine the Tree Borrows rules on the abstract tree. Those
 operations are: access, reborrow, deallocation, exposure, wildcard access and function return.
 Verus isn't needed to build or use Kani. Running the proof in CI would add Verus as a CI
@@ -214,9 +227,13 @@ harness, two jobs.
 
 - **Miri's own borrow tests** (165 files from Miri's `tests/{pass,fail}/*_borrows`, ported so that
   Kani and Miri run the same file):
-  - 77 tests where both report UB;
+  - 76 tests where both report UB;
   - 57 where both pass;
   - none where Kani passes and Miri reports UB, and none the other way round;
+  - 1 excluded, `pass/tree_borrows/cell-inside-struct`: it runs Miri with
+    `-Zmiri-tree-borrows-no-precise-interior-mut`, a mode Kani doesn't implement (Kani always
+    tracks interior mutability per byte, and reports UB there). An earlier count included it
+    because our runner dropped that flag;
   - 19 inconclusive: function pointers, `dyn`, transmutes through bytes, and pointers copied by
     multi-element memory intrinsics;
   - the rest use threads or are compile errors.
@@ -227,14 +244,15 @@ harness, two jobs.
   | 9 (`Duration`) | 24/24 | none | 18 min (1 min) |
   | 11 (floats and ints) | 292/292 | none | 2.8 h (8 min) |
   | 14 (numeric conversions) | 190/190 | none | 1.4 h (5 min) |
-  | 6 (`NonNull`) | 90/96 | 3 real UB, 2 timeouts, 1 inconclusive (`&dyn` call) | 4.5 h (18 min) |
+  | 6 (`NonNull`) | 93/96 | 2 timeouts, 1 inconclusive (`&dyn` call) | 4.5 h (18 min) |
   | 13 (`CStr`) | 0/14 | all out of memory | (4 min) |
 
   Challenges 11 and 14 ran on an earlier build of the proof-of-concept, without its latest cost
   fixes.
 
-  The 3 real UB reports in Challenge 6 came from the harnesses, not from `NonNull`. Miri confirmed
-  them, and the cause was fixed in Kani's `PointerGenerator` (#5108).
+  Challenge 6 first had 3 UB reports. They came from the harnesses, not from `NonNull`: Miri
+  confirmed them, the cause was in Kani's `PointerGenerator`, fixed in #5108, and the 3 harnesses
+  now verify.
 
 - **Contracts**, on small programs where Miri runs the unrolled loop or the concrete call:
   - 10 loops with contracts, 5 with UB and 5 without, including UB that only happens in a later
@@ -245,9 +263,21 @@ harness, two jobs.
     Kani and Miri agree on all 7. The recursive UB case needs about 10 GB.
   - Kani's existing loop-contract and function-contract test suites pass with the change.
 
-The cost comes mainly from symbolic tag counts: when program paths that created different numbers
-of references merge, every later monitor operation works on a symbolic count. Challenge 13's
-harnesses, which loop over nondeterministic-length strings, are the worst case we have found.
+**Cost.** A profile of the Challenge 13 reduction (a nul-terminated view of a nondeterministic
+slice, and a loop over its bytes) showed where the time goes. 63% of the symbolic execution was in
+code that only builds panic messages, and most of the rest in per-call overhead: every function
+return runs the monitor, and every library entry point looks up its state. Symbolic tag counts, the
+cause we had assumed, contribute little: a variant whose returned reference doesn't depend on the
+iteration costs the same, relative to the program without checks. With the changes above (no
+checks in panic-only code, a fast path for returns that drop nothing, tags dropped when their
+storage ends):
+
+| Challenge 13 reduction | Before | After |
+|---|---|---|
+| 3 bytes | 122 s, 1.9 GB | 74 s, 1.2 GB |
+| 12 bytes | 767 s, 4.4 GB | 220 s, 3.0 GB |
+
+Without the checks, both take under 10 s. The full Challenge 13 harnesses still have to be rerun.
 
 ## Rationale and alternatives
 
@@ -284,24 +314,69 @@ So correctness rests on both:
 The early version had 26 Miri tests where Kani passed and Miri reported UB. All are fixed, and
 the current version has none.
 
+**Symbolic execution path by path.** Soteria Rust
+([Ayoun, Sjöstedt, Raad, PLDI 2026](https://doi.org/10.1145/3808306)) checks Tree Borrows by
+exploring one path at a time with a concrete tree per allocation. We ran it, with Tree Borrows on,
+on the same files:
+
+| | Miri borrow tests (165): Soteria | Kani | Kani's aliasing tests (76): Soteria | Kani |
+|---|---|---|---|---|
+| both report UB | 52 | 76 | 28 | 35 |
+| both pass | 59 | 57 | 38 | 34 |
+| missed UB | 38 | 0 | 5 | 0 |
+| false alarm | 3 | 0 | 0 | 0 |
+| inconclusive, unsupported or excluded | 13 | 32 | 5 | 7 |
+
+Soteria is much faster on these tests, 0.3 s against 5.4 s on the median Miri test, because each
+is a single concrete path. Most of its missed UB come from pointers created from integers, which
+it doesn't check; the rest from rules it departs from (retags without a read, deallocation as a
+read, no access when a protector ends, interior mutability per type). It has no loop invariants
+or function contracts, so it can't verify a loop with a nondeterministic trip count, which Kani
+does with a loop contract. Its per-path state needs no symbolic byte, but a symbolic byte gives
+the same coverage: Tree Borrows state is independent per byte, and some execution tracks the byte
+where a violation happens.
+
 **Not doing this.** Kani keeps reporting harnesses with aliasing undefined behavior as verified.
 Its users write and audit `unsafe` code, and they have no way to find these bugs except Miri on
 concrete inputs.
 
 ## Open questions
 
-- Should inconclusive aliasing results be reported as a third outcome (`UNDETERMINED`) instead of
-  a failure? This affects other checks too, for example unresolved checks after CBMC runs out of
-  memory, which are shown as failed today.
-- Are the costs acceptable for an unstable feature, or should the cost work on symbolic tag counts
-  (Challenge 13) come first? Users can enable the check per harness or per run.
-- `&self` method calls through `&dyn Trait` are inconclusive today. They are common in real code.
-  Should carrying the receiver's tag through vtable calls be required before the first release?
-- How should the CBMC dependency be handled if a CBMC release with #9238 and #9392 takes long?
-- Is the automatic loop invariant precise enough? It keeps access roots valid but forgets the
-  exact permission of every other tag the loop touches. Users can't state more, because there are
-  no aliasing predicates for invariants yet (see below). We haven't yet run it on loops from real
-  code, such as those of the verify-rust-std challenges.
+Each question has a proposal; reviewers' input is welcome on all of them.
+
+- **Should inconclusive results be a third outcome (`UNDETERMINED`)?** It would also help other
+  checks, for example the checks left unresolved when CBMC runs out of memory, which are shown as
+  failed today. *Proposal:* keep failing with a distinct message for the first release, and
+  propose `UNDETERMINED` separately, since it changes Kani's result reporting for every check.
+- **Is the cost acceptable for an unstable feature?** Harnesses take 10 to 20 times longer, and
+  Challenge 13 still has to be rerun with the cost fixes. *Proposal:* yes. The check is opt-in per
+  run, and verified results stay sound when the cost is high; the cost work continues after the
+  first PRs.
+- **Must `&self` calls through `&dyn Trait` work before a first release?** They are inconclusive
+  today, never unchecked. *Proposal:* no; carry the receiver's tag through vtable calls in a
+  follow-up.
+- **How should the CBMC dependency be handled?** *Proposal:* merge the parts that don't need it
+  first (see "Implementation plan"), and the instrumentation once Kani's CBMC pin moves to a
+  release with #9238; loop contracts with aliasing checks additionally need #9392.
+- **Is the automatic loop invariant precise enough?** It keeps access roots valid but forgets the
+  exact permission of every other tag the loop touches, and users can't state more yet.
+  *Proposal:* measure it on the loops of the verify-rust-std challenges before adding predicates
+  for invariants.
+
+## Implementation plan
+
+The proof-of-concept is about 11,000 lines, most of them tests and the Verus proof. It would land
+as a series of PRs, each reviewable and testable on its own:
+
+1. **The monitor and its Verus proof** (`library/kani_core/src/aliasing_monitor.rs`,
+   `library/kani_core/verus`), with a CI job that runs the proof. Nothing calls the monitor yet.
+   Opened as [#5120](https://github.com/model-checking/kani/pull/5120).
+2. **The instrumentation** (`-Z aliasing-checks`): the MIR pass, the library wrappers, the driver
+   changes, the user documentation and the tests. It needs a CBMC release with #9238.
+3. **Contracts:** loop contracts (the loop-head abstraction, spec mode) and function contracts.
+   Loop contracts need CBMC #9392.
+4. **Follow-ups**, each with an issue: tags through `&dyn` and function pointers, multi-element
+   copies, `UNDETERMINED`.
 
 ## Out of scope / Future Improvements
 
@@ -313,6 +388,9 @@ concrete inputs.
   permission" facts survive induction.
 - Loops whose write set CBMC infers (no `loop_modifies`) report spurious dereference failures
   along with the real result; explicit `loop_modifies` avoids them.
-- Lowering the cost of symbolic tag counts after loops with nondeterministic trip counts.
+- Further cost work: the per-call overhead of the monitor, and symbolic tag counts where they
+  matter.
+- Reclaiming tags that a function can no longer reach before it returns, beyond the cases above,
+  to raise the 64-tag bound in long-running loops.
 - Applying the check to the crates.io ecosystem with `autoharness`; an experiment on the top 50
   crates is planned.
