@@ -617,7 +617,18 @@ impl GotocCtx<'_, '_> {
                 };
                 let layout = self.layout_of(rustc_internal::internal(self.tcx, ty));
                 let expr = match &layout.variants {
-                    Variants::Empty | Variants::Single { .. } => before.goto_expr,
+                    // An enum whose variants are all uninhabited and contain only zero-sized fields
+                    // (e.g. `enum E { A(!) }`) gets the layout of `!`, so its goto struct has no
+                    // field to project into.
+                    Variants::Empty => {
+                        return Err(Box::new(UnimplementedData::new(
+                            "Downcast into a variant of an uninhabited enum",
+                            "https://github.com/model-checking/kani/issues/3596",
+                            self.codegen_ty_stable(ty),
+                            *before.goto_expr.location(),
+                        )));
+                    }
+                    Variants::Single { .. } => before.goto_expr,
                     Variants::Multiple { tag_encoding, .. } => match tag_encoding {
                         TagEncoding::Direct => {
                             let cases = if ty_kind.is_coroutine() {
