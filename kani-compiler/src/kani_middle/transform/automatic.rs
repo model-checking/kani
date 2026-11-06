@@ -2069,15 +2069,17 @@ impl AutomaticHarnessPass {
         if !self.models.constructor_args {
             return;
         }
-        let cover_inst = Instance::resolve(self.kani_cover, &GenericArgs(vec![])).unwrap();
+        let cover_inst = Instance::resolve(self.kani_cover, &GenericArgs(vec![]))
+            .expect("the cover hook is always registered");
         let span = source.span(body.blocks());
         let true_op = Operand::Constant(ConstOperand {
             span,
             user_ty: None,
             const_: MirConst::from_bool(true),
         });
-        // kani-driver recognizes this cover by its description (`VACUITY_COVER_DESC`).
-        let msg = format!("autoharness: a generated input reaches `{}`", function.name());
+        // kani-driver recognizes this cover by the start of its description.
+        let msg =
+            format!("{}`{}`", kani_metadata::AUTOHARNESS_VACUITY_COVER_PREFIX, function.name());
         let msg_op = body.new_str_operand(&msg, span);
         let unit_lcl = body.new_local(Ty::new_tuple(&[]), span, Mutability::Not);
         body.insert_call(

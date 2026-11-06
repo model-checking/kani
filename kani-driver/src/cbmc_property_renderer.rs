@@ -154,7 +154,7 @@ const UNSUPPORTED_CONSTRUCT_DESC: &str = "is not currently supported by Kani";
 const UNWINDING_ASSERT_DESC: &str = "unwinding assertion loop";
 const UNWINDING_ASSERT_REC_DESC: &str = "recursion unwinding assertion";
 const UNDEFINED_FUNCTION_DESC: &str = "undefined function should be unreachable";
-const VACUITY_COVER_DESC: &str = "autoharness: a generated input reaches ";
+const VACUITY_COVER_DESC: &str = kani_metadata::AUTOHARNESS_VACUITY_COVER_PREFIX;
 
 impl ParserItem {
     /// Determines if an item must be skipped or not.
@@ -392,8 +392,8 @@ pub fn format_result(
         let failure_message = build_failure_message(prop.description.clone(), &prop.trace.clone());
         result_str.push_str(&failure_message);
     }
-    for prop in properties.iter().filter(|prop| is_vacuous_harness_cover(prop)) {
-        let vacuity_line = format!("{}\n", vacuity_message(prop));
+    for message in properties.iter().filter_map(vacuity_message) {
+        let vacuity_line = format!("{message}\n");
         result_str.push_str(&vacuity_line);
     }
 
@@ -565,10 +565,11 @@ pub fn is_vacuous_harness_cover(prop: &Property) -> bool {
         && matches!(prop.status, CheckStatus::Unsatisfiable | CheckStatus::Unreachable)
 }
 
-/// The line reporting a vacuous harness, for a `prop` that `is_vacuous_harness_cover` accepts.
-pub fn vacuity_message(prop: &Property) -> String {
-    let function = &prop.description[VACUITY_COVER_DESC.len()..];
-    format!("Vacuous harness: no generated input reaches {function}")
+/// The line reporting a vacuous harness, if `prop` is a cover that makes it vacuous.
+pub fn vacuity_message(prop: &Property) -> Option<String> {
+    let function = prop.description.strip_prefix(VACUITY_COVER_DESC)?;
+    is_vacuous_harness_cover(prop)
+        .then(|| format!("Vacuous harness: no generated input reaches {function}"))
 }
 
 /// Determines if there is property with status `FAILURE` and the given description

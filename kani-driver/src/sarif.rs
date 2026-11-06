@@ -3,7 +3,7 @@
 
 use crate::call_cbmc::ExitStatus;
 use crate::cbmc_output_parser::{CheckStatus, Property, SourceLocation, TraceItem};
-use crate::cbmc_property_renderer::{is_vacuous_harness_cover, vacuity_message};
+use crate::cbmc_property_renderer::vacuity_message;
 use crate::harness_runner::HarnessResult;
 use crate::session::KaniSession;
 use anyhow::{Context, Result};
@@ -182,14 +182,13 @@ impl SarifLog {
                             },
                         });
                     }
-                    for prop in properties.iter().filter(|prop| is_vacuous_harness_cover(prop)) {
+                    for text in properties.iter().filter_map(vacuity_message) {
                         let rule_id = "kani.autoharness.vacuous";
                         let desc = "No generated input reaches the function under test";
                         rules.entry(rule_id.to_string()).or_insert_with(|| ReportingDescriptor {
                             id: rule_id.to_string(),
                             short_description: Message { text: desc.to_string() },
                         });
-                        let text = vacuity_message(prop);
                         sarif_results.push(harness_level_result(harness, rule_id, &text));
                     }
                 }
