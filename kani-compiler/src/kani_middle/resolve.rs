@@ -71,6 +71,9 @@ pub fn resolve_fn_path<'tcx>(
             // E.g., in path <usize as SliceIndex<[i32]>>::get_unchecked, ty = `usize` and `trait_fn_id` is the ID of `get_unchecked`
             // in the definition of the `SliceIndex`` trait.
             let ty = type_resolution::resolve_ty(tcx, current_module, syn_ty)?;
+            if matches!(ty.kind(), TyKind::RigidTy(RigidTy::Dynamic(..))) {
+                return Err(ResolveError::UnsupportedPath { kind: "trait object self type" });
+            }
             let trait_fn_id = resolve_path(tcx, current_module, &path.path)?;
             validate_kind!(tcx, trait_fn_id, "function / method", DefKind::Fn | DefKind::AssocFn)?;
             // Extract generic args from the trait segment (e.g., <u32> from Convert<u32>).
@@ -690,8 +693,11 @@ where
             RigidTy::Foreign(_) => {
                 return Err(ResolveError::UnsupportedPath { kind: "foreign type" });
             }
+            RigidTy::Dynamic(..) => {
+                return Err(ResolveError::UnsupportedPath { kind: "trait object self type" });
+            }
             _ => {
-                unreachable!("Unexpected type {ty}")
+                return Err(ResolveError::UnsupportedPath { kind: "self type" });
             }
         },
         TyKind::Alias(_, _) => return Err(ResolveError::UnsupportedPath { kind: "alias" }),
