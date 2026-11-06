@@ -62,7 +62,7 @@ fn setup_session(session: &mut KaniSession, common_autoharness_args: &CommonAuto
     session.add_default_bounds();
     let bounds = common_autoharness_args.bounds();
     if common_autoharness_args.bounded_arguments {
-        warn_if_bounds_reach_unwind(bounds, &session.args);
+        warn_if_bounds_reach_unwind(bounds, &session.args, session.autoharness_default_unwind);
     }
     session.add_auto_harness_args(
         &common_autoharness_args.include_pattern,
@@ -77,11 +77,18 @@ fn setup_session(session: &mut KaniSession, common_autoharness_args: &CommonAuto
 /// Warn about a bound that reaches the effective unwinding bound. A loop iterating over such an
 /// argument is not fully unwound, so the result does not hold up to the bound after all.
 ///
-/// Called after `add_default_bounds`, so the unwinding bound is resolved by this point.
-fn warn_if_bounds_reach_unwind(bounds: AutoharnessBounds, args: &VerificationArgs) {
-    // `--unwind` takes precedence over `--default-unwind`, c.f. `resolve_unwind_value`. Automatic
-    // harnesses carry no `#[kani::unwind]` attribute, so those two are the whole precedence here.
-    let Some(unwind) = args.unwind.or(args.default_unwind) else { return };
+/// Called after `add_default_bounds`, so the autoharness unwinding default is known by this point.
+fn warn_if_bounds_reach_unwind(
+    bounds: AutoharnessBounds,
+    args: &VerificationArgs,
+    autoharness_default_unwind: Option<u32>,
+) {
+    // `--unwind` takes precedence over `--default-unwind`, which takes precedence over the
+    // autoharness default, c.f. `resolve_unwind_value`. Automatic harnesses carry no
+    // `#[kani::unwind]` attribute, so those three are the whole precedence here.
+    let Some(unwind) = args.unwind.or(args.default_unwind).or(autoharness_default_unwind) else {
+        return;
+    };
     for (option, value) in [
         ("--slice-bound", bounds.slice),
         ("--string-bound", bounds.string),
@@ -244,16 +251,18 @@ impl KaniSession {
         self.autoharness_bounds = bounds;
     }
 
-    /// Add global harness timeout and loop unwinding bounds if not provided.
+    /// Set the harness timeout and loop unwinding bound that automatic harnesses fall back to.
     /// These prevent automatic harnesses from hanging.
+    ///
+    /// They are deliberately not written into `self.args.harness_timeout` /
+    /// `self.args.default_unwind`: those apply to every harness in the run, including the manual
+    /// harnesses `autoharness` also verifies, which must behave as they do under plain
+    /// `kani`/`cargo kani` (#5103). An explicit `--harness-timeout`, `--default-unwind` or
+    /// `--unwind` still takes precedence for every harness, c.f. `resolve_unwind_value` and
+    /// `resolve_harness_timeout`.
     pub fn add_default_bounds(&mut self) {
-        if self.args.harness_timeout.is_none() {
-            let timeout = Timeout::from_str(AUTOHARNESS_TIMEOUT).unwrap();
-            self.args.harness_timeout = Some(timeout);
-        }
-        if self.args.default_unwind.is_none() {
-            self.args.default_unwind = Some(LOOP_UNWIND_DEFAULT);
-        }
+        self.autoharness_harness_timeout = Some(Timeout::from_str(AUTOHARNESS_TIMEOUT).unwrap());
+        self.autoharness_default_unwind = Some(LOOP_UNWIND_DEFAULT);
     }
 
     /// Prints the results from running the `autoharness` subcommand.
@@ -334,7 +343,7 @@ impl KaniSession {
 
         if failing > 0 {
             println!(
-                "Note that `kani autoharness` sets default --harness-timeout of {AUTOHARNESS_TIMEOUT} and --default-unwind of {LOOP_UNWIND_DEFAULT}."
+                "Note that `kani autoharness` sets default --harness-timeout of {AUTOHARNESS_TIMEOUT} and --default-unwind of {LOOP_UNWIND_DEFAULT} for automatic harnesses."
             );
             println!(
                 "If verification failed because of timing out or too low of an unwinding bound, try passing larger values for these arguments (or, if possible, writing a loop contract)."
