@@ -1,0 +1,195 @@
+[without --bounded-arguments]
+| cargo_autoharness_multichareq_searcher | char_array_mut                | Requires --bounded-arguments for argument(s) s: &mut std::str::pattern::CharArraySearcher<'_, 2>        |
+[with --bounded-arguments]
+Status: SATISFIED\
+Description: "char_array_mut: empty haystack"
+Status: SATISFIED\
+Description: "char_array_mut: non-empty haystack"
+Status: SATISFIED\
+Description: "char_array_mut: haystack starting with a multi-byte char"
+Status: SATISFIED\
+Description: "char_array_mut: next is Match"
+Status: SATISFIED\
+Description: "char_array_mut: next is Reject"
+Status: SATISFIED\
+Description: "char_array_mut: next is Done"
+Status: SATISFIED\
+Description: "char_array_mut: exhausted non-empty haystack"
+Status: SATISFIED\
+Description: "char_array_mut: advanced from the front"
+Status: SATISFIED\
+Description: "char_array_mut: advanced from the back"
+Status: SATISFIED\
+Description: "char_array_mut: advanced from both ends"
+Status: SATISFIED\
+Description: "char_array_ref: empty haystack"
+Status: SATISFIED\
+Description: "char_array_ref: non-empty haystack"
+Status: SATISFIED\
+Description: "char_array_ref: haystack starting with a multi-byte char"
+Status: SATISFIED\
+Description: "char_array_ref: next is Match"
+Status: SATISFIED\
+Description: "char_array_ref: next is Reject"
+Status: SATISFIED\
+Description: "char_array_ref: next is Done"
+Status: SATISFIED\
+Description: "char_array_ref: exhausted non-empty haystack"
+Status: SATISFIED\
+Description: "char_array_ref: advanced from the front"
+Status: SATISFIED\
+Description: "char_array_ref: advanced from the back"
+Status: SATISFIED\
+Description: "char_array_ref: advanced from both ends"
+Status: SATISFIED\
+Description: "char_array_value: empty haystack"
+Status: SATISFIED\
+Description: "char_array_value: non-empty haystack"
+Status: SATISFIED\
+Description: "char_array_value: haystack starting with a multi-byte char"
+Status: SATISFIED\
+Description: "char_array_value: next is Match"
+Status: SATISFIED\
+Description: "char_array_value: next is Reject"
+Status: SATISFIED\
+Description: "char_array_value: next is Done"
+Status: SATISFIED\
+Description: "char_array_value: exhausted non-empty haystack"
+Status: SATISFIED\
+Description: "char_array_value: advanced from the front"
+Status: SATISFIED\
+Description: "char_array_value: advanced from the back"
+Status: SATISFIED\
+Description: "char_array_value: advanced from both ends"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_mut: empty haystack"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_mut: non-empty haystack"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_mut: haystack starting with a multi-byte char"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_mut: next is Match"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_mut: next is Reject"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_mut: next is Done"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_mut: exhausted non-empty haystack"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_mut: advanced from the front"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_mut: advanced from the back"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_mut: advanced from both ends"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_ref: empty haystack"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_ref: non-empty haystack"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_ref: haystack starting with a multi-byte char"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_ref: next is Match"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_ref: next is Reject"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_ref: next is Done"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_ref: exhausted non-empty haystack"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_ref: advanced from the front"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_ref: advanced from the back"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_ref: advanced from both ends"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_value: empty haystack"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_value: non-empty haystack"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_value: haystack starting with a multi-byte char"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_value: next is Match"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_value: next is Reject"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_value: next is Done"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_value: exhausted non-empty haystack"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_value: advanced from the front"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_value: advanced from the back"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_value: advanced from both ends"
+Status: SATISFIED\
+Description: "char_slice_mut: empty haystack"
+Status: SATISFIED\
+Description: "char_slice_mut: non-empty haystack"
+Status: SATISFIED\
+Description: "char_slice_mut: haystack starting with a multi-byte char"
+Status: SATISFIED\
+Description: "char_slice_mut: next is Match"
+Status: SATISFIED\
+Description: "char_slice_mut: next is Reject"
+Status: SATISFIED\
+Description: "char_slice_mut: next is Done"
+Status: SATISFIED\
+Description: "char_slice_mut: exhausted non-empty haystack"
+Status: SATISFIED\
+Description: "char_slice_mut: advanced from the front"
+Status: SATISFIED\
+Description: "char_slice_mut: advanced from the back"
+Status: SATISFIED\
+Description: "char_slice_mut: advanced from both ends"
+Status: SATISFIED\
+Description: "char_slice_ref: empty haystack"
+Status: SATISFIED\
+Description: "char_slice_ref: non-empty haystack"
+Status: SATISFIED\
+Description: "char_slice_ref: haystack starting with a multi-byte char"
+Status: SATISFIED\
+Description: "char_slice_ref: next is Match"
+Status: SATISFIED\
+Description: "char_slice_ref: next is Reject"
+Status: SATISFIED\
+Description: "char_slice_ref: next is Done"
+Status: SATISFIED\
+Description: "char_slice_ref: exhausted non-empty haystack"
+Status: SATISFIED\
+Description: "char_slice_ref: advanced from the front"
+Status: SATISFIED\
+Description: "char_slice_ref: advanced from the back"
+Status: SATISFIED\
+Description: "char_slice_ref: advanced from both ends"
+Status: SATISFIED\
+Description: "char_slice_value: empty haystack"
+Status: SATISFIED\
+Description: "char_slice_value: non-empty haystack"
+Status: SATISFIED\
+Description: "char_slice_value: haystack starting with a multi-byte char"
+Status: SATISFIED\
+Description: "char_slice_value: next is Match"
+Status: SATISFIED\
+Description: "char_slice_value: next is Reject"
+Status: SATISFIED\
+Description: "char_slice_value: next is Done"
+Status: SATISFIED\
+Description: "char_slice_value: exhausted non-empty haystack"
+Status: SATISFIED\
+Description: "char_slice_value: advanced from the front"
+Status: SATISFIED\
+Description: "char_slice_value: advanced from the back"
+Status: SATISFIED\
+Description: "char_slice_value: advanced from both ends"
+Failed Checks: assertion failed: s.haystack().len() != 3
+| cargo_autoharness_multichareq_searcher | char_array_mut                | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_multichareq_searcher | char_array_ref                | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_multichareq_searcher | char_array_ref_searcher_mut   | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_multichareq_searcher | char_array_ref_searcher_ref   | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_multichareq_searcher | char_array_ref_searcher_value | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_multichareq_searcher | char_array_value              | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_multichareq_searcher | char_slice_mut                | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_multichareq_searcher | char_slice_ref                | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_multichareq_searcher | char_slice_value              | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_multichareq_searcher | haystack_len_is_not_three     | #[kani::proof] (bounded)  | Failure             |
+Complete - 9 successfully verified functions, 1 failures, 10 total.
