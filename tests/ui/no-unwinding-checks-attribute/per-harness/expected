@@ -1,3 +1,5 @@
+** WARNING: Unwinding assertions are turned off for this harness (`#[kani::no_unwinding_checks]`), so its result only covers the executions within the unwinding bound.
+
 check_without_unwinding_checks.assertion\
 Status: SUCCESS\
 Description: "assertion failed: count == n"
@@ -8,4 +10,5 @@ Description: "unwinding assertion loop 0"
 
 Manual Harness Summary:\
 Verification failed for - check_with_unwinding_checks\
+Verified without unwinding assertions - check_without_unwinding_checks\
 Complete - 1 successfully verified harnesses, 1 failures, 2 total.

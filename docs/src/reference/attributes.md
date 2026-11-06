@@ -205,6 +205,7 @@ VERIFICATION:- SUCCESSFUL
 It has the effect of the `--no-unwinding-checks` option on the annotated harness only.
 Kani does not report loops that weren't unwound enough times, and a successful result only holds for the executions that stay within the unwinding value.
 This is meant for harnesses that verify some code up to a certain bound on purpose.
+Kani prints a warning with the result of such a harness, and the summary lists each one that verified successfully.
 It cannot be used on `#[kani::proof_for_contract]` harnesses, since `#[kani::stub_verified]` would then trust the contract beyond the unwinding bound.
 
 ### Example
