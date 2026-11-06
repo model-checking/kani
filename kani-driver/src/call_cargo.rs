@@ -88,6 +88,7 @@ crate-type = ["lib"]
         // In theory, these could be passed just to the local crate rather than all crates,
         // but the `cargo build` command we use for building `std` doesn't allow you to pass `rustc`
         // arguments, so we have to pass them through the environment variable instead.
+        rustc_args.extend(self.kani_rustc_local_flags());
         rustc_args.push(encode_as_rustc_arg(&self.kani_compiler_local_flags()));
 
         // Ignore global assembly, since `compiler_builtins` has some.
@@ -238,6 +239,7 @@ crate-type = ["lib"]
                     .arg("--") // Add this delimiter so we start passing args to rustc and not Cargo
                     .env("RUSTC", &self.kani_compiler)
                     .pass_rustc_args(&rustc_args, PassTo::AllCrates)
+                    .pass_rustc_args(&self.kani_rustc_local_flags(), PassTo::OnlyLocalCrate)
                     .pass_rustc_arg(encode_as_rustc_arg(&kani_pkg_args), PassTo::OnlyLocalCrate)
                     // This is only required for stable but is a no-op for nightly channels
                     .env("RUSTC_BOOTSTRAP", "1")

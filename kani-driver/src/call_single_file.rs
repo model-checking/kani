@@ -66,6 +66,7 @@ impl KaniSession {
 
         let lib_path = lib_folder().unwrap();
         let mut rustc_args = self.kani_rustc_flags(LibConfig::new(lib_path));
+        rustc_args.extend(self.kani_rustc_local_flags());
         rustc_args.push(file.into());
         rustc_args.push("--out-dir".into());
         rustc_args.push(RustcArg::from(outdir.as_os_str()));
@@ -118,6 +119,19 @@ impl KaniSession {
             flags.push("--ignore-global-asm".into());
         }
 
+        flags
+    }
+
+    /// The rustc arguments that should be passed only to the local crate being compiled.
+    /// Dependencies skip codegen, so passing these to them would only force recompilation.
+    pub fn kani_rustc_local_flags(&self) -> Vec<RustcArg> {
+        let mut flags = vec![];
+        // The MIR inliner copies a stubbed function into its callers, where the stub pass
+        // cannot replace it.
+        if self.args.is_stubbing_enabled() {
+            flags.push("-Z".into());
+            flags.push("inline-mir=no".into());
+        }
         flags
     }
 
