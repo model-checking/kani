@@ -810,7 +810,7 @@ impl GotocCtx<'_, '_> {
                 // Like rustc's codegen, ignore `min_length`: it can exceed `length` after a bounds
                 // check that always fails, where GVN turns `a[i]` into `a[i of i+1]`. An
                 // out-of-bounds index that is reached fails CBMC's array bounds check.
-                let idx = if from_end { length - offset } else { offset };
+                let idx = if from_end { length.wrapping_sub(offset) } else { offset };
                 let idxe = Expr::int_constant(idx, Type::ssize_t());
                 let expr = self.codegen_idx_array(before.goto_expr, idxe);
                 let typ = TypeOrVariant::Type(elemt);
