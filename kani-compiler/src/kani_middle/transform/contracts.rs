@@ -3,7 +3,7 @@
 //! This module contains code related to the MIR-to-MIR pass to enable contracts.
 use crate::args::ReachabilityType;
 use crate::kani_middle::attributes::KaniAttributes;
-use crate::kani_middle::codegen_units::CodegenUnit;
+use crate::kani_middle::codegen_units::{CodegenUnit, Stubs};
 use crate::kani_middle::kani_functions::{KaniIntrinsic, KaniModel};
 use crate::kani_middle::transform::body::{
     InsertPosition, MutableBody, SourceInstruction, synthetic_source_info,
@@ -284,6 +284,8 @@ pub struct FunctionWithContractPass {
     check_fn: Option<FnDef>,
     /// Functions that should be stubbed by their contract.
     replace_fns: HashSet<FnDef>,
+    /// Explicit replacements active in this harness.
+    stubs: Stubs,
     /// Should we interpret contracts as assertions? (true iff the no-assert-contracts option is not passed)
     assert_contracts: bool,
     /// Functions annotated with contract attributes will contain contract closures even if they
@@ -403,6 +405,7 @@ impl FunctionWithContractPass {
             FunctionWithContractPass {
                 check_fn,
                 replace_fns,
+                stubs: unit.stubs.clone(),
                 assert_contracts: !queries.args().no_assert_contracts,
                 unused_closures: Default::default(),
                 run_contract_fn,
@@ -617,7 +620,8 @@ impl FunctionWithContractPass {
         let any_args = GenericArgs(vec![GenericArgKind::Type(ret_ty)]);
         let Ok(any_instance) = Instance::resolve(kani_any, &any_args) else { return };
 
-        let Some(path) = find_call_path(&any_instance, &instance, &mut HashSet::new()) else {
+        let Some(path) = find_call_path(&any_instance, &instance, &self.stubs, &mut HashSet::new())
+        else {
             return;
         };
 
@@ -754,12 +758,22 @@ fn find_closure(tcx: TyCtxt, fn_def: FnDef, body: &Body, name: &str) -> ClosureD
 fn find_call_path(
     from: &Instance,
     target: &Instance,
+    stubs: &Stubs,
     visited: &mut HashSet<Instance>,
 ) -> Option<Vec<String>> {
     if !visited.insert(*from) {
         return None;
     }
-    let body = from.body()?;
+    // Follow the body that FnStubPass will execute, including replacements
+    // of Arbitrary implementations used to break constructor cycles.
+    let effective = match from.ty().kind() {
+        TyKind::RigidTy(RigidTy::FnDef(def, args)) => match stubs.get(&def) {
+            Some(replacement) => Instance::resolve(*replacement, &args).ok()?,
+            None => *from,
+        },
+        _ => *from,
+    };
+    let body = effective.body()?;
 
     for bb in body.blocks.iter() {
         let TerminatorKind::Call { func, .. } = &bb.terminator.kind else { continue };
@@ -773,7 +787,7 @@ fn find_call_path(
             return Some(vec![from.name()]);
         }
 
-        if let Some(mut path) = find_call_path(&callee, target, visited) {
+        if let Some(mut path) = find_call_path(&callee, target, stubs, visited) {
             path.insert(0, from.name());
             return Some(path);
         }
