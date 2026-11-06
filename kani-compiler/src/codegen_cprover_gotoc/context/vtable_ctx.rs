@@ -21,6 +21,7 @@ use cbmc::InternedString;
 use cbmc::goto_program::{Stmt, Type};
 use kani_metadata::{CallSite, PossibleMethodEntry, TraitDefinedMethod, VtableCtxResults};
 use rustc_data_structures::fx::FxHashMap;
+use rustc_public::ty::{Binder, ExistentialTraitRef};
 use tracing::debug;
 
 /// This structure represents data about the vtable that we construct
@@ -38,6 +39,10 @@ pub struct VtableCtx {
 
     // Internal tracing of index needed for call site wrappers
     call_site_global_idx: usize,
+
+    // All vtable globals generated so far: (principal trait, global symbol name, global type).
+    // Used to detect wide pointer metadata that points to a vtable of a different trait.
+    vtables: Vec<(Option<Binder<ExistentialTraitRef>>, InternedString, Type)>,
 }
 
 /// Constructor
@@ -49,6 +54,7 @@ impl VtableCtx {
             possible_methods: FxHashMap::default(),
             call_sites: Vec::new(),
             call_site_global_idx: 0,
+            vtables: Vec::new(),
         }
     }
 }
@@ -75,6 +81,23 @@ impl VtableCtx {
     /// The vtable index for drop
     pub fn drop_index() -> usize {
         rustc_middle::ty::COMMON_VTABLE_ENTRIES_DROPINPLACE
+    }
+
+    /// Record a generated vtable global and the principal trait it was generated for.
+    pub fn add_vtable(
+        &mut self,
+        principal: Option<Binder<ExistentialTraitRef>>,
+        vtable_global: InternedString,
+        vtable_type: Type,
+    ) {
+        if !self.vtables.iter().any(|(_, global, _)| *global == vtable_global) {
+            self.vtables.push((principal, vtable_global, vtable_type));
+        }
+    }
+
+    /// All vtable globals generated so far.
+    pub fn vtables(&self) -> &[(Option<Binder<ExistentialTraitRef>>, InternedString, Type)] {
+        &self.vtables
     }
 }
 
