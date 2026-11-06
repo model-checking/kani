@@ -3,7 +3,7 @@
 
 use crate::args::OutputFormat;
 use crate::call_cbmc::{FailedProperties, VerificationStatus};
-use crate::cbmc_output_parser::{CheckStatus, ParserItem, Property, TraceItem};
+use crate::cbmc_output_parser::{CheckStatus, ListedProperty, ParserItem, Property, TraceItem};
 use crate::coverage::cov_results::CoverageResults;
 use console::style;
 use once_cell::sync::Lazy;
@@ -233,8 +233,23 @@ fn format_item_regular(item: &ParserItem) -> Option<String> {
     match item {
         ParserItem::Program { program } => Some(program.to_string()),
         ParserItem::Message { message_text, .. } => Some(message_text.to_string()),
+        ParserItem::Properties { properties } => Some(format_properties(properties)),
         _ => None,
     }
+}
+
+/// Formats the properties listed by `--show-properties`
+fn format_properties(properties: &[ListedProperty]) -> String {
+    let mut result_str = String::from("\nPROPERTIES:\n");
+    for (index, prop) in (1..).zip(properties) {
+        result_str.push_str(&format!("Check {index}: {}\n", prop.name));
+        result_str.push_str(&format!("\t - Description: \"{}\"\n", prop.description));
+        if !prop.source_location.is_missing() {
+            result_str.push_str(&format!("\t - Location: {}\n", prop.source_location));
+        }
+        result_str.push('\n');
+    }
+    result_str
 }
 
 /// Formats an item using the terse output format
