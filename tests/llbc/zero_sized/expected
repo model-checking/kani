@@ -1,0 +1,19 @@
+// Full name: test::tagged\
+pub fn tagged<T>(n: u8) -> Tagged<T>\
+{\
+    let _0: Tagged<T>; // return\
+    let n: u8; // arg #1\
+    let _2: PhantomData<T>; // anonymous local\
+    let _3: u8; // anonymous local\
+\
+    storage_live(_0)\
+    storage_live(_2)\
+    storage_live(_3)\
+    _2 = PhantomData {  }\
+    _3 = copy n\
+    _0 = Tagged { tag: move _2, n: move _3 }\
+    storage_dead(_3)\
+    storage_dead(_2)\
+    storage_dead(n)\
+    return\
+}

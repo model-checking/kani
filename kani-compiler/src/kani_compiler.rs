@@ -199,6 +199,17 @@ impl Callbacks for KaniCompiler {
         self.build_std = args.build_std;
         self.no_assert_overrides = args.no_assert_overrides;
 
+        // The LLBC backend feeds Charon's consumers (Aeneas), which model ownership: they need
+        // MIR where moves are still moves and nothing was removed on the assumption that the
+        // program has no undefined behaviour. Compile those runs the way Charon does. This only
+        // applies when the LLBC backend is selected; the CProver backend keeps rustc's default
+        // MIR optimizations.
+        #[cfg(feature = "llbc")]
+        if args.backend == BackendOption::Llbc {
+            config.opts.unstable_opts.mir_opt_level = Some(0);
+            config.opts.unstable_opts.mir_preserve_ub = true;
+        }
+
         // Capture args in the closure so they're available when the backend is created
         // (potentially on a different thread).
         config.make_codegen_backend = Some(Box::new({

@@ -22,14 +22,19 @@ pub fn main()\
     let _0: (); // return\
     let s: MyStruct; // local\
     let a: i32; // local\
+    let _3: MyStruct; // anonymous local\
 \
     storage_live(_0)\
     storage_live(s)\
     storage_live(a)\
+    storage_live(_3)\
     _0 = ()\
     s = MyStruct { a: const 1i32, b: const true }\
-    a = struct_project(copy s)\
+    _3 = move s\
+    a = struct_project(move _3)\
     ↳⚡ undefined_behavior\
+    storage_dead(_3)\
+    _0 = ()\
     storage_dead(a)\
     storage_dead(s)\
     return\
