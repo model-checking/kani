@@ -31,7 +31,9 @@ jobs:
         run: python3 agent-plugin/tests/validate_plugin.py
 
       - name: Run script unit tests
-        run: python3 agent-plugin/tests/test_scripts.py
+        run: |
+          python3 agent-plugin/tests/test_scripts.py
+          python3 agent-plugin/tests/test_map.py
 
       - name: Lint plugin Python code
         run: |

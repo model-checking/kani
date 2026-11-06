@@ -83,6 +83,7 @@ All scripts print JSON and accept `--help`.
 | `check-proof-diff.py` | Changes since a baseline that weaken the agreed property, and any change to the code under verification |
 | `check-witness.py` | Confirms a defect (the concrete playback witness fails) or a fix (fails before, passes after) |
 | `evidence.py` | Records the run behind a reported result, and re-checks it later |
+| `map-crate.py` | Crate Verifiability Map: functions, call graph, recursion, harnesses, results, a staged verification plan |
 | `summarize-coverage.py` | Merges source coverage across harnesses: regions no harness exercises |
 | `check-assumptions.py` | Quick text scan for contradictory, pinned, or over-strong `kani::assume` / `requires` |
 | `inspect-harness.py` | Harness structure: inputs, assertions, attributes, missing unwind bounds |
@@ -106,6 +107,7 @@ Kani feature, raise `min_kani` in the same change.
 ```bash
 python3 agent-plugin/tests/validate_plugin.py   # manifests and skill structure
 python3 agent-plugin/tests/test_scripts.py      # script unit tests, no Kani needed
+python3 agent-plugin/tests/test_map.py          # Crate Verifiability Map tests (needs cargo, not Kani)
 cargo test -p kani-mcp                          # MCP server unit tests
 cargo run -p compiletest -- --suite agent-plugin --mode exec   # end-to-end, needs a Kani build
 ```

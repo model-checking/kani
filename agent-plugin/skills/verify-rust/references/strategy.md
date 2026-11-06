@@ -15,8 +15,10 @@ When one harness is too slow, needs unwinding bounds that are too large, or the 
 reached from many places, verify functions one at a time against contracts
 (`references/contracts.md`):
 
-1. **Map the call graph** of the code under verification with rust-analyzer's call hierarchy
-   (`references/rust-analyzer.md`): for each function, its callees inside the crate.
+1. **Map the call graph** of the code under verification: for a workspace, build the Crate
+   Verifiability Map (`references/verifiability-map.md`), which gives callees, recursive
+   components, and a bottom-up order; for a few functions, use rust-analyzer's call hierarchy
+   (`references/rust-analyzer.md`).
 2. **Start at the leaves**: functions that call nothing else in scope. Give each a contract
    (`#[kani::requires]`, `#[kani::ensures]`, `#[kani::modifies]`) and prove it with a
    `#[kani::proof_for_contract]` harness.

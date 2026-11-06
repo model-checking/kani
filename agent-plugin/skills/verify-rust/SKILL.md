@@ -72,8 +72,11 @@ Read the code and its types. List existing harnesses with `kani_list_harnesses` 
 default; `filter` for names) or `cargo kani list --format json`, and describe them with
 `scripts/inspect-harness.py <src> --summary` (then `--flagged-only` or `--harness`; pass
 `--list-json kani-list.json` to find macro-generated harnesses the scan cannot see).
-Map the call graph of the code under verification with rust-analyzer's call hierarchy
-(`references/rust-analyzer.md`), then choose a strategy with `references/strategy.md`: one
+For more than one function, build the Crate Verifiability Map (`scripts/map-crate.py map`;
+`references/verifiability-map.md`): call graph, recursion, existing harnesses and results, and a
+staged bottom-up plan, with what it cannot see listed as uncertainty. For a single function,
+use rust-analyzer's call hierarchy (`references/rust-analyzer.md`). Then choose a strategy with
+`references/strategy.md`: one
 harness for a small target; contracts proved bottom-up for larger ones. Use AutoHarness
 (`kani_autoharness`; `references/autoharness.md`) to sweep many functions for panics and UB:
 list first, because it also runs every manual harness, with a different default unwind bound.
@@ -160,6 +163,8 @@ Run all of these and fix every `error` before reporting:
 See `references/vacuity.md`.
 
 ### 9. Record the evidence and report what was proven
+
+If you built a map, `scripts/map-crate.py update` it with the final export and re-plan.
 
 Record the final run with
 `scripts/evidence.py record --export <export.json> --command "<the exact command>"` and cite the

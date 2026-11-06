@@ -16,10 +16,18 @@ from pathlib import Path
 PLUGIN = Path(__file__).resolve().parent.parent
 REQUIRED_PLUGIN_FIELDS = ["name", "version", "description", "author", "keywords", "license", "repository"]
 REQUIRED_REFERENCES = ["kani", "autoharness", "contracts", "coverage", "miri", "rust-analyzer", "strategy",
-                       "vacuity"]
+                       "vacuity", "verifiability-map"]
 REQUIRED_SCRIPTS = [
-    "check-assumptions.py", "check-kani-version.py", "check-proof-diff.py", "check-specs.py",
-    "check-vacuity.py", "check-witness.py", "evidence.py", "inspect-harness.py", "summarize-coverage.py",
+    "check-assumptions.py",
+    "check-kani-version.py",
+    "check-proof-diff.py",
+    "check-specs.py",
+    "check-vacuity.py",
+    "check-witness.py",
+    "evidence.py",
+    "inspect-harness.py",
+    "map-crate.py",
+    "summarize-coverage.py",
     "summarize-results.py",
 ]
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
@@ -106,6 +114,10 @@ def main():
     verify = PLUGIN / "skills" / "verify-rust"
     for ref in REQUIRED_REFERENCES:
         check((verify / "references" / f"{ref}.md").exists(), f"missing references/{ref}.md")
+    check((PLUGIN / "scripts" / "verifiability_map.py").exists(), "missing scripts/verifiability_map.py")
+    check((PLUGIN / "docs" / "verifiability-map-design.md").exists(), "missing docs/verifiability-map-design.md")
+    schema = load_json("schemas/verifiability-map.schema.json")
+    check(schema.get("title") and schema.get("required"), "schemas/verifiability-map.schema.json is incomplete")
     for script in REQUIRED_SCRIPTS:
         path = PLUGIN / "scripts" / script
         check(path.exists(), f"missing scripts/{script}")
