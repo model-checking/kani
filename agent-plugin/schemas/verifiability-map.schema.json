@@ -250,6 +250,15 @@
                 "items": {
                   "type": "string"
                 }
+              },
+              "loop_invariants": {
+                "type": "integer"
+              },
+              "loop_decreases": {
+                "type": "integer"
+              },
+              "loop_modifies": {
+                "type": "integer"
               }
             },
             "required": [
@@ -257,7 +266,10 @@
               "branch_keywords",
               "unsafe_blocks",
               "parameters",
-              "unbounded_input_types"
+              "unbounded_input_types",
+              "loop_invariants",
+              "loop_decreases",
+              "loop_modifies"
             ]
           },
           "contracts": {
@@ -489,6 +501,22 @@
               "impact",
               "effort"
             ]
+          },
+          "first_line": {
+            "type": "integer"
+          },
+          "recursion_attribute": {
+            "type": "boolean"
+          },
+          "contract_status": {
+            "enum": [
+              "none",
+              "declared",
+              "verified",
+              "failed",
+              "inconclusive",
+              "unsupported"
+            ]
           }
         },
         "required": [
@@ -526,7 +554,10 @@
           "unverified_callees",
           "strategy",
           "priority",
-          "priority_inputs"
+          "priority_inputs",
+          "first_line",
+          "recursion_attribute",
+          "contract_status"
         ]
       }
     },
@@ -710,6 +741,9 @@
               "stubbed",
               "contract_assumed"
             ]
+          },
+          "automatic": {
+            "type": "boolean"
           }
         },
         "required": [

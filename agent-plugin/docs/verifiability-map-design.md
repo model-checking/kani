@@ -21,6 +21,12 @@ directory; none forks it. It works without MCP.
 
 ## Implemented
 
+The map is **contract-first**: its strategy and plan steer each crate toward function contracts,
+loop contracts with invariants and `decreases` clauses, and AutoHarness verifying the contracts
+bottom-up, with callers relying on verified contracts. Unwinding bounds and hand-written harnesses
+are the fallback. AutoHarness-generated harnesses, which are not in the source, are read from the
+results and counted as evidence for their functions.
+
 | Piece | What it does |
 |-------|--------------|
 | Workspace discovery | `cargo metadata`: packages, targets (lib, bin, ...), features, workspace dependencies. Only library and binary sources are indexed; tests, examples, and benchmarks are not verification targets. |
@@ -34,6 +40,8 @@ directory; none forks it. It works without MCP.
 | Plan | A staged, bottom-up plan; goals restrict its scope. |
 | Update | Merge new results into a map, recompute everything, and refuse to run when the sources changed since the map was built. |
 | Report | A Mermaid diagram of the call graph, colored by status. |
+| MCP tools | `kani_map_crate`, `kani_plan_verification`, `kani_update_verification_map`, `kani_explain_function`: thin wrappers over the same scripts, returning compact answers. |
+| Contract-first signals | Per function: `contract_status`, loop invariants, `decreases` clauses, `#[kani::recursion]`; per plan stage: the workflow steps and the AutoHarness command; `partial-termination` where a proof has invariants but no decreases clause. |
 | Schema | `schemas/verifiability-map.schema.json`, versioned (`schema_version`). Output is deterministic: same sources and results give the same bytes. |
 
 ## Proposed (not implemented)
@@ -47,8 +55,6 @@ directory; none forks it. It works without MCP.
   MIR (`rustc_public`) and finds direct recursion and loops, but writes CSV and misses mutual
   recursion; extending it would give monomorphized, exact direct calls and replace the
   rust-analyzer approximation.
-- MCP tools (`kani_map_crate`, `kani_plan_verification`, `kani_update_verification_map`; names are
-  proposals). Until then agents run the CLI.
 - Monomorphized instances, per-target and per-feature maps (several maps, one per configuration),
   a measured-cost model (recording solver time and memory per harness and studying how they relate to
   the complexity metrics), and an HTML report.

@@ -38,7 +38,16 @@ useless. These failure modes are common, and Kani's verdict alone does not revea
    `kani::any()` (a unit test, not a proof), no assertions (only default checks), or loops
    without an unwind bound.
 
-Each checker exits with status 2 when it reports a `warning` or `error`. The text-based
+Each checker exits with status 2 when it reports a `warning` or `error`.
+
+`check-vacuity.py` counts `info` findings (built-in and library checks that cannot fail, and the
+suggestion to add a vacuity probe) in `info_summary` instead of listing hundreds of them; pass
+`--show-info` to list them. Checks of `core`, `std`, `alloc`, and Kani itself are never user
+assertions. A `#[kani::should_panic]` harness and an AutoHarness-generated harness are not asked for
+a trailing `kani::cover!`. An `unreachable-callee-assertion` in a helper that every harness calls
+with a fixed argument is expected; one in an error-path harness's `Ok` branch also.
+`check-assumptions.py` reports an assumption that a value is valid for its type (UTF-8, a `char`)
+as `info`: state it in the report, it is a type precondition. The text-based
 scans (`check-assumptions.py`, `inspect-harness.py`) give hints; the Kani-backed checks decide.
 
 ## What the result relies on

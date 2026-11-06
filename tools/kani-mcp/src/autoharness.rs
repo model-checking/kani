@@ -10,6 +10,8 @@ use std::collections::BTreeMap;
 
 /// How many skipped functions to name per reason.
 const NAMES_PER_REASON: usize = 10;
+/// How many distinct skip reasons to list (reasons can embed type names and be very many).
+const MAX_REASONS: usize = 25;
 
 enum Table {
     None,
@@ -53,15 +55,19 @@ pub fn list_summary(text: &str, filter: Option<&str>) -> Value {
     for (function, reason) in &skipped {
         by_reason.entry(reason).or_default().push(function);
     }
-    let skipped_json: Vec<Value> = by_reason
-        .iter()
+    let mut ranked: Vec<(&&str, &Vec<&str>)> = by_reason.iter().collect();
+    ranked.sort_by_key(|(_, fs)| std::cmp::Reverse(fs.len()));
+    let reasons_omitted = ranked.len().saturating_sub(MAX_REASONS);
+    let skipped_json: Vec<Value> = ranked
+        .into_iter()
+        .take(MAX_REASONS)
         .map(|(reason, functions)| {
             let functions: Vec<&&str> = functions
                 .iter()
                 .filter(|f| filter.is_none_or(|p| f.contains(p)))
                 .take(NAMES_PER_REASON)
                 .collect();
-            json!({ "reason": reason, "count": by_reason[reason].len(), "examples": functions })
+            json!({ "reason": reason, "count": by_reason[*reason].len(), "examples": functions })
         })
         .collect();
     let selected_view: Vec<&String> =
@@ -71,6 +77,9 @@ pub fn list_summary(text: &str, filter: Option<&str>) -> Value {
         "skipped_count": skipped.len(),
         "skipped_by_reason": skipped_json,
     });
+    if reasons_omitted > 0 {
+        out["skip_reasons_omitted"] = json!(reasons_omitted);
+    }
     if filter.is_some() || selected.len() <= 50 {
         out["selected"] = json!(selected_view);
     } else {

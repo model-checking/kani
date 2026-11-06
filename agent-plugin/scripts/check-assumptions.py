@@ -35,8 +35,8 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from kani_plugin_lib import (  # noqa: E402
-    emit, find_root, harnesses_of, helper_closure, helper_index, kani_only_files, line_of, parse_functions,
-    rust_files, strip_comments_and_strings)
+    emit, find_root, harness_matches, harnesses_of, helper_closure, helper_index, kani_only_files, line_of,
+    parse_functions, rust_files, strip_comments_and_strings, unmatched_message)
 
 ASSUME = re.compile(r"\bkani::assume\s*\(|\bkani::any_where\s*\(")
 ASSERT = re.compile(
@@ -46,6 +46,9 @@ NUM = r"-?(?:0x[0-9a-fA-F_]+|0b[01_]+|[0-9][0-9_]*)(?:[iu](?:8|16|32|64|128|size
 BOUND = re.compile(rf"\b([A-Za-z_][A-Za-z0-9_.]*)\s*(<=|>=|==|<|>)\s*({NUM})\b")
 REV_BOUND = re.compile(rf"(?<![A-Za-z0-9_.])({NUM})\s*(<=|>=|==|<|>)\s*([A-Za-z_][A-Za-z0-9_.]*)\b")
 SUCCESS = re.compile(r"\.(is_ok|is_some)\s*\(\s*\)")
+# Validity of a value of a type (`&str` is UTF-8, `char` is a scalar value): a type precondition,
+# not a hidden error path.
+TYPE_VALIDITY = re.compile(r"\b(?:from_utf8|from_utf8_lossy|from_u32|is_char_boundary|from_digit)\b")
 PRIMITIVES = {f"{p}{w}" for p in "iu" for w in ("8", "16", "32", "64", "128", "size")}
 FLIP = {"<": ">", ">": "<", "<=": ">=", ">=": "<=", "==": "=="}
 MANY_ASSUMPTIONS = 5
@@ -134,7 +137,12 @@ def check_harness(h, helpers=()):
                     h_file, line, h.name, "warning", "pinned-value",
                     f"`{var} == {n}` pins `{var}` to one value; the proof covers a single case "
                     "for it. Prefer a range, or drop the assumption."))
-        if SUCCESS.search(cond):
+        if SUCCESS.search(cond) and TYPE_VALIDITY.search(cond):
+            findings.append(finding(
+                h_file, line, h.name, "info", "assume-type-validity",
+                "this assumption restricts the input to a valid value of its type (UTF-8, a char); it is a "
+                "type precondition, not a hidden error path. State it in the report."))
+        elif SUCCESS.search(cond):
             findings.append(finding(
                 h_file, line, h.name, "warning", "assume-success",
                 "assuming a call succeeds (`is_ok`/`is_some`) hides its error path; check that "
@@ -183,7 +191,9 @@ def check_requires(path):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("paths", nargs="+", help="Rust files or directories to scan")
-    parser.add_argument("--harness", action="append", default=[], help="only check these harnesses")
+    parser.add_argument("--harness", action="append", default=[],
+                        help="only check these harnesses: a name, a module-qualified name, or a module; "
+                             "an error if nothing matches")
     args = parser.parse_args(argv)
     findings = []
     n_harnesses = 0
@@ -195,10 +205,16 @@ def main(argv=None):
         parsed = {f.resolve(): parse_functions(f.read_text(encoding="utf-8", errors="replace"), f,
                                                f.resolve() in kani_only) for f in {*crate, *targets}}
         index = helper_index([fn for fns in parsed.values() for fn in fns])
+        all_harness_fns = [fn for f in targets for fn in parsed[f.resolve()] if harnesses_of([fn])]
+        if args.harness:
+            message = unmatched_message(args.harness, all_harness_fns)
+            if message:
+                print(f"error: {message}", file=sys.stderr)
+                return 1
         for f in targets:
             for fn in parsed[f.resolve()]:
                 hs = harnesses_of([fn])
-                if not hs or (args.harness and fn.name not in args.harness):
+                if not hs or (args.harness and not any(harness_matches(fn, h) for h in args.harness)):
                     continue
                 n_harnesses += 1
                 findings.extend(check_harness(hs[0], helper_closure(fn, index)))

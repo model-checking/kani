@@ -11,6 +11,7 @@
 //! Kani CLI, which the `verify-rust` skill uses as a fallback.
 
 mod autoharness;
+mod map;
 mod partial;
 mod process;
 mod summary;
@@ -82,9 +83,11 @@ fn initialize(params: &Value) -> Value {
         "protocolVersion": protocol,
         "capabilities": { "tools": { "listChanged": false } },
         "serverInfo": { "name": "kani-mcp", "version": env!("CARGO_PKG_VERSION") },
-        "instructions": "Structured access to the Kani Rust model checker. These tools cover \
-            only common operations; every other Kani feature (autoharness, contracts flags, \
-            coverage, solver options, ...) is available by running `cargo kani` directly.",
+        "instructions": "Structured access to the Kani Rust model checker, and to the Crate Verifiability \
+            Map (kani_map_crate, kani_plan_verification, kani_update_verification_map, \
+            kani_explain_function) for planning what to verify and in which order. These tools cover \
+            only common operations; every other Kani feature (contracts flags, coverage, solver \
+            options, ...) is available by running `cargo kani` directly.",
     })
 }
 
@@ -99,10 +102,11 @@ fn tool_definitions() -> Value {
         "description": "Extra Kani command-line arguments, passed through unchanged (e.g. [\"--default-unwind\", \"8\"]). Crates that use function contracts need [\"-Z\", \"function-contracts\"]."
     });
     let harness = json!({ "type": "string", "description": "Only harnesses whose name contains this string (`--harness`)." });
-    let exact = json!({ "type": "boolean", "description": "Match `harness` against the fully qualified name exactly (`--exact`)." });
+    let exact = json!({ "type": "boolean", "description": "Match `harness` against the fully qualified name exactly (`--exact`). It then needs the module-qualified name that `kani_list_harnesses` shows (`proofs::check_x`); without `exact`, any substring of the name works." });
     let timeout = json!({ "type": "integer", "description": format!("Wall-clock limit in seconds for the whole call (default {DEFAULT_TIMEOUT_S}). On timeout Kani and its children are killed and no results are returned: verify fewer harnesses per call.") });
     let harness_timeout = json!({ "type": "integer", "description": "Per-harness limit in seconds (`--harness-timeout`). A harness that exceeds it is reported as TIMEOUT and the run continues. It does not cover goto-instrument." });
-    let export_path = json!({ "type": "string", "description": "Also write Kani's `--export-json` file here, e.g. for the plugin's `evidence.py record`." });
+    let export_path = json!({ "type": "string", "description": "Write Kani's `--export-json` file here (parent directories are created). Default: a file under the plugin output directory (`target/kani-plugin/`, or `KANI_PLUGIN_OUT`), reported as `run.export_path`, for the plugin's `evidence.py record`." });
+    let memory_limit = json!({ "type": "integer", "description": "Kill Kani and everything it started when together they use more than this many MB of resident memory (a run that exhausts memory otherwise takes the machine down). The run is reported as stopped; no results are written." });
     let log_path = json!({ "type": "string", "description": "Also write Kani's console output here, e.g. for `check-vacuity.py --log` (needs the default output format, so do not combine with `jobs`)." });
     json!([
         {
@@ -133,6 +137,9 @@ fn tool_definitions() -> Value {
                     "path": path,
                     "harness": harness,
                     "exact": exact,
+                    "per_harness": { "type": "boolean", "description": "Run each harness in its own Kani process (`--harness NAME --exact`) with its own export, and merge the results. Results already produced survive a timeout or a memory kill; `timeout_s` is then the budget of the whole call, and `per_harness_timeout_s` (default 900) the limit of each harness. Use it for sweeps of many harnesses." },
+                    "per_harness_timeout_s": { "type": "integer", "description": "With `per_harness`: wall-clock limit of each harness (default 900)." },
+                    "memory_limit_mb": memory_limit,
                     "jobs": { "type": "integer", "description": "Verify this many harnesses in parallel (`--jobs N --output-format terse`). Each job can use several GB of memory." },
                     "timeout_s": timeout,
                     "harness_timeout_s": harness_timeout,
@@ -157,6 +164,7 @@ fn tool_definitions() -> Value {
                     "bounded_arguments": { "type": "boolean", "description": "Also cover functions taking slices, `&str`, `Vec`, with bounded inputs (`--bounded-arguments`); results hold only up to the bounds." },
                     "slice_bound": { "type": "integer", "description": "Maximum slice length under `bounded_arguments` (`--slice-bound`)." },
                     "string_bound": { "type": "integer", "description": "Maximum `&str` length in bytes under `bounded_arguments` (`--string-bound`)." },
+                    "memory_limit_mb": memory_limit,
                     "failures_only": { "type": "boolean", "description": "Only list harnesses that did not succeed (default true); counts always cover all." },
                     "timeout_s": timeout,
                     "harness_timeout_s": harness_timeout,
@@ -168,6 +176,62 @@ fn tool_definitions() -> Value {
             }
         },
         {
+            "name": "kani_map_crate",
+            "description": "Build the Crate Verifiability Map of a Cargo workspace: functions, call graph (cargo-callgraph if installed, else a labeled text scan), recursion, existing harnesses and contracts, and the verification status of each function from the Kani results given. Returns a compact summary and the path of the map file; use `kani_plan_verification` and `kani_explain_function` on it. A planning aid, not a proof: unresolved edges, dynamic dispatch, macros, `cfg`, and FFI are listed as uncertainty.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "path": path,
+                    "results": { "type": "array", "items": { "type": "string" }, "description": "`--export-json` files (e.g. `run.export_path` of earlier calls) and evidence bundle directories to merge." },
+                    "callgraph": { "type": "string", "enum": ["auto", "tool", "text"], "description": "auto (default): cargo-callgraph if installed; tool: require it; text: text scan only." },
+                    "map_path": { "type": "string", "description": "Where to write the map (default: under the plugin output directory)." },
+                    "timeout_s": timeout
+                },
+                "required": ["path"]
+            }
+        },
+        {
+            "name": "kani_plan_verification",
+            "description": "A staged, bottom-up verification plan from a map: for each function not yet verified, the proposed Kani workflow (contracts for recursion, unwind bounds for loops, stubs for unresolved callees, AutoHarness for simple leaves, ...), its priority, the callees that block it, and what is uncertain. `goals` limit the plan to some functions and everything they depend on.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "map_path": { "type": "string", "description": "A map written by `kani_map_crate`." },
+                    "goals": { "type": "array", "items": { "type": "string" }, "description": "Function ids, paths, or names to plan for." },
+                    "max_items": { "type": "integer", "description": "How many functions to list (default 40); the rest are counted." },
+                    "timeout_s": timeout
+                },
+                "required": ["map_path"]
+            }
+        },
+        {
+            "name": "kani_update_verification_map",
+            "description": "Merge new Kani results into a map (`--export-json` files, evidence bundles): statuses, strategies, and priorities are recomputed. Refuses when the sources changed since the map was built: map again.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "map_path": { "type": "string" },
+                    "results": { "type": "array", "items": { "type": "string" }, "description": "Export files or evidence bundles to merge." },
+                    "root": { "type": "string", "description": "The workspace root (default: the one recorded by `kani_map_crate`)." },
+                    "timeout_s": timeout
+                },
+                "required": ["map_path", "results"]
+            }
+        },
+        {
+            "name": "kani_explain_function",
+            "description": "Everything a map knows about one function: verification status and evidence, callers and callees with their status, strategy and rationale, priority, and uncertainty. The five complexity metrics are `not_computed` until `cargo kani complexity` exists.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "map_path": { "type": "string" },
+                    "function": { "type": "string", "description": "A function id, qualified path, or name." },
+                    "timeout_s": timeout
+                },
+                "required": ["map_path", "function"]
+            }
+        },
+        {
             "name": "kani_get_counterexample",
             "description": "Verify one harness with concrete playback and return the generated unit tests: `failure_witnesses` replay a failed check with concrete inputs, `cover_witnesses` show inputs that satisfy a `kani::cover!`. Playback runs the real code, not stubs.",
             "inputSchema": {
@@ -175,6 +239,7 @@ fn tool_definitions() -> Value {
                 "properties": {
                     "path": path,
                     "harness": { "type": "string", "description": "The harness to reproduce (`--harness`)." },
+                    "memory_limit_mb": memory_limit,
                     "exact": exact,
                     "timeout_s": timeout,
                     "harness_timeout_s": harness_timeout,
@@ -194,6 +259,10 @@ fn call_tool(params: &Value) -> Value {
     let token = params.get("_meta").and_then(|m| m.get("progressToken"));
     let result = match name {
         "kani_autoharness" => autoharness_tool(&args, token),
+        "kani_map_crate" => map::map_crate(&args, token),
+        "kani_plan_verification" => map::plan(&args, token),
+        "kani_update_verification_map" => map::update(&args, token),
+        "kani_explain_function" => map::explain(&args, token),
         "kani_get_counterexample" => get_counterexample(&args, token),
         "kani_get_version" => get_version(token),
         "kani_list_harnesses" => list_harnesses(&args, token),
@@ -212,6 +281,101 @@ fn tool_result(value: Value, is_error: bool) -> Value {
         "structuredContent": value,
         "isError": is_error,
     })
+}
+
+fn unix_time() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Where the plugin keeps its own files, as `kani_plugin_lib.plugin_out_dir` does: `KANI_PLUGIN_OUT`,
+/// else `$CARGO_TARGET_DIR/kani-plugin`, else `<dir>/target/kani-plugin`.
+pub(crate) fn plugin_out_dir(dir: &Path) -> PathBuf {
+    if let Some(p) = std::env::var_os("KANI_PLUGIN_OUT") {
+        return PathBuf::from(p);
+    }
+    match std::env::var_os("CARGO_TARGET_DIR") {
+        Some(t) => PathBuf::from(t).join("kani-plugin"),
+        None => dir.join("target").join("kani-plugin"),
+    }
+}
+
+fn write_creating_dirs(path: &Path, text: &str) -> Result<()> {
+    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("cannot create `{}`", parent.display()))?;
+    }
+    std::fs::write(path, text).with_context(|| format!("cannot write `{}`", path.display()))
+}
+
+/// The first compiler errors in Kani's output: what to fix when no results were produced.
+fn compiler_errors(text: &str) -> Vec<String> {
+    let mut errors: Vec<Vec<&str>> = vec![];
+    let mut open = false;
+    for line in text.lines() {
+        if line.starts_with("error:") || line.starts_with("error[") {
+            errors.push(vec![line]);
+            open = true;
+        } else if open
+            && (line.starts_with(' ') || line.starts_with("-->"))
+            && errors.last().is_some_and(|e| e.len() < 8)
+        {
+            errors.last_mut().unwrap().push(line);
+        } else {
+            open = false;
+        }
+    }
+    errors.iter().take(6).map(|e| e.join("\n")).collect()
+}
+
+/// Unstable Kani features the crate's sources use (`kani::requires` needs `-Z function-contracts`,
+/// `kani::stub` needs `-Z stubbing`, ...), as `-Z feature` arguments, so that the same call works
+/// without the caller knowing which flags a crate needs. Features already in `given` are skipped.
+fn auto_unstable(dir: &Path, given: &[String]) -> Vec<String> {
+    const RULES: &[(&str, &[&str])] = &[
+        (
+            "function-contracts",
+            &[
+                "kani::requires",
+                "kani::ensures",
+                "kani::modifies",
+                "proof_for_contract",
+                "stub_verified",
+            ],
+        ),
+        ("stubbing", &["kani::stub("]),
+        ("loop-contracts", &["loop_invariant", "loop_modifies"]),
+    ];
+    let mut text = String::new();
+    let mut todo = vec![dir.to_path_buf()];
+    let mut files = 0;
+    while let Some(d) = todo.pop() {
+        let Ok(entries) = std::fs::read_dir(&d) else { continue };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if path.is_dir() {
+                if !name.starts_with('.') && !name.starts_with("target") && name != "node_modules" {
+                    todo.push(path);
+                }
+            } else if name.ends_with(".rs") && files < 5000 {
+                files += 1;
+                if let Ok(t) = std::fs::read_to_string(&path) {
+                    text.push_str(&t);
+                }
+            }
+        }
+    }
+    let mut out = vec![];
+    for (feature, needles) in RULES {
+        let already = given.windows(2).any(|w| w[0] == "-Z" && w[1] == *feature);
+        if !already && needles.iter().any(|n| text.contains(n)) {
+            out.extend(["-Z".to_string(), feature.to_string()]);
+        }
+    }
+    out
 }
 
 /// Find `program` on PATH.
@@ -382,7 +546,7 @@ fn toolchain_check(token: Option<&Value>) -> Result<Value> {
     let mut cmd = Command::new("kani");
     cmd.arg("check.rs").current_dir(dir.path());
     apply_kani_env(&mut cmd);
-    let out = process::run(cmd, Duration::from_secs(SHORT_TIMEOUT_S), token)?;
+    let out = process::run(cmd, Duration::from_secs(SHORT_TIMEOUT_S), token, None)?;
     let ok = out.exit_code == Some(0) && out.text.contains("VERIFICATION:- SUCCESSFUL");
     let mut result = json!({ "works": ok });
     if !ok {
@@ -476,11 +640,13 @@ fn list_harnesses(args: &Value, token: Option<&Value>) -> Result<Value> {
     // `kani list` does not take build options such as `--target-dir`: drop them, so the same
     // `extra_args` can be used for listing and verification.
     let (kept, ignored) = drop_list_unsupported(string_list(args, "extra_args")?);
+    list_args.extend(auto_unstable(&target.dir, &kept));
     list_args.extend(kept);
     let out = process::run(
         target.command(Some("list"), &list_args),
         timeout_arg(args, SHORT_TIMEOUT_S),
         token,
+        None,
     )?;
     let contents = std::fs::read_to_string(&list_file);
     if !existed {
@@ -488,12 +654,21 @@ fn list_harnesses(args: &Value, token: Option<&Value>) -> Result<Value> {
     }
     let full: Value = match contents {
         Ok(text) => serde_json::from_str(&text)?,
-        Err(_) => bail!(
-            "`kani list` did not produce results (exit code {:?}{}):\n{}",
-            out.exit_code,
-            if out.timed_out { ", timed out" } else { "" },
-            tail(&out.text, OUTPUT_TAIL_LINES)
-        ),
+        Err(_) => {
+            let errors = compiler_errors(&out.text);
+            if errors.is_empty() {
+                bail!(
+                    "`kani list` did not produce results (exit code {:?}{}):\n{}",
+                    out.exit_code,
+                    if out.timed_out { ", timed out" } else { "" },
+                    tail(&out.text, OUTPUT_TAIL_LINES)
+                )
+            }
+            bail!(
+                "`kani list` did not produce results: the crate does not compile. Compiler errors:\n{}",
+                errors.join("\n\n")
+            )
+        }
     };
     let detail = args.get("detail").and_then(Value::as_str).unwrap_or("summary");
     let filter = args.get("filter").and_then(Value::as_str);
@@ -509,14 +684,19 @@ fn list_harnesses(args: &Value, token: Option<&Value>) -> Result<Value> {
 }
 
 fn drop_list_unsupported(args: Vec<String>) -> (Vec<String>, Vec<String>) {
-    const WITH_VALUE: &[&str] = &["--target-dir"];
+    // Build options `kani list` rejects ("unexpected argument").
+    const WITH_VALUE: &[&str] =
+        &["--target-dir", "--features", "-F", "--manifest-path", "--package", "-p"];
+    const FLAGS: &[&str] = &["--no-default-features", "--all-features", "--workspace"];
     let (mut kept, mut ignored) = (vec![], vec![]);
     let mut iter = args.into_iter();
     while let Some(arg) = iter.next() {
         if WITH_VALUE.contains(&arg.as_str()) {
             ignored.push(arg);
             ignored.extend(iter.next());
-        } else if WITH_VALUE.iter().any(|o| arg.starts_with(&format!("{o}="))) {
+        } else if FLAGS.contains(&arg.as_str())
+            || WITH_VALUE.iter().any(|o| arg.starts_with(&format!("{o}=")))
+        {
             ignored.push(arg);
         } else {
             kept.push(arg);
@@ -617,6 +797,10 @@ fn summarize_list(full: &Value, filter: Option<&str>, source_targets: &[String])
 /// Options shared by the tools that run verification.
 fn run_options(args: &Value) -> Result<Vec<String>> {
     let mut out = harness_args(args);
+    let extra = string_list(args, "extra_args")?;
+    if let Ok(target) = Target::from_args(args) {
+        out.extend(auto_unstable(&target.dir, &extra));
+    }
     if let Some(n) = args.get("harness_timeout_s").and_then(Value::as_u64) {
         out.extend([
             "-Z".into(),
@@ -639,18 +823,20 @@ fn run_with_export(
     tool_args: &Value,
     token: Option<&Value>,
 ) -> Result<(Option<Value>, Output, Value)> {
-    let dir = tempfile::tempdir()?;
+    // Without `export_path` the export is kept under the plugin output directory (never /tmp), and
+    // reported, so that it can be recorded as evidence.
     let export = match tool_args.get("export_path").and_then(Value::as_str) {
-        Some(p) => {
-            let p = PathBuf::from(p);
-            if p.exists() {
-                std::fs::remove_file(&p)
-                    .with_context(|| format!("cannot replace `{}`", p.display()))?;
-            }
-            p
-        }
-        None => dir.path().join("results.json"),
+        Some(p) => PathBuf::from(p),
+        None => plugin_out_dir(&target.dir).join(format!("export-{}.json", unix_time())),
     };
+    if let Some(parent) = export.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("cannot create `{}`", parent.display()))?;
+    }
+    if export.exists() {
+        std::fs::remove_file(&export)
+            .with_context(|| format!("cannot replace `{}`", export.display()))?;
+    }
     let mut all_args = vec![
         "-Z".into(),
         "export-json".into(),
@@ -661,51 +847,73 @@ fn run_with_export(
     let cmd = target.command(subcommand, &all_args);
     let mut run_info =
         json!({ "command": command_line(&cmd), "cwd": target.dir.display().to_string() });
-    let out = process::run(cmd, timeout_arg(tool_args, DEFAULT_TIMEOUT_S), token)?;
+    let memory_mb = tool_args.get("memory_limit_mb").and_then(Value::as_u64);
+    let out = process::run(cmd, timeout_arg(tool_args, DEFAULT_TIMEOUT_S), token, memory_mb)?;
     if let Some(log) = tool_args.get("log_path").and_then(Value::as_str) {
-        std::fs::write(log, &out.text).with_context(|| format!("cannot write `{log}`"))?;
+        write_creating_dirs(Path::new(log), &out.text)?;
         run_info["log_path"] = json!(log);
     }
     let doc = match std::fs::read_to_string(&export) {
         Ok(text) => Some(serde_json::from_str(&text).context("malformed Kani JSON export")?),
         Err(_) => None,
     };
-    if doc.is_some() && tool_args.get("export_path").is_some() {
+    if doc.is_some() {
         run_info["export_path"] = json!(export.display().to_string());
     }
     Ok((doc, out, run_info))
 }
 
 fn no_results_error(out: &Output) -> anyhow::Error {
-    if out.timed_out {
+    if out.memory_exceeded {
         return anyhow::anyhow!(
-            "Kani was stopped after {}s (`timeout_s`); Kani writes no results when it is killed. \
-             Verify fewer harnesses per call, set `harness_timeout_s`, or reduce input and unwind \
-             bounds. Last lines of output:\n{}",
+            "Kani was stopped after {}s because it used more than `memory_limit_mb`; it writes no results \
+             when killed. Shrink symbolic inputs first (a `char`, `String`, or slice multiplies the state), \
+             lower unwind bounds, or stub callees. Last lines of output:\n{}",
             out.elapsed_s,
             tail(&out.text, OUTPUT_TAIL_LINES)
         );
     }
-    anyhow::anyhow!(
-        "Kani did not produce verification results (exit code {:?}). This is usually a \
-         compilation error or an invalid argument; last lines of output:\n{}",
-        out.exit_code,
-        tail(&out.text, OUTPUT_TAIL_LINES)
-    )
+    if out.timed_out {
+        return anyhow::anyhow!(
+            "Kani was stopped after {}s (`timeout_s`); Kani writes no results when it is killed. \
+             Verify fewer harnesses per call (or use `per_harness`), set `harness_timeout_s`, or reduce \
+             input and unwind bounds. Last lines of output:\n{}",
+            out.elapsed_s,
+            tail(&out.text, OUTPUT_TAIL_LINES)
+        );
+    }
+    let mut message =
+        format!("Kani did not produce verification results (exit code {:?}).", out.exit_code);
+    if out.text.contains("Failed to match the following harness") {
+        message.push_str(
+            " A `harness` filter matched nothing. With `exact` the fully qualified name is required \
+             (`proofs::check_x`, as `kani_list_harnesses` shows it); without `exact` any substring works.",
+        );
+    }
+    let errors = compiler_errors(&out.text);
+    if errors.is_empty() {
+        message.push_str(&format!(
+            " This is usually a compilation error or an invalid argument; last lines of output:\n{}",
+            tail(&out.text, OUTPUT_TAIL_LINES)
+        ));
+    } else {
+        message.push_str(&format!(" Compiler errors:\n{}", errors.join("\n\n")));
+    }
+    anyhow::anyhow!(message)
 }
 
 /// Kani wrote no export. If the run was stopped by the timeout, report the harnesses that
 /// finished, read from Kani's console output; otherwise the run failed.
 fn partial_or_error(out: &Output, run_info: Value) -> Result<Value> {
     let partial = partial::parse(&out.text);
-    if out.timed_out && !partial.finished.is_empty() {
+    if out.stopped() && !partial.finished.is_empty() {
         return Ok(json!({
-            "run_state": "TIMED_OUT",
+            "run_state": if out.memory_exceeded { "MEMORY_LIMIT" } else { "TIMED_OUT" },
             "complete": false,
             "harnesses": partial.finished,
             "unfinished": partial.unfinished,
             "note": format!(
-                "Stopped after {}s (`timeout_s`). These results were read from Kani's console \
+                "Stopped after {}s (`timeout_s` or `memory_limit_mb`). These results were read from Kani's console \
                  output, because Kani writes no `--export-json` when it is killed: they have no \
                  proof-quality counts and cannot be recorded with evidence.py. Re-run the \
                  unfinished harnesses separately.",
@@ -717,7 +925,99 @@ fn partial_or_error(out: &Output, run_info: Value) -> Result<Value> {
     Err(no_results_error(out))
 }
 
+/// Run each harness in its own Kani process, so that a timeout or a memory kill loses only that
+/// harness. `timeout_s` is the budget of the whole call; each harness gets `per_harness_timeout_s`.
+fn verify_per_harness(args: &Value, token: Option<&Value>) -> Result<Value> {
+    let started = std::time::Instant::now();
+    let total = timeout_arg(args, DEFAULT_TIMEOUT_S);
+    let per = args.get("per_harness_timeout_s").and_then(Value::as_u64).unwrap_or(900);
+    let target = Target::from_args(args)?;
+    let mut list_args = args.clone();
+    list_args["detail"] = json!("full");
+    list_args.as_object_mut().map(|o| o.remove("filter"));
+    let listing = list_harnesses(&list_args, token)?;
+    let filter = args.get("harness").and_then(Value::as_str);
+    let mut names: Vec<String> = ["standard-harnesses", "contract-harnesses"]
+        .iter()
+        .flat_map(|k| listing[k].as_object().into_iter().flatten())
+        .flat_map(|(_, v)| v.as_array().cloned().unwrap_or_default())
+        .filter_map(|v| v.as_str().map(String::from))
+        .filter(|n| filter.is_none_or(|f| n.contains(f)))
+        .collect();
+    names.sort();
+    names.dedup();
+    if names.is_empty() {
+        bail!("no harness matches `{}`", filter.unwrap_or(""));
+    }
+    let dir = plugin_out_dir(&target.dir).join(format!("per-harness-{}", unix_time()));
+    std::fs::create_dir_all(&dir)?;
+    let (mut entries, mut not_run, mut first_doc) = (vec![], vec![], None::<Value>);
+    let mut commands = vec![];
+    for name in &names {
+        let remaining = total.saturating_sub(started.elapsed());
+        if remaining.is_zero() {
+            not_run.push(name.clone());
+            continue;
+        }
+        let safe: String =
+            name.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '_' }).collect();
+        let mut one = args.clone();
+        one["export_path"] = json!(dir.join(format!("{safe}.json")).display().to_string());
+        one["timeout_s"] = json!(remaining.as_secs().min(per));
+        one["log_path"] = json!(dir.join(format!("{safe}.log")).display().to_string());
+        let mut kani_args = vec!["--harness".to_string(), name.clone(), "--exact".to_string()];
+        if let Some(n) = args.get("harness_timeout_s").and_then(Value::as_u64) {
+            kani_args.extend([
+                "-Z".into(),
+                "unstable-options".into(),
+                "--harness-timeout".into(),
+                format!("{n}s"),
+            ]);
+        }
+        let extra = string_list(args, "extra_args")?;
+        kani_args.extend(auto_unstable(&target.dir, &extra));
+        kani_args.extend(extra);
+        let (doc, out, info) = run_with_export(&target, None, &kani_args, &one, token)?;
+        commands.push(info["command"].clone());
+        match doc {
+            Some(d) => {
+                entries.extend(d["harnesses"].as_array().cloned().unwrap_or_default());
+                first_doc.get_or_insert(d);
+            }
+            None => {
+                let kind = if out.memory_exceeded {
+                    "OUT_OF_MEMORY"
+                } else if out.timed_out {
+                    "TIMEOUT"
+                } else {
+                    "CRASHED"
+                };
+                entries.push(json!({
+                    "name": name, "file": "", "line": 0, "outcome": { "kind": kind },
+                    "resources": { "verification_time_s": out.elapsed_s },
+                    "failed_properties": [], "checks": {}, "covers": {}, "attributes": {},
+                }));
+            }
+        }
+    }
+    let mut merged = first_doc.unwrap_or_else(|| json!({}));
+    merged["harnesses"] = json!(entries);
+    merged["summary"] = json!({});
+    let mut result = summary::summarize(&merged, false, summary::DEFAULT_MAX_FAILED);
+    result["run_state"] = json!(if not_run.is_empty() { "COMPLETE" } else { "PARTIAL" });
+    result["not_run"] = json!(not_run);
+    result["per_harness"] = json!({ "dir": dir.display().to_string(), "harnesses": names.len() });
+    result["note"] = json!(
+        "Each harness ran in its own process; exports and logs are in `per_harness.dir`. Record a harness's \
+         export with evidence.py, or merge them with `scripts/run-harnesses.py`."
+    );
+    Ok(result)
+}
+
 fn verify_harness(args: &Value, token: Option<&Value>) -> Result<Value> {
+    if args.get("per_harness").and_then(Value::as_bool).unwrap_or(false) {
+        return verify_per_harness(args, token);
+    }
     let target = Target::from_args(args)?;
     let mut kani_args = run_options(args)?;
     if let Some(jobs) = args.get("jobs").and_then(Value::as_u64) {
@@ -784,6 +1084,7 @@ fn autoharness_tool(args: &Value, token: Option<&Value>) -> Result<Value> {
             target.command(Some("autoharness"), &kani_args),
             timeout_arg(args, SHORT_TIMEOUT_S),
             token,
+            None,
         )?;
         if !existed {
             let _ = std::fs::remove_file(&list_file);
@@ -1000,6 +1301,10 @@ mod tests {
                 "kani_list_harnesses",
                 "kani_verify_harness",
                 "kani_autoharness",
+                "kani_map_crate",
+                "kani_plan_verification",
+                "kani_update_verification_map",
+                "kani_explain_function",
                 "kani_get_counterexample"
             ]
         );

@@ -144,6 +144,28 @@ $CMD > /dev/null 2>&1 || fail "check_midpoint should pass"
 "$SCRIPTS/evidence.py" record --export "$WORK/ev.json" --command "$CMD" --out "$WORK/evidence" > "$WORK/rec.json"
 BUNDLE="$(jq_py "$WORK/rec.json" 'd["bundle"]')"
 "$SCRIPTS/evidence.py" verify "$BUNDLE" > "$WORK/ver.json" || fail "verify failed: $(cat "$WORK/ver.json")"
+# Content-based change detection: a snapshot before the run, so touching a file is not a change.
+"$SCRIPTS/evidence.py" snapshot --out "$WORK/pre.json" > /dev/null
+$CMD > "$WORK/ev.log" 2>&1 || fail "check_midpoint should pass"
+touch src/lib.rs
+"$SCRIPTS/evidence.py" record --export "$WORK/ev.json" --log "$WORK/ev.log" --snapshot "$WORK/pre.json" \
+    --command "$CMD" --out "$WORK/evidence-snap" > "$WORK/rec-snap.json" \
+    || fail "touching a file without changing it must not warn: $(cat "$WORK/rec-snap.json")"
+BUNDLE2="$(jq_py "$WORK/rec-snap.json" 'd["bundle"]')"
+[ -f "$BUNDLE2/kani.log" ] || fail "the log was not stored in the bundle"
+echo "// real change" >> src/lib.rs
+if "$SCRIPTS/evidence.py" record --export "$WORK/ev.json" --snapshot "$WORK/pre.json" --command "$CMD" \
+    --out "$WORK/evidence-snap" > "$WORK/rec-snap2.json"; then
+    fail "a content change after the snapshot must be reported"
+fi
+grep -q "snapshot (content hashes)" "$WORK/rec-snap2.json" || fail "unclear warning: $(cat "$WORK/rec-snap2.json")"
+git checkout -q -- src/lib.rs
+echo "evidence.py: a snapshot detects real changes by content, and not a touched file; the log is stored"
+
+# check-witness cleans up its work copies, and keeps them under the plugin output directory.
+ls "$FIXTURE/target/kani-plugin" 2> /dev/null | grep -q '^witness-' && fail "check-witness.py left a work copy behind"
+echo "check-witness.py: work copies are removed"
+
 echo "// edited" >> tests/uses_not_for_kani.rs
 if "$SCRIPTS/evidence.py" verify "$BUNDLE" --no-rerun > "$WORK/ver2.json"; then
     fail "a changed source should be reported"

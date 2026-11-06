@@ -119,6 +119,12 @@ When a proof is slow: shrink input bounds and unwinding first, stub expensive ca
 callees separately with contracts and use `stub_verified`, try `--solver kissat`/`cadical`, and
 split one large harness into several smaller ones. See the Kani book's "Debugging slow proofs".
 
+Check these first, they cost nothing: a `kani::any::<char>()` or a `String` of symbolic characters
+multiplies the state (use ASCII bytes or a `requires` that bounds them); a missing `#[kani::unwind]`
+makes CBMC report an out-of-memory or a crash instead of an unwinding failure (the summary's
+`diagnosis` shows which); unbounded recursion and drop glue look the same. The preferred fix for
+loops is a loop invariant with a `decreases` clause (`references/contracts.md`), not a larger bound.
+
 Common causes of blow-up:
 
 - **Recursive types and drop glue.** Dropping a recursive structure (trees, linked lists,

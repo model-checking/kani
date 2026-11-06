@@ -206,7 +206,15 @@ def kani_only_files(files):
                 candidates = [(f.parent / path_attr.group(1)).resolve()]
             else:
                 candidates = [(base / f"{m.group(1)}.rs").resolve(), (base / m.group(1) / "mod.rs").resolve()]
-            out.append((candidates, bool(re.search(r"#\[\s*cfg\s*\(\s*kani\s*\)\s*\]", attrs))))
+            out.append(
+                (candidates,
+                 bool(
+                     re.search(
+                         r"#\[\s*cfg\s*\(([^\]]*)\)\s*\]",
+                         attrs) and any(
+                         cfg_mentions_kani(m) for m in re.findall(
+                             r"#\[\s*cfg\s*\(([^\]]*)\)\s*\]",
+                             attrs)))))
         decls[f] = out
     kani_only = set()
     changed = True
@@ -236,6 +244,8 @@ class Function:
     scope: str  # "file", "mod", "impl", "trait", "fn", or "other"
     scope_header: str  # source text before the enclosing block's `{` ("" at file level)
     scope_end: int  # offset just past the enclosing block's `}` (len(src) at file level)
+    modules: list  # names of the enclosing inline `mod` blocks, outermost first
+    scope_start: int  # offset of the enclosing block's `{` (0 at file level)
     in_kani: bool  # inside `#[cfg(kani)]` code, or a harness
     body: str  # body code, comments and strings blanked
     body_src: str  # body source
@@ -278,7 +288,7 @@ def parse_functions(src, path="<src>", all_in_kani=False):
     for open_idx, close_idx, kind, header_start in spans:
         # A module's or impl's header (the text since the previous item) includes its attributes.
         if kind in ("mod", "impl"):
-            if any(n == "cfg" and re.fullmatch(r"\s*kani\s*", a)
+            if any(n == "cfg" and cfg_mentions_kani(a)
                    for n, a, _ in parse_attributes(src, code, header_start, open_idx)):
                 kani_mods.append((open_idx, close_idx))
     functions = []
@@ -304,6 +314,13 @@ def parse_functions(src, path="<src>", all_in_kani=False):
         scope = inner[2] if inner else "file"
         scope_header = src[inner[3]:inner[0]] if inner else ""
         scope_end = inner[1] + 1 if inner else len(src)
+        scope_start = inner[0] if inner else 0
+        modules = []
+        for o, c, k, h in sorted(spans, key=lambda t: t[0]):
+            if k == "mod" and o < fn.start() < c:
+                mm = re.search(r"\bmod\s+(\w+)\s*$", code[h:o])
+                if mm:
+                    modules.append(mm.group(1))
         attr_start = item_attr_start(code, fn.start())
         attributes = parse_attributes(src, code, attr_start, fn.start())
         signature = src[fn.start():open_idx]
@@ -317,7 +334,7 @@ def parse_functions(src, path="<src>", all_in_kani=False):
                 else:
                     params.append((pat.strip(), ty.strip()))
         in_kani = all_in_kani or any(a < fn.start() < b for a, b in kani_mods) or any(
-            n == "cfg" and re.fullmatch(r"\s*kani\s*", a) or n in ("kani::proof", "kani::proof_for_contract")
+            n == "cfg" and cfg_mentions_kani(a) or n in ("kani::proof", "kani::proof_for_contract")
             for n, a, _ in attributes)
         functions.append(Function(
             name=fn.group(1),
@@ -332,6 +349,8 @@ def parse_functions(src, path="<src>", all_in_kani=False):
             scope=scope,
             scope_header=scope_header,
             scope_end=scope_end,
+            modules=modules,
+            scope_start=scope_start,
             in_kani=in_kani,
             body=code[open_idx: close_idx + 1],
             body_src=src[open_idx: close_idx + 1],
@@ -404,7 +423,8 @@ def resolve_call(caller, path, index):
             return [h for h in candidates if h.scope != "impl"]
         return [h for h in candidates
                 if (h.scope == "impl" and re.search(rf"\b{re.escape(qualifier)}\b", h.scope_header))
-                or (h.scope != "impl" and (qualifier in Path(h.file).parts or Path(h.file).stem == qualifier))]
+                or (h.scope != "impl" and (qualifier in Path(h.file).parts or Path(h.file).stem == qualifier
+                                           or qualifier in h.modules))]
     free = [h for h in candidates if h.scope != "impl"]
     same_file = [h for h in free if h.file == caller.file]
     return same_file or free
@@ -439,15 +459,84 @@ def find_harnesses(path):
     return harnesses_of(parse_functions(src, path))
 
 
+IGNORED_DIRS = re.compile(r"^(target.*|\..*|node_modules)$")
+
+
 def rust_files(paths):
-    """Expand files and directories into Rust source files, skipping build outputs."""
+    """Expand files and directories into Rust source files, skipping build outputs, hidden
+    directories (`.git`, `.kani-out`, scratch copies), and `target*` directories."""
     for p in map(Path, paths):
         if p.is_dir():
-            for f in sorted(p.rglob("*.rs")):
-                if not any(part in ("target", ".git") for part in f.parts):
-                    yield f
+            found = []
+            for dirpath, dirnames, filenames in os.walk(p):
+                dirnames[:] = sorted(d for d in dirnames if not IGNORED_DIRS.match(d))
+                found.extend(Path(dirpath) / n for n in filenames if n.endswith(".rs"))
+            yield from sorted(found)
         elif p.suffix == ".rs":
             yield p
+
+
+def plugin_out_dir(root):
+    """Where the plugin keeps its own files (work copies, call graphs, evidence): the directory in
+    `KANI_PLUGIN_OUT` if set, else `$CARGO_TARGET_DIR/kani-plugin` if cargo's target directory is set,
+    else `<root>/target/kani-plugin`. It is never scanned as source."""
+    env = os.environ.get("KANI_PLUGIN_OUT")
+    if env:
+        return Path(env)
+    cargo = os.environ.get("CARGO_TARGET_DIR")
+    return Path(cargo) / "kani-plugin" if cargo else Path(root) / "target" / "kani-plugin"
+
+
+def cfg_mentions_kani(arg):
+    """Whether a `#[cfg(...)]` argument can only hold when compiling for Kani (`kani`,
+    `all(kani, ..)`, `any(kani, test)`), so the item is verification-only code. `not(kani)` is not."""
+    return bool(re.search(r"\bkani\b", arg)) and not re.search(r"not\s*\(\s*kani\s*\)", arg)
+
+
+def file_modules(path):
+    """Module path implied by a file's location (`src/a/b.rs` -> [a, b]; lib/main/mod -> [])."""
+    p = Path(path)
+    parts = list(p.parts)
+    if "src" in parts:
+        parts = parts[len(parts) - 1 - parts[::-1].index("src") + 1:]
+    elif parts:
+        parts = parts[-1:]
+    if not parts:
+        return []
+    parts[-1] = Path(parts[-1]).stem
+    if parts[-1] in ("mod", "lib", "main"):
+        parts = parts[:-1]
+    return parts
+
+
+def qualified_name(fn):
+    """`module::path::name` of a function, from its file and its enclosing inline modules."""
+    return "::".join([*file_modules(fn.file), *fn.modules, fn.name])
+
+
+def harness_matches(fn, flt):
+    """Whether a harness filter selects `fn`: its name, any suffix of its qualified path (so
+    `proofs::check` and `verification::proofs::check` both work), or a module containing it."""
+    q = qualified_name(fn)
+    flt = flt.strip()
+    return flt == fn.name or q == flt or q.endswith("::" + flt) or q.startswith(flt + "::") \
+        or ("::" + flt + "::") in ("::" + q)
+
+
+def unmatched_message(filters, harness_fns):
+    """An error message for filters that select no harness, listing what exists; None if all match."""
+    missing = unmatched_filters(filters, harness_fns)
+    if not missing:
+        return None
+    names = sorted(qualified_name(f) for f in harness_fns)
+    shown = ", ".join(names[:15]) + (f", ... ({len(names)} in all)" if len(names) > 15 else "")
+    return (f"no harness matches {missing}. A filter is a harness name, a module-qualified name "
+            f"(`proofs::check_x`), or a module that contains harnesses. Harnesses found: {shown or 'none'}")
+
+
+def unmatched_filters(filters, functions):
+    """The filters that select none of `functions` (empty when every filter matched something)."""
+    return [f for f in filters if not any(harness_matches(fn, f) for fn in functions)]
 
 
 def kani_toolchain():
@@ -489,16 +578,22 @@ def kani_env():
     return env
 
 
-IGNORED_DIRS = re.compile(r"^(target.*|\.git|node_modules)$")
+# Directories not copied into work copies: build outputs, VCS data, and the plugin's own output.
+# Other hidden directories (`.cargo/config.toml`) are copied: they can change how the crate builds.
+COPY_IGNORED = re.compile(r"^(target.*|\.git|node_modules|\.kani-.*)$")
 
 
-def sync_tree(src, dst):
+def sync_tree(src, dst, exclude=()):
     """Make `dst` a copy of `src` (without build outputs), copying only files whose size or
-    modification time differ, so the copy's build cache stays valid between runs."""
+    modification time differ, so the copy's build cache stays valid between runs. Directories in
+    `exclude` (for example the work directory itself, when it is inside `src`) are skipped."""
     import shutil
     src, dst = Path(src), Path(dst)
+    skip = [Path(e).resolve() for e in exclude]
     for dirpath, dirnames, filenames in os.walk(src):
-        dirnames[:] = [d for d in dirnames if not IGNORED_DIRS.match(d)]
+        dirnames[:] = [d for d in dirnames if not COPY_IGNORED.match(d)
+                       and not any(Path(dirpath, d).resolve() == e or e in Path(dirpath, d).resolve().parents
+                                   for e in skip)]
         rel = Path(dirpath).relative_to(src)
         (dst / rel).mkdir(parents=True, exist_ok=True)
         for name in filenames:
@@ -521,7 +616,7 @@ def external_path_deps(root):
     while todo:
         top = todo.pop()
         for dirpath, dirnames, filenames in os.walk(top):
-            dirnames[:] = [d for d in dirnames if not (d.startswith("target") or d.startswith("."))]
+            dirnames[:] = [d for d in dirnames if not COPY_IGNORED.match(d)]
             if "Cargo.toml" not in filenames:
                 continue
             text = (Path(dirpath) / "Cargo.toml").read_text(errors="replace")
@@ -534,7 +629,7 @@ def external_path_deps(root):
     return deps
 
 
-def mirror_workspace(root, work):
+def mirror_workspace(root, work, exclude=()):
     """Copy the workspace `root` into `work` (incrementally, see `sync_tree`), together with its
     external path dependencies, under their common ancestor, so that relative
     `path = "../..."` dependencies still resolve. Returns the copy of `root`."""
@@ -542,9 +637,10 @@ def mirror_workspace(root, work):
     deps = external_path_deps(root)
     anchor = Path(os.path.commonpath([root, *deps])) if deps else root
     copy = work / root.relative_to(anchor)
-    sync_tree(root, copy)
+    exclude = [*exclude, work]
+    sync_tree(root, copy, exclude)
     for dep in deps:
-        sync_tree(dep, work / dep.relative_to(anchor))
+        sync_tree(dep, work / dep.relative_to(anchor), exclude)
     return copy
 
 
@@ -592,4 +688,10 @@ def join_option_values(argv, options):
 
 
 def emit(obj):
-    print(json.dumps(obj, indent=2, sort_keys=True))
+    """Print `obj` as JSON. A closed pipe (`| head`) ends the output quietly."""
+    try:
+        print(json.dumps(obj, indent=2, sort_keys=True))
+        sys.stdout.flush()
+    except BrokenPipeError:
+        sys.stderr.close()
+        os._exit(0)

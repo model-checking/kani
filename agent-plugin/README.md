@@ -55,7 +55,11 @@ this repository:
 | `kani_get_version` | `cargo kani --version`, checked against `compatibility.json` |
 | `kani_list_harnesses` | `cargo kani list --format json` |
 | `kani_verify_harness` | `cargo kani -Z export-json ...`, summarized |
-| `kani_autoharness` | `cargo kani autoharness ...`: sweep, or `list_only` to see what would be generated |
+| `kani_autoharness` | `cargo kani autoharness ...`: verifies contracts and checks functions with no hand-written harness; `list_only` shows what would be generated |
+| `kani_map_crate` | `scripts/map-crate.py map`: the Crate Verifiability Map (needs Python 3; set `KANI_PLUGIN_DIR` if the server is not started from the plugin) |
+| `kani_plan_verification` | A staged, contract-first plan from a map, with the AutoHarness command per stage |
+| `kani_update_verification_map` | Merge new results into a map |
+| `kani_explain_function` | What the map knows about one function |
 | `kani_get_counterexample` | `cargo kani -Z concrete-playback --concrete-playback=print ...` |
 
 Each tool takes a `path` (a Cargo project directory or a single `.rs` file) and `extra_args`
@@ -83,10 +87,20 @@ All scripts print JSON and accept `--help`.
 | `check-proof-diff.py` | Changes since a baseline that weaken the agreed property, and any change to the code under verification |
 | `check-witness.py` | Confirms a defect (the concrete playback witness fails) or a fix (fails before, passes after) |
 | `evidence.py` | Records the run behind a reported result, and re-checks it later |
+| `list-harnesses.py` | `cargo kani list` without its clutter: JSON moved to the plugin output directory, compile errors shown |
+| `run-harnesses.py` | One Kani process per harness with timeouts and a memory cap; results merged and kept as they finish |
+| `cleanup-playback.py` | Removes duplicate tests that `--concrete-playback=inplace` adds |
 | `map-crate.py` | Crate Verifiability Map: functions, call graph, recursion, harnesses, results, a staged verification plan |
 | `summarize-coverage.py` | Merges source coverage across harnesses: regions no harness exercises |
 | `check-assumptions.py` | Quick text scan for contradictory, pinned, or over-strong `kani::assume` / `requires` |
 | `inspect-harness.py` | Harness structure: inputs, assertions, attributes, missing unwind bounds |
+
+## Environment variables
+
+- `KANI_PLUGIN_OUT`: where the plugin keeps its own files (work copies, exports, evidence). Default:
+  `$CARGO_TARGET_DIR/kani-plugin`, else `target/kani-plugin` in the project.
+- `KANI_PLUGIN_DIR`: the plugin directory, for `kani-mcp`'s map tools, if the server is not started
+  from inside it.
 
 ## Compatibility and versioning
 

@@ -32,7 +32,11 @@ pub fn parse(text: &str) -> Partial {
             .map(|n| n.trim_end_matches("..."))
             .or_else(|| {
                 line.strip_prefix("Autoharness: Checking function ").map(|n| {
-                    n.trim_end_matches("against all possible inputs...").trim_end_matches("...")
+                    let n = n
+                        .trim_end_matches("against all possible inputs...")
+                        .trim_end_matches("...")
+                        .trim();
+                    n.strip_suffix("'s contract").unwrap_or(n)
                 })
             });
         if let Some(name) = started_name {
@@ -111,6 +115,13 @@ mod tests {
             vec![json!({ "name": "Meters::add", "verdict": "SUCCESS", "time_s": 2.5 })]
         );
         assert_eq!(p.unfinished, vec!["<A as B>::f".to_string()]);
+    }
+
+    #[test]
+    fn reads_autoharness_contract_output() {
+        let text = "Thread 1: Autoharness: Checking function count_down's contract against all possible inputs...\n\
+                    Thread 1: VERIFICATION:- SUCCESSFUL\n";
+        assert_eq!(parse(text).finished[0]["name"], "count_down");
     }
 
     #[test]

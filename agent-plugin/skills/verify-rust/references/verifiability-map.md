@@ -44,9 +44,33 @@ spurious candidates.
   every member.
 - `strategy.primary` and `rationale`: which Kani workflow to try first, and why.
 - `priority`: impact / effort, a heuristic order. It does not predict solver time.
+- `contract_status`, `signals.loop_invariants`, `signals.loop_decreases`: how far the function is
+  along the contract-first path. `verification.caveats` list what the result relies on.
 - `complexity`: reserved for the five metrics of the proposed `cargo kani complexity` command, and
   `not_computed` until it exists. `signals` are different: text-based counts (loop and branch
   keywords, `unsafe`, unbounded input types) that guide the heuristic.
+
+## Contract-first
+
+The map's default is contract-first (`references/strategy.md`, `references/contracts.md`): every
+function gets a contract, every loop an invariant and a decreases clause, and AutoHarness verifies
+the contracts bottom-up. For each function the map records `contracts`, `contract_status` (`none`,
+`declared`, `verified`, `failed`, ...), and the loop signals `loop_keywords`, `loop_invariants`,
+`loop_decreases`, `loop_modifies`. `kani_plan_verification` gives each stage its steps, the loops
+that still need contracts (`loop_contract_work`), and an `autoharness` block with the include
+patterns, the CLI command, and the MCP call that verify the stage. Its `contract_progress` counts
+contracts verified and failed, loops with invariants and with decreases clauses, and the functions
+whose proofs are partial (`partial_termination`). A loop without an invariant is verified only
+within the unwind bound, and the function's `verification.caveats` say so. AutoHarness results
+(from `kani_autoharness` or `cargo kani autoharness -Z export-json`) are matched to their functions
+and count as evidence.
+
+## MCP tools
+
+`kani_map_crate` (build; returns a summary and the map's path), `kani_plan_verification` (stages,
+with `goals` and `max_items`), `kani_update_verification_map` (merge new exports), and
+`kani_explain_function`. The map stays on disk; the tools return compact answers. They run the
+plugin's scripts: set `KANI_PLUGIN_DIR` to the plugin directory if the server is not started from it.
 
 ## Strategies
 
@@ -56,15 +80,16 @@ spurious candidates.
 | `reduce-or-split` | The run was inconclusive: shrink bounds, stub expensive callees, split the harness (`references/kani.md`, performance) |
 | `avoid-unsupported-construct` | Stub or restructure what Kani does not support |
 | `re-run` | The evidence is stale: re-run the harness |
-| `contract-and-recursion` | Write `requires`/`ensures` for every member of the recursive component and prove each (`references/contracts.md`) |
-| `unwind-or-loop-contract` | Choose an unwind bound or a loop invariant |
-| `instantiate-concrete-types` | Verify concrete instantiations of the generic |
-| `stub-or-contract-callees` | Callees are trait-level, dynamic, or unknown: stub them or give them contracts |
-| `bounded-inputs` | Bound slices, strings, `Vec`s (`bounded_any`, `--bounded-arguments`) |
-| `ub-focused-harness` | Also use `-Z valid-value-checks` and `-Z uninit-checks` |
-| `run-existing-harness` | A harness exists but has no result yet |
-| `autoharness-candidate` | Obstacle-free leaf: try `kani_autoharness` (`references/autoharness.md`) |
-| `harness-with-callee-contracts` | Write a harness; cover callees with verified contracts |
+| `contract-and-recursion` | Write `requires`/`ensures` for every member of the recursive component, mark the recursive functions `#[kani::recursion]`, verify with AutoHarness (`references/contracts.md`) |
+| `loop-contract` | Write `#[kani::loop_invariant]`, `loop_modifies` if needed, and `#[kani::loop_decreases]`; `unwind` only as a fallback |
+| `add-loop-decreases` | The loops have invariants but no decreases clause: the proof is partial |
+| `instantiate-concrete-types` | Verify contracts for concrete instantiations of the generic |
+| `stub-or-contract-callees` | Callees are trait-level, dynamic, or unknown: give them contracts and use `stub_verified`; a plain stub is an unverified assumption |
+| `bounded-inputs` | Bound slices, strings, `Vec`s in a `requires`, or with `bounded_any` / `--bounded-arguments` |
+| `ub-focused-harness` | State safety conditions as `requires`; also use `-Z valid-value-checks` and `-Z uninit-checks` |
+| `verify-contract-with-autoharness` | The contract exists: verify it with `kani_autoharness` (`references/autoharness.md`) |
+| `write-contract-then-autoharness` | No contract yet: write one (show it to the user), then verify it with AutoHarness |
+| `run-existing-harness` | A hand-written harness exists but has no result yet |
 
 ## Limits
 

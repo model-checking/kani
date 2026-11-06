@@ -32,7 +32,7 @@ import subprocess
 from pathlib import Path
 
 from kani_plugin_lib import (
-    CALL, _scopes, harnesses_of, kani_env, kani_only_files, parse_functions, rust_files,
+    CALL, _scopes, harnesses_of, kani_env, line_of, kani_only_files, parse_functions, rust_files,
     strip_comments_and_strings, test_only_ranges)
 
 SCHEMA_VERSION = "0.1.0"
@@ -201,6 +201,7 @@ def build_index(root, packages):
                 functions.append({
                     "_fn": fn,
                     "package": pkg["name"], "file": rel, "line": fn.line,
+                    "first_line": line_of(code, fn.start),
                     "end_line": fn.line + src.count("\n", kw, fn.end),
                     "qualified_path": "::".join(path), "name": fn.name, "self_type": self_ty, "trait": trait,
                     "in_trait_impl": trait_ty[1] is not None,
@@ -211,12 +212,16 @@ def build_index(root, packages):
                         "loop_keywords": len(LOOP_KW.findall(body)),
                         "branch_keywords": len(BRANCH_KW.findall(body)),
                         "unsafe_blocks": len(UNSAFE_KW.findall(body)),
+                        "loop_invariants": len(re.findall(r"\bkani::loop_invariant\b", body)),
+                        "loop_decreases": len(re.findall(r"\bkani::loop_decreases\b", body)),
+                        "loop_modifies": len(re.findall(r"\bkani::loop_modifies\b", body)),
                         "parameters": len(fn.params),
                         "unbounded_input_types": unbounded,
                     },
                     "contracts": {k: [re.sub(r"\s+", " ", a) for a in fn.attrs(f"kani::{k}")]
                                   for k in ("requires", "ensures", "modifies") if fn.attrs(f"kani::{k}")},
-                    "has_loop_contract": bool(fn.attrs("kani::loop_invariant")),
+                    "has_loop_contract": bool(re.search(r"\bkani::loop_invariant\b", body)),
+                    "recursion_attribute": any(n == "kani::recursion" for n, _, _ in fn.attributes),
                     "cfg": sorted(a for n, a, _ in fn.attributes if n == "cfg" and a.strip() not in ("kani", "test")),
                 })
     # Stable IDs: crate path, disambiguated by file, then by order of appearance.
@@ -557,6 +562,8 @@ def load_results(paths):
     runs = []
     for p in paths:
         p = Path(p)
+        if not p.exists():
+            raise ValueError(f"results `{p}` does not exist: pass --export-json files or evidence bundle directories")
         bundle = None
         if p.is_dir():
             bundle = json.loads((p / "bundle.json").read_text())
@@ -707,37 +714,70 @@ def function_verification(fid, harnesses, fn_status_by_id=None):
 # Strategy and planning
 # --------------------------------------------------------------------------------------
 
+def contract_status(f):
+    """`verified`/`failed`/`inconclusive` from fresh evidence of a harness targeting the function's
+    contract; `declared` for a contract no result covers yet; `none`."""
+    results = [e["status"] for e in f["verification"]["evidence"]
+               if e["relation"] == "contract-target" and "verdict" in e and e.get("fresh") is not False]
+    if results:
+        return next((st for st in ("failed", "inconclusive", "unsupported", "verified") if st in results), "declared")
+    return "declared" if f["contracts"] else "none"
+
+
+def autoharness_pattern(f):
+    """A `--include-pattern` regular expression that selects exactly this function (patterns cannot
+    contain spaces: they become `.`)."""
+    return "^" + re.sub(r"([(){}\[\]|+*?^$\\])", r"\\\1", f["qualified_path"]).replace(" ", ".") + "$"
+
+
 def strategy_for(f, comp, status, callees_unverified):
-    """Documented heuristic: which Kani workflow to try first. Not a guarantee of success."""
+    """Documented heuristic: which Kani workflow to try first. Contract-first: a function gets a
+    contract (`requires`/`ensures`/`modifies`), its loops get invariants and `decreases` clauses, and
+    AutoHarness verifies the contract with no hand-written harness; callers then use the verified
+    contract (`stub_verified`). Unwinding bounds and hand-written harnesses are the fallback."""
     s = f["signals"]
     reasons, tags = [], []
+    has_contract = bool(f["contracts"])
     if comp["recursive"]:
         tags.append("contract-and-recursion")
-        reasons.append(f"in a recursive component of {len(comp['members'])} function(s): needs a function contract "
-                       "for every member and recursion handling")
-    if s["loop_keywords"]:
-        tags.append("unwind-or-loop-contract")
-        reasons.append(f"{s['loop_keywords']} loop keyword(s): choose an unwind bound or a loop invariant")
+        reasons.append(f"in a recursive component of {len(comp['members'])} function(s): give every member a "
+                       "contract (`requires`/`ensures`) and mark the recursive functions `#[kani::recursion]`; "
+                       "callers inside the component then use the contracts")
+    loops, invariants, decreases = s["loop_keywords"], s["loop_invariants"], s["loop_decreases"]
+    if loops and invariants < loops:
+        tags.append("loop-contract")
+        reasons.append(f"{loops - invariants} loop(s) without `#[kani::loop_invariant]`: write an invariant (and "
+                       "`#[kani::loop_modifies]` if the loop writes through references) and a "
+                       "`#[kani::loop_decreases(expr)]` clause, so the proof is unbounded and shows termination; an "
+                       "`#[kani::unwind(N)]` bound is the fallback when no invariant can be written "
+                       "(needs -Z loop-contracts; in an iterator `for` loop use `kani::index`)")
+    elif invariants and decreases < invariants:
+        tags.append("add-loop-decreases")
+        reasons.append(
+            "loop invariants without `#[kani::loop_decreases]`: the proof is partial, termination is not shown")
     if f["generic"]:
         tags.append("instantiate-concrete-types")
-        reasons.append("generic: verify concrete instantiations")
+        reasons.append("generic: verify concrete instantiations (a contract holds for each instance you check)")
     if f["unresolved_callees"]:
         tags.append("stub-or-contract-callees")
         reasons.append(f"{len(f['unresolved_callees'])} callee(s) not resolved exactly (trait dispatch, dynamic, "
-                       "external): stub them or give them contracts")
+                       "external): give them contracts and use `stub_verified`; a plain `#[kani::stub]` is an "
+                       "unverified assumption")
     if s["unbounded_input_types"]:
         tags.append("bounded-inputs")
-        reasons.append(f"unbounded input types {s['unbounded_input_types']}: bound them (bounded_any, "
-                       "--bounded-arguments)")
+        reasons.append(f"unbounded input types {s['unbounded_input_types']}: bound them in `requires` or with "
+                       "`bounded_any` / `--bounded-arguments`")
     if s["unsafe_blocks"] or f["unsafe_fn"]:
         tags.append("ub-focused-harness")
-        reasons.append("unsafe code: also use -Z valid-value-checks / -Z uninit-checks")
+        reasons.append("unsafe code: state its safety conditions as `requires`, and also use -Z valid-value-checks / "
+                       "-Z uninit-checks")
     if status == "failed":
         primary = "triage-failure"
         reasons.insert(0, "a harness that reaches it failed: replay the counterexample first")
     elif status == "inconclusive":
         primary = "reduce-or-split"
-        reasons.insert(0, "a run was inconclusive (timeout, out of memory, crash): shrink bounds, stub callees, split")
+        reasons.insert(0, "a run was inconclusive (timeout, out of memory, crash): shrink bounds, replace callees by "
+                          "their verified contracts, add loop invariants, split")
     elif status == "unsupported":
         primary = "avoid-unsupported-construct"
         reasons.insert(0, "Kani reported unsupported constructs: stub them or restructure")
@@ -748,18 +788,23 @@ def strategy_for(f, comp, status, callees_unverified):
         primary = "none"
     elif tags:
         primary = tags[0]
+    elif has_contract:
+        primary = "verify-contract-with-autoharness"
     elif f["has_harness"]:
         primary = "run-existing-harness"
         reasons.append("a harness already exists")
-    elif not f["callees"] and not f["unresolved_callees"]:
-        primary = "autoharness-candidate"
-        reasons.append("leaf function with no structural obstacles: try AutoHarness or a direct harness")
     else:
-        primary = "harness-with-callee-contracts"
-        reasons.append("call the function from a harness; use verified contracts (stub_verified) for its callees")
+        primary = "write-contract-then-autoharness"
+        reasons.append("write a contract for it (what it requires, what it ensures, what it modifies), then let "
+                       "AutoHarness verify the contract; callers then use it with `stub_verified`")
+    if has_contract and status not in ("verified", "failed") and primary != "verify-contract-with-autoharness":
+        reasons.append("it already has a contract: once the obstacles above are handled, AutoHarness verifies it")
+    if status != "verified" and not has_contract and primary not in ("write-contract-then-autoharness",
+                                                                     "run-existing-harness", "triage-failure"):
+        reasons.append("it has no contract yet: write one, then verify it with AutoHarness")
     if callees_unverified and primary not in ("none",):
-        reasons.append(f"{len(callees_unverified)} resolved callee(s) are not verified: prove them first or "
-                       "cover them with a contract")
+        reasons.append(f"{len(callees_unverified)} resolved callee(s) are not verified: verify their contracts first "
+                       "(AutoHarness), so this function can rely on them with `stub_verified`")
     return {"primary": primary, "also": [t for t in tags if t != primary], "rationale": reasons}
 
 
@@ -865,9 +910,28 @@ def build_map(path, results=(), callgraph="auto", callgraph_json=None, timeout=9
                              if not e["resolved"] and e["kind"] != "external"})
         external = sorted({e["to_name"] for e in out_edges if e["kind"] == "external"})
         comp = comp_by_index[comp_of[fid]]
-        rec = {k: f[k] for k in ("id", "name", "qualified_path", "package", "file", "line", "end_line", "scope",
-                                 "self_type", "trait", "generic", "public", "unsafe_fn", "signals", "contracts",
-                                 "has_loop_contract", "cfg")}
+        rec = {
+            k: f[k] for k in (
+                "id",
+                "name",
+                "qualified_path",
+                "package",
+                "file",
+                "line",
+                "first_line",
+                "end_line",
+                "scope",
+                "self_type",
+                "trait",
+                "generic",
+                "public",
+                "unsafe_fn",
+                "signals",
+                "contracts",
+                "has_loop_contract",
+                "recursion_attribute",
+                "cfg",
+                "first_line")}
         rec.update({
             "callees": sorted(succ.get(fid, ())), "callers": sorted(pred.get(fid, ())),
             "candidate_callees": sorted(maybe.get(fid, ())),
@@ -902,18 +966,62 @@ def build_map(path, results=(), callgraph="auto", callgraph_json=None, timeout=9
     return m
 
 
+def add_automatic_harnesses(m, runs):
+    """AutoHarness generates harnesses that are not in the source. Each one in the results becomes a
+    harness record of its function: `proof_for_contract` harnesses target the function's contract,
+    plain ones check the function (and what it calls, which Kani inlines) on all inputs."""
+    m["harnesses"] = [h for h in m["harnesses"] if not h.get("automatic")]
+    for f in m["functions"]:
+        f["harnesses"] = [h for h in f["harnesses"] if not h.startswith("auto::")]
+        f["has_harness"] = bool(f["harnesses"])
+    unmatched = []
+    seen = set()
+    for run in runs:
+        for eh in run["doc"].get("harnesses", []):
+            if not eh.get("is_automatically_generated"):
+                continue
+            file, line, name = eh.get("file", ""), eh.get("line", 0), eh["name"].split("::")[-1]
+            same_file = [f for f in m["functions"] if file and (f["file"].endswith(file) or file.endswith(f["file"]))]
+            hits = [f for f in same_file if line in (f["first_line"], f["line"]) and f["name"] == name]
+            hits = hits or [f for f in same_file if f["name"] == name]
+            if len(hits) != 1:
+                unmatched.append(eh["name"])
+                continue
+            f = hits[0]
+            kind = eh.get("attributes", {}).get("kind")
+            contract = isinstance(kind, dict) and "ProofForContract" in kind
+            hid = f"auto::{f['id']}"
+            if hid in seen:
+                continue
+            seen.add(hid)
+            closure = {f["id"]} | transitive([f["id"]], {x["id"]: set(x["callees"]) for x in m["functions"]})
+            m["harnesses"].append({
+                "id": hid, "name": eh["name"], "package": f["package"], "file": f["file"], "line": f["line"],
+                "kind": "proof_for_contract" if contract else "proof",
+                "contract_target": f["name"] if contract else None, "automatic": True,
+                "attributes": {"unwind": None, "stubs": [], "verified_stubs": [], "should_panic": False,
+                               "solver": None},
+                "assumptions": 0, "function": f["id"],
+                "reaches": {"contract_target": [f["id"]] if contract else [], "reachable": sorted(closure),
+                            "maybe_reachable": [], "stubbed": [], "contract_assumed": []}})
+            f["harnesses"].append(hid)
+            f["has_harness"] = True
+    m["harnesses"].sort(key=lambda h: (h["file"], h["line"], h["id"]))
+    return sorted(set(unmatched))
+
+
 def finalize(m, root, results=()):
     """(Re)compute everything that depends on Kani results: per-harness results, per-function
     verification status, strategy, and priority. Works from the map alone."""
     root = Path(root)
     package_files = [root / rel for rel in m["sources"] if rel.endswith(".rs") and (root / rel).exists()]
-    merge_results(
-        m["harnesses"],
-        load_results(results) if results and not isinstance(
-            results[0],
-            dict) else list(results),
-        root,
-        package_files)
+    runs = load_results(results) if results and not isinstance(results[0], dict) else list(results)
+    unmatched = add_automatic_harnesses(m, runs)
+    m["uncertainty"] = [u for u in m["uncertainty"] if u["flag"] != "unmatched-automatic-harnesses"]
+    if unmatched:
+        m["uncertainty"].append({"flag": "unmatched-automatic-harnesses", "reason": f"{len(unmatched)} AutoHarness "
+                                 f"harness(es) could not be matched to a function and were ignored: {unmatched[:5]}"})
+    merge_results(m["harnesses"], runs, root, package_files)
     by_id = {f["id"]: f for f in m["functions"]}
     comps = {c["id"]: c for c in m["components"]}
     harness_by_id = {h["id"]: h for h in m["harnesses"]}
@@ -963,6 +1071,20 @@ def finalize(m, root, results=()):
             f["uncertainty"].append({"flag": "unsafe", "reason": "contains unsafe code"})
         if any(e.get("fresh") is None for e in v["evidence"] if "verdict" in e):
             f["uncertainty"].append({"flag": "freshness-unknown", "reason": "a result has no start time or hash"})
+    for f in m["functions"]:
+        f["contract_status"] = contract_status(f)
+        s = f["signals"]
+        v = f["verification"]
+        if v["status"] in ("verified", "conditional") and s["loop_keywords"] > s["loop_invariants"]:
+            unwinds = sorted({e["unwind"] for e in v["evidence"] if e.get("unwind") is not None})
+            v["caveats"] = sorted(set(v["caveats"] + [
+                f"{s['loop_keywords'] - s['loop_invariants']} loop(s) have no invariant: the result holds only within "
+                f"the unwind bound ({', '.join(map(str, unwinds)) or 'unknown'}), not for every input; write "
+                "`#[kani::loop_invariant]` and `#[kani::loop_decreases]` for an unbounded proof"]))
+        if s["loop_invariants"] and s["loop_decreases"] < s["loop_invariants"]:
+            f["uncertainty"].append({"flag": "partial-termination", "reason": f"{s['loop_invariants']} loop "
+                                     f"invariant(s) but {s['loop_decreases']} `#[kani::loop_decreases]` clause(s): "
+                                     "a proof that uses them does not show that the loops terminate"})
     status = {f["id"]: f["verification"]["status"] for f in m["functions"]}
     for f in m["functions"]:
         comp = comps[f["component"]]
@@ -1024,7 +1146,9 @@ def plan(m, goals=()):
     out_stages = []
     for n, level in enumerate(sorted(stages)):
         items = sorted(stages[level], key=lambda i: (-i["priority"], i["function"]))
-        out_stages.append({"stage": n + 1, "level": level, "functions": items})
+        stage = {"stage": n + 1, "level": level, "functions": items}
+        stage.update(stage_workflow(items, by_id))
+        out_stages.append(stage)
     reusable = sorted(f["id"] for f in m["functions"]
                       if f["id"] in wanted and len(f["callers"]) >= 2 and f["verification"]["status"] != "verified")
     return {
@@ -1032,6 +1156,10 @@ def plan(m, goals=()):
         "goals": list(goals) or None,
         "scope": {"functions": len(wanted), "already_verified": len(wanted & done), "to_do": len(wanted - done)},
         "stages": out_stages,
+        "approach": ("Contract-first. Give each function a contract, each loop an invariant and a decreases clause, "
+                     "and let AutoHarness verify the contracts bottom-up; callers rely on verified contracts "
+                     "(`stub_verified`). Unwinding bounds and hand-written harnesses are the fallback."),
+        "contract_progress": contract_progress(m, wanted),
         "reusable_contract_candidates": reusable,
         "notes": ["Stages run bottom-up: callees before callers. A function is `blocked_by` its callees that are "
                   "not verified; prove them, or cover them with a contract (stub_verified), first.",
@@ -1040,6 +1168,60 @@ def plan(m, goals=()):
                   "recorded bounds, assumptions, and stubs; it is not a proof of the whole crate.",
                   "Priority and strategy are heuristics (impact / effort); they do not predict solver time.",
                   *[u["reason"] for u in m["uncertainty"] if u["flag"] == "approximate-call-graph"]],
+    }
+
+
+CONTRACT_STRATEGIES = {"write-contract-then-autoharness", "verify-contract-with-autoharness", "loop-contract",
+                       "add-loop-decreases", "contract-and-recursion", "stub-or-contract-callees",
+                       "instantiate-concrete-types", "bounded-inputs", "ub-focused-harness"}
+
+
+def stage_workflow(items, by_id):
+    """The steps of a stage and the AutoHarness command that verifies its contracts."""
+    todo = [i for i in items if i["status"] in ("not_attempted", "stale", "inconclusive", "conditional")
+            and i["strategy"] in CONTRACT_STRATEGIES]
+    loop_work = [i["function"] for i in items if i["strategy"] in ("loop-contract", "add-loop-decreases")
+                 or {"loop-contract", "add-loop-decreases"} & set(i["also"])]
+    patterns = [autoharness_pattern(by_id[i["function"]]) for i in todo
+                if not by_id[i["function"]]["generic"] and not by_id[i["function"]]["unresolved_callees"]]
+    features = ["-Z", "autoharness", "-Z", "loop-contracts", "-Z", "unstable-options"]
+    cli = "cargo kani autoharness " + " ".join(features) + " --harness-timeout 5m " + " ".join(
+        f"--include-pattern '{p}'" for p in patterns)
+    steps = [
+        "1. For each function below: write or review its contract (`#[kani::requires]` for what callers must "
+        "guarantee, `#[kani::ensures]` for what it promises, `#[kani::modifies]` for what it writes), and show it "
+        "to the user: a precondition is an assumption.",
+        "2. For each loop: `#[kani::loop_invariant(...)]`, `#[kani::loop_modifies(...)]` if it writes through "
+        "references, and `#[kani::loop_decreases(...)]` so termination is proved (`unwind` only as a fallback).",
+        "3. Verify the contracts with AutoHarness (no hand-written harness): the command below, or `kani_autoharness` "
+        "with `include_patterns`. It verifies each function against its contract on all inputs the contract allows.",
+        "4. Callees verified in this stage become `#[kani::stub_verified(callee)]` in the next stage's harnesses.",
+    ]
+    out = {"workflow": steps}
+    if loop_work:
+        out["loop_contract_work"] = loop_work
+    if patterns:
+        out["autoharness"] = {"include_patterns": patterns, "cli": cli,
+                              "mcp": {"tool": "kani_autoharness", "include_patterns": patterns,
+                                      "extra_args": ["-Z", "loop-contracts"]},
+                              "note": "AutoHarness also runs the crate's manual harnesses first; list with "
+                                      "`list_only` before a large sweep (references/autoharness.md)."}
+    return out
+
+
+def contract_progress(m, wanted):
+    funcs = [f for f in m["functions"] if f["id"] in wanted]
+    loops = sum(f["signals"]["loop_keywords"] for f in funcs)
+    return {
+        "functions": len(funcs),
+        "with_contract": sum(1 for f in funcs if f["contracts"]),
+        "contract_verified": sum(1 for f in funcs if f["contract_status"] == "verified"),
+        "contract_failed": sum(1 for f in funcs if f["contract_status"] == "failed"),
+        "loops": loops,
+        "loops_with_invariant": sum(f["signals"]["loop_invariants"] for f in funcs),
+        "loops_with_decreases": sum(f["signals"]["loop_decreases"] for f in funcs),
+        "partial_termination": sorted(f["id"] for f in funcs
+                                      if any(u["flag"] == "partial-termination" for u in f["uncertainty"])),
     }
 
 

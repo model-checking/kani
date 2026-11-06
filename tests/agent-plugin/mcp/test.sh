@@ -8,6 +8,7 @@
 source "$(dirname "$0")/../../../agent-plugin/tests/smoke-lib.sh"
 build_mcp
 CLIENT="$PLUGIN/tests/mcp_client.py"
+export KANI_PLUGIN_DIR="$PLUGIN"
 
 "$CLIENT" "$KANI_MCP" \
     kani_get_version '{}' \
@@ -20,6 +21,12 @@ CLIENT="$PLUGIN/tests/mcp_client.py"
     kani_autoharness "{\"path\": \"$FIXTURE\", \"list_only\": true, \"filter\": \"midpoint\"}" \
     kani_autoharness "{\"path\": \"$FIXTURE\", \"include_patterns\": [\"agent_plugin_fixture::midpoint\"], \"export_path\": \"$WORK/auto.json\"}" \
     kani_autoharness "{\"path\": \"$FIXTURE\", \"include_patterns\": [\"Mul<Foo> for Bar\"]}" \
+    kani_verify_harness "{\"path\": \"$FIXTURE\", \"per_harness\": true, \"harness\": \"check_\", \"timeout_s\": 600, \"per_harness_timeout_s\": 300}" \
+    kani_map_crate "{\"path\": \"$FIXTURE\", \"callgraph\": \"text\", \"map_path\": \"$WORK/map.json\"}" \
+    kani_plan_verification "{\"map_path\": \"$WORK/map.json\", \"max_items\": 3}" \
+    kani_explain_function "{\"map_path\": \"$WORK/map.json\", \"function\": \"naive_midpoint\"}" \
+    kani_update_verification_map "{\"map_path\": \"$WORK/map.json\", \"results\": [\"$WORK/mcp.json\"]}" \
+    kani_update_verification_map "{\"map_path\": \"$WORK/map.json\", \"results\": [\"$WORK/does-not-exist.json\"]}" \
     > "$WORK/mcp.jsonl" || fail "MCP session failed"
 
 [ ! -e "$FIXTURE/kani-list.json" ] || fail "kani_list_harnesses left kani-list.json behind"
@@ -30,8 +37,8 @@ CLIENT="$PLUGIN/tests/mcp_client.py"
 
 python3 - "$WORK/mcp.jsonl" "$WORK/cli-summary.json" <<'PY'
 import json, sys
-(version, listed, verified, cex, bad_flag, timed_out, filtered, auto_list, auto_run,
- auto_space) = [json.loads(l) for l in open(sys.argv[1])]
+(version, listed, verified, cex, bad_flag, timed_out, filtered, auto_list, auto_run, auto_space,
+ per_harness, mapped, planned, explained, updated, update_missing) = [json.loads(l) for l in open(sys.argv[1])]
 cli = json.load(open(sys.argv[2]))
 
 assert not version["is_error"] and version["result"]["compatible"], version
@@ -90,6 +97,35 @@ print("kani_autoharness: runs, and separates automatic from manual harnesses")
 
 assert auto_space["is_error"] and "contains a space" in auto_space["result"]["error"], auto_space
 print("kani_autoharness: rejects patterns with spaces")
+
+r = per_harness["result"]
+assert not per_harness["is_error"] and r["run_state"] == "COMPLETE", per_harness
+assert r["total"] >= 4 and r["failed"] == 1 and r["not_run"] == [], r
+assert r["per_harness"]["harnesses"] == r["total"] and "check_naive_midpoint" in str(r["harnesses"]), r
+print("kani_verify_harness: per_harness runs each harness in its own process")
+
+r = mapped["result"]
+assert not mapped["is_error"] and r["call_graph"] == "text-scan", mapped
+assert r["summary"]["functions"] >= 6 and r["summary"]["harnesses"] >= 5, r["summary"]
+assert any(u["flag"] == "approximate-call-graph" for u in r["uncertainty"]), r["uncertainty"]
+print("kani_map_crate: builds the map and returns a compact summary")
+
+r = planned["result"]
+assert not planned["is_error"] and "Contract-first" in r["approach"], planned
+assert sum(len(s["functions"]) for s in r["stages"]) <= 3 and r.get("omitted_functions", 0) > 0, r["stages"]
+print("kani_plan_verification: a contract-first plan, capped at max_items")
+
+e = explained["result"][0]
+assert not explained["is_error"] and e["complexity"]["status"] == "not_computed", explained
+assert e["strategy"]["primary"] in ("triage-failure", "loop-contract", "write-contract-then-autoharness",
+                                    "run-existing-harness"), e["strategy"]
+print("kani_explain_function: strategy, evidence, and the reserved complexity field")
+
+r = updated["result"]
+assert not updated["is_error"], updated
+assert r["summary"]["by_status"].get("verified", 0) >= 1 and r["summary"]["by_status"].get("failed", 0) >= 1, r["summary"]
+assert update_missing["is_error"] and "does not exist" in update_missing["result"]["error"], update_missing
+print("kani_update_verification_map: merges results; a missing results path is a clear error")
 PY
 [ ! -e "$FIXTURE/kani-list.json" ] || fail "kani_autoharness left kani-list.json behind"
 smoke_pass

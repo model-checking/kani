@@ -18,17 +18,46 @@ use std::time::{Duration, Instant};
 
 const POLL: Duration = Duration::from_millis(200);
 const PROGRESS_EVERY: Duration = Duration::from_secs(15);
+const MEMORY_CHECK_EVERY: Duration = Duration::from_secs(2);
 
 pub struct Output {
     pub exit_code: Option<i32>,
     pub text: String,
     pub timed_out: bool,
+    /// Killed because Kani and its children together used more than the memory limit.
+    pub memory_exceeded: bool,
     pub elapsed_s: u64,
+}
+
+impl Output {
+    /// The run was stopped by us (time or memory), so Kani wrote no results.
+    pub fn stopped(&self) -> bool {
+        self.timed_out || self.memory_exceeded
+    }
+}
+
+/// Resident memory, in MB, of every process in the process group `pgid` (0 if unknown).
+fn group_rss_mb(pgid: u32) -> u64 {
+    let Ok(out) = Command::new("ps").args(["-axo", "pgid=,rss="]).output() else { return 0 };
+    let total_kb: u64 = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter_map(|l| {
+            let mut parts = l.split_whitespace();
+            let (group, rss) = (parts.next()?, parts.next()?);
+            (group == pgid.to_string()).then(|| rss.parse::<u64>().ok()).flatten()
+        })
+        .sum();
+    total_kb / 1024
 }
 
 /// Run `cmd` to completion, or until `timeout` elapses. `progress_token` is the MCP progress
 /// token of the request, if the client sent one.
-pub fn run(mut cmd: Command, timeout: Duration, progress_token: Option<&Value>) -> Result<Output> {
+pub fn run(
+    mut cmd: Command,
+    timeout: Duration,
+    progress_token: Option<&Value>,
+    memory_limit_mb: Option<u64>,
+) -> Result<Output> {
     #[cfg(unix)]
     {
         // A process group of its own, so that a timeout kills Kani's children too.
@@ -66,6 +95,8 @@ pub fn run(mut cmd: Command, timeout: Duration, progress_token: Option<&Value>) 
     let start = Instant::now();
     let mut last_progress = start;
     let mut timed_out = false;
+    let mut memory_exceeded = false;
+    let mut last_memory_check = start;
     let status = loop {
         if let Some(status) = child.try_wait()? {
             break Some(status);
@@ -74,6 +105,16 @@ pub fn run(mut cmd: Command, timeout: Duration, progress_token: Option<&Value>) 
             timed_out = true;
             kill_group(&mut child);
             break child.wait().ok();
+        }
+        if let Some(limit) = memory_limit_mb
+            && last_memory_check.elapsed() >= MEMORY_CHECK_EVERY
+        {
+            last_memory_check = Instant::now();
+            if group_rss_mb(child.id()) > limit {
+                memory_exceeded = true;
+                kill_group(&mut child);
+                break child.wait().ok();
+            }
         }
         if let Some(token) = progress_token
             && last_progress.elapsed() >= PROGRESS_EVERY
@@ -92,6 +133,7 @@ pub fn run(mut cmd: Command, timeout: Duration, progress_token: Option<&Value>) 
         exit_code: status.and_then(|s| s.code()),
         text,
         timed_out,
+        memory_exceeded,
         elapsed_s: start.elapsed().as_secs(),
     })
 }
@@ -126,7 +168,7 @@ mod tests {
     fn captures_output_and_exit_code() {
         let mut cmd = Command::new("sh");
         cmd.args(["-c", "echo out; echo err >&2; exit 3"]);
-        let out = run(cmd, Duration::from_secs(30), None).unwrap();
+        let out = run(cmd, Duration::from_secs(30), None, None).unwrap();
         assert_eq!(out.exit_code, Some(3));
         assert!(out.text.contains("out") && out.text.contains("err"));
         assert!(!out.timed_out);
@@ -136,7 +178,7 @@ mod tests {
     fn kills_on_timeout() {
         let mut cmd = Command::new("sh");
         cmd.args(["-c", "sleep 30 & sleep 30"]);
-        let out = run(cmd, Duration::from_secs(1), None).unwrap();
+        let out = run(cmd, Duration::from_secs(1), None, None).unwrap();
         assert!(out.timed_out);
         assert!(out.elapsed_s < 10);
     }

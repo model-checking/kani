@@ -123,4 +123,73 @@ import json, sys
 assert "midpoint" not in {r["function"] for r in f.get("uncovered", [])}, f
 PY
 echo "summarize-coverage.py: finds the code no harness exercises, and sees it covered once a harness reaches it"
+
+# list-harnesses.py: a clean listing, no clutter in the project, features detected from the sources.
+"$SCRIPTS/list-harnesses.py" . > "$WORK/list.json" || fail "list-harnesses.py failed: $(cat "$WORK/list.json")"
+[ ! -e kani-list.json ] || fail "list-harnesses.py left kani-list.json behind"
+[ "$(jq_py "$WORK/list.json" 'd["totals"]["contract-harnesses"]')" = "2" ] || fail "unexpected listing: $(cat "$WORK/list.json")"
+echo "list-harnesses.py: lists without leaving files behind"
+
+# run-harnesses.py: one process per harness, merged export kept as results arrive.
+"$SCRIPTS/run-harnesses.py" . --harness check_midpoint --harness check_vacuous --harness check_naive_midpoint \
+    --timeout-per 300 --out "$WORK/runs" > "$WORK/runs.json" 2> "$WORK/runs.err" || true
+python3 - "$WORK/runs/export.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+v = {h["name"].split("::")[-1]: (h["outcome"].get("verdict") or h["outcome"]["kind"]) for h in d["harnesses"]}
+assert v == {"check_midpoint": "SUCCESS", "check_vacuous": "SUCCESS", "check_naive_midpoint": "FAILURE"}, v
+assert d["run_state"] == "COMPLETE" and d["summary"]["total"] == 3, d["summary"]
+PY
+"$SCRIPTS/summarize-results.py" "$WORK/runs/export.json" > "$WORK/runs-summary.json"
+python3 - "$WORK/runs-summary.json" <<'PY'
+import json, sys
+s = json.load(open(sys.argv[1]))
+assert (s["total"], s["successful"], s["failed"], s["inconclusive"], s["all_ok"]) == (3, 2, 1, 0, False), s
+assert all("unreachable_checks" in h and "flags" in h for h in s["harnesses"]), s["harnesses"][0]
+PY
+echo "run-harnesses.py: runs each harness in its own process and merges the results"
+
+# A harness filter that matches nothing is an error, and a module-qualified name works.
+if "$SCRIPTS/check-assumptions.py" src --harness no_such_harness > /dev/null 2> "$WORK/err.txt"; then
+    fail "an unmatched harness filter should fail"
+fi
+grep -q "no harness matches" "$WORK/err.txt" || fail "unclear error: $(cat "$WORK/err.txt")"
+"$SCRIPTS/check-assumptions.py" src --harness proofs::check_vacuous > "$WORK/qual.json" || [ $? -eq 2 ]
+[ "$(jq_py "$WORK/qual.json" 'd["harnesses_checked"]')" = "1" ] || fail "module-qualified filter did not match"
+echo "harness filters: qualified names work, and a filter that matches nothing is an error"
+
+# check-vacuity.py counts info findings instead of listing them.
+python3 - "$WORK/vacuity.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert "info_summary" in d and all(f["severity"] != "info" for f in d["findings"]), d.keys()
+assert all("description" in f for f in d["findings"]), d["findings"]
+PY
+echo "check-vacuity.py: info findings are counted, every finding has a description"
+
+# cleanup-playback.py removes duplicated generated tests.
+cat > "$WORK/dup.rs" <<'RS'
+fn h() {}
+
+/// Test generated for harness `h`
+///
+/// Check for `assertion`: "x"
+
+#[test]
+fn kani_concrete_playback_h_1() {
+    kani::concrete_playback_run(vec![], h);
+}
+
+/// Test generated for harness `h`
+///
+/// Check for `assertion`: "x"
+
+#[test]
+fn kani_concrete_playback_h_1() {
+    kani::concrete_playback_run(vec![], h);
+}
+RS
+"$SCRIPTS/cleanup-playback.py" "$WORK/dup.rs" > /dev/null
+[ "$(grep -c 'fn kani_concrete_playback_h_1' "$WORK/dup.rs")" = "1" ] || fail "duplicate test not removed"
+echo "cleanup-playback.py: removes duplicated generated tests"
 smoke_pass

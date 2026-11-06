@@ -29,19 +29,6 @@ pub fn len(value: &Value) -> usize {
     value.as_array().map_or(0, Vec::len)
 }
 
-/// Insert `value` unless it is "empty": null, zero, or false. Matches Python truthiness.
-fn insert_nonempty(out: &mut Map<String, Value>, key: &str, value: Value) {
-    let empty = match &value {
-        Value::Null => true,
-        Value::Bool(b) => !b,
-        Value::Number(n) => n.as_f64() == Some(0.0),
-        _ => false,
-    };
-    if !empty {
-        out.insert(key.to_string(), value);
-    }
-}
-
 fn summarize_harness(harness: &Value, max_failed: usize) -> Value {
     let mut out = Map::new();
     out.insert("name".into(), harness["name"].clone());
@@ -56,40 +43,57 @@ fn summarize_harness(harness: &Value, max_failed: usize) -> Value {
         out.insert("message".into(), json!(message));
     }
     let failed = harness["failed_properties"].as_array().cloned().unwrap_or_default();
-    if !failed.is_empty() {
-        let shown: Vec<Value> = failed
-            .iter()
-            .take(max_failed)
-            .map(|p| {
-                let mut entry = Map::new();
-                entry.insert("class".into(), p["class"].clone());
-                entry.insert("description".into(), p["description"].clone());
-                if let Some(loc) = location(p) {
-                    entry.insert("location".into(), json!(loc));
-                }
-                Value::Object(entry)
-            })
-            .collect();
-        out.insert("failed".into(), json!(shown));
-        if failed.len() > max_failed {
-            out.insert("failed_omitted".into(), json!(failed.len() - max_failed));
-        }
+    let shown: Vec<Value> = failed
+        .iter()
+        .take(max_failed)
+        .map(|p| {
+            let mut entry = Map::new();
+            entry.insert("class".into(), p["class"].clone());
+            entry.insert("description".into(), p["description"].clone());
+            if let Some(loc) = location(p) {
+                entry.insert("location".into(), json!(loc));
+            }
+            Value::Object(entry)
+        })
+        .collect();
+    out.insert("failed".into(), json!(shown));
+    if failed.len() > max_failed {
+        out.insert("failed_omitted".into(), json!(failed.len() - max_failed));
     }
     let checks = &harness["checks"];
     let covers = &harness["covers"];
     let warnings =
         len(&harness["warnings"]) as u64 + harness["warnings_truncated"].as_u64().unwrap_or(0);
     for (key, value) in [
-        ("checks_total", checks["total"].clone()),
+        ("checks_total", json!(checks["total"].as_u64().unwrap_or(0))),
         ("unreachable_checks", json!(len(&checks["unreachable"]))),
         ("undetermined_checks", json!(len(&checks["undetermined"]))),
-        ("covers_total", covers["total"].clone()),
+        ("covers_total", json!(covers["total"].as_u64().unwrap_or(0))),
         ("unsatisfiable_covers", json!(len(&covers["unsatisfiable"]))),
         ("unreachable_covers", json!(len(&covers["unreachable"]))),
         ("unsupported_constructs", json!(len(&harness["unsupported_constructs"]))),
         ("warnings", json!(warnings)),
     ] {
-        insert_nonempty(&mut out, key, value);
+        out.insert(key.to_string(), value);
+    }
+    let unsupported: Vec<Value> = harness["unsupported_constructs"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .take(max_failed)
+        .map(|p| {
+            let mut entry = Map::new();
+            if let Some(d) = p["description"].as_str() {
+                entry.insert("description".into(), json!(d));
+            }
+            if let Some(loc) = location(p) {
+                entry.insert("location".into(), json!(loc));
+            }
+            Value::Object(entry)
+        })
+        .collect();
+    if !unsupported.is_empty() {
+        out.insert("unsupported".into(), json!(unsupported));
     }
     let flags: Vec<&str> = [
         ("automatically_generated", harness["is_automatically_generated"] == true),
@@ -101,9 +105,7 @@ fn summarize_harness(harness: &Value, max_failed: usize) -> Value {
     .into_iter()
     .filter_map(|(name, on)| on.then_some(name))
     .collect();
-    if !flags.is_empty() {
-        out.insert("flags".into(), json!(flags));
-    }
+    out.insert("flags".into(), json!(flags));
     let trusted = trusted_constructs(harness);
     if !trusted.is_empty() {
         out.insert("trusted".into(), Value::Object(trusted));
@@ -165,22 +167,32 @@ fn trusted_constructs(harness: &Value) -> Map<String, Value> {
 }
 
 pub fn summarize(doc: &Value, failures_only: bool, max_failed: usize) -> Value {
-    let harnesses: Vec<Value> = doc["harnesses"]
+    let all: Vec<Value> = doc["harnesses"]
         .as_array()
         .map(Vec::as_slice)
         .unwrap_or_default()
         .iter()
         .map(|h| summarize_harness(h, max_failed))
-        .filter(|h| !failures_only || h["verdict"] != "SUCCESS")
         .collect();
-    let summary = &doc["summary"];
-    let count = |key: &str| summary[key].as_u64().unwrap_or(0);
+    let mut by_verdict: std::collections::BTreeMap<String, u64> = Default::default();
+    for h in &all {
+        *by_verdict.entry(h["verdict"].as_str().unwrap_or("UNKNOWN").to_string()).or_default() += 1;
+    }
+    let harnesses: Vec<Value> =
+        all.into_iter().filter(|h| !failures_only || h["verdict"] != "SUCCESS").collect();
+    let n = |v: &str| by_verdict.get(v).copied().unwrap_or(0);
+    let total = doc["summary"]["total"].as_u64().unwrap_or_else(|| by_verdict.values().sum());
+    let inconclusive: u64 = ["TIMEOUT", "OUT_OF_MEMORY", "CRASHED"].iter().map(|v| n(v)).sum();
     let mut out = json!({
         "kani": doc["tools"]["kani"],
         "run_state": doc["run_state"],
-        "total": count("total"),
-        "successful": count("successful"),
-        "failed": count("failed"),
+        "started_at": doc["started_at"],
+        "total": total,
+        "successful": n("SUCCESS"),
+        "failed": n("FAILURE"),
+        "inconclusive": inconclusive,
+        "by_verdict": by_verdict,
+        "all_ok": total > 0 && n("SUCCESS") == total,
         "harnesses": harnesses,
     });
     let weakened = weakened_checks(doc);
@@ -212,7 +224,10 @@ mod tests {
         assert_eq!(harness["failed_omitted"], 1);
         assert_eq!(harness["failed"][0]["location"], "test.rs:10");
         assert_eq!(harness["unsatisfiable_covers"], 1);
-        assert!(harness.get("unreachable_checks").is_none());
+        assert_eq!(harness["unreachable_checks"], 0);
+        assert_eq!(harness["flags"], json!(["contract"]));
+        assert_eq!(summary["inconclusive"], 0);
+        assert_eq!(summary["all_ok"], false);
         assert_eq!(harness["trusted"]["stubs"], json!(["real_fn -> stub_fn"]));
         assert_eq!(harness["trusted"]["verified_stubs"], json!(["verified_target_fn"]));
     }

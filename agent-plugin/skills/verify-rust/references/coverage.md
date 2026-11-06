@@ -26,7 +26,11 @@ scripts/summarize-coverage.py --log kani.log --file src/ethernet.rs
 ```
 
 It merges the harnesses and prints, per file, the covered and total regions, and each uncovered
-region with its line and function. `--max-uncovered N` limits the list; `--crate PATH` uses the
+region with its line and function. Dependencies (files outside the workspace) are left out unless
+you pass `--all-files`; `--src` (default `./src`) lists the source files no harness touched at
+all (`files_without_regions`), which the percentages cannot show. A region is covered if any
+harness covers it, and generic instances of the same source span are merged, so a closure covered
+by one harness is not reported as a gap because another harness's instance never reaches it. `--max-uncovered N` limits the list; `--crate PATH` uses the
 latest run under a crate; `--compare DIR...` shows what changed between two sets of runs (for
 example, before and after adding a harness). Do not use `kani-cov summary` on projects with
 several files: it can panic (kani#5102).
@@ -46,6 +50,10 @@ For each uncovered region, decide which of these it is, and say so in the report
   "up to N bytes" always uses exactly N. Cover every branch with `kani::cover!`
   (`references/vacuity.md`) and fix the inputs.
 - **Not meant to be covered**, such as code only needed outside Kani. Name it.
+
+The percentages are over the regions Kani instrumented, which are the functions the harnesses
+reach: a crate with one harness can show 100% while most of its functions were never visited.
+Quote the scope (`files_without_regions`, the number of functions reached) next to any percentage.
 
 Coverage is of regions in source, not of behaviors: a fully covered function can still be
 checked under assumptions that exclude important inputs. It complements `check-vacuity.py` and

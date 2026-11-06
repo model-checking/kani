@@ -47,6 +47,8 @@ assumptions = load("check-assumptions")
 inspect = load("inspect-harness")
 version = load("check-kani-version")
 proof_diff = load("check-proof-diff")
+witness = load("check-witness")
+vacuity_main = vacuity
 specs = load("check-specs")
 DIFF = TESTS / "fixtures" / "rust" / "diff"
 
@@ -65,7 +67,10 @@ class SummarizeTest(unittest.TestCase):
         self.assertEqual(h["unsatisfiable_covers"], 1)
         self.assertEqual(h["warnings"], 4)
         self.assertIn("contract", h["flags"])
-        self.assertNotIn("unreachable_checks", h)
+        self.assertEqual(h["unreachable_checks"], 0)
+        self.assertEqual(h["unsupported"], [
+                         {"description": "not currently supported by Kani", "location": "test.rs:9"}])
+        self.assertEqual((s["failed"], s["inconclusive"], s["all_ok"]), (1, 0, False))
 
     def test_non_completed_outcomes(self):
         _, s = run_main(summarize, [str(JSON_FIXTURES / "fixture-non-completed-outcomes.json")])
@@ -256,17 +261,39 @@ class CoverageTest(unittest.TestCase):
                                  ("src/b.rs", 1, 2, "g", "UNCOVERED")])
             self.raw(tmp, "h2", [("src/a.rs", 1, 3, "f", "UNCOVERED"), ("src/a.rs", 5, 6, "f", "COVERED"),
                                  ("src/b.rs", 1, 2, "g", "UNCOVERED")])
-            regions, n = coverage.merge([tmp])
-            self.assertEqual(n, 2)
+            regions, n, bad = coverage.merge([tmp])
+            self.assertEqual((n, bad), (2, []))
             s = coverage.summarize(regions)
             self.assertEqual(s["total"], {"covered": 2, "regions": 3, "percent": 67})
             [a, b] = s["files"]
-            self.assertEqual((a["file"], a["covered"], a["total"], "uncovered" in a), ("src/a.rs", 2, 2, False))
+            self.assertEqual((a["file"], a["covered"], a["total"], a["uncovered"]), ("src/a.rs", 2, 2, []))
             self.assertEqual(b["uncovered"], [{"line": 1, "end_line": 2, "function": "g"}])
-            self.assertEqual([f["file"] for f in coverage.summarize(regions, "b.rs")["files"]], ["src/b.rs"])
+            self.assertEqual(b["uncovered_omitted"], 0)
+            self.assertEqual([f["file"] for f in coverage.summarize(regions, "../b.rs")["files"]], ["src/b.rs"])
+            self.assertIn("not the whole crate", s["scope"])
+
+    def test_generic_instances_are_merged_by_source_span(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.raw(tmp, "h1", [("src/a.rs", 5, 6, "closure_of_instance_1", "COVERED")])
+            self.raw(tmp, "h2", [("src/a.rs", 5, 6, "closure_of_instance_2", "UNCOVERED")])
+            regions, _, _ = coverage.merge([tmp])
+            self.assertEqual(coverage.summarize(regions)["files"][0]["uncovered"], [])
+
+    def test_dependencies_corrupt_files_and_unreached_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.raw(tmp, "h1", [("src/a.rs", 1, 2, "f", "COVERED"),
+                                 ("/home/u/.cargo/registry/src/x/lib.rs", 1, 2, "g", "UNCOVERED")])
+            (Path(tmp) / "killed_kaniraw.json").write_text("")
+            regions, n, bad = coverage.merge([tmp])
+            self.assertEqual((n, bad), (1, ["killed_kaniraw.json"]))
+            s = coverage.summarize(regions, src_files=["src/a.rs", "src/never_touched.rs"])
+            self.assertEqual([f["file"] for f in s["files"]], ["src/a.rs"])
+            self.assertEqual(s["excluded_dependency_files"], 1)
+            self.assertEqual(s["files_without_regions"], ["src/never_touched.rs"])
+            self.assertEqual(len(coverage.summarize(regions, all_files=True)["files"]), 2)
 
     def test_uncovered_list_is_limited(self):
-        regions = {("a.rs", (i, 1), (i, 2), "f"): False for i in range(1, 6)}
+        regions = {("a.rs", (i, 1), (i, 2)): {"covered": False, "functions": {"f"}} for i in range(1, 6)}
         f = coverage.summarize(regions, max_uncovered=2)["files"][0]
         self.assertEqual((len(f["uncovered"]), f["uncovered_omitted"]), (2, 3))
 
@@ -274,8 +301,8 @@ class CoverageTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as one, tempfile.TemporaryDirectory() as two:
             self.raw(one, "h", [("a.rs", 1, 2, "f", "COVERED"), ("a.rs", 4, 5, "f", "UNCOVERED")])
             self.raw(two, "h", [("a.rs", 1, 2, "f", "UNCOVERED"), ("a.rs", 4, 5, "f", "COVERED")])
-            a, _ = coverage.merge([one])
-            b, _ = coverage.merge([two])
+            a, _, _ = coverage.merge([one])
+            b, _, _ = coverage.merge([two])
             diff = coverage.compare(a, b)
             self.assertEqual([r["line"] for r in diff["covered_only_in_first"]], [1])
             self.assertEqual([r["line"] for r in diff["covered_only_in_second"]], [4])
@@ -286,6 +313,148 @@ class CoverageTest(unittest.TestCase):
     def test_no_data_is_an_error(self):
         with contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(coverage.main(["/nonexistent"]), 1)
+
+
+class ReportedIssuesTest(unittest.TestCase):
+    """Regressions from testing on public crates."""
+
+    def test_summary_counts_inconclusive_separately(self):
+        def entry(name, outcome):
+            return {"name": name, "file": "f.rs", "line": 1, "outcome": outcome}
+        doc = {"harnesses": [entry("a", {"kind": "TIMEOUT"}), entry("b", {"kind": "OUT_OF_MEMORY"}),
+                             entry("c", {"kind": "COMPLETED", "verdict": "SUCCESS"})]}
+        s = summarize.summarize(doc)
+        self.assertEqual((s["total"], s["successful"], s["failed"],
+                         s["inconclusive"], s["all_ok"]), (3, 1, 0, 2, False))
+        self.assertEqual(s["by_verdict"], {"OUT_OF_MEMORY": 1, "SUCCESS": 1, "TIMEOUT": 1})
+        self.assertTrue(summarize.summarize(
+            {"harnesses": [entry("c", {"kind": "COMPLETED", "verdict": "SUCCESS"})]})["all_ok"])
+
+    def test_log_diagnoses_causes(self):
+        log = ("Checking harness proofs::a...\nFailed Checks: unwinding assertion loop 0\nVERIFICATION:- FAILED\n"
+               "Checking harness proofs::b...\nCBMC timed out after 300s\n"
+               "Thread 3: Autoharness: Checking function count_down's contract against all possible inputs...\n"
+               "Thread 3: Not unwinding recursion drop\n")
+        d = summarize.diagnose_log(log)
+        self.assertEqual({k: v["cause"] for k, v in d.items()},
+                         {"proofs::a": "unwind-bound", "proofs::b": "timeout", "count_down": "recursion"})
+        doc = {"harnesses": [{"name": "proofs::a", "file": "f.rs", "line": 1, "outcome": {"kind": "TIMEOUT"}}]}
+        self.assertEqual(summarize.summarize(doc, diagnoses=d)["harnesses"][0]["diagnosis"]["cause"], "unwind-bound")
+        finished, unfinished = summarize.verdicts_from_log(log)
+        self.assertEqual([(f["name"], f["verdict"]) for f in finished], [("proofs::a", "FAILURE")])
+        self.assertEqual(unfinished, ["proofs::b", "count_down"])
+
+    def test_missing_export_is_explained(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "k.log"
+            log.write_text("Checking harness h...\nVERIFICATION:- SUCCESSFUL\n")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(summarize.main([str(Path(tmp) / "none.json"), "--log", str(log)]), 1)
+            msg = json.loads(out.getvalue())
+            self.assertIn("killed", msg["why"])
+            self.assertEqual(msg["verdicts_in_log"], [{"name": "h", "verdict": "SUCCESS"}])
+
+    def test_vacuity_counts_info_and_exempts_library_checks_and_should_panic(self):
+        doc = {"harnesses": [
+            {"name": "h", "outcome": {"kind": "COMPLETED", "verdict": "SUCCESS"}, "covers": {"total": 0},
+             "checks": {"total": 3, "unreachable": ["core::fmt::Arguments::<'_>::from_str.assertion.1"]}},
+            {"name": "sp", "outcome": {"kind": "COMPLETED", "verdict": "SUCCESS"}, "attributes": {"should_panic": True},
+             "covers": {"total": 1, "unreachable": ["sp.cover.1"]}, "checks": {"total": 1, "unreachable": []}},
+            {"name": "auto", "is_automatically_generated": True, "outcome": {"kind": "COMPLETED", "verdict": "SUCCESS"},
+             "covers": {"total": 0}, "checks": {"total": 1, "unreachable": []}}]}
+        raw = vacuity.check(doc)["findings"]
+        self.assertEqual({(f["harness"], f["rule"]) for f in raw},
+                         {("h", "unreachable-builtin-check"), ("h", "no-vacuity-probe")})
+        self.assertTrue(all("description" in f for f in raw))
+        condensed = vacuity.condense({"findings": raw, "skipped_unsuccessful": []}, show_info=False)
+        self.assertEqual(condensed["findings"], [])
+        self.assertEqual(condensed["info_summary"]["unreachable-builtin-check"], {"count": 1, "harnesses": 1})
+        self.assertEqual(len(vacuity.condense({"findings": raw}, show_info=True)["findings"]), 2)
+
+    def test_harness_filters_accept_qualified_names_and_modules(self):
+        src = "#[cfg(kani)]\nmod verification {\n    mod proofs {\n        #[kani::proof]\n        fn check_x() {}\n    }\n}\n"
+        fns = [f for f in lib.parse_functions(src, "src/lib.rs") if lib.harnesses_of([f])]
+        self.assertEqual(lib.qualified_name(fns[0]), "verification::proofs::check_x")
+        for flt in ("check_x", "proofs::check_x", "verification::proofs::check_x", "proofs", "verification"):
+            self.assertTrue(lib.harness_matches(fns[0], flt), flt)
+        self.assertFalse(lib.harness_matches(fns[0], "check"))
+        self.assertIsNone(lib.unmatched_message(["proofs"], fns))
+        self.assertIn("no harness matches ['nope']", lib.unmatched_message(["nope"], fns))
+        self.assertIn("verification::proofs::check_x", lib.unmatched_message(["nope"], fns))
+
+    def test_cfg_any_kani_is_kani_only(self):
+        for arg, expected in [("kani", True), ("any(kani, test)", True), ("all(kani, feature = \"x\")", True),
+                              ("not(kani)", False), ("test", False), ("feature = \"kani_extra\"", False)]:
+            self.assertEqual(lib.cfg_mentions_kani(arg), expected, arg)
+        src = "#[cfg(any(kani, test))]\nfn helper() {}\n#[cfg(not(kani))]\nfn real() {}\n"
+        by = {f.name: f.in_kani for f in lib.parse_functions(src)}
+        self.assertEqual(by, {"helper": True, "real": False})
+
+    def test_hidden_and_target_dirs_are_not_scanned(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for d in ("src", ".kani-out/specs/src", "target/debug", ".git"):
+                (Path(tmp) / d).mkdir(parents=True)
+                (Path(tmp) / d / "x.rs").write_text("fn f() {}")
+            found = [str(f.relative_to(tmp)) for f in lib.rust_files([tmp])]
+            self.assertEqual(found, ["src/x.rs"])
+
+    def test_witness_matches_panics_by_class(self):
+        def panic(msg):
+            return ("src/lib.rs:5", msg)
+        m = witness.matches
+        self.assertTrue(m(panic("assertion `left == right` failed\n  left: 1"),
+                          "This is a placeholder message; Kani doesn't support message formatted at runtime"))
+        self.assertTrue(m(panic("index out of bounds: the len is 2 but the index is 2"),
+                          "index out of bounds: the length is less than or equal to the given index"))
+        self.assertTrue(m(panic("attempt to add with overflow"), "attempt to add with overflow"))
+        self.assertTrue(m(panic("assertion failed: x < 3"), "assertion failed: x < 3"))
+        self.assertFalse(m(panic("attempt to add with overflow"), "index out of bounds"))
+        self.assertFalse(m(panic("explicit panic"), "assertion failed: x < 3"))
+        self.assertIsNone(m(panic("anything"), None))
+        self.assertFalse(m(None, "anything"))
+
+    def test_witness_build_problems_and_std_imports(self):
+        self.assertEqual(witness.build_problem("error: cannot find macro `vec` in this scope"), "needs-std")
+        self.assertEqual(witness.build_problem("error: unexpected `cfg` condition name: `kani`"), "deny-warnings")
+        self.assertIsNone(witness.build_problem("error[E0308]: mismatched types"))
+        self.assertEqual(witness.file_top_insert("#![no_std]\n//! doc\n\nfn f() {}", "extern crate std;"),
+                         "#![no_std]\n//! doc\n\nextern crate std;\nfn f() {}")
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "src"
+            src.mkdir()
+            (src /
+             "lib.rs").write_text("#![no_std]\n#[cfg(kani)]\nmod w {\n    #[test]\n    fn t() { let _ = vec![1]; }\n}\n")
+            witness.add_std_imports(tmp, "t")
+            text = (src / "lib.rs").read_text()
+            self.assertIn("extern crate std;", text)
+            self.assertIn("use std::{vec, vec::Vec};", text)
+            witness.relax_warnings(tmp)
+
+    def test_proof_diff_new_harness_stubs_macros_and_allowed_changes(self):
+        base = "pub fn f(x: u8) -> u8 { x }\nmake_things!(a, 1);\n"
+        new = ("pub fn f(x: u8) -> u8 { x + 1 }\nmake_things!(a, 2);\n#[cfg(any(kani, test))]\nfn helper() {}\n"
+               "#[cfg(kani)]\nmod p {\n    #[kani::proof]\n    #[kani::stub(f, g)]\n    fn h() { f(kani::any()); }\n"
+               "    fn g(_x: u8) -> u8 { kani::assume(false); 0 }\n}\n")
+        rules = {(f["item"], f["rule"], f["severity"]) for f in proof_diff.diff_file(Path("a.rs"), base, new)}
+        self.assertIn(("f", "code-changed", "error"), rules)
+        self.assertIn(("make_things", "macro-invocation-changed", "warning"), rules)
+        self.assertIn(("h", "new-harness-stub", "warning"), rules)
+        self.assertFalse(any(item == "helper" for item, _, _ in rules))
+        allowed = {(f["item"], f["rule"])
+                   for f in proof_diff.diff_file(Path("a.rs"), base, new, allow=frozenset({"f"}))}
+        self.assertIn(("f", "approved-code-change"), allowed)
+
+    def test_proof_diff_reports_stub_body_assumptions(self):
+        new = (
+            "#[cfg(kani)]\nmod p {\n    #[kani::proof]\n    #[kani::stub(real, stubs::fake)]\n    fn h() { real(1); }\n"
+            "    mod stubs { pub fn fake(_x: u8) -> u8 { kani::assume(true); 0 } }\n}\nfn real(_x: u8) -> u8 { 0 }\n")
+        [f] = [
+            f for f in proof_diff.diff_file(
+                Path("a.rs"),
+                "fn real(_x: u8) -> u8 { 0 }\n",
+                new) if f["rule"] == "harness-added"]
+        self.assertIn("assume(true)", f["message"])
 
 
 class ProofDiffTest(unittest.TestCase):

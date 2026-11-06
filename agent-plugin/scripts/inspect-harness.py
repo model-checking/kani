@@ -40,7 +40,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from kani_plugin_lib import (  # noqa: E402
-    CALL, emit, find_root, harnesses_of, helper_closure, helper_index, kani_only_files, parse_functions, rust_files)
+    CALL, emit, find_root, harness_matches, harnesses_of, helper_closure, helper_index, kani_only_files,
+    parse_functions, rust_files, unmatched_message)
 
 ANY = re.compile(r"\bkani::any(?:_where)?\b|\bany_(?:modifies|slice_of_array)\b|\bkani::vec::(?:any|exact)_vec\b"
                  r"|\bkani::bounded_any\b|\bkani::slice::any_slice_of_array(?:_mut)?\b|\bany_array\b"
@@ -111,7 +112,8 @@ def listed_harnesses(list_json):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("paths", nargs="+", help="Rust files or directories to scan")
-    parser.add_argument("--harness", action="append", default=[], help="only describe these harnesses")
+    parser.add_argument("--harness", action="append", default=[],
+                        help="only describe these harnesses: a name, a module-qualified name, or a module")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--summary", action="store_true", help="only counts and the names of flagged harnesses")
     mode.add_argument("--flagged-only", action="store_true", help="only harnesses with at least one flag")
@@ -126,10 +128,16 @@ def main(argv=None):
                                                f.resolve() in kani_only) for f in {*crate, *targets}}
         index = helper_index([fn for fns in parsed.values() for fn in fns])
         harnesses = []
+        all_harness_fns = [fn for f in targets for fn in parsed[f.resolve()] if harnesses_of([fn])]
+        if args.harness:
+            message = unmatched_message(args.harness, all_harness_fns)
+            if message:
+                print(f"error: {message}", file=sys.stderr)
+                return 1
         for f in targets:
             for fn in parsed[f.resolve()]:
                 hs = harnesses_of([fn])
-                if hs and (not args.harness or fn.name in args.harness):
+                if hs and (not args.harness or any(harness_matches(fn, h) for h in args.harness)):
                     harnesses.append(describe(hs[0], helper_closure(fn, index)))
         missing = None
         if args.list_json:

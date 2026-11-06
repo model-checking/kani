@@ -87,6 +87,40 @@ fi
 grep -q "core/src/math.rs" "$WORK/err.txt" || fail "unclear message: $(cat "$WORK/err.txt")"
 echo "update: refuses when the sources changed since the map was built"
 
+# Contract-first: contracts and a loop contract with a decreases clause, verified by AutoHarness
+# with no hand-written harness; the map plans it before the run and counts the results after.
+mkdir "$WORK/cf" && cp "$PLUGIN/tests/fixtures/contract_first.rs" "$WORK/cf/"
+(cd "$WORK/cf" && "$MAP" map contract_first.rs --callgraph text --out "$WORK/cf-before.json" > /dev/null \
+    && "$MAP" plan "$WORK/cf-before.json" > "$WORK/cf-plan.json") || fail "contract-first map failed"
+python3 - "$WORK/cf-before.json" "$WORK/cf-plan.json" <<'PY'
+import json, sys
+m, plan = (json.load(open(p)) for p in sys.argv[1:])
+by = {f["name"]: f for f in m["functions"]}
+assert by["sum_to"]["strategy"]["primary"] == "loop-contract", by["sum_to"]["strategy"]
+assert by["count_down"]["strategy"]["primary"] == "verify-contract-with-autoharness", by["count_down"]["strategy"]
+assert by["count_down"]["signals"]["loop_decreases"] == 1 and by["total_zero"]["callees"], by
+assert "Contract-first" in plan["approach"] and plan["contract_progress"]["with_contract"] == 3, plan
+stage = plan["stages"][0]
+assert "^contract_first::count_down$" in stage["autoharness"]["include_patterns"], stage
+assert "-Z loop-contracts" in stage["autoharness"]["cli"], stage["autoharness"]
+PY
+(cd "$WORK/cf" && kani autoharness -Z autoharness -Z loop-contracts -Z export-json --export-json "$WORK/cf-run.json" \
+    contract_first.rs > "$WORK/cf-run.log" 2>&1) || fail "autoharness failed: $(tail -n 20 "$WORK/cf-run.log")"
+(cd "$WORK/cf" && "$MAP" map contract_first.rs --callgraph text --results "$WORK/cf-run.json" \
+    --out "$WORK/cf-after.json" > /dev/null && "$MAP" plan "$WORK/cf-after.json" > "$WORK/cf-plan2.json")
+python3 - "$WORK/cf-after.json" "$WORK/cf-plan2.json" <<'PY'
+import json, sys
+m, plan = (json.load(open(p)) for p in sys.argv[1:])
+by = {f["name"]: f for f in m["functions"]}
+assert {n: f["verification"]["status"] for n, f in by.items()} == {k: "verified" for k in by}, by
+assert [by[n]["contract_status"] for n in ("add", "count_down", "total_zero")] == ["verified"] * 3
+assert by["sum_to"]["contract_status"] == "none"
+assert any("no invariant" in c for c in by["sum_to"]["verification"]["caveats"]), by["sum_to"]["verification"]
+assert by["count_down"]["verification"]["caveats"] == [], by["count_down"]["verification"]
+assert plan["scope"]["to_do"] == 0 and plan["contract_progress"]["contract_verified"] == 3, plan["scope"]
+PY
+echo "contract-first: the plan asks for contracts and loop contracts; AutoHarness results become evidence"
+
 "$MAP" explain "$WORK/map-text.json" fact > /dev/null || fail "explain failed"
 "$MAP" report "$WORK/map-text.json" | grep -q "flowchart TD" || fail "report failed"
 [ ! -e "$WORK/ws/Cargo.lock.orig" ] || fail "unexpected files"

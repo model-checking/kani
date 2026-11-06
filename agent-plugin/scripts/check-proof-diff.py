@@ -28,8 +28,15 @@ This is a text-based comparison of items: it reports what changed for review and
 that a change is safe. Exit status: 0 when only `info` findings are reported, 2 when there is a
 `warning` or `error`, 1 on input errors.
 
+Also flagged: item-position macro invocations that changed (`macro-invocation-changed`: their
+expansion is invisible to the scan, so executable code may have changed), and stubs on new
+harnesses (`new-harness-stub`). Helpers that are only compiled for Kani (`#[cfg(kani)]`,
+`#[cfg(any(kani, test))]`, files included that way) are never reported as new executable code.
+Only files that changed since the base (or mention Kani) are read, so large crates are quick;
+files over `--max-file-kb` (generated bindings) are skipped and counted.
+
 Usage:
-    check-proof-diff.py PATH... [--base REV | --base-dir DIR]
+    check-proof-diff.py PATH... [--base REV | --base-dir DIR] [--allow-code-change FUNCTION]...
 """
 
 import argparse
@@ -171,12 +178,55 @@ def code_fingerprint(f):
     return signature, norm(f.body)
 
 
-def diff_file(path, old_src, new_src, old_index=None, new_index=None, kani_only=False):
+# Macros of the standard library and Kani: they do not define items.
+STD_MACROS = {"println", "print", "eprintln", "eprint", "format", "write", "writeln", "vec", "panic", "assert",
+              "assert_eq", "assert_ne", "debug_assert", "debug_assert_eq", "debug_assert_ne", "unreachable",
+              "todo", "unimplemented", "matches", "dbg", "include", "include_str", "include_bytes", "concat",
+              "stringify", "env", "option_env", "line", "file", "column", "cfg", "compile_error", "thread_local"}
+MACRO_CALL = re.compile(r"^[ \t]*([A-Za-z_]\w*)!\s*([(\[{])", re.M)
+
+
+def macro_invocations(src, functions):
+    """Normalized text of item-position macro invocations (outside function bodies): their expansion
+    is invisible to the source scan, so a change inside one can change executable code."""
+    code = strip_comments_and_strings(src)
+    spans = [(f.start, f.end) for f in functions]
+    out = Counter()
+    for m in MACRO_CALL.finditer(code):
+        if m.group(1) in STD_MACROS or any(a <= m.start() < b for a, b in spans):
+            continue
+        close = {"(": ")", "[": "]", "{": "}"}[m.group(2)]
+        depth, k = 0, m.end() - 1
+        while k < len(code):
+            if code[k] == m.group(2):
+                depth += 1
+            elif code[k] == close:
+                depth -= 1
+                if depth == 0:
+                    break
+            k += 1
+        out[norm(src[m.start():k + 1])] += 1
+    return out
+
+
+def diff_file(path, old_src, new_src, old_index=None, new_index=None, kani_only=False, allow=frozenset()):
     """Compare two versions of a file. The helper indexes cover the whole crate, so that helpers
-    defined in other files count; `kani_only` marks a file compiled only for Kani."""
+    defined in other files count; `kani_only` marks a file compiled only for Kani. Functions in
+    `allow` have approved code changes."""
     out = []
     old = key_functions(parse_functions(old_src, path, kani_only)) if old_src is not None else {}
     new = key_functions(parse_functions(new_src, path, kani_only))
+    if not kani_only and old_src is not None:
+        old_macros = macro_invocations(old_src, old.values())
+        new_macros = macro_invocations(new_src, new.values())
+        for text in (new_macros - old_macros).elements():
+            out.append(finding(str(path), 0, text.split("!")[0], "warning", "macro-invocation-changed",
+                               f"an item-generating macro invocation changed or was added: `{text[:100]}`. "
+                               "Its expansion is invisible to this scan, so executable code may have changed: "
+                               "review it by hand."))
+        for text in (old_macros - new_macros).elements():
+            out.append(finding(str(path), 0, text.split("!")[0], "warning", "macro-invocation-removed",
+                               f"an item-generating macro invocation was removed or changed: `{text[:100]}`."))
     if new_index is None:
         new_index = helper_index(new.values())
     if old_index is None:
@@ -195,6 +245,12 @@ def diff_file(path, old_src, new_src, old_index=None, new_index=None, kani_only=
                           "Confirm the user approved each one, then snapshot a new baseline."
                           if assumes else " It has no assumptions.")
                 out.append(finding(n.file, n.line, n.name, "info", "harness-added", "new harness." + detail))
+                for kind in ("kani::stub", "kani::stub_verified"):
+                    for spec in n.attrs(kind):
+                        out.append(finding(n.file, n.line, n.name, "warning", "new-harness-stub",
+                                           f"`#[{kind}({norm(spec)})]` replaces real code with a model or a "
+                                           "contract: it is an assumption about that code. Confirm the user "
+                                           "approved it, and list it in the report."))
             else:
                 out.extend(diff_harness(o, n, old_index, new_index))
             continue
@@ -205,6 +261,10 @@ def diff_file(path, old_src, new_src, old_index=None, new_index=None, kani_only=
         if o is None:
             out.append(finding(n.file, n.line, n.name, "warning", "code-added",
                                "new executable function: check that it was requested."))
+        elif code_fingerprint(o) != code_fingerprint(n) and n.name in allow:
+            out.append(finding(n.file, n.line, n.name, "info", "approved-code-change",
+                               "executable code changed; listed in --allow-code-change. Confirm it is "
+                               "confirmed by a witness (check-witness.py --base)."))
         elif code_fingerprint(o) != code_fingerprint(n):
             out.append(finding(
                 n.file, n.line, n.name, "error", "code-changed",
@@ -220,6 +280,25 @@ def diff_file(path, old_src, new_src, old_index=None, new_index=None, kani_only=
             out.append(finding(str(path), o.line, o.name, "error", "code-removed",
                                "executable function removed."))
     return out
+
+
+def changed_files(args, sample):
+    """Resolved paths of files that differ from the base (or are new), or None if that cannot be
+    determined cheaply (then every file is compared). Unchanged files are not read from git."""
+    if args.base_dir or not sample:
+        return None
+    top = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=Path(sample).resolve().parent,
+                         capture_output=True, text=True)
+    if top.returncode != 0:
+        return None
+    top = Path(top.stdout.strip())
+    changed = set()
+    for cmd in (["git", "diff", "--name-only", args.base, "--"], ["git", "ls-files", "--others", "--exclude-standard"]):
+        out = subprocess.run(cmd, cwd=top, capture_output=True, text=True)
+        if out.returncode != 0:
+            return None
+        changed.update((top / line).resolve() for line in out.stdout.splitlines())
+    return changed
 
 
 def base_source(args, f):
@@ -244,28 +323,48 @@ def main(argv=None):
     group.add_argument("--base", default="HEAD", help="git revision to compare against (default: HEAD)")
     group.add_argument("--base-dir", help="directory holding a copy of the sources made before editing; "
                        "PATHs are resolved relative to the current directory and looked up under it")
+    parser.add_argument("--allow-code-change", action="append", default=[], metavar="FUNCTION",
+                        help="a function whose code change the user approved (a fix confirmed by a witness); "
+                             "reported as info instead of an error (repeatable)")
+    parser.add_argument("--max-file-kb", type=int, default=2048,
+                        help="skip source files larger than this (generated bindings); default 2048")
     args = parser.parse_args(argv)
     findings = []
-    files = 0
+    files = skipped_large = unchanged = harness_count = 0
     try:
         targets = list(rust_files(args.paths))
         _, package = find_root(targets[0]) if targets else (None, None)
         crate = list(rust_files([package])) if package else targets
-        kani_only = kani_only_files(crate)
+        big = {f.resolve() for f in crate + targets if f.stat().st_size > args.max_file_kb * 1024}
+        skipped_large = len(big)
+        crate = [f for f in crate if f.resolve() not in big]
+        targets = [f for f in targets if f.resolve() not in big]
+        changed = changed_files(args, targets[0] if targets else None)
         new_srcs = {f.resolve(): f.read_text(encoding="utf-8", errors="replace") for f in crate + targets}
-        old_srcs = {f.resolve(): base_source(args, f) for f in crate + targets}
-        new_index = helper_index([fn for f, src in new_srcs.items()
-                                  for fn in parse_functions(src, f, f in kani_only)])
+        # Only files that mention Kani, or changed, matter for the helper index and the diff.
+        old_srcs = {f: (base_source(args, Path(f)) if changed is None or f in changed else src)
+                    for f, src in new_srcs.items() if "kani" in src or changed is None or f in changed}
+        kani_only = kani_only_files([f for f in crate if f.resolve() in old_srcs])
+        new_index = helper_index([fn for f in old_srcs for fn in parse_functions(new_srcs[f], f, f in kani_only)])
         old_index = helper_index([fn for f, src in old_srcs.items() if src is not None
                                   for fn in parse_functions(src, f, f in kani_only)])
+        allow = frozenset(args.allow_code_change)
         for f in targets:
+            r = f.resolve()
+            if r not in old_srcs or old_srcs[r] == new_srcs[r]:
+                unchanged += 1
+                continue
             files += 1
-            findings.extend(diff_file(f, old_srcs[f.resolve()], new_srcs[f.resolve()], old_index, new_index,
-                                      f.resolve() in kani_only))
+            harness_count += sum(1 for fn in parse_functions(new_srcs[r], f, r in kani_only) if is_harness(fn))
+            findings.extend(diff_file(f, old_srcs[r], new_srcs[r], old_index, new_index, r in kani_only, allow))
     except (OSError, subprocess.CalledProcessError) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
-    emit({"base": args.base_dir or args.base, "files_compared": files, "findings": findings})
+    out = {"base": args.base_dir or args.base, "files_compared": files, "files_unchanged": unchanged,
+           "harnesses_in_compared_files": harness_count, "findings": findings}
+    if skipped_large:
+        out["skipped_large_files"] = skipped_large
+    emit(out)
     return 2 if any(f["severity"] != "info" for f in findings) else 0
 
 

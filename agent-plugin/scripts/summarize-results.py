@@ -7,19 +7,35 @@ Produces only the facts an agent needs to act on a verification run: per-harness
 the failed properties with their source locations, and the counts that matter for proof
 quality (unreachable checks, unsatisfiable covers, unsupported constructs). It also reports
 what a SUCCESS relies on: `weakened_checks` lists options of the run that disable checks, and
-each harness's `trusted` lists its stubs and `stub_verified` targets. Empty fields are omitted
-to keep the output small.
+each harness's `trusted` lists its stubs and `stub_verified` targets.
+
+Every count key is always present (zero included), so scripts can index them directly.
+`failed` counts harnesses that failed; `inconclusive` counts those that timed out, ran out of
+memory, or crashed, which is not the same as failing. `all_ok` is true only when every harness
+succeeded. Unsupported constructs, which make Kani's result unreliable, are listed per harness.
+
+With `--log kani.log` (Kani's console output of the same run), each harness that did not
+succeed gets a `diagnosis`: the log often shows the real cause of a TIMEOUT or OUT_OF_MEMORY
+(an unwinding bound that is too small, unbounded recursion, a solver timeout).
 
 Usage:
-    cargo kani -Z export-json --export-json results.json ...
-    summarize-results.py results.json [--failures-only] [--max-failed N]
+    cargo kani -Z export-json --export-json results.json ... | tee kani.log
+    summarize-results.py results.json [--failures-only] [--max-failed N] [--log kani.log]
+
+When the export does not exist (the run was killed, or failed to compile), the script says so and,
+with `--log`, reports the verdicts that the log does show.
 
 The `kani_verify_harness` MCP tool returns the same shape.
 """
 
 import argparse
 import json
+import os
+import re
 import sys
+import time
+
+INCONCLUSIVE = ("TIMEOUT", "OUT_OF_MEMORY", "CRASHED")
 
 
 def verdict_of(harness):
@@ -79,31 +95,34 @@ def summarize_harness(harness, max_failed):
     if outcome.get("message"):
         out["message"] = outcome["message"]
     failed = harness.get("failed_properties", [])
-    if failed:
-        out["failed"] = [
-            {k: v for k, v in (
-                ("class", p["class"]),
-                ("description", p["description"]),
-                ("location", location(p)),
-            ) if v is not None}
-            for p in failed[:max_failed]
-        ]
-        if len(failed) > max_failed:
-            out["failed_omitted"] = len(failed) - max_failed
+    out["failed"] = [
+        {k: v for k, v in (
+            ("class", p["class"]),
+            ("description", p["description"]),
+            ("location", location(p)),
+        ) if v is not None}
+        for p in failed[:max_failed]
+    ]
+    if len(failed) > max_failed:
+        out["failed_omitted"] = len(failed) - max_failed
     checks = harness.get("checks", {})
     covers = harness.get("covers", {})
-    counts = {
-        "checks_total": checks.get("total"),
+    unsupported = harness.get("unsupported_constructs", [])
+    out.update({
+        "checks_total": checks.get("total") or 0,
         "unreachable_checks": len(checks.get("unreachable", [])),
         "undetermined_checks": len(checks.get("undetermined", [])),
-        "covers_total": covers.get("total"),
+        "covers_total": covers.get("total") or 0,
         "unsatisfiable_covers": len(covers.get("unsatisfiable", [])),
         "unreachable_covers": len(covers.get("unreachable", [])),
-        "unsupported_constructs": len(harness.get("unsupported_constructs", [])),
+        "unsupported_constructs": len(unsupported),
         "warnings": len(harness.get("warnings", [])) + harness.get("warnings_truncated", 0),
-    }
-    out.update({k: v for k, v in counts.items() if v})
-    flags = [
+    })
+    if unsupported:
+        out["unsupported"] = [
+            {k: v for k, v in (("description", p.get("description")), ("location", location(p))) if v}
+            for p in unsupported[:max_failed]]
+    out["flags"] = [
         name for name, on in (
             ("automatically_generated", harness.get("is_automatically_generated")),
             ("bounded", harness.get("is_bounded")),
@@ -112,34 +131,125 @@ def summarize_harness(harness, max_failed):
             ("concrete_test_generated", harness.get("generated_concrete_test")),
         ) if on
     ]
-    if flags:
-        out["flags"] = flags
     trusted = trusted_constructs(harness)
     if trusted:
         out["trusted"] = trusted
     return out
 
 
-def summarize(doc, failures_only=False, max_failed=5):
+def summarize(doc, failures_only=False, max_failed=5, diagnoses=None):
     harnesses = [summarize_harness(h, max_failed) for h in doc.get("harnesses", [])]
+    if diagnoses:
+        for h in harnesses:
+            d = diagnoses.get(h["name"]) or diagnoses.get(h["name"].split("::")[-1])
+            if d and h["verdict"] != "SUCCESS":
+                h["diagnosis"] = d
+    verdicts = {}
+    for h in harnesses:
+        verdicts[h["verdict"]] = verdicts.get(h["verdict"], 0) + 1
     if failures_only:
         harnesses = [h for h in harnesses if h["verdict"] != "SUCCESS"]
     summary = doc.get("summary", {})
+    total = summary.get("total", sum(verdicts.values()))
     out = {
         "kani": doc.get("tools", {}).get("kani"),
         "run_state": doc.get("run_state"),
-        "total": summary.get("total", 0),
-        "successful": summary.get("successful", 0),
-        "failed": summary.get("failed", 0),
+        "started_at": doc.get("started_at"),
+        "total": total,
+        "successful": verdicts.get("SUCCESS", 0),
+        "failed": verdicts.get("FAILURE", 0),
+        "inconclusive": sum(n for v, n in verdicts.items() if v in INCONCLUSIVE),
+        "by_verdict": dict(sorted(verdicts.items())),
+        "all_ok": bool(total) and verdicts.get("SUCCESS", 0) == total,
         "harnesses": harnesses,
     }
-    weakened = weakened_checks(doc)
-    if weakened:
-        out["weakened_checks"] = weakened
     unmatched = doc.get("harness_selection", {}).get("unmatched_filters", [])
     if unmatched:
         out["unmatched_filters"] = unmatched
+    weakened = weakened_checks(doc)
+    if weakened:
+        out["weakened_checks"] = weakened
     return out
+
+
+# ---- Console log ----------------------------------------------------------------------
+
+START = re.compile(
+    r"^(?:Thread \d+: )?(?:Checking harness (.+?)\.\.\.|Autoharness: Checking function (.+?)(?:'s contract)? against)")
+PREFIX = re.compile(r"^Thread (\d+): ")
+
+
+def split_blocks(text):
+    """Lines of the log grouped by harness (sequential or `Thread N:` parallel output)."""
+    blocks, current = {}, {}
+    for raw in text.splitlines():
+        m = PREFIX.match(raw)
+        key = m.group(1) if m else ""
+        line = raw[m.end():] if m else raw
+        s = START.match(raw)
+        if s:
+            current[key] = (s.group(1) or s.group(2)).strip()
+            blocks.setdefault(current[key], [])
+            continue
+        if key in current:
+            blocks[current[key]].append(line)
+    return blocks
+
+
+CAUSES = [
+    ("unwind-bound", re.compile(r"unwinding assertion|Failed Checks: unwinding"),
+     "an unwinding bound is too small for a loop: add or raise `#[kani::unwind(N)]` (N must exceed the "
+     "maximum number of iterations), or bound the input that drives the loop"),
+    ("recursion", re.compile(r"Not unwinding recursion|recursion"),
+     "Kani hit unbounded recursion (often drop glue of a recursive type): bound the recursion with "
+     "`#[kani::unwind]`, give the function a contract and use `stub_verified`, or `core::mem::forget` the "
+     "value if dropping is not part of the property (and say so in the report)"),
+    ("timeout", re.compile(r"timed out|CBMC timed out"),
+     "the solver timed out: shrink input bounds and unwinding, stub expensive callees, or split the harness "
+     "(references/kani.md, Performance)"),
+    ("out-of-memory", re.compile(r"out of memory|OUT_OF_MEMORY|Cannot allocate memory", re.I),
+     "CBMC ran out of memory: shrink symbolic inputs first (a `char`, `String`, or slice multiplies the "
+     "state), lower unwind bounds, or stub callees"),
+    ("cbmc-crash", re.compile(r"CBMC failed|exited with status 15|status 15"),
+     "CBMC crashed; this is usually memory exhaustion or an unwinding explosion: see the other causes"),
+]
+
+
+def diagnose_log(text):
+    """harness name -> {cause, hint, evidence}, from Kani's console output."""
+    out = {}
+    for name, lines in split_blocks(text).items():
+        body = "\n".join(lines)
+        for cause, pattern, hint in CAUSES:
+            m = pattern.search(body)
+            if m:
+                out[name] = {"cause": cause, "hint": hint,
+                             "evidence": next((ln.strip() for ln in lines if pattern.search(ln)), m.group(0))[:160]}
+                break
+    return out
+
+
+def verdicts_from_log(text):
+    """Verdicts the console log shows, for runs that wrote no export."""
+    results, current, failed = [], {}, {}
+    for raw in text.splitlines():
+        m = PREFIX.match(raw)
+        key = m.group(1) if m else ""
+        line = raw[m.end():] if m else raw
+        s = START.match(raw)
+        if s:
+            current[key] = (s.group(1) or s.group(2)).strip()
+            failed.pop(key, None)
+        elif line.startswith("Failed Checks: ") and key in current:
+            failed.setdefault(key, []).append(line[len("Failed Checks: "):].strip())
+        elif line.startswith("VERIFICATION:- ") and key in current:
+            verdict = {"SUCCESSFUL": "SUCCESS", "FAILED": "FAILURE"}.get(line.split("- ", 1)[1].strip(), "UNKNOWN")
+            entry = {"name": current[key], "verdict": verdict}
+            if key in failed:
+                entry["failed"] = failed.pop(key)[:5]
+            results.append(entry)
+    done = {r["name"] for r in results}
+    return results, [n for n in dict.fromkeys(current.values()) if n not in done]
 
 
 def main(argv=None):
@@ -147,14 +257,41 @@ def main(argv=None):
     parser.add_argument("export_json", help="file written by `--export-json`")
     parser.add_argument("--failures-only", action="store_true", help="omit successful harnesses")
     parser.add_argument("--max-failed", type=int, default=5, help="failed properties shown per harness")
+    parser.add_argument("--log", help="Kani's console output of the same run, to diagnose non-successes")
     args = parser.parse_args(argv)
+    log_text = None
+    if args.log:
+        try:
+            log_text = open(args.log, encoding="utf-8", errors="replace").read()
+        except OSError as e:
+            print(f"error: cannot read Kani log `{args.log}`: {e}", file=sys.stderr)
+            return 1
+    if not os.path.exists(args.export_json):
+        msg = {"error": f"no Kani export at `{args.export_json}`",
+               "why": "Kani writes `--export-json` only when a run completes. A run that was killed (a time "
+                      "limit, the memory watchdog, a closed terminal) or that failed to compile leaves none. "
+                      "Re-run with `scripts/run-harnesses.py` (one harness per run, results kept as they finish), "
+                      "or with the MCP tools and `timeout_s`."}
+        if log_text is not None:
+            finished, unfinished = verdicts_from_log(log_text)
+            msg["verdicts_in_log"] = finished
+            msg["unfinished"] = unfinished
+            msg["diagnoses"] = diagnose_log(log_text)
+        print(json.dumps(msg, indent=2, sort_keys=True))
+        return 1
     try:
         with open(args.export_json, encoding="utf-8") as f:
             doc = json.load(f)
     except (OSError, json.JSONDecodeError) as e:
         print(f"error: cannot read Kani JSON export `{args.export_json}`: {e}", file=sys.stderr)
         return 1
-    print(json.dumps(summarize(doc, args.failures_only, args.max_failed), indent=2, sort_keys=True))
+    out = summarize(doc, args.failures_only, args.max_failed, diagnose_log(log_text) if log_text else None)
+    out["export_age_minutes"] = round((time.time() - os.path.getmtime(args.export_json)) / 60, 1)
+    try:
+        print(json.dumps(out, indent=2, sort_keys=True))
+        sys.stdout.flush()
+    except BrokenPipeError:
+        os._exit(0)
     return 0
 
 

@@ -294,6 +294,134 @@ class MapTest(unittest.TestCase):
         self.assertIn("-->", text)
 
 
+def auto_entry(name, file, line, contract=False, verdict="SUCCESS", unwind=20):
+    entry = harness_entry(name, file, line, verdict=verdict)
+    entry["is_automatically_generated"] = True
+    entry["resolved_unwind"] = unwind
+    entry["attributes"]["kind"] = {"ProofForContract": {"target_fn": name}} if contract else "Proof"
+    return entry
+
+
+class ContractFirstTest(unittest.TestCase):
+    """The map steers toward contracts, loop contracts with decreases clauses, and AutoHarness."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = Path(tempfile.mkdtemp())
+        cls.root = cls.tmp / "ws"
+        shutil.copytree(WORKSPACE, cls.root, ignore=shutil.ignore_patterns("target", "Cargo.lock"))
+        core = cls.root / "core" / "src" / "lib.rs"
+        core.write_text(core.read_text() + """
+/// Loop contract with an invariant but no decreases clause: termination is not shown.
+pub fn invariant_only(n: u32) -> u32 {
+    let mut x = n;
+    #[kani::loop_invariant(x <= n)]
+    while x > 0 {
+        x -= 1;
+    }
+    x
+}
+
+/// A complete loop contract.
+#[kani::requires(n <= 100)]
+#[kani::ensures(|r: &u32| *r == 0)]
+pub fn counted_down(n: u32) -> u32 {
+    let mut x = n;
+    #[kani::loop_invariant(x <= n)]
+    #[kani::loop_decreases(x)]
+    while x > 0 {
+        x -= 1;
+    }
+    x
+}
+""")
+        cls.map = vm.build_map(cls.root, [], callgraph="text")
+        cls.by = {f["qualified_path"].split("::", 1)[1]: f for f in cls.map["functions"]}
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp)
+
+    def primary(self, name):
+        return self.by[name]["strategy"]["primary"]
+
+    def test_strategy_asks_for_contracts_and_loop_contracts(self):
+        self.assertEqual(self.primary("sum_to"), "loop-contract")
+        self.assertIn("loop_decreases", " ".join(self.by["sum_to"]["strategy"]["rationale"]))
+        self.assertEqual(self.primary("invariant_only"), "add-loop-decreases")
+        self.assertEqual(self.primary("is_even"), "contract-and-recursion")
+        self.assertEqual(self.primary("math::div"), "verify-contract-with-autoharness")
+        self.assertEqual(self.primary("fast_path"), "write-contract-then-autoharness")
+        self.assertEqual(self.primary("shapes::total_area"), "loop-contract")  # loop first, dispatch second
+        self.assertIn("stub-or-contract-callees", self.by["shapes::total_area"]["strategy"]["also"])
+
+    def test_loop_contract_signals_and_partial_termination(self):
+        s = self.by["counted_down"]["signals"]
+        self.assertEqual((s["loop_keywords"], s["loop_invariants"], s["loop_decreases"]), (1, 1, 1))
+        self.assertNotEqual(self.primary("counted_down"), "loop-contract")
+        flags = {u["flag"] for u in self.by["invariant_only"]["uncertainty"]}
+        self.assertIn("partial-termination", flags)
+        self.assertNotIn("partial-termination", {u["flag"] for u in self.by["counted_down"]["uncertainty"]})
+
+    def test_plan_has_contract_workflow_and_autoharness_command(self):
+        plan = vm.plan(self.map)
+        self.assertIn("Contract-first", plan["approach"])
+        progress = plan["contract_progress"]
+        self.assertEqual(progress["with_contract"], 2)  # div and counted_down
+        self.assertEqual(progress["loops_with_invariant"], 2)
+        self.assertEqual(progress["loops_with_decreases"], 1)
+        self.assertEqual(progress["partial_termination"], ["ws_core::invariant_only"])
+        stage = next(st for st in plan["stages"] if st["level"] == 0)
+        self.assertEqual(len(stage["workflow"]), 4)
+        self.assertIn("ws_core::sum_to", stage["loop_contract_work"])
+        auto = stage["autoharness"]
+        self.assertIn("^ws_core::math::div$", auto["include_patterns"])
+        self.assertIn("-Z loop-contracts", auto["cli"])
+        self.assertEqual(auto["mcp"]["tool"], "kani_autoharness")
+        # Functions with unresolved callees or generics are not in the sweep command.
+        self.assertFalse(any("total_area" in p or "largest" in p for p in auto["include_patterns"]))
+
+    def test_autoharness_results_are_evidence(self):
+        sources = vm.package_sources(self.root.resolve(), vm.discover_workspace(self.root)[1])
+        div = self.by["math::div"]
+        entries = [auto_entry("div", "core/src/math.rs", div["first_line"], contract=True),
+                   auto_entry("counted_down", "core/src/lib.rs", self.by["counted_down"]["first_line"], contract=True),
+                   auto_entry("sum_to", "core/src/lib.rs", self.by["sum_to"]["first_line"]),
+                   auto_entry("ghost", "core/src/lib.rs", 9999)]
+        bundle = write_bundle(self.tmp / "auto", entries, self.root.resolve(), sources)
+        m = vm.build_map(self.root, [bundle], callgraph="text")
+        by = {f["qualified_path"].split("::", 1)[1]: f for f in m["functions"]}
+        self.assertEqual(by["math::div"]["contract_status"], "verified")
+        self.assertEqual(by["math::div"]["verification"]["status"], "verified")
+        self.assertEqual(by["counted_down"]["contract_status"], "verified")
+        self.assertEqual(by["sum_to"]["contract_status"], "none")
+        # A plain automatic harness verifies the function, but its loop has no invariant: only
+        # within the unwind bound, and the map says so.
+        self.assertEqual(by["sum_to"]["verification"]["status"], "verified")
+        self.assertTrue(any("no invariant" in c and "20" in c for c in by["sum_to"]["verification"]["caveats"]))
+        self.assertEqual(by["counted_down"]["verification"]["caveats"], [])
+        self.assertIn("unmatched-automatic-harnesses", {u["flag"] for u in m["uncertainty"]})
+        self.assertEqual({h["id"] for h in m["harnesses"] if h.get("automatic")},
+                         {"auto::ws_core::math::div", "auto::ws_core::counted_down", "auto::ws_core::sum_to"})
+        self.assertEqual(validate(json.loads(json.dumps(m, default=str)), SCHEMA), [])
+        # A second update replaces the automatic harnesses instead of duplicating them.
+        vm.finalize(m, self.root.resolve(), [bundle])
+        self.assertEqual(len([h for h in m["harnesses"] if h.get("automatic")]), 3)
+        again = {f["qualified_path"]: f["harnesses"] for f in m["functions"]}
+        self.assertEqual(again["ws_core::math::div"].count("auto::ws_core::math::div"), 1)
+
+    def test_failed_contract_harness_marks_the_contract_failed(self):
+        sources = vm.package_sources(self.root.resolve(), vm.discover_workspace(self.root)[1])
+        div = self.by["math::div"]
+        bundle = write_bundle(self.tmp / "auto-fail", [auto_entry("div", "core/src/math.rs", div["first_line"],
+                                                                  contract=True, verdict="FAILURE")],
+                              self.root.resolve(), sources)
+        m = vm.build_map(self.root, [bundle], callgraph="text")
+        f = next(f for f in m["functions"] if f["name"] == "div")
+        self.assertEqual((f["contract_status"], f["verification"]["status"], f["strategy"]["primary"]),
+                         ("failed", "failed", "triage-failure"))
+
+
 class CallgraphJoinTest(unittest.TestCase):
     def test_edges_from_cargo_callgraph_output(self):
         root = Path("/w")

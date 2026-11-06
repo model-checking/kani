@@ -31,6 +31,12 @@ quantifiers`).
 Usage:
     check-specs.py PATH... [--function NAME] [--probe-harnesses [--harness NAME]]
                    [--compare-base REV | --compare-base-dir DIR] [--kani-arg ARG]... [--work-dir DIR]
+                   [--features F]... [--no-default-features] [--all-features] [-p PACKAGE]
+                   [--harness-timeout 5m]
+
+For crates that need cargo features, pass `--features` (not `--kani-arg --features`). The probe
+re-runs the selected harnesses (a full run each): select them with `--harness` and set
+`--harness-timeout`.
 
 The crate is copied to a persistent work directory under `target/` and only changed files are
 re-copied, so dependencies are built once. Do not run two checks on the same crate at once.
@@ -52,7 +58,8 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from kani_plugin_lib import (  # noqa: E402
     emit, find_root, join_option_values, kani_env, kani_only_files, parse_functions, rust_files, split_top_level,
-    mirror_workspace, strip_comments_and_strings)
+    harness_matches, harnesses_of, mirror_workspace, plugin_out_dir, qualified_name, strip_comments_and_strings,
+    unmatched_message)
 
 PRIMITIVES = {f"{s}{w}" for s in "iu" for w in ("8", "16", "32", "64", "128", "size")} | {
     "bool", "char", "f32", "f64", "()"}
@@ -142,7 +149,8 @@ def bindings(fn, extra):
         if not re.fullmatch(r"[A-Za-z_]\w*", name):
             return None, f"parameter pattern `{pat}` is not a plain identifier"
         if not supported(ty, extra):
-            return None, f"parameter `{name}: {ty}`: Kani may not be able to generate this type"
+            return None, (f"parameter `{name}: {ty}`: this script cannot generate this type (slices, `str`, and "
+                          "collections are not supported); the contract is not checked, which is not a pass")
         ty = LIFETIME.sub("", ty)
         params.append(f"{name}: {ty}")
         if ty.startswith("&"):
@@ -167,7 +175,7 @@ class Plan:
         self.insertions = {}  # file -> list of (offset, text)
         self.checks = []  # dicts with kind, function, file, line, harness, and kind-specific keys
         self.unchecked = []
-        self.harness_filters = [PREFIX]
+        self.harness_filters = []
 
     def insert(self, file, offset, text):
         self.insertions.setdefault(file, []).append((offset, text))
@@ -219,6 +227,8 @@ def plan_function(plan, fn, base_requires, extra):
         harnesses.append(harness(name, decls, stmts))
         plan.checks.append({"kind": check_kind, "harness": name, "function": fn.name, "file": fn.file,
                             "line": fn.line, **info})
+        if PREFIX not in plan.harness_filters:
+            plan.harness_filters.append(PREFIX)
 
     if requires:
         add("sat", [f'kani::cover!({r}[0], "{PREFIX}_requires_satisfiable");'])
@@ -248,7 +258,7 @@ def plan_probe(plan, fn):
     plan.insert(fn.file, fn.end - 1, f'\n;kani::assert(false, "{END_MARKER}");\n')
     plan.checks.append({"kind": "probe", "harness": fn.name, "function": fn.name, "file": fn.file,
                         "line": fn.line})
-    plan.harness_filters.append(fn.name)
+    plan.harness_filters.append(qualified_name(fn))
 
 
 def base_source(args, path):
@@ -278,8 +288,8 @@ def run_kani(plan, files, kani_args, work_dir=None):
             mapping = {first.resolve(): work_file}
             cwd, cmd = tmp, ["kani", work_file.name]
         else:
-            work = Path(work_dir) if work_dir else root / "target" / "kani-plugin" / "spec-checks"
-            copy = mirror_workspace(root, work)
+            work = Path(work_dir) if work_dir else plugin_out_dir(root) / "spec-checks"
+            copy = mirror_workspace(root, work.resolve())
             mapping = {f.resolve(): copy / f.resolve().relative_to(root) for f in files}
             cwd, cmd = copy / package.relative_to(root), ["cargo", "kani"]
         for file, edits in plan.insertions.items():
@@ -391,7 +401,14 @@ def main(argv=None):
     parser.add_argument("paths", nargs="+", help="Rust files or directories of one crate")
     parser.add_argument("--function", action="append", default=[], help="only check these functions")
     parser.add_argument("--probe-harnesses", action="store_true", help="check that each harness's end is reachable")
-    parser.add_argument("--harness", action="append", default=[], help="with --probe-harnesses, only these")
+    parser.add_argument("--harness", action="append", default=[],
+                        help="with --probe-harnesses, only these: a name, a module-qualified name, or a module; "
+                             "an error if nothing matches")
+    parser.add_argument("--features", action="append", default=[], help="cargo features to enable (repeatable)")
+    parser.add_argument("--no-default-features", action="store_true")
+    parser.add_argument("--all-features", action="store_true")
+    parser.add_argument("-p", "--package", action="append", default=[], help="cargo package to check")
+    parser.add_argument("--harness-timeout", help="per-harness time limit, e.g. 5m (adds -Z unstable-options)")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--compare-base", help="git revision whose preconditions to compare against")
     group.add_argument("--compare-base-dir", help="directory with a copy of the sources made before editing")
@@ -399,6 +416,13 @@ def main(argv=None):
                         help="extra argument for Kani, e.g. `--kani-arg -Z --kani-arg quantifiers` (repeatable)")
     parser.add_argument("--work-dir", help="where to keep the crate copy (default: target/kani-plugin/spec-checks)")
     args = parser.parse_args(join_option_values(argv, {"--kani-arg"}))
+    for f in args.features:
+        args.kani_arg += ["--features", f]
+    args.kani_arg += ["--no-default-features"] * args.no_default_features + ["--all-features"] * args.all_features
+    for pkg in args.package:
+        args.kani_arg += ["-p", pkg]
+    if args.harness_timeout:
+        args.kani_arg += ["-Z", "unstable-options", "--harness-timeout", args.harness_timeout]
 
     files = list(rust_files(args.paths))
     if not files:
@@ -410,6 +434,13 @@ def main(argv=None):
     extra = arbitrary_types(crate)
     comparing = bool(args.compare_base or args.compare_base_dir)
     plan = Plan()
+    harness_fns = [fn for f in files for fn in parse_functions(f.read_text(encoding="utf-8", errors="replace"), f,
+                                                               f.resolve() in kani_only) if harnesses_of([fn])]
+    if args.harness:
+        message = unmatched_message(args.harness, harness_fns)
+        if message:
+            print(f"error: {message}", file=sys.stderr)
+            return 1
 
     def key(fn):
         return (strip_attrs(fn.scope_header), fn.name)
@@ -423,7 +454,7 @@ def main(argv=None):
         for fn in parse_functions(src, f, f.resolve() in kani_only):
             is_harness = any(n in ("kani::proof", "kani::proof_for_contract") for n, _, _ in fn.attributes)
             if is_harness:
-                if args.probe_harnesses and (not args.harness or fn.name in args.harness):
+                if args.probe_harnesses and (not args.harness or any(harness_matches(fn, h) for h in args.harness)):
                     plan_probe(plan, fn)
                 continue
             if fn.in_kani or (args.function and fn.name not in args.function):
@@ -444,6 +475,14 @@ def main(argv=None):
         else:
             findings += interpret(plan, doc)
     result = {"checks_generated": len(plan.checks), "findings": findings}
+    if not plan.checks:
+        result["note"] = ("nothing to check: " + (
+            "no `#[kani::requires]` contracts were found in the given files" if not args.probe_harnesses else
+            "no contracts, and no harness was selected for the reachability probe")
+            + (". Pass --probe-harnesses to check that harnesses reach their end"
+               if not args.probe_harnesses else "") + ". An empty result is not a pass.")
+    elif not args.probe_harnesses and all(c["kind"] != "probe" for c in plan.checks):
+        result["note"] = "only contract preconditions were checked; add --probe-harnesses for harness reachability"
     if output_tail:
         result["output_tail"] = output_tail
     emit(result)
