@@ -14,9 +14,13 @@ brew update
 # macOS 14 runner's clang, and building takes a long time on Intel. Use the release binaries, which
 # support macOS 13.3 and later. (Nothing else installed here pulls in Homebrew's Python, so the
 # runner's own Python 3 is used.)
+source kani-dependencies
 ARCH=$(uname -m)
-Z3_VERSION=5.3.1
 Z3_ARCH=$([ "${ARCH}" = "x86_64" ] && echo x64 || echo "${ARCH}")
+if [ -z "${Z3_VERSION:-}" ]; then
+  echo "$0: Error: Z3_VERSION is not specified"
+  exit 1
+fi
 Z3_DIR=z3-${Z3_VERSION}-${Z3_ARCH}-osx-13.3
 curl -L --remote-name https://github.com/Z3Prover/z3/releases/download/z3-${Z3_VERSION}/${Z3_DIR}.zip
 sudo unzip -o -j -d /usr/local/bin ${Z3_DIR}.zip ${Z3_DIR}/bin/z3

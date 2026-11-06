@@ -1,0 +1,80 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+# Opens a PR that bumps `Z3_VERSION` in `kani-dependencies` when Z3 publishes a release. Only the
+# macOS setup installs that release (Ubuntu uses the distribution's package), so the PR's macOS CI
+# jobs are what test it; this job only checks that the release has the macOS binaries the setup
+# script downloads.
+name: Attempt Z3 update
+
+on:
+  schedule:
+    - cron: "45 4 * * Mon" # Run this every Monday at 04:45 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  create-z3-update-pr:
+    # Restricted to the main repository so that forks do not open update PRs.
+    if: github.repository == 'model-checking/kani'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v6
+
+      - name: Compare Z3 versions and determine next step
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          source kani-dependencies
+          echo "Z3_VERSION=$Z3_VERSION" >> $GITHUB_ENV
+          # The latest release that is not a pre-release (Z3 also publishes nightly builds).
+          Z3_LATEST=$(gh release view -R Z3Prover/z3 --json tagName --jq .tagName | sed 's/^z3-//')
+          echo "Z3_LATEST=$Z3_LATEST" >> $GITHUB_ENV
+          assets=$(gh release view -R Z3Prover/z3 "z3-$Z3_LATEST" --json assets --jq '.assets[].name')
+          if [ "x$Z3_LATEST" = "x$Z3_VERSION" ]; then
+            echo "next_step=none" >> $GITHUB_ENV
+          # A PR or a failure issue for this version already exists.
+          elif git ls-remote --exit-code origin "z3-$Z3_LATEST" > /dev/null || \
+              gh issue list -S "Z3 upgrade to $Z3_LATEST failed" --json title | grep -q title; then
+            echo "next_step=none" >> $GITHUB_ENV
+          # `scripts/setup/macos/install_deps.sh` downloads these two archives.
+          elif ! echo "$assets" | grep -qx "z3-$Z3_LATEST-arm64-osx-13.3.zip" || \
+              ! echo "$assets" | grep -qx "z3-$Z3_LATEST-x64-osx-13.3.zip"; then
+            echo "next_step=create_issue" >> $GITHUB_ENV
+          else
+            sed -i "s/^Z3_VERSION=.*/Z3_VERSION=\"$Z3_LATEST\"/" kani-dependencies
+            git diff
+            echo "next_step=create_pr" >> $GITHUB_ENV
+          fi
+
+      - name: Create Pull Request
+        if: ${{ env.next_step == 'create_pr' }}
+        uses: peter-evans/create-pull-request@v8
+        with:
+          commit-message: Upgrade Z3 from ${{ env.Z3_VERSION }} to ${{ env.Z3_LATEST }}
+          branch: z3-${{ env.Z3_LATEST }}
+          delete-branch: true
+          title: 'Automatic upgrade of Z3 from ${{ env.Z3_VERSION }} to ${{ env.Z3_LATEST }}'
+          body: >
+            Upgrade the Z3 release that the macOS CI jobs install to its latest version. The macOS
+            regression jobs on this PR are what test it.
+
+      - name: Create Issue
+        if: ${{ env.next_step == 'create_issue' }}
+        uses: dacbd/create-issue-action@main
+        with:
+          token: ${{ github.token }}
+          title: 'Z3 upgrade to ${{ env.Z3_LATEST }} failed'
+          body: >
+            Z3 ${{ env.Z3_LATEST }} does not have the `arm64-osx-13.3` and `x64-osx-13.3` archives
+            that `scripts/setup/macos/install_deps.sh` downloads, so the pin in `kani-dependencies`
+            stays at ${{ env.Z3_VERSION }}. Update the asset names in that script, then bump
+            `Z3_VERSION`.
+
+            The automated run
+            [can be found here.](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
