@@ -24,8 +24,10 @@ fn test_copy_simple() {
 
 #[kani::proof]
 fn test_copy_with_overlap() {
-    let arr: [i32; 3] = [0, 1, 0];
-    let src: *const i32 = arr.as_ptr();
+    let mut arr: [i32; 3] = [0, 1, 0];
+    // Both pointers come from `as_mut_ptr`: a pointer derived from `arr.as_ptr()` (a shared
+    // reference) may not be written through.
+    let src: *const i32 = arr.as_mut_ptr();
 
     unsafe {
         let dst = src.add(1) as *mut i32;
