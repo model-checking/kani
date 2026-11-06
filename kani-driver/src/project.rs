@@ -6,7 +6,7 @@
 
 use crate::args::NumThreads;
 use crate::metadata::from_json;
-use crate::session::KaniSession;
+use crate::session::{KaniSession, lib_no_core_folder};
 use crate::util::{crate_name, info_operation};
 use anyhow::{Context, Result};
 use kani_metadata::{
@@ -371,7 +371,7 @@ pub(crate) fn std_project(std_path: &Path, session: &KaniSession) -> Result<Proj
 
 /// Fingerprint of what a `verify-std` build depends on: the path and contents
 /// of every file under `std_path` (except `outdir`), the Kani compiler binary,
-/// the command line and `RUSTFLAGS`. Contents rather than modification times,
+/// its precompiled libraries, the command line and `RUSTFLAGS`. Contents rather than modification times,
 /// so that an edit is seen even when it keeps the size and the timestamp.
 fn std_build_fingerprint(std_path: &Path, outdir: &Path, session: &KaniSession) -> Result<String> {
     fn hash_tree(dir: &Path, skip: &Path, hasher: &mut DefaultHasher) -> Result<()> {
@@ -399,6 +399,8 @@ fn std_build_fingerprint(std_path: &Path, outdir: &Path, session: &KaniSession) 
     let mut hasher = DefaultHasher::new();
     hash_tree(std_path, outdir, &mut hasher)?;
     hash_file(&session.kani_compiler, &mut hasher)?;
+    // Cargo sees only the flag that names this folder, not the libraries in it.
+    hash_tree(&lib_no_core_folder()?, outdir, &mut hasher)?;
     std::env::args().collect::<Vec<_>>().hash(&mut hasher);
     std::env::var_os("RUSTFLAGS").hash(&mut hasher);
     Ok(format!("{:016x}", hasher.finish()))
