@@ -892,7 +892,12 @@ impl GotocHook for LoopInvariantRegister {
                 // The storage of such a local can end in the loop body, which can make it the
                 // dead object (see `codegen_storage_live`) when the latch jumps back to the
                 // loop head, where the loop havocs it. It is dead there: mark its storage live,
-                // as its `StorageLive` in the body would.
+                // as its `StorageLive` in the body would. That is one step early: between here
+                // and the back edge CBMC only checks the invariant and the assigns clause, so an
+                // invariant that reads the local through a dangling pointer loses its dead-object
+                // check on this path. A pointer to the local that the loop writes must be in the
+                // write set, though, so it is havocked at the head, and the step case still flags
+                // the read (test `loop_modifies_returned_local_dangling`).
                 storage_live =
                     generated.iter().map(|local| gcx.codegen_storage_live(*local, loc)).collect();
                 assigns.extend(generated.into_iter().map(|local| gcx.codegen_local(local, loc)));
