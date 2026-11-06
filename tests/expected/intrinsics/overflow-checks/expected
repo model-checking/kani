@@ -13,7 +13,13 @@ Description: "`2i32.pow(31)` returns"
 core::num::<impl u32>::funnel_shl.assertion\
 Status: FAILURE\
 Description: "This is a placeholder message; Kani doesn't support message formatted at runtime"
+check_funnel_shl_overflow.cover\
+Status: UNREACHABLE\
+Description: "`funnel_shl` by `u32::BITS` returns"
 <u8 as std::iter::Step>::forward.assertion\
 Status: FAILURE\
 Description: "attempt to add with overflow"
+check_range_from_past_max.cover\
+Status: UNREACHABLE\
+Description: "`next` past `u8::MAX` returns"
 Complete - 3 successfully verified harnesses, 4 failures, 7 total.

@@ -34,6 +34,7 @@ fn check_signed_pow_overflow() {
 #[kani::proof]
 fn check_funnel_shl_overflow() {
     let _ = u32::MAX.funnel_shl(u32::MAX, u32::BITS);
+    kani::cover!(true, "`funnel_shl` by `u32::BITS` returns");
 }
 
 #[kani::proof]
@@ -47,4 +48,5 @@ fn check_range_from_past_max() {
     let mut iter = core::range::RangeFrom { start: u8::MAX }.into_iter();
     let _ = iter.next();
     let _ = iter.next();
+    kani::cover!(true, "`next` past `u8::MAX` returns");
 }
