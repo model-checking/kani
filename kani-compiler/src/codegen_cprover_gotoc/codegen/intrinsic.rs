@@ -1607,7 +1607,7 @@ impl GotocCtx<'_, '_> {
                     "`{intrinsic_str}` with the result type `{ret_ty}` (lane type `{lane_ty}`)"
                 ),
                 loc,
-                "https://github.com/model-checking/kani/issues/4950",
+                "https://github.com/model-checking/kani/issues/new/choose",
             );
         }
         let arg = fargs.remove(0);
