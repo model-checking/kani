@@ -232,7 +232,11 @@ impl KaniSession {
 
         std::fs::create_dir_all(prefix).unwrap();
         let mut file = File::create(&file_name).unwrap();
-        let file_output = result.render(&OutputFormat::Regular, harness.attributes.should_panic);
+        let mut file_output =
+            result.render(&OutputFormat::Regular, harness.attributes.should_panic);
+        if harness.attributes.no_unwinding_checks {
+            file_output.push_str(NO_UNWINDING_CHECKS_WARNING);
+        }
 
         if let Err(e) = writeln!(file, "{file_output}") {
             eprintln!(
