@@ -65,6 +65,16 @@ fn build_missing_body(tcx: TyCtxt, instance: Instance) -> Body {
     rustc_internal::stable(&mono_body)
 }
 
+/// The original (untransformed) body of `instance`, including for the constructors whose body
+/// `rustc_public::Instance::body()` does not surface, c.f. `build_missing_body`.
+///
+/// Use this rather than `instance.body().unwrap()` for any reachable instance: a constructor
+/// imported from another crate is reachable whenever it is used as a function value (e.g.
+/// `.map(Some)`), and `body()` returns `None` for it.
+pub(crate) fn instance_body(tcx: TyCtxt, instance: Instance) -> Body {
+    instance.body().unwrap_or_else(|| build_missing_body(tcx, instance))
+}
+
 mod automatic;
 pub(crate) mod body;
 mod check_uninit;
@@ -155,7 +165,7 @@ impl BodyTransformation {
             .entry(instance)
             .or_insert_with(|| {
                 // Transform and add to the cache if there's no existing entry.
-                let mut body = instance.body().unwrap_or_else(|| build_missing_body(tcx, instance));
+                let mut body = instance_body(tcx, instance);
 
                 let mut modified = false;
                 for pass in self.stub_passes.iter_mut().chain(self.inst_passes.iter_mut()) {
