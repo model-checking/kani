@@ -99,13 +99,18 @@ impl KaniSession {
         // For dev builds, re-filter the harnesses to double check filtering in the compiler
         // and ensure we're doing the minimal harness codegen possible. That filtering happens in
         // the `kani-compiler/src/kani_middle/codegen_units.rs` file's `determine_targets` function.
+        // The compiler filters only manual harnesses and keeps every automatic harness, and
+        // `find_proof_harnesses` skips automatic harnesses, so compare the manual harnesses only.
+        // This detects retained manual harnesses that do not satisfy the filter.
         if cfg!(debug_assertions) && !harness_filters.is_empty() {
-            let filtered_harnesses: Vec<&HarnessMetadata> = find_proof_harnesses(
-                &harness_filters,
-                compiler_filtered_harnesses.clone(),
-                self.args.exact,
-            );
-            assert_eq!(compiler_filtered_harnesses, filtered_harnesses);
+            let manual_harnesses: Vec<&HarnessMetadata> = compiler_filtered_harnesses
+                .iter()
+                .copied()
+                .filter(|harness| !harness.is_automatically_generated)
+                .collect();
+            let filtered_harnesses: Vec<&HarnessMetadata> =
+                find_proof_harnesses(&harness_filters, manual_harnesses.clone(), self.args.exact);
+            assert_eq!(manual_harnesses, filtered_harnesses);
         }
 
         if self.args.exact {
