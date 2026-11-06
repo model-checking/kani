@@ -107,6 +107,22 @@ grep -q "Compiling core" ${TMP_DIR}/edit.log \
     || echo "Unexpected reuse of the build after the edit"
 grep "Complete -" ${TMP_DIR}/edit.log
 
+echo "[TEST] Run kani verify-std after an edit that keeps the size and timestamp"
+touch -r ${TMP_DIR}/library/core/src/lib.rs ${TMP_DIR}/core_lib_time
+sed -i 's|^// edited$|// EDITED|' ${TMP_DIR}/library/core/src/lib.rs
+touch -r ${TMP_DIR}/core_lib_time ${TMP_DIR}/library/core/src/lib.rs
+kani verify-std \
+    -Z unstable-options \
+    "${TMP_DIR}/library" \
+    --target-dir "${TMP_DIR}/target" \
+    -Z function-contracts \
+    -Z stubbing \
+    -Z mem-predicates > ${TMP_DIR}/same-size.log 2>&1
+grep -q "Compiling core" ${TMP_DIR}/same-size.log \
+    && echo "Rebuild of core after the same-size edit as expected" \
+    || echo "Unexpected reuse of the build after the same-size edit"
+grep "Complete -" ${TMP_DIR}/same-size.log
+
 # Test that uninit-checks basic setup works on a no-core library
 echo "[TEST] Run kani verify-std -Z uninit-checks"
 RUSTFLAGS="--cfg=uninit_checks" kani verify-std \

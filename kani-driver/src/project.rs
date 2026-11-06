@@ -369,9 +369,10 @@ pub(crate) fn std_project(std_path: &Path, session: &KaniSession) -> Result<Proj
     Project::try_new(session, outdir, None, metadata, None)
 }
 
-/// Fingerprint of what a `verify-std` build depends on: the path, size and
-/// modification time of every file under `std_path` (except `outdir`), the
-/// Kani compiler binary, the command line and `RUSTFLAGS`.
+/// Fingerprint of what a `verify-std` build depends on: the path and contents
+/// of every file under `std_path` (except `outdir`), the Kani compiler binary,
+/// the command line and `RUSTFLAGS`. Contents rather than modification times,
+/// so that an edit is seen even when it keeps the size and the timestamp.
 fn std_build_fingerprint(std_path: &Path, outdir: &Path, session: &KaniSession) -> Result<String> {
     fn hash_tree(dir: &Path, skip: &Path, hasher: &mut DefaultHasher) -> Result<()> {
         let mut entries = fs::read_dir(dir)?.collect::<Result<Vec<_>, _>>()?;
@@ -391,10 +392,8 @@ fn std_build_fingerprint(std_path: &Path, outdir: &Path, session: &KaniSession) 
         Ok(())
     }
     fn hash_file(path: &Path, hasher: &mut DefaultHasher) -> Result<()> {
-        let metadata = fs::metadata(path)?;
         path.hash(hasher);
-        metadata.len().hash(hasher);
-        metadata.modified()?.hash(hasher);
+        fs::read(path)?.hash(hasher);
         Ok(())
     }
     let mut hasher = DefaultHasher::new();
