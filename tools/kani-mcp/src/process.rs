@@ -10,7 +10,7 @@
 //!
 //! Every run is also guarded against using too much memory (it mirrors
 //! `agent-plugin/scripts/kani_run.py`, which documents it): on Linux with systemd the command runs
-//! in its own scope (`systemd-run --user --scope -p MemoryMax=.. -p MemorySwapMax=0`), so the kernel
+//! in its own scope (`systemd-run --user --scope -p MemoryMax=.. -p MemorySwapMax=0 -p OOMPolicy=continue`), so the kernel
 //! kills only that run, and the scope's `memory.peak` and `cpu.stat` give its real peak memory and
 //! CPU time; elsewhere the process group's resident memory is polled and the group killed above the
 //! cap. The cap is `memory_limit_mb`, else `KANI_PLUGIN_MEMORY_MB` (`0` for none), else half of the
@@ -197,7 +197,8 @@ fn scoped(cmd: &Command, limit_mb: u64, res: &std::path::Path) -> Command {
     wrapped
         .args(["--user", "--scope", "--quiet", "-p"])
         .arg(format!("MemoryMax={limit_mb}M"))
-        .args(["-p", "MemorySwapMax=0", "--", "bash", "-c", SCOPE_WRAPPER, "_"])
+        .args(["-p", "MemorySwapMax=0", "-p", "OOMPolicy=continue"])
+        .args(["--", "bash", "-c", SCOPE_WRAPPER, "_"])
         .arg(cmd.get_program())
         .args(cmd.get_args());
     for (key, value) in cmd.get_envs() {
@@ -214,16 +215,10 @@ fn scoped(cmd: &Command, limit_mb: u64, res: &std::path::Path) -> Command {
 }
 
 /// Whether the kernel killed the run for exceeding the scope's cap: it counted an OOM kill, or the
-/// run died of SIGKILL with a peak at the cap.
-fn scope_memory_kill(
-    oom_kills: u64,
-    exit_code: Option<i32>,
-    peak_mb: Option<u64>,
-    limit_mb: Option<u64>,
-) -> bool {
-    oom_kills > 0
-        || (matches!(exit_code, Some(137) | None)
-            && peak_mb.zip(limit_mb).is_some_and(|(p, l)| p as f64 >= 0.9 * l as f64))
+/// run died of SIGKILL or SIGTERM.
+fn scope_memory_kill(oom_kills: u64, exit_code: Option<i32>) -> bool {
+    // With `OOMPolicy=continue` the wrapper survives; the run died of SIGKILL (137) or SIGTERM (143).
+    oom_kills > 0 || matches!(exit_code, Some(137 | 143) | None)
 }
 
 /// The counters the scope wrapper wrote: (peak MB, CPU seconds, OOM kills).
@@ -363,7 +358,7 @@ fn run_with_guard(
         let (peak, cpu, oom_kills) = read_scope_record(&res_file);
         let _ = std::fs::remove_file(&res_file);
         (peak_memory_mb, cpu_s) = (peak, cpu);
-        memory_exceeded |= !timed_out && scope_memory_kill(oom_kills, exit_code, peak, limit);
+        memory_exceeded |= !timed_out && scope_memory_kill(oom_kills, exit_code);
     }
     Ok(Output {
         exit_code,
@@ -436,7 +431,7 @@ mod tests {
     #[test]
     fn a_run_under_the_cap_reports_its_peak() {
         let mut cmd = Command::new("python3");
-        cmd.args(["-c", "import time; x = b'x' * (120 * 1024 * 1024); time.sleep(2.5)"]);
+        cmd.args(["-c", "import time; x = b'x' * (120 * 1024 * 1024); time.sleep(5)"]);
         let out = run_with_guard(cmd, Duration::from_secs(60), None, Some(4000), Some("watchdog"))
             .unwrap();
         assert!(!out.stopped());
@@ -457,6 +452,7 @@ mod tests {
         let line = format!("{wrapped:?}");
         assert!(line.contains("systemd-run") && line.contains("--scope"), "{line}");
         assert!(line.contains("MemoryMax=1024M") && line.contains("MemorySwapMax=0"), "{line}");
+        assert!(line.contains("OOMPolicy=continue"), "{line}");
         assert!(line.contains("\"kani\" \"x.rs\""), "{line}");
         assert!(line.contains("KANI_PLUGIN_RES"), "{line}");
     }
@@ -468,10 +464,11 @@ mod tests {
         let (peak, cpu, kills) = read_scope_record(&res);
         std::fs::remove_file(&res).unwrap();
         assert_eq!((peak, cpu, kills), (Some(2048), Some(4.5), 1));
-        assert!(scope_memory_kill(1, Some(137), peak, Some(1024)));
-        assert!(scope_memory_kill(0, Some(137), Some(990), Some(1024)));
-        assert!(!scope_memory_kill(0, Some(137), Some(100), Some(1024)));
-        assert!(!scope_memory_kill(0, Some(0), Some(1024), Some(1024)));
+        assert!(scope_memory_kill(1, Some(0)));
+        assert!(scope_memory_kill(0, Some(137)));
+        assert!(scope_memory_kill(0, Some(143)));
+        assert!(!scope_memory_kill(0, Some(0)));
+        assert!(!scope_memory_kill(0, Some(1)));
     }
 
     #[test]

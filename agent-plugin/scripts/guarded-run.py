@@ -61,9 +61,10 @@ def main(argv=None):
         with open(args.record, "w", encoding="utf-8") as f:
             json.dump(record, f, indent=2, sort_keys=True)
     peak = record["peak_memory_mb"]
+    cpu = record["cpu_s"]
     summary = result.killed_message() or (
         f"finished in {record['elapsed_s']}s, peak {'unknown' if peak is None else f'{peak} MB'}, "
-        f"cpu {record['cpu_s']}s")
+        f"cpu {'unknown' if cpu is None else f'{cpu}s'}")
     print(f"guarded-run: {summary} [{result.method} guard, limit {record['limit_mb']} MB]", file=sys.stderr)
     if result.killed == "memory":
         return 137

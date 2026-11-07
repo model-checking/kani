@@ -6,7 +6,8 @@ CBMC can use all the memory of a machine, and a memory kill that takes down the 
 loses much more than the run. `run_guarded` puts the run where only it can be killed:
 
 - `scope`: on Linux with systemd, the command runs in its own transient scope
-  (`systemd-run --user --scope -p MemoryMax=... -p MemorySwapMax=0`). The kernel kills only that
+  (`systemd-run --user --scope -p MemoryMax=... -p MemorySwapMax=0 -p OOMPolicy=continue`: the kernel
+  kills only the largest process, and the wrapper survives to read the counters). The kernel kills only that
   scope's processes when the cap is exceeded, and its `memory.peak` and `cpu.stat` give the run's
   real peak memory and CPU time.
 - `watchdog`: elsewhere (macOS, or Linux without a user systemd), the process group is polled every
@@ -210,6 +211,7 @@ def run_guarded(cmd, cwd=None, env=None, timeout_s=None, memory_mb=None, log_pat
         os.close(fd)
         environment["KANI_PLUGIN_RES"] = res_file
         argv = ["systemd-run", "--user", "--scope", "--quiet", "-p", f"MemoryMax={limit}M", "-p", "MemorySwapMax=0",
+                "-p", "OOMPolicy=continue",
                 "--", "bash", "-c", SCOPE_WRAPPER, "_", *cmd]
     before = os.times()
     started = time.time()
@@ -273,7 +275,8 @@ def run_guarded(cmd, cwd=None, env=None, timeout_s=None, memory_mb=None, log_pat
         cpu_s = values["cpu_usec"] / 1e6 if "cpu_usec" in values else None
         if not killed and values.get("oom_kill", 0) > 0:
             killed = "memory"
-        elif not killed and proc.returncode in (137, -9) and peak_mb and limit and peak_mb >= 0.9 * limit:
+        elif not killed and proc.returncode in (137, 143, -9, -15):
+            # SIGKILL or SIGTERM: the kernel's OOM kill, or systemd stopping the scope.
             killed = "memory"
     else:
         after = os.times()

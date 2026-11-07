@@ -358,7 +358,7 @@ class MemoryGuardTest(unittest.TestCase):
         export = self.dir / "export.json"
         export.write_text(json.dumps(json.loads((EXPORTS / "probe-flat.json").read_text())))
         result = self.kani_run.run_guarded([sys.executable, "-c", "x = b'x' * (120 * 1024 * 1024); import time; "
-                                            "time.sleep(2.5)"], memory_mb=2000)
+                                            "time.sleep(5)"], memory_mb=2000)
         self.assertIsNone(result.killed)
         self.assertEqual(result.returncode, 0)
         self.assertTrue(self.kani_run.annotate_export(export, result))
@@ -389,6 +389,7 @@ class MemoryGuardTest(unittest.TestCase):
         self.assertIn("--scope", args)
         self.assertIn("MemoryMax=1024M", args)
         self.assertIn("MemorySwapMax=0", args)
+        self.assertIn("OOMPolicy=continue", args)
         self.assertEqual(result.method, "scope")
         self.assertEqual(result.killed, "memory")
         self.assertEqual(round(result.peak_memory_mb), 2048)
