@@ -52,7 +52,9 @@ instead of `/tmp` for your own exports and logs too.
    list tools by name only and load their schemas on request: load the `kani_*` tools before calling
    them. A missing MCP tool never means Kani lacks the feature; if the server is unavailable, use the
    CLI and the scripts for everything.
-5. **Keep context small.** Run Kani with `-Z export-json --export-json <file>` and read results
+5. **Keep context small.** Run Kani with `-Z export-json --export-json <file>` (Kani 0.68.0 and some
+   older source builds reject `-Z export-json` and need `-Z unstable-options` instead: the scripts
+   and MCP tools choose, `check-kani-version.py` prints `export_flags`) and read results
    with `scripts/summarize-results.py <file> --log <kani.log>`, not raw console output. For
    counterexamples, use concrete playback. Read raw output only when there is no export (a compile
    error, or a run that was killed).
@@ -268,4 +270,7 @@ Never describe a bounded, stubbed, or partial proof as unconditional.
 This plugin release supports the Kani versions in `compatibility.json` at the plugin root.
 `--export-json`, concrete playback, AutoHarness, function contracts, and loop contracts are unstable
 Kani features; they need `-Z export-json`, `-Z concrete-playback`, `-Z autoharness`,
-`-Z function-contracts`, and `-Z loop-contracts`.
+`-Z function-contracts`, and `-Z loop-contracts`. Which `-Z` value enables `--export-json` depends
+on the build: `-Z export-json` on current Kani, `-Z unstable-options` on 0.68.0 and older source
+builds. The scripts and MCP tools probe it once (`kani -Z export-json --version`); set
+`KANI_PLUGIN_EXPORT_FLAG=export-json|unstable-options` to override.

@@ -590,6 +590,60 @@ def kani_env():
     return env
 
 
+_EXPORT_FLAG_CACHE = {}
+
+
+def export_flag_args():
+    """The `-Z` option that enables `--export-json` in the installed Kani: `["-Z", "export-json"]`
+    (Kani builds since the RFC 0015 export, #4941) or `["-Z", "unstable-options"]` (0.68.0 and
+    older builds, which reject `-Z export-json`). Probed once per process with
+    `kani -Z export-json --version`: Kani validates `-Z` values before it acts on `--version`, so
+    the answer is immediate and nothing is compiled. `KANI_PLUGIN_EXPORT_FLAG` (`export-json` or
+    `unstable-options`) overrides the probe. If Kani cannot be run at all, the current spelling
+    is returned."""
+    import shutil
+    import subprocess
+    forced = os.environ.get("KANI_PLUGIN_EXPORT_FLAG")
+    if forced in ("export-json", "unstable-options"):
+        return ["-Z", forced]
+    cmd = ["cargo", "kani"] if shutil.which("cargo-kani") and shutil.which("cargo") else ["kani"]
+    key = (tuple(cmd), shutil.which(cmd[-1] if cmd[0] == "cargo" else cmd[0]) or "")
+    if key not in _EXPORT_FLAG_CACHE:
+        flag = "export-json"
+        try:
+            out = subprocess.run(cmd + ["-Z", "export-json", "--version"], capture_output=True, text=True,
+                                 timeout=120, env=kani_env())
+            if out.returncode != 0 and "export-json" in out.stderr and "invalid value" in out.stderr:
+                flag = "unstable-options"
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        _EXPORT_FLAG_CACHE[key] = flag
+    return ["-Z", _EXPORT_FLAG_CACHE[key]]
+
+
+def adapt_export_flag(cmd):
+    """`cmd` (a recorded Kani command line) with the `-Z` option that the installed Kani needs for
+    `--export-json`: the run may have been recorded with a Kani that spelled it differently."""
+    cmd = list(cmd)
+    if "--export-json" not in cmd:
+        return cmd
+    want = export_flag_args()[1]
+    pairs = [i for i in range(len(cmd) - 1) if cmd[i] == "-Z" and cmd[i + 1] in ("export-json", "unstable-options")]
+    if any(cmd[i + 1] == want for i in pairs):
+        return cmd
+    for i in pairs:
+        if cmd[i + 1] == "export-json":
+            cmd[i + 1] = want
+            return cmd
+    cmd[cmd.index("--export-json"):cmd.index("--export-json")] = ["-Z", want]
+    return cmd
+
+
+def export_args(path):
+    """The Kani options that write the run's export to `path`: `-Z <flag> --export-json PATH`."""
+    return export_flag_args() + ["--export-json", str(path)]
+
+
 # Directories not copied into work copies: build outputs, VCS data, and the plugin's own output.
 # Other hidden directories (`.cargo/config.toml`) are copied: they can change how the crate builds.
 COPY_IGNORED = re.compile(r"^(target.*|\.git|node_modules|\.kani-.*)$")

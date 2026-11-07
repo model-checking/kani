@@ -63,7 +63,7 @@ cargo kani list --format json                # inventory -> kani-list.json
 Structured results (preferred over reading console output):
 
 ```bash
-cargo kani -Z export-json --export-json /tmp/kani.json --harness check_parse
+cargo kani -Z export-json --export-json /tmp/kani.json --harness check_parse   # older builds: -Z unstable-options
 scripts/summarize-results.py /tmp/kani.json --failures-only
 ```
 

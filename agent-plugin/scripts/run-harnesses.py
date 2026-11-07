@@ -40,7 +40,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from kani_plugin_lib import find_root, join_option_values, kani_env, plugin_out_dir  # noqa: E402
+from kani_plugin_lib import export_args, find_root, join_option_values, kani_env, plugin_out_dir  # noqa: E402
 
 LIST = Path(__file__).resolve().parent / "list-harnesses.py"
 
@@ -88,8 +88,7 @@ def run_one(name, cwd, out_dir, kani_args, timeout, mem_mb):
     """Run one harness. Returns (verdict kind, harness entry or None, seconds)."""
     safe = re.sub(r"[^A-Za-z0-9_.-]", "_", name)
     export, log = out_dir / f"{safe}.json", out_dir / f"{safe}.log"
-    cmd = ["cargo", "kani", "--harness", name, "--exact", "-Z", "export-json", "--export-json", str(export),
-           *kani_args]
+    cmd = ["cargo", "kani", "--harness", name, "--exact", *export_args(export), *kani_args]
     start = time.time()
     with open(log, "w") as lf:
         proc = subprocess.Popen(cmd, cwd=cwd, stdout=lf, stderr=subprocess.STDOUT, env=kani_env(),

@@ -27,7 +27,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from kani_plugin_lib import kani_env, kani_toolchain  # noqa: E402
+from kani_plugin_lib import export_flag_args, kani_env, kani_toolchain  # noqa: E402
 
 COMPATIBILITY = Path(__file__).resolve().parent.parent / "compatibility.json"
 INSTALL_HINT = "cargo install --locked kani-verifier && cargo kani setup"
@@ -111,6 +111,8 @@ def main(argv=None):
         # Run `cargo kani` with this environment, so that rustup does not install the toolchain
         # a project pins in its rust-toolchain.toml (Kani does not use it).
         result["cli_env"] = f"RUSTUP_TOOLCHAIN={toolchain} RUSTUP_AUTO_INSTALL=0"
+    if result["compatible"] and args.version_string is None:
+        result["export_flags"] = " ".join(export_flag_args())
     if result["compatible"] and args.version_string is None and not args.no_toolchain_check:
         works, output = toolchain_check()
         result["toolchain_works"] = works

@@ -22,6 +22,7 @@ use serde_json::{Value, json};
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::OnceLock;
 use std::time::Duration;
 
 /// The plugin's compatibility file is the single source of truth for supported Kani versions.
@@ -397,6 +398,46 @@ fn toolchain_channel_above(path: &Path) -> Option<String> {
             .and_then(|r| r.trim_start().strip_prefix('='))
             .map(|v| v.trim().trim_matches(['"', '\'']).to_string())
     })
+}
+
+/// The `-Z` option that enables `--export-json` in the installed Kani: `-Z export-json` (builds
+/// since the RFC 0015 export) or `-Z unstable-options` (0.68.0 and older builds, which reject the
+/// former). Probed once with `kani -Z export-json --version`: Kani validates `-Z` values before it
+/// acts on `--version`, so the answer is immediate and nothing is compiled.
+/// `KANI_PLUGIN_EXPORT_FLAG` overrides the probe.
+fn export_flag_args() -> Vec<String> {
+    static FLAG: OnceLock<&'static str> = OnceLock::new();
+    let flag = FLAG.get_or_init(|| match std::env::var("KANI_PLUGIN_EXPORT_FLAG").as_deref() {
+        Ok("unstable-options") => "unstable-options",
+        Ok("export-json") => "export-json",
+        _ => probe_export_flag(),
+    });
+    vec!["-Z".into(), (*flag).into()]
+}
+
+fn probe_export_flag() -> &'static str {
+    let mut cmd = if which("cargo-kani").is_some() && which("cargo").is_some() {
+        let mut cmd = Command::new("cargo");
+        cmd.arg("kani");
+        cmd
+    } else {
+        Command::new("kani")
+    };
+    cmd.args(["-Z", "export-json", "--version"]);
+    apply_kani_env(&mut cmd);
+    match cmd.output() {
+        Ok(out) => export_flag_for(out.status.success(), &String::from_utf8_lossy(&out.stderr)),
+        Err(_) => "export-json",
+    }
+}
+
+/// `-Z export-json` was rejected as an invalid value: this Kani needs `-Z unstable-options`.
+fn export_flag_for(accepted: bool, stderr: &str) -> &'static str {
+    if !accepted && stderr.contains("invalid value") && stderr.contains("export-json") {
+        "unstable-options"
+    } else {
+        "export-json"
+    }
 }
 
 /// An installed Rust toolchain to run Kani's `cargo` proxy with: Kani's own toolchain if it
@@ -843,12 +884,8 @@ fn run_with_export(
         std::fs::remove_file(&export)
             .with_context(|| format!("cannot replace `{}`", export.display()))?;
     }
-    let mut all_args = vec![
-        "-Z".into(),
-        "export-json".into(),
-        "--export-json".into(),
-        export.display().to_string(),
-    ];
+    let mut all_args = export_flag_args();
+    all_args.extend(["--export-json".into(), export.display().to_string()]);
     all_args.extend_from_slice(args);
     let cmd = target.command(subcommand, &all_args);
     let mut run_info =
@@ -1236,6 +1273,14 @@ mod tests {
             Some("nightly-2026-10-23")
         );
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn picks_the_export_flag_the_installed_kani_accepts() {
+        let rejected = "error: invalid value 'export-json' for '--unstable <UNSTABLE_FEATURE>'";
+        assert_eq!(export_flag_for(false, rejected), "unstable-options");
+        assert_eq!(export_flag_for(true, ""), "export-json");
+        assert_eq!(export_flag_for(false, "error: something else"), "export-json");
     }
 
     #[test]

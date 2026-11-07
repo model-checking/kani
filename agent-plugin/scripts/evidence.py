@@ -42,7 +42,7 @@ from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS))
-from kani_plugin_lib import find_root, kani_env, plugin_out_dir  # noqa: E402
+from kani_plugin_lib import adapt_export_flag, export_args, find_root, kani_env, plugin_out_dir  # noqa: E402
 _spec = importlib.util.spec_from_file_location("summarize_results", SCRIPTS / "summarize-results.py")
 summarize_results = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(summarize_results)
@@ -202,8 +202,9 @@ def verify(args):
             new_export = str(Path(tmp) / "results.json")
             if "--export-json" in cmd:
                 cmd[cmd.index("--export-json") + 1] = new_export
+                cmd = adapt_export_flag(cmd)
             else:
-                cmd += ["-Z", "export-json", "--export-json", new_export]
+                cmd += export_args(new_export)
             subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=kani_env())
             if Path(new_export).exists():
                 rerun = verdicts(json.loads(Path(new_export).read_text(encoding="utf-8")))

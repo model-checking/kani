@@ -32,7 +32,7 @@ import subprocess
 from pathlib import Path
 
 from kani_plugin_lib import (
-    CALL, _scopes, harnesses_of, kani_env, line_of, kani_only_files, parse_functions, rust_files,
+    CALL, _scopes, export_args, harnesses_of, kani_env, line_of, kani_only_files, parse_functions, rust_files,
     strip_comments_and_strings, test_only_ranges)
 
 SCHEMA_VERSION = "0.1.0"
@@ -1186,7 +1186,7 @@ def stage_workflow(items, by_id):
                 if not by_id[i["function"]]["generic"] and not by_id[i["function"]]["unresolved_callees"]]
     features = ["-Z", "autoharness", "-Z", "loop-contracts", "-Z", "unstable-options"]
     cli = "cargo kani autoharness " + " ".join(features) + " --harness-timeout 5m " + " ".join(
-        f"--include-pattern '{p}'" for p in patterns)
+        export_args("autoharness-export.json")) + " " + " ".join(f"--include-pattern '{p}'" for p in patterns)
     steps = [
         "1. For each function below: write or review its contract (`#[kani::requires]` for what callers must "
         "guarantee, `#[kani::ensures]` for what it promises, `#[kani::modifies]` for what it writes), and show it "

@@ -55,7 +55,7 @@ assert not verified["is_error"], verified
 r = verified["result"]
 assert r["total"] == 5 and r["failed"] == 1 and r["exit_code"] != 0, r
 assert r["run"]["export_path"].endswith("mcp.json") and r["run"]["log_path"].endswith("mcp.log"), r
-assert r["run"]["command"].startswith("cargo kani -Z export-json"), r
+assert r["run"]["command"].startswith("cargo kani -Z "), r
 r = {k: v for k, v in r.items() if k != "run"}
 
 def strip_times(summary):

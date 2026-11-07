@@ -57,7 +57,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from kani_plugin_lib import (  # noqa: E402
-    emit, find_root, join_option_values, kani_env, kani_only_files, parse_functions, rust_files, split_top_level,
+    emit, export_args, find_root, join_option_values, kani_env, kani_only_files, parse_functions, rust_files, split_top_level,
     harness_matches, harnesses_of, mirror_workspace, plugin_out_dir, qualified_name, strip_comments_and_strings,
     unmatched_message)
 
@@ -299,7 +299,7 @@ def run_kani(plan, files, kani_args, work_dir=None):
                 text = text[:offset] + snippet + text[offset:]
             target.write_text(text, encoding="utf-8")
         export = tmp / "results.json"
-        cmd += ["-Z", "function-contracts", "-Z", "export-json", "--export-json", str(export)]
+        cmd += ["-Z", "function-contracts", *export_args(export)]
         for h in plan.harness_filters:
             cmd += ["--harness", h]
         cmd += kani_args
