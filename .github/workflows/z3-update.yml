@@ -36,11 +36,15 @@ jobs:
           Z3_LATEST=$(gh release view -R Z3Prover/z3 --json tagName --jq .tagName | sed 's/^z3-//')
           echo "Z3_LATEST=$Z3_LATEST" >> $GITHUB_ENV
           assets=$(gh release view -R Z3Prover/z3 "z3-$Z3_LATEST" --json assets --jq '.assets[].name')
+          # How many open issues already report a failed upgrade to this version. This is its own
+          # command, not part of the `elif` below, so that a failing `gh` call fails the step
+          # instead of reading as "no issue".
+          failure_issues=$(gh issue list -S "Z3 upgrade to $Z3_LATEST failed" --json title --jq length)
           if [ "x$Z3_LATEST" = "x$Z3_VERSION" ]; then
             echo "next_step=none" >> $GITHUB_ENV
           # A PR or a failure issue for this version already exists.
           elif git ls-remote --exit-code origin "z3-$Z3_LATEST" > /dev/null || \
-              gh issue list -S "Z3 upgrade to $Z3_LATEST failed" --json title | grep -q title; then
+              [ "$failure_issues" -gt 0 ]; then
             echo "next_step=none" >> $GITHUB_ENV
           # `scripts/setup/macos/install_deps.sh` downloads these two archives.
           elif ! echo "$assets" | grep -qx "z3-$Z3_LATEST-arm64-osx-13.3.zip" || \
@@ -66,7 +70,9 @@ jobs:
 
       - name: Create Issue
         if: ${{ env.next_step == 'create_issue' }}
-        uses: dacbd/create-issue-action@main
+        # Pinned to the commit of v2.0.0, the latest release. `main` has only README changes
+        # since, and an unpinned third-party action could change under this token.
+        uses: dacbd/create-issue-action@cdb57ab6ff8862aa09fee2be6ba77a59581921c2 # v2.0.0
         with:
           token: ${{ github.token }}
           title: 'Z3 upgrade to ${{ env.Z3_LATEST }} failed'
