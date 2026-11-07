@@ -1,0 +1,2 @@
+error: cannot inline a call to `sqrt` in a quantifier predicate: no GOTO body is available
+error: aborting due to 1 previous error

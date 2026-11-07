@@ -35,6 +35,12 @@ fn test_exists() {
 
 ### Limitations
 
+#### Safety Checks in Predicates
+
+With `-Z valid-value-checks` or `-Z uninit-checks`, predicates containing explicit safety checks are currently rejected because those checks cannot be retained in a pure quantifier expression. The scan includes statements embedded in expressions. With these options enabled, function calls are preserved even when their return value is unused, and helper bodies are checked before quantifier inlining. It recognizes the `safety_check`, `arithmetic_overflow`, `exact_div`, and `finite_check` property classes; it does not establish preservation of every assertion class. Safety checks performed before constructing the closure remain active.
+
+With either extra UB option, existential predicates that require statement-expression fallback are also rejected because of [CBMC #9189](https://github.com/diffblue/cbmc/issues/9189). Predicates that can be lowered directly to pure expressions are unaffected. Calls requiring quantifier inlining are rejected when no GOTO body is available, including bodyless builtins.
+
 #### Array Indexing
 
 The performance of quantifiers can be affected by the depth of call stacks in the quantified expressions. If the call stack is too deep, Kani may not be able to evaluate the quantifier effectively, leading to potential timeouts or running out of memory. Actually, array indexing in Rust leads to a deep call stack, which can cause issues with quantifiers. To mitigate this, consider using *unsafe* pointer dereferencing instead of array indexing when working with quantifiers. For example:
