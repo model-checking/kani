@@ -1,6 +1,9 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use crate::codegen_cprover_gotoc::{GotocCtx, codegen::ty_stable::pointee_type_stable};
+use crate::codegen_cprover_gotoc::{
+    GotocCtx,
+    codegen::{ty_stable::pointee_type_stable, typ},
+};
 use crate::kani_middle::attributes::KaniAttributes;
 use cbmc::goto_program::FunctionContract;
 use cbmc::goto_program::{Expr, Lambda, Location};
@@ -192,27 +195,33 @@ impl GotocCtx<'_, '_> {
                         TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) => pointee_ty,
                         kind => unreachable!("Expected a raw pointer, but found {:?}", kind),
                     };
+                    // The pointee spans `len` elements for slices and `str`, and the size the
+                    // vtable records for trait objects.
+                    let len = || ptr.clone().member("len", &self.symbol_table);
                     let size = match unref.kind() {
                         TyKind::RigidTy(RigidTy::Slice(elt_type)) => {
-                            elt_type.layout().unwrap().shape().size.bytes()
+                            let elt_size = elt_type.layout().unwrap().shape().size.bytes();
+                            len().mul(Expr::size_constant(
+                                elt_size.try_into().unwrap(),
+                                &self.symbol_table,
+                            ))
                         }
-                        TyKind::RigidTy(RigidTy::Str) => 1,
+                        TyKind::RigidTy(RigidTy::Str) => len(),
+                        TyKind::RigidTy(RigidTy::Dynamic(..)) => ptr
+                            .clone()
+                            .member("vtable", &self.symbol_table)
+                            .dereference()
+                            .member(typ::VTABLE_SIZE_FIELD, &self.symbol_table),
                         // For adt, see https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp
                         TyKind::RigidTy(RigidTy::Adt(..)) => {
                             todo!("Adt fat pointers not implemented")
                         }
-                        kind => unreachable!("Generating a slice fat pointer to {:?}", kind),
+                        kind => unreachable!("Generating a fat pointer to {:?}", kind),
                     };
                     Lambda::as_contract_for(
                         &goto_annotated_fn_typ,
                         None,
-                        self.codegen_object_upto(
-                            ptr.clone().member("data", &self.symbol_table),
-                            ptr.member("len", &self.symbol_table).mul(Expr::size_constant(
-                                size.try_into().unwrap(),
-                                &self.symbol_table,
-                            )),
-                        ),
+                        self.codegen_object_upto(ptr.member("data", &self.symbol_table), size),
                     )
                 } else {
                     Lambda::as_contract_for(&goto_annotated_fn_typ, None, ptr.dereference())

@@ -5,7 +5,7 @@
 //! UB. In practice, that means collecting all instructions where the place is featured.
 
 use crate::kani_middle::{
-    points_to::{MemLoc, PointsToGraph},
+    points_to::{MemLoc, PointsToGraph, unsupported_call},
     transform::{
         body::{InsertPosition, MutableBody, SourceInstruction},
         check_uninit::{
@@ -16,7 +16,7 @@ use crate::kani_middle::{
 };
 use rustc_middle::ty::TyCtxt;
 use rustc_public::mir::{
-    MirVisitor, Operand, Place, Rvalue, Statement, Terminator,
+    LocalDecl, MirVisitor, Operand, Place, Rvalue, Statement, Terminator, TerminatorKind,
     mono::Instance,
     visit::{Location, PlaceContext},
 };
@@ -32,11 +32,14 @@ pub struct InstrumentationVisitor<'a, 'tcx> {
     /// The list of places we should be looking for, ignoring others
     analysis_targets: &'a HashSet<MemLoc<'tcx>>,
     current_instance: Instance,
+    /// The locals of the body being visited, to type call operands.
+    locals: Vec<LocalDecl>,
     tcx: TyCtxt<'tcx>,
 }
 
 impl TargetFinder for InstrumentationVisitor<'_, '_> {
     fn find_all(mut self, body: &MutableBody) -> Vec<InitRelevantInstruction> {
+        self.locals = body.locals().to_vec();
         for (bb_idx, bb) in body.blocks().iter().enumerate() {
             self.current_target = InitRelevantInstruction {
                 source: SourceInstruction::Statement { idx: 0, bb: bb_idx },
@@ -66,6 +69,7 @@ impl<'a, 'tcx> InstrumentationVisitor<'a, 'tcx> {
             points_to,
             analysis_targets,
             current_instance,
+            locals: vec![],
             tcx,
         }
     }
@@ -102,6 +106,13 @@ impl MirVisitor for InstrumentationVisitor<'_, '_> {
             };
         } else {
             unreachable!()
+        }
+        // The points-to analysis does not follow these calls, so the aliasing it computed is only
+        // valid on paths that do not reach them.
+        if let TerminatorKind::Call { func, .. } = &term.kind
+            && let Some(reason) = unsupported_call(func.ty(&self.locals).unwrap())
+        {
+            self.push_target(MemoryInitOp::Unsupported { reason });
         }
         self.super_terminator(term, location);
         // Push the current target from the terminator onto the list.

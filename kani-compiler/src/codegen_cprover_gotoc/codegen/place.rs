@@ -470,8 +470,10 @@ impl GotocCtx<'_, '_> {
                     | TyKind::RigidTy(RigidTy::Dynamic(..)) => {
                         inner_goto_expr.member("data", &self.symbol_table)
                     }
+                    // Not every unsized ADT is behind a fat pointer: one whose tail is an
+                    // `extern type` has no metadata, so it is dereferenced like a sized one.
                     TyKind::RigidTy(RigidTy::Adt(..)) | TyKind::RigidTy(RigidTy::Tuple(..))
-                        if self.is_unsized(inner_mir_typ_internal) =>
+                        if self.use_fat_pointer(inner_mir_typ_internal) =>
                     {
                         // in tests/kani/Strings/os_str_reduced.rs, we see
                         // ```

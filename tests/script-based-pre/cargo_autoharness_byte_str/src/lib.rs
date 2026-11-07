@@ -6,9 +6,9 @@
 // backed by nondeterministic harness-local storage, c.f. the `AnyByteStrRef` model. The
 // "TEST NOTE" comments explain the expected result per function.
 
-#![feature(bstr)]
+#![feature(byte_str)]
 
-use std::bstr::ByteStr;
+use std::byte_str::ByteStr;
 
 // TEST NOTE: should PASS: the length of a byte string of at most 16 bytes fits any usize.
 pub fn len(s: &ByteStr) -> usize {

@@ -1,0 +1,2 @@
+Failed Checks: Kani does not support reasoning about memory initialization of pointers to trait objects.
+VERIFICATION:- FAILED

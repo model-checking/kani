@@ -8,7 +8,6 @@
 #![feature(dropck_eyepatch)]
 #![feature(rustc_attrs)]
 #![feature(core_intrinsics)]
-#![feature(ptr_internals)]
 #![allow(internal_features)]
 
 #[cfg(disable_debug_asserts)]
