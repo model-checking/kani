@@ -271,16 +271,11 @@ fn run_with_guard(
 ) -> Result<Output> {
     let limit = resolve_limit_mb(memory_limit_mb);
     let guard = guard_method(limit, forced_guard);
-    let res_file = std::env::temp_dir().join(format!(
-        "kani-mcp-run-{}-{}.res",
-        std::process::id(),
-        RUN_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    ));
-    let unit = format!(
-        "kani-plugin-{}-{}",
-        std::process::id(),
-        RUN_COUNTER.load(std::sync::atomic::Ordering::Relaxed)
-    );
+    // One number per run: runs in parallel threads must not share a scope name or result file.
+    let run_id = RUN_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let res_file =
+        std::env::temp_dir().join(format!("kani-mcp-run-{}-{run_id}.res", std::process::id()));
+    let unit = format!("kani-plugin-{}-{run_id}", std::process::id());
     if let (true, Some(l)) = (guard == "scope", limit) {
         cmd = scoped(&cmd, l, &res_file, &unit);
     }
