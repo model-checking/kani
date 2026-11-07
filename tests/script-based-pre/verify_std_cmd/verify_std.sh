@@ -109,7 +109,8 @@ grep "Complete -" "${TMP_DIR}/edit.log"
 
 echo "[TEST] Run kani verify-std after an edit that keeps the size and timestamp"
 touch -r "${TMP_DIR}/library/core/src/lib.rs" "${TMP_DIR}/core_lib_time"
-sed -i 's|^// edited$|// EDITED|' "${TMP_DIR}/library/core/src/lib.rs"
+sed 's|^// edited$|// EDITED|' "${TMP_DIR}/library/core/src/lib.rs" > "${TMP_DIR}/lib.rs.new"
+mv "${TMP_DIR}/lib.rs.new" "${TMP_DIR}/library/core/src/lib.rs"
 touch -r "${TMP_DIR}/core_lib_time" "${TMP_DIR}/library/core/src/lib.rs"
 kani verify-std \
     -Z unstable-options \
