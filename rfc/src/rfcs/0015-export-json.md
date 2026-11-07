@@ -145,6 +145,7 @@ kani-driver src/main.rs -Z export-json --export-json out.json
       "is_automatically_generated": false,
       "has_loop_contracts": false,
       "is_bounded": false,
+      "is_aliasing": false,
       "attributes": {
         "kind": "Proof",
         "should_panic": false,
@@ -221,6 +222,14 @@ bounded at least one argument because `--autoharness-bounded-arguments` was pass
 an unbounded `Arbitrary` strategy. Success then proves only inputs within that bound. Manual harnesses
 and generated ones needing no bounded argument report false. This is independent of `is_ctor_based`;
 `is_bounded == false` alone does not establish unrestricted inputs.
+
+**Aliased arguments.** Mandatory `is_aliasing` is true exactly when autoharness generated the harness,
+`--autoharness-alias-arguments` was passed, and at least one reference or raw pointer argument was allowed
+to alias an earlier one. It is false both when the option was not passed and when the function has no
+eligible argument pair; either way each argument was generated from separate storage, so Success does not
+cover callers that pass the same reference or pointer for two arguments. `is_aliasing == true` covers only
+the eligible pairs (shared references to the same type, raw pointers to the same pointee type); it does not
+establish that every way a caller could alias the arguments was explored.
 
 The predicates use abbreviated per-harness `outcome.verdict` and `checks.*`; both are inapplicable
 when `configuration.checks.assertion_reach_checks` is false:
@@ -432,6 +441,7 @@ The narrower `INCOMPLETE` marker follows its presence matrix below.
 | `harnesses[].is_automatically_generated` | bool | — | True for an autoharness-generated harness; not selectable with `--harness`/`--exact`. |
 | `harnesses[].has_loop_contracts` | bool | — | Whether the harness uses loop contracts. |
 | `harnesses[].is_bounded` | bool | — | Mandatory; see Bounded results under Reading the results. |
+| `harnesses[].is_aliasing` | bool | — | Mandatory; see Aliased arguments under Reading the results. |
 | `harnesses[].attributes.kind` | `"Proof"` \| `"Test"` \| `{"ProofForContract": {"target_fn": string}}` | — | Requested metadata enum, including the object form for contract proofs. |
 | `harnesses[].attributes.should_panic` | bool | — | Whether `#[kani::should_panic]` is set. |
 | `harnesses[].attributes.solver` | string \| `{"Binary": string}` | nullable | The *requested* solver attribute; `null` when unset (default resolution applies). Compare `resolved_solver`. |
@@ -564,7 +574,7 @@ replace the SAT solver Kani passes. With `--external-smt2-solver <path>` (or, wi
 
 | Field(s) | `COMPLETED` | `TIMEOUT` / `OUT_OF_MEMORY` | `CRASHED` |
 |---|---|---|---|
-| `name`, `crate_name`, `file`, `line`, `contract`, `is_automatically_generated`, `has_loop_contracts`, `is_bounded`, `attributes.*`, `resolved_solver`, `resolved_unwind`, `generated_concrete_test` | present | present | present |
+| `name`, `crate_name`, `file`, `line`, `contract`, `is_automatically_generated`, `has_loop_contracts`, `is_bounded`, `is_aliasing`, `attributes.*`, `resolved_solver`, `resolved_unwind`, `generated_concrete_test` | present | present | present |
 | `resources.verification_time_s` | present, a verification duration | present, time elapsed until the timeout/OOM occurred | present, time elapsed until the crash |
 | `outcome.verdict` | present | absent | absent |
 | `outcome.code` / `outcome.message` | absent | absent | present |
