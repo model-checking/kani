@@ -773,6 +773,7 @@ fn find_call_path(
         },
         _ => *from,
     };
+    // If the effective function has no body, stop searching this path.
     let body = effective.body()?;
 
     for bb in body.blocks.iter() {
