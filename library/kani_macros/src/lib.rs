@@ -71,6 +71,16 @@ pub fn unwind(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::unwind(attr, item)
 }
 
+/// Turn off unwinding assertions for a proof harness.
+///
+/// The attribute `#[kani::no_unwinding_checks]` can only be used alongside `#[kani::proof]`.
+/// It has the effect of `--no-unwinding-checks` on this harness only: verification covers just
+/// the executions that stay within the harness's unwinding bound.
+#[proc_macro_attribute]
+pub fn no_unwinding_checks(attr: TokenStream, item: TokenStream) -> TokenStream {
+    attr_impl::no_unwinding_checks(attr, item)
+}
+
 /// Specify a function/method stub pair to use for proof harness
 ///
 /// The attribute `#[kani::stub(original, replacement)]` can only be used alongside `#[kani::proof]`.
@@ -650,6 +660,7 @@ mod sysroot {
     kani_attribute!(stub);
     kani_attribute!(unstable);
     kani_attribute!(unwind);
+    kani_attribute!(no_unwinding_checks, no_args);
     kani_attribute!(use_stub_set);
 }
 
@@ -684,6 +695,7 @@ mod regular {
     no_op!(stub);
     no_op!(unstable);
     no_op!(unwind);
+    no_op!(no_unwinding_checks);
     no_op!(requires);
     no_op!(ensures);
     no_op!(modifies);

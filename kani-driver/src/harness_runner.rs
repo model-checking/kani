@@ -19,6 +19,11 @@ use crate::session::{BUG_REPORT_URL, KaniSession};
 use std::env::current_dir;
 use std::path::PathBuf;
 
+/// Printed with the result of a harness that has `#[kani::no_unwinding_checks]`.
+const NO_UNWINDING_CHECKS_WARNING: &str = "** WARNING: Unwinding assertions are turned off \
+    for this harness (`#[kani::no_unwinding_checks]`), so its result only covers the executions \
+    within the unwinding bound.\n";
+
 /// A HarnessRunner is responsible for checking all proof harnesses. The data in this structure represents
 /// "background information" that the controlling driver (e.g. cargo-kani or kani) computed.
 ///
@@ -186,7 +191,11 @@ impl KaniSession {
                 self.write_output_to_file(result, harness);
             }
 
-            let output = result.render(&self.args.output_format(), harness.attributes.should_panic);
+            let mut output =
+                result.render(&self.args.output_format(), harness.attributes.should_panic);
+            if harness.attributes.no_unwinding_checks {
+                output.push_str(NO_UNWINDING_CHECKS_WARNING);
+            }
 
             if rayon::current_num_threads() > 1 {
                 self.emit_line(&prefix_thread_lines(&output, thread_index));
@@ -223,7 +232,11 @@ impl KaniSession {
 
         std::fs::create_dir_all(prefix).unwrap();
         let mut file = File::create(&file_name).unwrap();
-        let file_output = result.render(&OutputFormat::Regular, harness.attributes.should_panic);
+        let mut file_output =
+            result.render(&OutputFormat::Regular, harness.attributes.should_panic);
+        if harness.attributes.no_unwinding_checks {
+            file_output.push_str(NO_UNWINDING_CHECKS_WARNING);
+        }
 
         if let Err(e) = writeln!(file, "{file_output}") {
             eprintln!(
@@ -303,7 +316,8 @@ impl KaniSession {
         Ok(result)
     }
 
-    /// Prints a summary report of the verification results.
+    /// Prints a summary report of the verification results. Successful harnesses without
+    /// unwinding assertions are listed, since their results hold only within the unwinding bound.
     pub(crate) fn print_final_summary(&self, results: &[HarnessResult<'_>]) -> Result<()> {
         let (automatic, manual): (Vec<_>, Vec<_>) =
             results.iter().partition(|r| r.harness.is_automatically_generated);
@@ -331,6 +345,9 @@ impl KaniSession {
 
         for failure in failures.iter() {
             println!("Verification failed for - {}", failure.harness.pretty_name);
+        }
+        for success in successes.iter().filter(|r| r.harness.attributes.no_unwinding_checks) {
+            println!("Verified without unwinding assertions - {}", success.harness.pretty_name);
         }
 
         if total > 0 {
