@@ -200,6 +200,47 @@ pub fn forwards_concrete_const<const N: usize>(x: u8) -> u8 {
     with_const_index::<1>(x).wrapping_add(N as u8)
 }
 
+// TEST NOTE: skipped (Generic Function). The `const {}` block is decided by the substituted *type*:
+// harnessing it as `with_type_index::<i32>` made rustc reject the instantiation with an
+// unrecoverable E0080 that aborted the whole run.
+// https://github.com/model-checking/kani/issues/4826
+pub fn with_type_index<T>(x: u8) -> u8 {
+    const { [10u8, 20u8][std::mem::size_of::<T>()] };
+    x
+}
+
+// TEST NOTE: skipped (Generic Function). The const parameter reaches the guarded block only through
+// a type argument, `[u8; N]`, so the search must follow calls whose type arguments mention it.
+// https://github.com/model-checking/kani/issues/4826
+pub fn forwards_const_through_type<const N: usize>(x: u8) -> u8 {
+    with_type_index::<[u8; N]>(x)
+}
+
+// TEST NOTE: verified as `forwards_concrete_type::<i32>`. The callee's type argument is concrete,
+// so whether its block evaluates does not depend on the type autoharness substitutes.
+pub fn forwards_concrete_type<T>(x: u8, _y: T) -> u8 {
+    with_type_index::<u8>(x)
+}
+
+// TEST NOTE: skipped (Generic Function). Its second type parameter decides the guarded callee.
+pub fn forwards_second_type<A, B>(x: u8, _y: A) -> u8 {
+    with_type_index::<B>(x)
+}
+
+// TEST NOTE: verified as `concrete_second_type::<i32>`. It reaches the same guarded callee, but
+// only through the concrete second argument `u8`: the search carries the arguments it instantiates
+// `forwards_second_type` with, rather than inspecting that body in its identity form.
+pub fn concrete_second_type<T>(x: u8, y: T) -> u8 {
+    forwards_second_type::<T, u8>(x, y)
+}
+
+// TEST NOTE: verified as `slice_len::<i32>`. The slice iterator it reaches requires generic
+// associated constants such as `<T as SizedTypeProperties>::IS_ZST`, which are not `const {}`
+// blocks and are not treated as preconditions on the type parameter.
+pub fn slice_len<T>(x: [T; 2]) -> usize {
+    x.iter().count()
+}
+
 // TEST NOTE: verified as `Wrapper::<i32>::get`; generic parameters of the impl block are
 // instantiated too.
 pub struct Wrapper<T> {
