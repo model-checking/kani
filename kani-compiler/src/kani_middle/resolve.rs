@@ -7,7 +7,7 @@
 //!
 //! Note that glob use statements can form loops. The paths can also walk through the loop.
 
-use crate::kani_middle::stable_fn_def;
+use crate::kani_middle::{ctor_args_with_lifetimes, stable_fn_def};
 use quote::ToTokens;
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::{CRATE_DEF_INDEX, DefId, LOCAL_CRATE, LocalDefId, LocalModId};
@@ -482,7 +482,7 @@ fn resolve_in_trait_impl<'tcx>(
                     });
                 }
                 syn::GenericArgument::Lifetime(_) => {
-                    // Lifetimes are erased — safe to skip.
+                    // Erased lifetime slots are restored from the declaration below.
                 }
                 _ => {
                     return Err(ResolveError::UnsupportedPath {
@@ -492,12 +492,21 @@ fn resolve_in_trait_impl<'tcx>(
             }
         }
     }
-    let desired_generic_args = GenericArgs(args);
+    // Include the method's own generic parameters when selecting its implementation.
+    let generics = tcx.generics_of(trait_fn_id);
+    let identity_ty = rustc_internal::stable(tcx.type_of(trait_fn_id)).value;
+    let TyKind::RigidTy(RigidTy::FnDef(_, identity_args)) = identity_ty.kind() else {
+        unreachable!("Expected a trait method function type")
+    };
+    args.extend(identity_args.0.iter().skip(generics.parent_count).cloned());
+    let desired_generic_args = ctor_args_with_lifetimes(tcx, trait_fn_id, &GenericArgs(args))
+        .ok_or(ResolveError::MissingTraitImpl { tcx, trait_fn_id, ty })?;
     let exists = Instance::resolve(trait_fn_fn_def, &desired_generic_args);
 
     // If such an Instance exists, return *its* FnDef (i.e., the FnDef inside the impl block for this `ty`)
     exists.map_or(Err(ResolveError::MissingTraitImpl { tcx, trait_fn_id, ty }), |inst| {
-        Ok(FnResolution::FnImpl { def: inst.ty().kind().fn_def().unwrap().0, ty })
+        let impl_id = rustc_internal::internal(tcx, inst.def.def_id());
+        Ok(FnResolution::FnImpl { def: stable_fn_def(tcx, impl_id).unwrap(), ty })
     })
 }
 
