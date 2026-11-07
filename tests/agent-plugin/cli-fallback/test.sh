@@ -91,7 +91,7 @@ echo "concrete playback produces a reproducer for the failing harness"
 
 # AutoHarness must work through the CLI too, with JSON export. It also runs the manual
 # harnesses, so the intentional failure makes it exit non-zero.
-cargo kani autoharness -Z autoharness --include-pattern 'agent_plugin_fixture::midpoint' \
+cargo kani autoharness -Z autoharness -Z unstable-options --harness-timeout 600s --include-pattern 'agent_plugin_fixture::midpoint' \
     -Z export-json --export-json "$WORK/auto.json" > "$WORK/auto.log" 2>&1 || true
 [ -f "$WORK/auto.json" ] || fail "autoharness produced no export: $(tail -n 30 "$WORK/auto.log")"
 python3 - "$WORK/auto.json" <<'PY'

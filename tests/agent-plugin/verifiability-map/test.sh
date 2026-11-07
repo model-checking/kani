@@ -104,8 +104,8 @@ stage = plan["stages"][0]
 assert "^contract_first::count_down$" in stage["autoharness"]["include_patterns"], stage
 assert "-Z loop-contracts" in stage["autoharness"]["cli"], stage["autoharness"]
 PY
-(cd "$WORK/cf" && kani autoharness -Z autoharness -Z loop-contracts -Z export-json --export-json "$WORK/cf-run.json" \
-    contract_first.rs > "$WORK/cf-run.log" 2>&1) || fail "autoharness failed: $(tail -n 20 "$WORK/cf-run.log")"
+(cd "$WORK/cf" && kani autoharness -Z autoharness -Z loop-contracts -Z unstable-options --harness-timeout 600s \
+    -Z export-json --export-json "$WORK/cf-run.json" contract_first.rs > "$WORK/cf-run.log" 2>&1) || fail "autoharness failed: $(tail -n 20 "$WORK/cf-run.log")"
 (cd "$WORK/cf" && "$MAP" map contract_first.rs --callgraph text --results "$WORK/cf-run.json" \
     --out "$WORK/cf-after.json" > /dev/null && "$MAP" plan "$WORK/cf-after.json" > "$WORK/cf-plan2.json")
 python3 - "$WORK/cf-after.json" "$WORK/cf-plan2.json" <<'PY'
