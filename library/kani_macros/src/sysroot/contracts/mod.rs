@@ -528,6 +528,7 @@ mod replace;
 mod shared;
 
 const INTERNAL_RESULT_IDENT: &str = "result_kani_internal";
+const INTERNAL_SELF_IDENT: &str = "self_kani_internal";
 
 pub fn requires(attr: TokenStream, item: TokenStream) -> TokenStream {
     contract_main(attr, item, ContractConditionsType::Requires)
