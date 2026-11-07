@@ -62,6 +62,7 @@ TESTS=(
     "kani-docs cargo-kani"
     "kani-fixme kani-fixme"
     "json-handler exec"
+    "agent-plugin exec"
 )
 
 # Build compiletest and print configuration. We pick suite / mode combo so there's no test.

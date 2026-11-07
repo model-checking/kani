@@ -1,0 +1,16 @@
+{
+  "name": "kani",
+  "version": "0.1.0",
+  "description": "Formally verify Rust code with the Kani model checker: write proof harnesses, run Kani, inspect counterexamples, and check that proofs are not vacuous.",
+  "author": {
+    "name": "Kani Contributors",
+    "url": "https://github.com/model-checking/kani"
+  },
+  "homepage": "https://model-checking.github.io/kani/",
+  "repository": "https://github.com/model-checking/kani",
+  "license": "MIT OR Apache-2.0",
+  "keywords": ["rust", "formal-verification", "model-checking", "kani", "unsafe", "proof"],
+  "skills": "./skills/",
+  "mcpServers": "./mcp.json",
+  "logo": "./assets/kani-logo.png"
+}
