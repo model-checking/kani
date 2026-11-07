@@ -1,0 +1,4 @@
+match_decreases_detects_stale_measure.loop_decreases.1\
+	 - Status: FAILURE\
+	 - Description: "Check variant decreases after step for loop match_decreases_detects_stale_measure.0"
+VERIFICATION:- FAILED

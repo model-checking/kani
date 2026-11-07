@@ -720,9 +720,29 @@ fn loop_modifies_binding(targets: &[Expr]) -> Vec<Stmt> {
     }
 }
 
+// An attributed match-arm loop can include its trailing comma.
+struct LoopInput(Stmt);
+
+impl syn::parse::Parse for LoopInput {
+    fn parse(input: syn::parse::ParseStream<'_>) -> syn::Result<Self> {
+        let expr: Expr = input.parse()?;
+        if !matches!(expr, Expr::Loop(_) | Expr::While(_) | Expr::ForLoop(_)) {
+            return Err(syn::Error::new_spanned(
+                expr,
+                "loop contract attribute must be applied to a loop expression",
+            ));
+        }
+        let semi: Option<Token![;]> = input.parse()?;
+        if semi.is_none() {
+            let _: Option<Token![,]> = input.parse()?;
+        }
+        Ok(Self(Stmt::Expr(expr, semi)))
+    }
+}
+
 pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     // parse the stmt of the loop
-    let mut loop_stmt: Stmt = syn::parse(item.clone()).unwrap();
+    let LoopInput(mut loop_stmt) = parse_macro_input!(item as LoopInput);
     // The invariants of the other `#[kani::loop_invariant]` attributes of the loop, if any.
     let other_invariants = match take_other_loop_invariants(&mut loop_stmt) {
         Ok(invariants) => invariants,
@@ -749,7 +769,7 @@ pub fn loop_invariant(attr: TokenStream, item: TokenStream) -> TokenStream {
     inv_name.push_str(&loop_id);
 
     // expr of the loop invariant
-    let mut inv_expr: Expr = syn::parse(attr).unwrap();
+    let mut inv_expr: Expr = parse_macro_input!(attr as Expr);
     let original_span = inv_expr.span();
     for other_invariant in other_invariants {
         inv_expr = parse_quote! { (#inv_expr) && (#other_invariant) };
@@ -1023,7 +1043,10 @@ pub fn loop_modifies(attr: TokenStream, item: TokenStream) -> TokenStream {
     let targets = proc_macro2::TokenStream::from(attr.clone());
     // Check that the targets parse.
     let _ = parse_macro_input!(attr with Punctuated::<Expr, Token![,]>::parse_terminated);
-    let mut loop_stmt: Stmt = syn::parse(item.clone()).unwrap();
+    let LoopInput(mut loop_stmt) = match syn::parse(item.clone()) {
+        Ok(parsed) => parsed,
+        Err(error) => return error.to_compile_error().into(),
+    };
     match loop_attrs_mut(&mut loop_stmt) {
         Some(attrs) if attrs.iter().any(is_loop_invariant_attr) => {
             attrs.push(parse_quote!(#[kanitool::loop_modifies(#targets)]));
@@ -1081,7 +1104,10 @@ pub fn loop_decreases(attr: TokenStream, item: TokenStream) -> TokenStream {
         const fn kani_keep_loop_decreases_binding<T>(_binding: &T) {}
         kani_keep_loop_decreases_binding(&#loop_decreases_ident);
     };
-    let loop_stmt: Stmt = syn::parse(item.clone()).unwrap();
+    let LoopInput(loop_stmt) = match syn::parse::<LoopInput>(item.clone()) {
+        Ok(parsed) => parsed,
+        Err(error) => return error.to_compile_error().into(),
+    };
     // Validate that the attribute is applied to a loop statement.
     match &loop_stmt {
         Stmt::Expr(Expr::While(_) | Expr::Loop(_) | Expr::ForLoop(_), _) => {}
@@ -1107,6 +1133,43 @@ pub fn loop_decreases(attr: TokenStream, item: TokenStream) -> TokenStream {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn loop_input_accepts_match_arm_separator() {
+        let parsed: LoopInput = syn::parse2(quote! {
+            #[kani::loop_modifies(&x)]
+            loop { break x; },
+        })
+        .unwrap();
+        assert!(matches!(parsed.0, Stmt::Expr(Expr::Loop(_), None)));
+        let stmt = parsed.0;
+        assert!(!quote!(#stmt).to_string().ends_with(','));
+    }
+
+    #[test]
+    fn loop_input_accepts_statement_and_tail_expression() {
+        for tokens in [
+            quote!(loop {}),
+            quote!(while x > 0 { x -= 1; };),
+            quote!(while x > 0 {
+                x -= 1;
+            },),
+            quote!(for x in a {
+                consume(x);
+            },),
+            quote!(for x in a { consume(x); };),
+        ] {
+            let parsed: LoopInput = syn::parse2(tokens).unwrap();
+            assert!(matches!(parsed.0, Stmt::Expr(_, _)));
+        }
+    }
+
+    #[test]
+    fn loop_input_rejects_invalid_input() {
+        for tokens in [quote!(loop {};,), quote!(42), quote!({ loop {} }), quote!(loop {}, extra)] {
+            assert!(syn::parse2::<LoopInput>(tokens).is_err());
+        }
+    }
 
     fn attr_paths(attrs: &[syn::Attribute]) -> Vec<String> {
         attrs
