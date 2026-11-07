@@ -65,10 +65,15 @@ instead of `/tmp` for your own exports and logs too.
    prefix every `cargo` command with the `cli_env` that `kani_get_version` /
    `check-kani-version.py` print (`RUSTUP_TOOLCHAIN=<Kani's toolchain> RUSTUP_AUTO_INSTALL=0`),
    and ask before running anything that needs the pinned toolchain.
-7. **Bound every run.** Model checking can run for hours, and a run that is killed writes no
-   results. Agree a time budget with the user; give every run a limit (`timeout_s`,
-   `harness_timeout_s`, `memory_limit_mb` on the MCP tools; `timeout` and `-Z unstable-options
-   --harness-timeout` on the CLI); run harnesses one per process (step 5); run anything longer than a
+7. **Bound every run.** Model checking can run for hours, and CBMC can use all the memory of a
+   machine, which also takes down the shell or agent that started it. Run Kani through
+   `scripts/guarded-run.py [--memory-limit-mb N] [--timeout-s N] --export <file> -- cargo kani ...`
+   (the MCP tools and the other scripts do this themselves): the run gets its own cgroup or a watchdog,
+   a memory kill ends only that run, and it leaves an export with `run_state: KILLED` and
+   `killed: memory (peak ..., limit ...)`; report that as inconclusive, with the peak. The default cap is
+   half of the available memory (`KANI_PLUGIN_MEMORY_MB`). Agree a time budget with the user; give every run a
+   limit (`timeout_s`, `harness_timeout_s`, `memory_limit_mb` on the MCP tools; `--timeout-s` above, and
+   `-Z unstable-options --harness-timeout` on the CLI); run harnesses one per process (step 5); run anything longer than a
    few minutes in the background and poll it (shell tools often have a 2 to 10 minute limit that
    kills the run and its results); and report a run that hits a limit as inconclusive.
 

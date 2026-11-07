@@ -272,6 +272,144 @@ class VersionExportCheckTest(unittest.TestCase):
         self.assertIn("read 0 harness(es)", result["export_error"])
 
 
+HOG = "import time; x = b'x' * (400 * 1024 * 1024); print('allocated', flush=True); time.sleep(60)"
+FAKE_SYSTEMD_RUN = """#!/bin/bash
+# A stand-in for `systemd-run --user --scope`: records its arguments and fakes the scope's counters.
+echo "$@" > "$FAKE_SYSTEMD_ARGS"
+if [ "$FAKE_SYSTEMD_MODE" = oom ]; then
+  printf 'peak_bytes=%s\ncpu_usec=%s\noom_kill=1\n' 2147483648 4500000 > "$KANI_PLUGIN_RES"
+  echo "Checking harness big..."
+  exit 137
+fi
+while [ "$1" != "--" ]; do shift; done; shift
+exec "$@"
+"""
+
+
+class MemoryGuardTest(unittest.TestCase):
+    def setUp(self):
+        import os
+        import kani_run
+        self.kani_run = kani_run
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        self.saved = dict(os.environ)
+        os.environ["KANI_PLUGIN_MEMORY_GUARD"] = "watchdog"
+        os.environ.pop("KANI_PLUGIN_MEMORY_MB", None)
+        self.summarize = load("summarize-results")
+
+    def tearDown(self):
+        import os
+        os.environ.clear()
+        os.environ.update(self.saved)
+        self.tmp.cleanup()
+
+    def test_limits(self):
+        import os
+        r = self.kani_run
+        self.assertEqual(r.resolve_limit_mb(512), 512)
+        self.assertIsNone(r.resolve_limit_mb("0"))
+        self.assertIsNone(r.resolve_limit_mb("none"))
+        os.environ["KANI_PLUGIN_MEMORY_MB"] = "4096"
+        self.assertEqual(r.resolve_limit_mb(), 4096)
+        os.environ.pop("KANI_PLUGIN_MEMORY_MB")
+        default = r.resolve_limit_mb()
+        self.assertTrue(default is None or default >= r.MIN_DEFAULT_MB)
+        with self.assertRaises(ValueError):
+            r.resolve_limit_mb("lots")
+
+    def test_a_run_over_the_cap_is_killed_alone(self):
+        result = self.kani_run.run_guarded([sys.executable, "-c", HOG], memory_mb=150, timeout_s=60)
+        self.assertEqual(result.killed, "memory")
+        self.assertLess(result.elapsed_s, 30)
+        self.assertGreater(result.peak_memory_mb, 150)
+        self.assertIn("killed: memory (peak", result.killed_message())
+        self.assertIn("limit 150 MB", result.killed_message())
+        # This process is still here to see it.
+        export = self.dir / "export.json"
+        self.assertTrue(self.kani_run.write_stopped_export(export, result, "check_big"))
+        summary = self.summarize.summarize(kani_export.load_export(export))
+        self.assertEqual(summary["run_state"], "KILLED")
+        self.assertFalse(summary["all_ok"])
+        self.assertEqual(summary["by_verdict"], {"OUT_OF_MEMORY": 1})
+        self.assertEqual(summary["harnesses"][0]["name"], "check_big")
+        self.assertEqual(summary["killed"][0]["reason"], "memory")
+        self.assertIn("killed: memory", summary["killed"][0]["message"])
+        self.assertGreater(summary["run"]["peak_memory_mb"], 150)
+
+    def test_a_timeout_is_recorded(self):
+        result = self.kani_run.run_guarded([sys.executable, "-c", "import time; time.sleep(60)"], timeout_s=1)
+        self.assertEqual(result.killed, "timeout")
+        export = self.dir / "export.json"
+        self.kani_run.write_stopped_export(export, result)
+        doc = kani_export.load_export(export)
+        self.assertEqual(doc["run_state"], "TIMEOUT")
+        self.assertEqual(doc["harnesses"][0]["outcome"], {"kind": "TIMEOUT"})
+
+    def test_the_log_of_a_stopped_run_names_what_finished_and_what_was_running(self):
+        script = ("import time; print('Checking harness a...'); print('VERIFICATION:- SUCCESSFUL'); "
+                  "print('Checking harness b...', flush=True); x = b'x' * (400 * 1024 * 1024); time.sleep(60)")
+        result = self.kani_run.run_guarded([sys.executable, "-c", script], memory_mb=150, timeout_s=60)
+        doc = self.kani_run.stopped_export(result)
+        self.assertEqual([(h["name"], h["outcome"]) for h in doc["harnesses"]],
+                         [("a", {"kind": "COMPLETED", "verdict": "SUCCESS"}), ("b", {"kind": "OUT_OF_MEMORY"})])
+
+    def test_a_completed_run_records_peak_and_cpu(self):
+        export = self.dir / "export.json"
+        export.write_text(json.dumps(json.loads((EXPORTS / "probe-flat.json").read_text())))
+        result = self.kani_run.run_guarded([sys.executable, "-c", "x = b'x' * (120 * 1024 * 1024); import time; "
+                                            "time.sleep(2.5)"], memory_mb=2000)
+        self.assertIsNone(result.killed)
+        self.assertEqual(result.returncode, 0)
+        self.assertTrue(self.kani_run.annotate_export(export, result))
+        summary = self.summarize.summarize(kani_export.load_export(export))
+        self.assertGreater(summary["run"]["peak_memory_mb"], 50)
+        self.assertEqual(summary["run"]["guard"], "watchdog")
+        self.assertNotIn("killed", summary)
+        # Kani's own export is never replaced by a stopped one.
+        self.assertFalse(self.kani_run.write_stopped_export(export, result))
+
+    def test_systemd_scope_is_used_when_available(self):
+        import os
+        bindir = self.dir / "bin"
+        bindir.mkdir()
+        (bindir / "systemd-run").write_text(FAKE_SYSTEMD_RUN)
+        (bindir / "systemd-run").chmod(0o755)
+        os.environ["PATH"] = f"{bindir}{os.pathsep}{os.environ['PATH']}"
+        os.environ["FAKE_SYSTEMD_ARGS"] = str(self.dir / "args.txt")
+        os.environ["FAKE_SYSTEMD_MODE"] = "oom"
+        os.environ["KANI_PLUGIN_MEMORY_GUARD"] = "scope"
+        self.kani_run._SCOPE_OK.clear()
+        self.kani_run._SCOPE_OK["ok"] = True
+        try:
+            result = self.kani_run.run_guarded(["kani", "x.rs"], memory_mb=1024)
+        finally:
+            self.kani_run._SCOPE_OK.clear()
+        args = (self.dir / "args.txt").read_text()
+        self.assertIn("--scope", args)
+        self.assertIn("MemoryMax=1024M", args)
+        self.assertIn("MemorySwapMax=0", args)
+        self.assertEqual(result.method, "scope")
+        self.assertEqual(result.killed, "memory")
+        self.assertEqual(round(result.peak_memory_mb), 2048)
+        self.assertEqual(round(result.cpu_s, 1), 4.5)
+        self.assertIn("killed: memory (peak 2048 MB, limit 1024 MB)", result.killed_message())
+
+    def test_guarded_run_cli(self):
+        import subprocess
+        export = self.dir / "run.json"
+        done = subprocess.run(
+            [sys.executable, str(SCRIPTS / "guarded-run.py"), "--memory-limit-mb", "150", "--export", str(export),
+             "--harness", "check_big", "--", sys.executable, "-c", HOG],
+            capture_output=True, text=True, env={**__import__("os").environ})
+        self.assertEqual(done.returncode, 137, done.stderr)
+        self.assertIn("guarded-run: killed: memory", done.stderr)
+        self.assertEqual(json.loads(export.read_text())["run_state"], "KILLED")
+        ok = subprocess.run([sys.executable, str(SCRIPTS / "guarded-run.py"), "--", sys.executable, "-c",
+                             "import sys; print('out'); sys.exit(3)"], capture_output=True, text=True)
+        self.assertEqual((ok.returncode, ok.stdout.strip()), (3, "out"))
+
+
 FAKE_KANI = """#!/bin/bash
 # A stand-in for `kani`: MODE=old rejects `-Z export-json` as Kani 0.68.0 does.
 if [ "$1 $2" = "-Z export-json" ] && [ "$KANI_FAKE_MODE" = old ]; then

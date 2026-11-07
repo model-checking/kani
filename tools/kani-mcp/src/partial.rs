@@ -7,6 +7,7 @@
 //! export is lost. The console output still has the verdict of every harness that finished;
 //! this module reads it, for both the regular and the `--jobs` (`Thread N:` prefixed) formats.
 
+use crate::process::Output;
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
@@ -84,6 +85,99 @@ pub fn parse(text: &str) -> Partial {
     Partial { finished, unfinished }
 }
 
+/// `2026-11-07T01:51:53Z` for seconds since the Unix epoch.
+pub fn iso_utc(secs: u64) -> String {
+    let (days, rem) = (secs / 86_400, secs % 86_400);
+    // Civil date from days since 1970-01-01 (Howard Hinnant's algorithm).
+    let z = days as i64 + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        rem / 3600,
+        rem % 3600 / 60,
+        rem % 60
+    )
+}
+
+/// The export for a run that was stopped (memory or time) before Kani wrote its own: `run_state`
+/// is `KILLED` or `TIMEOUT`, harnesses that finished keep their verdict (read from the console),
+/// the harness that was running is OUT_OF_MEMORY or TIMEOUT, and the rest were not run. Mirrors
+/// `kani_run.stopped_export`.
+pub fn stopped_export(
+    out: &Output,
+    partial: &Partial,
+    harness: Option<&str>,
+    started: u64,
+) -> Value {
+    let kind = if out.memory_exceeded { "OUT_OF_MEMORY" } else { "TIMEOUT" };
+    let entry = |name: &str, outcome: Value, failed: Vec<Value>, seconds: f64| {
+        json!({
+            "name": name, "crate_name": "", "file": "", "line": 0, "outcome": outcome,
+            "resources": { "verification_time_s": seconds },
+            "failed_properties": failed, "checks": {}, "covers": {}, "attributes": {},
+            "is_automatically_generated": false, "is_bounded": false,
+            "generated_concrete_test": false, "from_console_log": true,
+        })
+    };
+    let mut entries: Vec<Value> = partial
+        .finished
+        .iter()
+        .map(|f| {
+            let failed = f["failed"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|p| {
+                    json!({ "class": null, "description": p["description"].clone(),
+                            "file": null, "line": null })
+                })
+                .collect();
+            entry(
+                f["name"].as_str().unwrap_or_default(),
+                json!({ "kind": "COMPLETED", "verdict": f["verdict"].clone() }),
+                failed,
+                f["time_s"].as_f64().unwrap_or(0.0),
+            )
+        })
+        .collect();
+    let stopped = harness
+        .map(String::from)
+        .or_else(|| partial.unfinished.last().cloned())
+        .or_else(|| entries.is_empty().then(|| "(the whole run)".to_string()));
+    if let Some(name) = &stopped
+        && !entries.iter().any(|e| e["name"] == name.as_str())
+    {
+        let mut e = entry(name, json!({ "kind": kind }), vec![], out.elapsed_s as f64);
+        e["plugin_run"] = out.record();
+        entries.push(e);
+    }
+    for name in partial.unfinished.iter().filter(|n| Some(*n) != stopped.as_ref()) {
+        entries.push(entry(name, json!({ "kind": "NOT_RUN" }), vec![], 0.0));
+    }
+    let verdicts = |v: &str| entries.iter().filter(|e| e["outcome"]["verdict"] == v).count();
+    json!({
+        "export_shape": "flat", "configuration_known": false, "configuration": {},
+        "export_notes": [
+            crate::export::NO_CONFIGURATION_NOTE,
+            "Kani was stopped before it wrote an export: this document was written by the plugin from \
+             its console output.",
+        ],
+        "tools": { "kani": null },
+        "run_state": if out.memory_exceeded { "KILLED" } else { "TIMEOUT" },
+        "started_at": iso_utc(started),
+        "summary": { "total": entries.len(), "successful": verdicts("SUCCESS"), "failed": verdicts("FAILURE") },
+        "harnesses": entries,
+        "plugin_run": out.record(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -122,6 +216,44 @@ mod tests {
         let text = "Thread 1: Autoharness: Checking function count_down's contract against all possible inputs...\n\
                     Thread 1: VERIFICATION:- SUCCESSFUL\n";
         assert_eq!(parse(text).finished[0]["name"], "count_down");
+    }
+
+    #[test]
+    fn formats_utc_times() {
+        assert_eq!(iso_utc(0), "1970-01-01T00:00:00Z");
+        assert_eq!(iso_utc(1_794_016_313), "2026-11-07T01:51:53Z");
+        assert_eq!(iso_utc(951_782_400), "2000-02-29T00:00:00Z");
+    }
+
+    #[test]
+    fn stopped_export_names_what_finished_and_what_was_running() {
+        let out = Output {
+            exit_code: None,
+            text: String::new(),
+            timed_out: false,
+            memory_exceeded: true,
+            elapsed_s: 41,
+            peak_memory_mb: Some(9120),
+            cpu_s: None,
+            guard: "scope",
+            limit_mb: Some(8192),
+        };
+        let partial =
+            parse("Checking harness a...\nVERIFICATION:- SUCCESSFUL\nChecking harness b...\n");
+        let doc = stopped_export(&out, &partial, None, 0);
+        assert_eq!(doc["run_state"], "KILLED");
+        assert_eq!(doc["harnesses"][0]["outcome"]["verdict"], "SUCCESS");
+        assert_eq!(doc["harnesses"][1]["name"], "b");
+        assert_eq!(doc["harnesses"][1]["outcome"]["kind"], "OUT_OF_MEMORY");
+        assert_eq!(
+            doc["plugin_run"]["killed_message"],
+            "killed: memory (peak 9120 MB, limit 8192 MB) after 41s"
+        );
+        let doc = crate::export::normalize(doc, std::path::Path::new(".")).unwrap();
+        let summary = crate::summary::summarize(&doc, false, 5);
+        assert_eq!(summary["killed"][0]["reason"], "memory");
+        assert_eq!(summary["run"]["peak_memory_mb"], 9120);
+        assert_eq!(summary["all_ok"], false);
     }
 
     #[test]

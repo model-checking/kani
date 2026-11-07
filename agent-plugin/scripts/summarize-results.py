@@ -38,7 +38,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from kani_export import ExportError, NO_CONFIGURATION_NOTE, load_export, weakened_checks_detectable  # noqa: E402
 
-INCONCLUSIVE = ("TIMEOUT", "OUT_OF_MEMORY", "CRASHED")
+INCONCLUSIVE = ("TIMEOUT", "OUT_OF_MEMORY", "CRASHED", "KILLED")
 
 
 def verdict_of(harness):
@@ -94,6 +94,14 @@ def trusted_constructs(harness):
     return trusted
 
 
+def run_resources(record):
+    """The resource record of a guarded run (`plugin_run`, see kani_run.py), as shown in summaries."""
+    if not record:
+        return None
+    keys = ("peak_memory_mb", "cpu_s", "elapsed_s", "limit_mb", "guard", "peak_is_sampled", "killed", "killed_message")
+    return {k: record[k] for k in keys if record.get(k) is not None}
+
+
 def summarize_harness(harness, max_failed):
     out = {
         "name": harness["name"],
@@ -144,6 +152,12 @@ def summarize_harness(harness, max_failed):
     trusted = trusted_constructs(harness)
     if trusted:
         out["trusted"] = trusted
+    run = run_resources(harness.get("plugin_run"))
+    if run:
+        out["run"] = run
+        if run.get("killed"):
+            out["killed"] = run["killed"]
+            out["message"] = run["killed_message"]
     return out
 
 
@@ -179,6 +193,15 @@ def summarize(doc, failures_only=False, max_failed=5, diagnoses=None):
     weakened = weakened_checks(doc)
     if weakened:
         out["weakened_checks"] = weakened
+    stopped = [{"harness": h["name"], "reason": h["killed"], "message": h["message"]}
+               for h in harnesses if h.get("killed")]
+    if stopped:
+        out["killed"] = stopped
+    run = run_resources(doc.get("plugin_run"))
+    if run:
+        out["run"] = run
+        if run.get("killed") and not stopped:
+            out["killed"] = [{"harness": None, "reason": run["killed"], "message": run["killed_message"]}]
     out["export_shape"] = doc.get("export_shape", "flat")
     out["weakened_checks_detectable"] = weakened_checks_detectable(doc)
     if not out["weakened_checks_detectable"]:

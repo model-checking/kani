@@ -110,7 +110,34 @@ fn summarize_harness(harness: &Value, max_failed: usize) -> Value {
     if !trusted.is_empty() {
         out.insert("trusted".into(), Value::Object(trusted));
     }
+    if let Some(run) = run_resources(&harness["plugin_run"]) {
+        if run.get("killed").is_some() {
+            out.insert("killed".into(), run["killed"].clone());
+            out.insert("message".into(), run["killed_message"].clone());
+        }
+        out.insert("run".into(), Value::Object(run));
+    }
     Value::Object(out)
+}
+
+/// The resource record of a guarded run (`plugin_run`, see `process::Output::record`), as shown
+/// in summaries.
+fn run_resources(record: &Value) -> Option<Map<String, Value>> {
+    let record = record.as_object()?;
+    let out: Map<String, Value> = [
+        "peak_memory_mb",
+        "cpu_s",
+        "elapsed_s",
+        "limit_mb",
+        "guard",
+        "peak_is_sampled",
+        "killed",
+        "killed_message",
+    ]
+    .iter()
+    .filter_map(|k| record.get(*k).filter(|v| !v.is_null()).map(|v| (k.to_string(), v.clone())))
+    .collect();
+    (!out.is_empty()).then_some(out)
 }
 
 /// Each entry: (`configuration.checks` key, value that weakens the proof, the flag that set it).
@@ -218,6 +245,21 @@ pub fn summarize(doc: &Value, failures_only: bool, max_failed: usize) -> Value {
     let unmatched = &doc["harness_selection"]["unmatched_filters"];
     if len(unmatched) > 0 {
         out["unmatched_filters"] = unmatched.clone();
+    }
+    let stopped: Vec<Value> = harnesses
+        .iter()
+        .filter(|h| h.get("killed").is_some())
+        .map(|h| json!({ "harness": h["name"], "reason": h["killed"], "message": h["message"] }))
+        .collect();
+    if !stopped.is_empty() {
+        out["killed"] = json!(stopped);
+    }
+    if let Some(run) = run_resources(&doc["plugin_run"]) {
+        if run.get("killed").is_some() && stopped.is_empty() {
+            out["killed"] = json!([{ "harness": null, "reason": run["killed"],
+                                     "message": run["killed_message"] }]);
+        }
+        out["run"] = Value::Object(run);
     }
     out["export_shape"] = doc.get("export_shape").cloned().unwrap_or(json!("flat"));
     let detectable = crate::export::weakened_checks_detectable(doc);

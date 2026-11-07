@@ -108,7 +108,7 @@ fn tool_definitions() -> Value {
     let timeout = json!({ "type": "integer", "description": format!("Wall-clock limit in seconds for the whole call (default {DEFAULT_TIMEOUT_S}). On timeout Kani and its children are killed and no results are returned: verify fewer harnesses per call.") });
     let harness_timeout = json!({ "type": "integer", "description": "Per-harness limit in seconds (`--harness-timeout`). A harness that exceeds it is reported as TIMEOUT and the run continues. It does not cover goto-instrument." });
     let export_path = json!({ "type": "string", "description": "Write Kani's `--export-json` file here (parent directories are created). Default: a file under the plugin output directory (`target/kani-plugin/`, or `KANI_PLUGIN_OUT`), reported as `run.export_path`, for the plugin's `evidence.py record`." });
-    let memory_limit = json!({ "type": "integer", "description": "Kill Kani and everything it started when together they use more than this many MB of resident memory (a run that exhausts memory otherwise takes the machine down). The run is reported as stopped; no results are written." });
+    let memory_limit = json!({ "type": "integer", "description": "Memory cap in MB (0: none) for Kani and everything it started; a run over it is killed alone (on Linux with systemd, in its own scope), so it cannot take down this server or the machine. Default: `KANI_PLUGIN_MEMORY_MB`, else half of the available memory. A stopped run is reported as `killed: memory` with its peak, and an export with `run_state` KILLED is written (`run.export_path`). Completed runs report `run.resources` (peak memory, CPU)." });
     let log_path = json!({ "type": "string", "description": "Also write Kani's console output here, e.g. for `check-vacuity.py --log` (needs the default output format, so do not combine with `jobs`)." });
     json!([
         {
@@ -936,9 +936,25 @@ fn run_with_export(
         write_creating_dirs(Path::new(log), &out.text)?;
         run_info["log_path"] = json!(log);
     }
+    run_info["resources"] = out.record();
+    if out.stopped() && !export.exists() {
+        // Kani writes no export when it is stopped. Write one that says so, with what finished.
+        let partial = partial::parse(&out.text);
+        let started = unix_time().saturating_sub(out.elapsed_s);
+        let harness = tool_args.get("harness").and_then(Value::as_str);
+        let stopped = partial::stopped_export(&out, &partial, harness, started);
+        write_creating_dirs(&export, &serde_json::to_string_pretty(&stopped)?)?;
+        run_info["export_path"] = json!(export.display().to_string());
+        run_info["stopped_export"] = json!(true);
+        return Ok((None, out, run_info));
+    }
     let doc = match std::fs::read_to_string(&export) {
         Ok(text) => {
-            let raw = serde_json::from_str(&text).context("malformed Kani JSON export")?;
+            let mut raw: Value =
+                serde_json::from_str(&text).context("malformed Kani JSON export")?;
+            // Keep what the run used next to its results.
+            raw["plugin_run"] = out.record();
+            let _ = std::fs::write(&export, serde_json::to_string_pretty(&raw)?);
             Some(export::normalize(raw, &target.dir)?)
         }
         Err(_) => None,
@@ -952,19 +968,20 @@ fn run_with_export(
 fn no_results_error(out: &Output) -> anyhow::Error {
     if out.memory_exceeded {
         return anyhow::anyhow!(
-            "Kani was stopped after {}s because it used more than `memory_limit_mb`; it writes no results \
-             when killed. Shrink symbolic inputs first (a `char`, `String`, or slice multiplies the state), \
-             lower unwind bounds, or stub callees. Last lines of output:\n{}",
-            out.elapsed_s,
+            "{}. Kani was stopped because it used more than the memory limit (`memory_limit_mb`, \
+             `KANI_PLUGIN_MEMORY_MB`); it writes no results when killed. Shrink symbolic inputs first (a \
+             `char`, `String`, or slice multiplies the state), lower unwind bounds, or stub callees. Last \
+             lines of output:\n{}",
+            out.killed_message().unwrap_or_default(),
             tail(&out.text, OUTPUT_TAIL_LINES)
         );
     }
     if out.timed_out {
         return anyhow::anyhow!(
-            "Kani was stopped after {}s (`timeout_s`); Kani writes no results when it is killed. \
+            "{}. Kani was stopped (`timeout_s`); it writes no results when it is killed. \
              Verify fewer harnesses per call (or use `per_harness`), set `harness_timeout_s`, or reduce \
              input and unwind bounds. Last lines of output:\n{}",
-            out.elapsed_s,
+            out.killed_message().unwrap_or_default(),
             tail(&out.text, OUTPUT_TAIL_LINES)
         );
     }
@@ -994,8 +1011,10 @@ fn partial_or_error(out: &Output, run_info: Value) -> Result<Value> {
     let partial = partial::parse(&out.text);
     if out.stopped() && !partial.finished.is_empty() {
         return Ok(json!({
-            "run_state": if out.memory_exceeded { "MEMORY_LIMIT" } else { "TIMED_OUT" },
+            "run_state": if out.memory_exceeded { "KILLED" } else { "TIMEOUT" },
             "complete": false,
+            "killed": out.killed_message(),
+            "resources": out.record(),
             "harnesses": partial.finished,
             "unfinished": partial.unfinished,
             "note": format!(
@@ -1048,6 +1067,7 @@ fn verify_per_harness(args: &Value, token: Option<&Value>) -> Result<Value> {
         let safe: String =
             name.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '_' }).collect();
         let mut one = args.clone();
+        one["harness"] = json!(name);
         one["export_path"] = json!(dir.join(format!("{safe}.json")).display().to_string());
         one["timeout_s"] = json!(remaining.as_secs().min(per));
         one["log_path"] = json!(dir.join(format!("{safe}.log")).display().to_string());
@@ -1067,7 +1087,10 @@ fn verify_per_harness(args: &Value, token: Option<&Value>) -> Result<Value> {
         commands.push(info["command"].clone());
         match doc {
             Some(d) => {
-                entries.extend(d["harnesses"].as_array().cloned().unwrap_or_default());
+                for mut h in d["harnesses"].as_array().cloned().unwrap_or_default() {
+                    h["plugin_run"] = out.record();
+                    entries.push(h);
+                }
                 first_doc.get_or_insert(d);
             }
             None => {
@@ -1082,6 +1105,7 @@ fn verify_per_harness(args: &Value, token: Option<&Value>) -> Result<Value> {
                     "name": name, "file": "", "line": 0, "outcome": { "kind": kind },
                     "resources": { "verification_time_s": out.elapsed_s },
                     "failed_properties": [], "checks": {}, "covers": {}, "attributes": {},
+                    "plugin_run": out.record(),
                 }));
             }
         }
@@ -1089,6 +1113,8 @@ fn verify_per_harness(args: &Value, token: Option<&Value>) -> Result<Value> {
     let mut merged = first_doc.unwrap_or_else(|| json!({}));
     merged["harnesses"] = json!(entries);
     merged["summary"] = json!({});
+    // The first harness's record is not the record of the whole call.
+    merged.as_object_mut().map(|o| o.remove("plugin_run"));
     let mut result = summary::summarize(&merged, false, summary::DEFAULT_MAX_FAILED);
     result["run_state"] = json!(if not_run.is_empty() { "COMPLETE" } else { "PARTIAL" });
     result["not_run"] = json!(not_run);

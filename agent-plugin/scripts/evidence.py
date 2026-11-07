@@ -43,6 +43,7 @@ from pathlib import Path
 SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS))
 from kani_export import ExportError, load_export, weakened_checks_detectable  # noqa: E402
+from kani_run import add_memory_arg, apply_memory_arg, run_guarded  # noqa: E402
 from kani_plugin_lib import adapt_export_flag, export_args, find_root, kani_env, plugin_out_dir  # noqa: E402
 _spec = importlib.util.spec_from_file_location("summarize_results", SCRIPTS / "summarize-results.py")
 summarize_results = importlib.util.module_from_spec(_spec)
@@ -211,7 +212,7 @@ def verify(args):
                 cmd = adapt_export_flag(cmd)
             else:
                 cmd += export_args(new_export)
-            subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=kani_env())
+            run_guarded(cmd, cwd=cwd, env=kani_env())
             if Path(new_export).exists():
                 rerun = verdicts(load_export(new_export, workspace=cwd))
             else:
@@ -241,9 +242,11 @@ def main(argv=None):
     snap.add_argument("--cwd", default=".")
     snap.add_argument("--out", required=True, help="file to write")
     ver = sub.add_parser("verify", help="check a bundle and re-run its command")
+    add_memory_arg(ver)
     ver.add_argument("bundle", help="bundle directory printed by `record`")
     ver.add_argument("--no-rerun", action="store_true", help="only check hashes and git state")
     args = parser.parse_args(argv)
+    apply_memory_arg(args)
     try:
         if args.action == "snapshot":
             cwd = Path(args.cwd).resolve()

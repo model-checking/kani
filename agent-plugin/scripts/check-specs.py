@@ -56,6 +56,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from kani_export import ExportError, load_export  # noqa: E402
+from kani_run import add_memory_arg, apply_memory_arg, run_guarded  # noqa: E402
 from kani_plugin_lib import (  # noqa: E402
     emit, export_args, find_root, join_option_values, kani_env, kani_only_files, parse_functions, rust_files, split_top_level,
     harness_matches, harnesses_of, mirror_workspace, plugin_out_dir, qualified_name, strip_comments_and_strings,
@@ -303,8 +304,8 @@ def run_kani(plan, files, kani_args, work_dir=None):
         for h in plan.harness_filters:
             cmd += ["--harness", h]
         cmd += kani_args
-        out = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=kani_env())
-        text = out.stdout + out.stderr
+        out = run_guarded(cmd, cwd=cwd, env=kani_env())
+        text = out.text + (f"\n{out.killed_message()}\n" if out.killed else "")
         try:
             doc = load_export(export, workspace=cwd) if export.exists() else None
         except ExportError:
@@ -417,8 +418,10 @@ def main(argv=None):
     group.add_argument("--compare-base-dir", help="directory with a copy of the sources made before editing")
     parser.add_argument("--kani-arg", action="append", default=[],
                         help="extra argument for Kani, e.g. `--kani-arg -Z --kani-arg quantifiers` (repeatable)")
+    add_memory_arg(parser)
     parser.add_argument("--work-dir", help="where to keep the crate copy (default: target/kani-plugin/spec-checks)")
     args = parser.parse_args(join_option_values(argv, {"--kani-arg"}))
+    apply_memory_arg(args)
     for f in args.features:
         args.kani_arg += ["--features", f]
     args.kani_arg += ["--no-default-features"] * args.no_default_features + ["--all-features"] * args.all_features

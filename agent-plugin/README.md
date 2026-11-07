@@ -98,6 +98,7 @@ such as `--no-overflow-checks` cannot be seen), and the stubs of a harness are r
 | `check-witness.py` | Confirms a defect (the concrete playback witness fails) or a fix (fails before, passes after) |
 | `evidence.py` | Records the run behind a reported result, and re-checks it later |
 | `list-harnesses.py` | `cargo kani list` without its clutter: JSON moved to the plugin output directory, compile errors shown |
+| `guarded-run.py` | Runs any command (usually `cargo kani ...`) in its own cgroup or under a watchdog with a memory cap: a runaway CBMC ends only that run, which leaves an export saying `killed: memory` with its peak |
 | `run-harnesses.py` | One Kani process per harness with timeouts and a memory cap; results merged and kept as they finish |
 | `cleanup-playback.py` | Removes duplicate tests that `--concrete-playback=inplace` adds |
 | `map-crate.py` | Crate Verifiability Map: functions, call graph, recursion, harnesses, results, a staged verification plan |
@@ -109,6 +110,16 @@ such as `--no-overflow-checks` cannot be seen), and the stubs of a harness are r
 
 - `KANI_PLUGIN_OUT`: where the plugin keeps its own files (work copies, exports, evidence). Default:
   `$CARGO_TARGET_DIR/kani-plugin`, else `target/kani-plugin` in the project.
+- `KANI_PLUGIN_MEMORY_MB`: the memory cap of every Kani run started by the scripts and the MCP server
+  (`0` or `none` for no limit). Default: half of the memory available to the process (the smaller of the
+  machine's memory and its cgroup limit). Scripts take `--memory-limit-mb`, the MCP tools
+  `memory_limit_mb`. On Linux with systemd the run gets its own scope (`systemd-run --user --scope -p
+  MemoryMax=.. -p MemorySwapMax=0`), so a memory kill ends only that run; elsewhere the process group is
+  watched and killed above the cap. `KANI_PLUGIN_MEMORY_GUARD=scope|watchdog|off` chooses the method.
+  Each run records its peak memory and CPU time (`plugin_run` in the export; `run` in summaries), and a
+  killed run writes an export with `run_state` `KILLED` or `TIMEOUT`.
+- `KANI_PLUGIN_EXPORT_FLAG`: `export-json` or `unstable-options`, to skip the probe for the `-Z` option
+  that enables `--export-json`.
 - `KANI_PLUGIN_DIR`: the plugin directory, for `kani-mcp`'s map tools, if the server is not started
   from inside it.
 

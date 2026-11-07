@@ -17,9 +17,11 @@ Usage:
 
 Harnesses are the ones `cargo kani list` reports; `--harness` selects those whose name contains a
 filter. `--timeout-per` (default 900) is wall-clock time per harness; `--total` (default 3600)
-stops the run before it starts another harness. `--mem-gb` kills a harness whose Kani and CBMC
-processes together use more resident memory. With `--jobs N`, N harnesses run at once (each can
-use several GB). Results go to `--out` (default: `<plugin output>/runs/<time>`): `export.json`
+stops the run before it starts another harness. Each harness runs under the memory guard
+(`kani_run.py`): in its own cgroup where systemd allows it, otherwise watched and killed; a harness
+that exceeds `--memory-limit-mb` is killed alone and recorded as OUT_OF_MEMORY with its peak. The
+default cap is half of the available memory (shared between `--jobs N` harnesses that run at once,
+each can use several GB); each result records its peak memory and CPU time (`plugin_run`). Results go to `--out` (default: `<plugin output>/runs/<time>`): `export.json`
 (merged, usable by summarize-results.py, check-vacuity.py, evidence.py), and one log and export
 per harness. Progress is printed to stderr. Run it in the background for long jobs, and read
 `export.json` while it runs.
@@ -31,7 +33,6 @@ import argparse
 import json
 import os
 import re
-import signal
 import subprocess
 import sys
 import threading
@@ -42,6 +43,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from kani_export import ExportError, load_export  # noqa: E402
 from kani_plugin_lib import export_args, find_root, join_option_values, kani_env, plugin_out_dir  # noqa: E402
+from kani_run import annotate_export, default_limit_mb, run_guarded, safe_name, write_stopped_export  # noqa: E402
 
 LIST = Path(__file__).resolve().parent / "list-harnesses.py"
 
@@ -67,56 +69,29 @@ def list_harness_names(path):
     return sorted(set(names))
 
 
-def group_rss_mb(pgid):
-    """Resident memory (MB) of every process in a process group."""
-    out = subprocess.run(["ps", "-axo", "pgid=,rss="], capture_output=True, text=True)
-    total = 0
-    for line in out.stdout.splitlines():
-        parts = line.split()
-        if len(parts) == 2 and parts[0] == str(pgid):
-            total += int(parts[1])
-    return total / 1024
-
-
-def kill_group(proc):
-    try:
-        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-    except (ProcessLookupError, PermissionError):
-        pass
-
-
 def run_one(name, cwd, out_dir, kani_args, timeout, mem_mb):
-    """Run one harness. Returns (verdict kind, harness entry or None, seconds)."""
-    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", name)
+    """Run one harness under the memory guard. Returns (verdict kind, export document or None,
+    seconds, resource record). A harness that is stopped gets an export that says so."""
+    safe = safe_name(name)
     export, log = out_dir / f"{safe}.json", out_dir / f"{safe}.log"
     cmd = ["cargo", "kani", "--harness", name, "--exact", *export_args(export), *kani_args]
-    start = time.time()
-    with open(log, "w") as lf:
-        proc = subprocess.Popen(cmd, cwd=cwd, stdout=lf, stderr=subprocess.STDOUT, env=kani_env(),
-                                start_new_session=True)
-        kind = None
-        while proc.poll() is None:
-            time.sleep(1)
-            if time.time() - start > timeout:
-                kind = "TIMEOUT"
-            elif mem_mb and group_rss_mb(os.getpgid(proc.pid)) > mem_mb:
-                kind = "OUT_OF_MEMORY"
-            if kind:
-                kill_group(proc)
-                proc.wait()
-                break
-    took = round(time.time() - start, 1)
-    if export.exists() and kind is None:
+    result = run_guarded(cmd, cwd=cwd, env=kani_env(), timeout_s=timeout, memory_mb=mem_mb, log_path=log)
+    record = result.record()
+    took = round(result.elapsed_s, 1)
+    if result.killed:
+        write_stopped_export(export, result, name)
+        return ("OUT_OF_MEMORY" if result.killed == "memory" else "TIMEOUT"), None, took, record
+    if export.exists():
         try:
-            doc = load_export(export, workspace=cwd)
-            return None, doc, took
+            annotate_export(export, result)
+            return None, load_export(export, workspace=cwd), took, record
         except ExportError:
-            kind = "CRASHED"
-    return kind or "CRASHED", None, took
+            pass
+    return "CRASHED", None, took, record
 
 
-def synthetic_entry(name, kind, seconds):
-    return {"name": name, "crate_name": "", "file": "", "line": 0, "outcome": {"kind": kind},
+def synthetic_entry(name, kind, seconds, record=None):
+    return {"name": name, "plugin_run": record, "crate_name": "", "file": "", "line": 0, "outcome": {"kind": kind},
             "resources": {"verification_time_s": seconds}, "failed_properties": [], "checks": {}, "covers": {},
             "attributes": {}, "is_automatically_generated": False, "is_bounded": False,
             "generated_concrete_test": False}
@@ -143,7 +118,10 @@ def main(argv=None):
     parser.add_argument("--harness", action="append", default=[], help="select harnesses whose name contains this")
     parser.add_argument("--timeout-per", type=int, default=900, help="seconds per harness (default 900)")
     parser.add_argument("--total", type=int, default=3600, help="seconds for the whole run (default 3600)")
-    parser.add_argument("--mem-gb", type=float, default=0, help="kill a harness above this resident memory")
+    parser.add_argument("--mem-gb", type=float, default=0, help="memory cap per harness in GB (same as "
+                        "--memory-limit-mb)")
+    parser.add_argument("--memory-limit-mb", type=float, help="memory cap per harness in MB (0: none). Default: "
+                        "KANI_PLUGIN_MEMORY_MB, else half of the available memory shared by --jobs")
     parser.add_argument("--jobs", type=int, default=1, help="harnesses to run at once (default 1)")
     parser.add_argument("--out", help="output directory")
     parser.add_argument("--features", action="append", default=[], help="cargo features (repeatable)")
@@ -180,20 +158,26 @@ def main(argv=None):
     t0 = time.time()
     lock = threading.Lock()
     entries, first_doc, not_run = [], [None], []
-    mem_mb = args.mem_gb * 1024
+    mem_mb = args.memory_limit_mb if args.memory_limit_mb is not None else (args.mem_gb * 1024 or None)
+    if mem_mb is None and args.jobs > 1 and os.environ.get("KANI_PLUGIN_MEMORY_MB") is None:
+        # The default cap is half of the available memory: share it between the harnesses that run at once.
+        default = default_limit_mb()
+        mem_mb = default // args.jobs if default else None
 
     def work(name):
         if time.time() - t0 > args.total:
             with lock:
                 not_run.append(name)
             return
-        kind, doc, took = run_one(name, package, out_dir, kani_args, args.timeout_per, mem_mb)
+        kind, doc, took, record = run_one(name, package, out_dir, kani_args, args.timeout_per, mem_mb)
         with lock:
             if doc is not None:
                 first_doc[0] = first_doc[0] or doc
-                new = doc["harnesses"] or [synthetic_entry(name, "CRASHED", took)]
+                new = doc["harnesses"] or [synthetic_entry(name, "CRASHED", took, record)]
+                for entry in new:
+                    entry["plugin_run"] = record
             else:
-                new = [synthetic_entry(name, kind, took)]
+                new = [synthetic_entry(name, kind, took, record)]
             entries.extend(new)
             verdict = [(e["outcome"].get("verdict") or e["outcome"]["kind"]) for e in new]
             print(f"[{len(entries) + len(not_run)}/{len(names)}] {name}: {', '.join(verdict)} ({took}s)",
