@@ -122,6 +122,7 @@ Kani feature, raise `min_kani` in the same change.
 python3 agent-plugin/tests/validate_plugin.py   # manifests and skill structure
 python3 agent-plugin/tests/test_scripts.py      # script unit tests, no Kani needed
 python3 agent-plugin/tests/test_map.py          # Crate Verifiability Map tests (needs cargo, not Kani)
+python3 agent-plugin/tests/test_compat.py       # Kani-build compatibility: toolchain, export flag and shapes, memory guard
 cargo test -p kani-mcp                          # MCP server unit tests
 cargo run -p compiletest -- --suite agent-plugin --mode exec   # end-to-end, needs a Kani build
 ```

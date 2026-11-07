@@ -539,6 +539,18 @@ def unmatched_filters(filters, functions):
     return [f for f in filters if not any(harness_matches(fn, f) for fn in functions)]
 
 
+def toolchain_channel_above(path):
+    """The `channel` of the nearest `rust-toolchain.toml` in an ancestor directory of `path`
+    (a source build puts the binary in `<checkout>/target/kani/bin`, several levels below it).
+    Search stops at the first such file; None if there is none or it names no channel."""
+    for ancestor in Path(path).resolve().parents:
+        toolchain_file = ancestor / "rust-toolchain.toml"
+        if toolchain_file.exists():
+            m = re.search(r'^\s*channel\s*=\s*["\']([^"\']+)["\']', toolchain_file.read_text(), re.M)
+            return m.group(1) if m else None
+    return None
+
+
 def kani_toolchain():
     """An installed Rust toolchain to run Kani's `cargo` proxy with: Kani's own toolchain if it
     can be found, otherwise rustup's default toolchain. None if rustup is not used."""
@@ -546,12 +558,12 @@ def kani_toolchain():
     import subprocess
     kani = shutil.which("kani") or shutil.which("cargo-kani")
     if kani:
-        # A development build: `scripts/kani` in a Kani checkout, next to its rust-toolchain.toml.
-        toolchain_file = Path(kani).resolve().parent.parent / "rust-toolchain.toml"
-        if toolchain_file.exists():
-            m = re.search(r'^\s*channel\s*=\s*"([^"]+)"', toolchain_file.read_text(), re.M)
-            if m:
-                return m.group(1)
+        # A development build: the binary is `scripts/kani` or `target/kani/bin/kani` somewhere
+        # below a Kani checkout, whose `rust-toolchain.toml` is in one of its ancestors. The
+        # nearest one wins, as for rustup.
+        channel = toolchain_channel_above(kani)
+        if channel:
+            return channel
         # A release: `$KANI_HOME/kani-<version>/rust-toolchain-version`.
         home = Path(os.environ.get("KANI_HOME", Path.home() / ".kani"))
         for version_file in sorted(home.glob("kani-*/rust-toolchain-version"), reverse=True):

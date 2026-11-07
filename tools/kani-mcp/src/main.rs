@@ -385,21 +385,27 @@ fn which(program: &str) -> Option<PathBuf> {
         .find(|p| p.is_file())
 }
 
+/// The `channel` of the nearest `rust-toolchain.toml` in an ancestor directory of `path`. Search
+/// stops at the first such file (as for rustup); `None` if there is none or it names no channel.
+fn toolchain_channel_above(path: &Path) -> Option<String> {
+    let real = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let file =
+        real.ancestors().skip(1).map(|d| d.join("rust-toolchain.toml")).find(|f| f.is_file())?;
+    std::fs::read_to_string(file).ok()?.lines().find_map(|l| {
+        l.trim()
+            .strip_prefix("channel")
+            .and_then(|r| r.trim_start().strip_prefix('='))
+            .map(|v| v.trim().trim_matches(['"', '\'']).to_string())
+    })
+}
+
 /// An installed Rust toolchain to run Kani's `cargo` proxy with: Kani's own toolchain if it
 /// can be found, otherwise rustup's default toolchain.
 fn kani_toolchain() -> Option<String> {
     if let Some(kani) = which("kani").or_else(|| which("cargo-kani")) {
-        // A development build: `scripts/kani` in a Kani checkout, next to its rust-toolchain.toml.
-        let real = std::fs::canonicalize(&kani).unwrap_or(kani);
-        if let Some(checkout) = real.parent().and_then(Path::parent)
-            && let Ok(text) = std::fs::read_to_string(checkout.join("rust-toolchain.toml"))
-            && let Some(channel) = text.lines().find_map(|l| {
-                let l = l.trim();
-                l.strip_prefix("channel")
-                    .and_then(|r| r.trim_start().strip_prefix('='))
-                    .map(|v| v.trim().trim_matches('"').to_string())
-            })
-        {
+        // A development build: the binary is `scripts/kani` or `target/kani/bin/kani` somewhere
+        // below a Kani checkout, whose `rust-toolchain.toml` is in one of its ancestors.
+        if let Some(channel) = toolchain_channel_above(&kani) {
             return Some(channel);
         }
         // A release: `$KANI_HOME/kani-<version>/rust-toolchain-version`.
@@ -1213,6 +1219,24 @@ fn get_counterexample(args: &Value, token: Option<&Value>) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn finds_toolchain_file_in_any_ancestor() {
+        let root = std::env::temp_dir().join(format!("kani-mcp-toolchain-{}", std::process::id()));
+        let bin = root.join("target").join("kani").join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(bin.join("kani"), "").unwrap();
+        std::fs::write(
+            root.join("rust-toolchain.toml"),
+            "[toolchain]\nchannel = \"nightly-2026-10-23\"\n",
+        )
+        .unwrap();
+        assert_eq!(
+            toolchain_channel_above(&bin.join("kani")).as_deref(),
+            Some("nightly-2026-10-23")
+        );
+        std::fs::remove_dir_all(&root).unwrap();
+    }
 
     #[test]
     fn parses_versions() {
