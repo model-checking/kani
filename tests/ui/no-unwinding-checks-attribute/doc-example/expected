@@ -1,0 +1,7 @@
+Status: SATISFIED\
+Description: "`n` = 2 is reached"
+
+Status: UNSATISFIABLE\
+Description: "`n` = 3 is reached"
+
+VERIFICATION:- SUCCESSFUL

@@ -203,6 +203,7 @@ VERIFICATION:- SUCCESSFUL
 **The `#[kani::no_unwinding_checks]` attribute turns off the unwinding assertions of a proof harness.**
 
 It has the effect of the `--no-unwinding-checks` option on the annotated harness only.
+It is meant to be used with an unwinding value (`#[kani::unwind(N)]` or `--default-unwind`), which sets the bound: an execution that needs more loop iterations is cut off instead of failing.
 Kani does not report loops that weren't unwound enough times, and a successful result only holds for the executions that stay within the unwinding value.
 This is meant for harnesses that verify some code up to a certain bound on purpose.
 Kani prints a warning with the result of such a harness, and the summary lists each one that verified successfully.
