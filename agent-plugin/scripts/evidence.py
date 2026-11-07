@@ -42,6 +42,7 @@ from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS))
+from kani_export import ExportError, load_export, weakened_checks_detectable  # noqa: E402
 from kani_plugin_lib import adapt_export_flag, export_args, find_root, kani_env, plugin_out_dir  # noqa: E402
 _spec = importlib.util.spec_from_file_location("summarize_results", SCRIPTS / "summarize-results.py")
 summarize_results = importlib.util.module_from_spec(_spec)
@@ -119,7 +120,10 @@ def record(args):
     export = Path(args.export)
     if not export.is_absolute():
         export = cwd / export
-    doc = json.loads(export.read_text(encoding="utf-8"))
+    try:
+        doc = load_export(export, workspace=cwd)
+    except ExportError as e:
+        raise SystemExit(f"error: {e}")
     root, _ = find_root(cwd)
     out_root = Path(args.out) if args.out else plugin_out_dir(root or cwd) / "evidence"
     digest = sha256(export)
@@ -151,7 +155,9 @@ def record(args):
         "results_sha256": digest,
         "sources_sha256": sources,
         "verdicts": verdicts(doc),
+        "export_shape": doc.get("export_shape"),
         "weakened_checks": summarize_results.weakened_checks(doc),
+        "weakened_checks_detectable": weakened_checks_detectable(doc),
         "modified_after_run": modified_after_run,
         "change_detection": method,
     }
@@ -207,7 +213,7 @@ def verify(args):
                 cmd += export_args(new_export)
             subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=kani_env())
             if Path(new_export).exists():
-                rerun = verdicts(json.loads(Path(new_export).read_text(encoding="utf-8")))
+                rerun = verdicts(load_export(new_export, workspace=cwd))
             else:
                 differences.append("the re-run produced no results")
         if rerun is not None:

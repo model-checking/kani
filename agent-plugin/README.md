@@ -78,10 +78,20 @@ installed on your machine.
 
 All scripts print JSON and accept `--help`.
 
+### Export shapes
+
+Kani 0.68.0 and older builds write one `--export-json` shape (`metadata`, `harness_metadata`,
+`verification_results`; flag `-Z unstable-options`); Kani since #4941 writes another (`harnesses[]`,
+`configuration`; flag `-Z export-json`). Every script and the MCP server read both through one reader
+(`scripts/kani_export.py`, `tools/kani-mcp/src/export.rs`) and give the same answers. What the older shape
+does not record is marked, never guessed: summaries say `weakened_checks_detectable: false` (disabled checks
+such as `--no-overflow-checks` cannot be seen), and the stubs of a harness are read from its
+`#[kani::stub]` / `#[kani::stub_verified]` attributes (`trusted.stubs_source: source-scan`, or `unknown`).
+
 | Script | Purpose |
 |--------|---------|
-| `check-kani-version.py` | Is the installed Kani supported by this plugin release? |
-| `summarize-results.py` | Compact summary of a `--export-json` file, including weakened checks and stubs the result relies on |
+| `check-kani-version.py` | Is the installed Kani supported by this plugin release? Fails when the plugin cannot read its `--export-json` output; prints the `-Z` option to use (`export_flags`) |
+| `summarize-results.py` | Compact summary of a `--export-json` file, including weakened checks and stubs the result relies on. Reads the exports of Kani 0.68.0 and of current Kani (see below) |
 | `check-vacuity.py` | Unreachable assertions, unsatisfiable covers, missing vacuity probes |
 | `check-specs.py` | Kani-backed checks: harness end reachable, preconditions satisfiable, precondition changes stronger or weaker |
 | `check-proof-diff.py` | Changes since a baseline that weaken the agreed property, and any change to the code under verification |

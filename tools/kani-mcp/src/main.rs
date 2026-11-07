@@ -11,6 +11,7 @@
 //! Kani CLI, which the `verify-rust` skill uses as a fallback.
 
 mod autoharness;
+mod export;
 mod map;
 mod partial;
 mod process;
@@ -590,12 +591,20 @@ fn toolchain_check(token: Option<&Value>) -> Result<Value> {
         dir.path().join("check.rs"),
         "#[kani::proof]\nfn kani_mcp_toolchain_check() {}\n",
     )?;
+    let export = dir.path().join("export.json");
     let mut cmd = Command::new("kani");
-    cmd.arg("check.rs").current_dir(dir.path());
+    cmd.arg("check.rs").args(export_flag_args()).arg("--export-json").arg(&export);
+    cmd.current_dir(dir.path());
     apply_kani_env(&mut cmd);
     let out = process::run(cmd, Duration::from_secs(SHORT_TIMEOUT_S), token, None)?;
     let ok = out.exit_code == Some(0) && out.text.contains("VERIFICATION:- SUCCESSFUL");
     let mut result = json!({ "works": ok });
+    if ok && let Some(problem) = export_problem(&export, dir.path()) {
+        result["export_readable"] = json!(false);
+        result["export_error"] = json!(problem);
+    } else if ok {
+        result["export_readable"] = json!(true);
+    }
     if !ok {
         result["output_tail"] = json!(tail(&out.text, 20));
         result["hint"] = json!(
@@ -604,6 +613,28 @@ fn toolchain_check(token: Option<&Value>) -> Result<Value> {
         );
     }
     Ok(result)
+}
+
+/// Why this server cannot read the export that a successful trivial run wrote (`None` if it can).
+fn export_problem(export: &Path, dir: &Path) -> Option<String> {
+    let text = match std::fs::read_to_string(export) {
+        Ok(text) => text,
+        Err(_) => return Some("Kani wrote no export for a successful run".into()),
+    };
+    let doc = match serde_json::from_str(&text)
+        .map_err(anyhow::Error::from)
+        .and_then(|raw| export::normalize(raw, dir))
+    {
+        Ok(doc) => doc,
+        Err(e) => return Some(e.to_string()),
+    };
+    let harnesses = doc["harnesses"].as_array().map_or(0, Vec::len);
+    (harnesses != 1 || doc["harnesses"][0]["outcome"]["verdict"] != "SUCCESS").then(|| {
+        format!(
+            "the plugin read {harnesses} harness(es) from the export of a run that verified one: the export \
+             has a shape it does not understand"
+        )
+    })
 }
 
 fn get_version(token: Option<&Value>) -> Result<Value> {
@@ -671,7 +702,16 @@ fn get_version(token: Option<&Value>) -> Result<Value> {
                 "Kani {} is supported, but it cannot verify a trivial harness.",
                 installed.as_deref().unwrap_or("?")
             ));
+        } else if toolchain["export_readable"] == false {
+            result["compatible"] = json!(false);
+            result["message"] = json!(format!(
+                "Kani {} is supported, but this plugin cannot read its --export-json output ({}). Update the \
+                 plugin, or use a Kani build whose export it supports.",
+                installed.as_deref().unwrap_or("?"),
+                toolchain["export_error"].as_str().unwrap_or("unknown shape")
+            ));
         }
+        result["export_flags"] = json!(export_flag_args().join(" "));
         result["toolchain"] = toolchain;
     }
     Ok(result)
@@ -897,7 +937,10 @@ fn run_with_export(
         run_info["log_path"] = json!(log);
     }
     let doc = match std::fs::read_to_string(&export) {
-        Ok(text) => Some(serde_json::from_str(&text).context("malformed Kani JSON export")?),
+        Ok(text) => {
+            let raw = serde_json::from_str(&text).context("malformed Kani JSON export")?;
+            Some(export::normalize(raw, &target.dir)?)
+        }
         Err(_) => None,
     };
     if doc.is_some() {

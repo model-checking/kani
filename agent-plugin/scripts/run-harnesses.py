@@ -40,6 +40,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from kani_export import ExportError, load_export  # noqa: E402
 from kani_plugin_lib import export_args, find_root, join_option_values, kani_env, plugin_out_dir  # noqa: E402
 
 LIST = Path(__file__).resolve().parent / "list-harnesses.py"
@@ -107,9 +108,9 @@ def run_one(name, cwd, out_dir, kani_args, timeout, mem_mb):
     took = round(time.time() - start, 1)
     if export.exists() and kind is None:
         try:
-            doc = json.loads(export.read_text())
+            doc = load_export(export, workspace=cwd)
             return None, doc, took
-        except json.JSONDecodeError:
+        except ExportError:
             kind = "CRASHED"
     return kind or "CRASHED", None, took
 

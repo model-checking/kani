@@ -163,6 +163,21 @@ fn trusted_constructs(harness: &Value) -> Map<String, Value> {
     if len(&attributes["verified_stubs"]) > 0 {
         trusted.insert("verified_stubs".into(), attributes["verified_stubs"].clone());
     }
+    // Where the stubs come from, unless the export itself lists them.
+    match attributes["stubs_source"].as_str() {
+        Some("unknown") => {
+            trusted.insert(
+                "stubs_source".into(),
+                json!(
+                    "unknown: the export does not list stubs and the harness source was not found"
+                ),
+            );
+        }
+        Some(source) if source != "export" && !trusted.is_empty() => {
+            trusted.insert("stubs_source".into(), json!(source));
+        }
+        _ => {}
+    }
     trusted
 }
 
@@ -182,7 +197,8 @@ pub fn summarize(doc: &Value, failures_only: bool, max_failed: usize) -> Value {
         all.into_iter().filter(|h| !failures_only || h["verdict"] != "SUCCESS").collect();
     let n = |v: &str| by_verdict.get(v).copied().unwrap_or(0);
     let total = doc["summary"]["total"].as_u64().unwrap_or_else(|| by_verdict.values().sum());
-    let inconclusive: u64 = ["TIMEOUT", "OUT_OF_MEMORY", "CRASHED"].iter().map(|v| n(v)).sum();
+    let inconclusive: u64 =
+        ["TIMEOUT", "OUT_OF_MEMORY", "CRASHED", "KILLED"].iter().map(|v| n(v)).sum();
     let mut out = json!({
         "kani": doc["tools"]["kani"],
         "run_state": doc["run_state"],
@@ -202,6 +218,12 @@ pub fn summarize(doc: &Value, failures_only: bool, max_failed: usize) -> Value {
     let unmatched = &doc["harness_selection"]["unmatched_filters"];
     if len(unmatched) > 0 {
         out["unmatched_filters"] = unmatched.clone();
+    }
+    out["export_shape"] = doc.get("export_shape").cloned().unwrap_or(json!("flat"));
+    let detectable = crate::export::weakened_checks_detectable(doc);
+    out["weakened_checks_detectable"] = json!(detectable);
+    if !detectable {
+        out["weakened_checks_note"] = json!(crate::export::NO_CONFIGURATION_NOTE);
     }
     out
 }

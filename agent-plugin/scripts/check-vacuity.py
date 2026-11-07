@@ -38,12 +38,12 @@ Exit status: 0 when nothing is suspicious (only `info` findings), 2 when at leas
 """
 
 import argparse
-import json
 import os
 import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from kani_export import ExportError, load_export  # noqa: E402
 from kani_plugin_lib import emit  # noqa: E402
 
 # Property classes that come from user-written code rather than Kani's default safety checks.
@@ -208,14 +208,14 @@ def condense(result, show_info):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("export_json", help="file written by `--export-json`")
+    parser.add_argument("--workspace", help="the project directory (default: the current directory)")
     parser.add_argument("--log", help="Kani's console output for the same run (regular output format)")
     parser.add_argument("--show-info", action="store_true", help="list info findings instead of counting them")
     args = parser.parse_args(argv)
     try:
-        with open(args.export_json, encoding="utf-8") as f:
-            doc = json.load(f)
-    except (OSError, json.JSONDecodeError) as e:
-        print(f"error: cannot read Kani JSON export `{args.export_json}`: {e}", file=sys.stderr)
+        doc = load_export(args.export_json, workspace=args.workspace)
+    except ExportError as e:
+        print(f"error: {e}", file=sys.stderr)
         return 1
     descriptions = None
     if args.log:

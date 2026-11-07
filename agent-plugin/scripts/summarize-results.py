@@ -35,6 +35,9 @@ import re
 import sys
 import time
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from kani_export import ExportError, NO_CONFIGURATION_NOTE, load_export, weakened_checks_detectable  # noqa: E402
+
 INCONCLUSIVE = ("TIMEOUT", "OUT_OF_MEMORY", "CRASHED")
 
 
@@ -81,7 +84,14 @@ def trusted_constructs(harness):
         "stubs": [f"{s['original']} -> {s['replacement']}" for s in attributes.get("stubs", [])],
         "verified_stubs": list(attributes.get("verified_stubs", [])),
     }
-    return {k: v for k, v in trusted.items() if v}
+    trusted = {k: v for k, v in trusted.items() if v}
+    source = attributes.get("stubs_source", "export")
+    if trusted and source != "export":
+        # The export itself did not list them: they were read from the harness source.
+        trusted["stubs_source"] = source
+    elif source == "unknown":
+        trusted["stubs_source"] = "unknown: the export does not list stubs and the harness source was not found"
+    return trusted
 
 
 def summarize_harness(harness, max_failed):
@@ -169,6 +179,10 @@ def summarize(doc, failures_only=False, max_failed=5, diagnoses=None):
     weakened = weakened_checks(doc)
     if weakened:
         out["weakened_checks"] = weakened
+    out["export_shape"] = doc.get("export_shape", "flat")
+    out["weakened_checks_detectable"] = weakened_checks_detectable(doc)
+    if not out["weakened_checks_detectable"]:
+        out["weakened_checks_note"] = NO_CONFIGURATION_NOTE
     return out
 
 
@@ -257,6 +271,8 @@ def main(argv=None):
     parser.add_argument("export_json", help="file written by `--export-json`")
     parser.add_argument("--failures-only", action="store_true", help="omit successful harnesses")
     parser.add_argument("--max-failed", type=int, default=5, help="failed properties shown per harness")
+    parser.add_argument("--workspace", help="the project directory, to find harness sources (stubs of older "
+                        "Kani exports are read from them; default: the current directory)")
     parser.add_argument("--log", help="Kani's console output of the same run, to diagnose non-successes")
     args = parser.parse_args(argv)
     log_text = None
@@ -280,10 +296,9 @@ def main(argv=None):
         print(json.dumps(msg, indent=2, sort_keys=True))
         return 1
     try:
-        with open(args.export_json, encoding="utf-8") as f:
-            doc = json.load(f)
-    except (OSError, json.JSONDecodeError) as e:
-        print(f"error: cannot read Kani JSON export `{args.export_json}`: {e}", file=sys.stderr)
+        doc = load_export(args.export_json, workspace=args.workspace)
+    except ExportError as e:
+        print(f"error: {e}", file=sys.stderr)
         return 1
     out = summarize(doc, args.failures_only, args.max_failed, diagnose_log(log_text) if log_text else None)
     out["export_age_minutes"] = round((time.time() - os.path.getmtime(args.export_json)) / 60, 1)

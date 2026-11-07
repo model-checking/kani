@@ -31,6 +31,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from kani_export import load_export
 from kani_plugin_lib import (
     CALL, _scopes, export_args, harnesses_of, kani_env, line_of, kani_only_files, parse_functions, rust_files,
     strip_comments_and_strings, test_only_ranges)
@@ -557,7 +558,7 @@ def sha256(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def load_results(paths):
+def load_results(paths, root=None):
     """Load `--export-json` files and evidence bundle directories. Returns a list of runs."""
     runs = []
     for p in paths:
@@ -570,7 +571,7 @@ def load_results(paths):
             export = p / "results.json"
         else:
             export = p
-        doc = json.loads(export.read_text())
+        doc = load_export(export, workspace=(bundle or {}).get("cwd") or root)
         runs.append({"path": str(p), "doc": doc, "bundle": bundle, "mtime": export.stat().st_mtime})
     return runs
 
@@ -638,6 +639,8 @@ def merge_results(harnesses, runs, root, package_files):
                                                                ("assert_contracts", False),
                                                                ("prove_safety_only", True)) if checks.get(k) is bad),
                     "cbmc_args": cfg.get("cbmc_args", []),
+                    "configuration_known": doc.get("configuration_known", "configuration" in doc),
+                    "stubs_source": eh.get("attributes", {}).get("stubs_source", "export"),
                     "unsupported_constructs": len(eh.get("unsupported_constructs", [])),
                     "failed_properties": [p.get("description") for p in eh.get("failed_properties", [])][:3],
                     "stubs": [f"{s['original']} -> {s['replacement']}" for s in eh.get("attributes", {}).get("stubs", [])],
@@ -674,6 +677,7 @@ def function_verification(fid, harnesses, fn_status_by_id=None):
             item.update(fresh=res["fresh"], freshness=res["freshness"], verdict=res["verdict"],
                         unwind=res["unwind"], bounded=res["bounded"], time_s=res["time_s"],
                         kani_version=res["kani_version"], weakened_checks=res["weakened_checks"],
+                        configuration_known=res["configuration_known"], stubs_source=res["stubs_source"],
                         assumptions=h["assumptions"], stubs=res["stubs"], verified_stubs=res["verified_stubs"])
         evidence.append(item)
     counting = [e for e in evidence if e["relation"] in ("contract-target", "reachable") and "verdict" in e]
@@ -695,6 +699,12 @@ def function_verification(fid, harnesses, fn_status_by_id=None):
                     continue
                 if e.get("weakened_checks"):
                     caveats.append(f"{e['harness']}: checks disabled: {', '.join(e['weakened_checks'])}")
+                if e.get("configuration_known") is False:
+                    caveats.append(f"{e['harness']}: the export does not record the run configuration, so disabled "
+                                   "checks (--no-*-checks, --cbmc-args) cannot be ruled out")
+                if e.get("stubs_source") == "unknown":
+                    caveats.append(f"{e['harness']}: stubs are unknown (the export does not list them and the "
+                                   "harness source was not found)")
                 if e.get("freshness") and e.get("fresh") is None:
                     caveats.append(f"{e['harness']}: freshness unknown")
                 if e.get("bounded"):
@@ -1015,7 +1025,7 @@ def finalize(m, root, results=()):
     verification status, strategy, and priority. Works from the map alone."""
     root = Path(root)
     package_files = [root / rel for rel in m["sources"] if rel.endswith(".rs") and (root / rel).exists()]
-    runs = load_results(results) if results and not isinstance(results[0], dict) else list(results)
+    runs = load_results(results, root) if results and not isinstance(results[0], dict) else list(results)
     unmatched = add_automatic_harnesses(m, runs)
     m["uncertainty"] = [u for u in m["uncertainty"] if u["flag"] != "unmatched-automatic-harnesses"]
     if unmatched:

@@ -27,7 +27,8 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from kani_plugin_lib import export_flag_args, kani_env, kani_toolchain  # noqa: E402
+from kani_export import ExportError, load_export  # noqa: E402
+from kani_plugin_lib import export_args, export_flag_args, kani_env, kani_toolchain  # noqa: E402
 
 COMPATIBILITY = Path(__file__).resolve().parent.parent / "compatibility.json"
 INSTALL_HINT = "cargo install --locked kani-verifier && cargo kani setup"
@@ -81,16 +82,39 @@ def check(version_text, compat, cmd=None):
 
 
 def toolchain_check(timeout=600):
-    """Verify a trivial harness with `kani`. Returns (works, output tail)."""
+    """Verify a trivial harness with `kani`, and read the export that the run writes. Returns
+    (works, export_error, output tail): `works` is whether the harness verified; `export_error` is
+    None when this plugin can read Kani's `--export-json` document (the harness must be in it, with
+    a SUCCESS verdict), otherwise why not."""
     with tempfile.TemporaryDirectory(prefix="kani-check-") as tmp:
         Path(tmp, "check.rs").write_text("#[kani::proof]\nfn kani_plugin_toolchain_check() {}\n")
+        export = Path(tmp, "export.json")
         try:
-            out = subprocess.run(["kani", "check.rs"], cwd=tmp, capture_output=True, text=True, timeout=timeout,
-                                 env=kani_env())
+            out = subprocess.run(["kani", "check.rs", *export_args(export)], cwd=tmp, capture_output=True,
+                                 text=True, timeout=timeout, env=kani_env())
         except (OSError, subprocess.TimeoutExpired) as e:
-            return False, str(e)
+            return False, None, str(e)
         text = out.stdout + out.stderr
-        return out.returncode == 0 and "VERIFICATION:- SUCCESSFUL" in text, "\n".join(text.splitlines()[-20:])
+        works = out.returncode == 0 and "VERIFICATION:- SUCCESSFUL" in text
+        tail = "\n".join(text.splitlines()[-20:])
+        if not works:
+            return False, None, tail
+        return True, export_problem(export), tail
+
+
+def export_problem(export):
+    """Why this plugin cannot read the export at `export` (None if it can)."""
+    if not export.exists():
+        return "Kani wrote no export for a successful run"
+    try:
+        doc = load_export(export)
+    except ExportError as e:
+        return str(e)
+    harnesses = doc.get("harnesses", [])
+    if len(harnesses) != 1 or harnesses[0].get("outcome", {}).get("verdict") != "SUCCESS":
+        return (f"the plugin read {len(harnesses)} harness(es) from the export of a run that verified one: "
+                "the export has a shape it does not understand")
+    return None
 
 
 def main(argv=None):
@@ -114,8 +138,16 @@ def main(argv=None):
     if result["compatible"] and args.version_string is None:
         result["export_flags"] = " ".join(export_flag_args())
     if result["compatible"] and args.version_string is None and not args.no_toolchain_check:
-        works, output = toolchain_check()
+        works, export_error, output = toolchain_check()
         result["toolchain_works"] = works
+        if works:
+            result["export_readable"] = export_error is None
+        if works and export_error:
+            result["compatible"] = False
+            result["export_error"] = export_error
+            result["message"] = (f"Kani {result['installed']} is supported, but this plugin cannot read its "
+                                 f"--export-json output ({export_error}). Update the plugin, or use a Kani "
+                                 "build whose export it supports.")
         if not works:
             result["compatible"] = False
             result["message"] = (f"Kani {result['installed']} is supported, but it cannot verify a trivial harness. "

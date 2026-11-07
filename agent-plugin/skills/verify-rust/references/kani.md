@@ -60,7 +60,11 @@ kani src/lib.rs                              # single file, no Cargo project
 cargo kani list --format json                # inventory -> kani-list.json
 ```
 
-Structured results (preferred over reading console output):
+Structured results (preferred over reading console output). The scripts read the exports of Kani 0.68.0
+and of current Kani. An export from the older shape cannot show disabled checks (`--no-*-checks`,
+`--cbmc-args`): `summarize-results.py` says `weakened_checks_detectable: false`, and then the claim "no checks
+were disabled" must come from the command line you ran, not from the export. Its stubs come from the harness
+source (`trusted.stubs_source`).
 
 ```bash
 cargo kani -Z export-json --export-json /tmp/kani.json --harness check_parse   # older builds: -Z unstable-options

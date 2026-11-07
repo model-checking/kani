@@ -46,7 +46,6 @@ Exit status: 0 when every check passed (only `ok`/`info`), 2 when there is a `wa
 """
 
 import argparse
-import json
 import os
 import re
 import shutil
@@ -56,6 +55,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from kani_export import ExportError, load_export  # noqa: E402
 from kani_plugin_lib import (  # noqa: E402
     emit, export_args, find_root, join_option_values, kani_env, kani_only_files, parse_functions, rust_files, split_top_level,
     harness_matches, harnesses_of, mirror_workspace, plugin_out_dir, qualified_name, strip_comments_and_strings,
@@ -305,7 +305,10 @@ def run_kani(plan, files, kani_args, work_dir=None):
         cmd += kani_args
         out = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, env=kani_env())
         text = out.stdout + out.stderr
-        doc = json.loads(export.read_text()) if export.exists() else None
+        try:
+            doc = load_export(export, workspace=cwd) if export.exists() else None
+        except ExportError:
+            doc = None
         return doc, text
 
 
