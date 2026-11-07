@@ -24,6 +24,7 @@ A run that is stopped (memory or time) writes no export of its own. `write_stopp
 that says so: `run_state` `KILLED` or `TIMEOUT`, the harness that was running, the time, and the peak.
 """
 
+import itertools
 import json
 import os
 import re
@@ -37,6 +38,7 @@ import time
 from pathlib import Path
 
 MIN_DEFAULT_MB = 2048
+_COUNTER = itertools.count()
 POLL_S = 0.5
 WATCHDOG_EVERY_S = 2.0
 
@@ -125,8 +127,15 @@ def scope_available():
         ok = False
         if sys.platform.startswith("linux") and shutil.which("systemd-run") and shutil.which("bash"):
             try:
-                ok = subprocess.run(["systemd-run", "--user", "--scope", "--quiet", "-p", "MemoryMax=1G", "true"],
-                                    capture_output=True, timeout=20).returncode == 0
+                ok = subprocess.run(["systemd-run",
+                                     "--user",
+                                     "--scope",
+                                     "--quiet",
+                                     "-p",
+                                     "MemoryMax=1G",
+                                     "true"],
+                                    capture_output=True,
+                                    timeout=20).returncode == 0
             except (OSError, subprocess.TimeoutExpired):
                 ok = False
         _SCOPE_OK["ok"] = ok
@@ -156,6 +165,14 @@ def group_rss_mb(pgid):
         if len(parts) == 2 and parts[0] == str(pgid) and parts[1].isdigit():
             total += int(parts[1])
     return total / 1024
+
+
+def _kill_run(proc, method, unit):
+    """Kill the run: its scope (every process in it, wherever it went), and its process group."""
+    if method == "scope":
+        subprocess.run(["systemctl", "--user", "kill", "--signal=SIGKILL", f"{unit}.scope"],
+                       capture_output=True)
+    _kill_group(proc)
 
 
 def _kill_group(proc):
@@ -206,11 +223,13 @@ def run_guarded(cmd, cwd=None, env=None, timeout_s=None, memory_mb=None, log_pat
     environment = dict(os.environ if env is None else env)
     argv = list(cmd)
     res_file = None
+    unit = f"kani-plugin-{os.getpid()}-{next(_COUNTER)}"
     if method == "scope":
         fd, res_file = tempfile.mkstemp(prefix="kani-run-", suffix=".res")
         os.close(fd)
         environment["KANI_PLUGIN_RES"] = res_file
-        argv = ["systemd-run", "--user", "--scope", "--quiet", "-p", f"MemoryMax={limit}M", "-p", "MemorySwapMax=0",
+        argv = ["systemd-run", "--user", "--scope", "--quiet", f"--unit={unit}", "-p", f"MemoryMax={limit}M",
+                "-p", "MemorySwapMax=0",
                 "-p", "OOMPolicy=continue",
                 "--", "bash", "-c", SCOPE_WRAPPER, "_", *cmd]
     before = os.times()
@@ -242,7 +261,7 @@ def run_guarded(cmd, cwd=None, env=None, timeout_s=None, memory_mb=None, log_pat
         elapsed = time.time() - started
         if timeout_s is not None and elapsed > timeout_s:
             killed = "timeout"
-            _kill_group(proc)
+            _kill_run(proc, method, unit)
             break
         if method == "watchdog" and elapsed - last_check >= WATCHDOG_EVERY_S:
             last_check = elapsed
@@ -250,10 +269,11 @@ def run_guarded(cmd, cwd=None, env=None, timeout_s=None, memory_mb=None, log_pat
             peak = max(peak, rss)
             if limit and rss > limit:
                 killed = "memory"
-                _kill_group(proc)
+                _kill_run(proc, method, unit)
                 break
     proc.wait()
-    reader.join(timeout=10)
+    # After a kill, a process that escaped it must not keep us waiting for the pipe to close.
+    reader.join(timeout=3 if killed else None)
     proc.stdout.close()
     if log:
         log.close()

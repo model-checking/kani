@@ -192,10 +192,12 @@ cg=/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)
 exit $rc"#;
 
 /// `cmd` run inside a systemd scope with a hard memory cap, recording the scope's counters in `res`.
-fn scoped(cmd: &Command, limit_mb: u64, res: &std::path::Path) -> Command {
+fn scoped(cmd: &Command, limit_mb: u64, res: &std::path::Path, unit: &str) -> Command {
     let mut wrapped = Command::new("systemd-run");
     wrapped
-        .args(["--user", "--scope", "--quiet", "-p"])
+        .args(["--user", "--scope", "--quiet"])
+        .arg(format!("--unit={unit}"))
+        .arg("-p")
         .arg(format!("MemoryMax={limit_mb}M"))
         .args(["-p", "MemorySwapMax=0", "-p", "OOMPolicy=continue"])
         .args(["--", "bash", "-c", SCOPE_WRAPPER, "_"])
@@ -274,8 +276,13 @@ fn run_with_guard(
         std::process::id(),
         RUN_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
+    let unit = format!(
+        "kani-plugin-{}-{}",
+        std::process::id(),
+        RUN_COUNTER.load(std::sync::atomic::Ordering::Relaxed)
+    );
     if let (true, Some(l)) = (guard == "scope", limit) {
-        cmd = scoped(&cmd, l, &res_file);
+        cmd = scoped(&cmd, l, &res_file, &unit);
     }
     #[cfg(unix)]
     {
@@ -323,7 +330,7 @@ fn run_with_guard(
         }
         if start.elapsed() >= timeout {
             timed_out = true;
-            kill_group(&mut child);
+            kill_run(&mut child, guard, &unit);
             break child.wait().ok();
         }
         if guard == "watchdog"
@@ -335,7 +342,7 @@ fn run_with_guard(
             sampled_peak_mb = sampled_peak_mb.max(rss);
             if rss > limit {
                 memory_exceeded = true;
-                kill_group(&mut child);
+                kill_run(&mut child, guard, &unit);
                 break child.wait().ok();
             }
         }
@@ -348,8 +355,16 @@ fn run_with_guard(
         }
         thread::sleep(POLL);
     };
+    // After a kill, a process that escaped it must not keep us waiting for the pipes to close.
+    let deadline = Instant::now()
+        + if timed_out || memory_exceeded { Duration::from_secs(3) } else { Duration::MAX / 4 };
     for reader in readers {
-        let _ = reader.join();
+        while !reader.is_finished() && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(20));
+        }
+        if reader.is_finished() {
+            let _ = reader.join();
+        }
     }
     let text = std::mem::take(&mut *buffer.lock().unwrap());
     let exit_code = status.and_then(|s| s.code());
@@ -371,6 +386,18 @@ fn run_with_guard(
         guard,
         limit_mb: limit,
     })
+}
+
+/// Kill the run: its scope (every process in it, wherever it went), and its process group.
+fn kill_run(child: &mut std::process::Child, guard: &str, unit: &str) {
+    if guard == "scope" {
+        let _ = Command::new("systemctl")
+            .args(["--user", "kill", "--signal=SIGKILL", &format!("{unit}.scope")])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+    kill_group(child);
 }
 
 fn kill_group(child: &mut std::process::Child) {
@@ -448,11 +475,12 @@ mod tests {
     fn scope_command_has_a_hard_cap_and_no_swap() {
         let mut cmd = Command::new("kani");
         cmd.arg("x.rs").env("A", "b").current_dir("/tmp");
-        let wrapped = scoped(&cmd, 1024, std::path::Path::new("/tmp/res"));
+        let wrapped = scoped(&cmd, 1024, std::path::Path::new("/tmp/res"), "kani-plugin-test");
         let line = format!("{wrapped:?}");
         assert!(line.contains("systemd-run") && line.contains("--scope"), "{line}");
         assert!(line.contains("MemoryMax=1024M") && line.contains("MemorySwapMax=0"), "{line}");
         assert!(line.contains("OOMPolicy=continue"), "{line}");
+        assert!(line.contains("--unit=kani-plugin-test"), "{line}");
         assert!(line.contains("\"kani\" \"x.rs\""), "{line}");
         assert!(line.contains("KANI_PLUGIN_RES"), "{line}");
     }

@@ -138,12 +138,19 @@ class ExportShapesTest(unittest.TestCase):
         import subprocess
         for shape, detectable in (("flat", True), ("tree", False)):
             with tempfile.TemporaryDirectory() as out:
+                # Sources newer than the run's start are reported (exit 2): a fresh checkout has
+                # new mtimes, so pretend the run started later.
+                doc = json.loads((EXPORTS / f"probe-{shape}.json").read_text())
+                doc["started_at" if shape == "flat" else "metadata"] = (
+                    "2099-01-01T00:00:00Z" if shape == "flat" else {**doc["metadata"], "timestamp": "2099-01-01T00:00:00Z"})
+                export = Path(out) / "export.json"
+                export.write_text(json.dumps(doc))
                 done = subprocess.run(
                     [sys.executable, str(SCRIPTS / "evidence.py"), "record", "--export",
-                     str(EXPORTS / f"probe-{shape}.json"), "--command", "kani src/lib.rs", "--cwd", str(PROBE),
-                     "--out", out], capture_output=True, text=True)
+                     str(export), "--command", "kani src/lib.rs", "--cwd", str(PROBE),
+                     "--out", str(Path(out) / "bundles")], capture_output=True, text=True)
                 self.assertEqual(done.returncode, 0, done.stderr)
-                [bundle] = Path(out).iterdir()
+                [bundle] = (Path(out) / "bundles").iterdir()
                 manifest = json.loads((bundle / "bundle.json").read_text())
                 self.assertEqual(manifest["export_shape"], shape)
                 self.assertEqual(manifest["weakened_checks_detectable"], detectable)
@@ -390,6 +397,7 @@ class MemoryGuardTest(unittest.TestCase):
         self.assertIn("MemoryMax=1024M", args)
         self.assertIn("MemorySwapMax=0", args)
         self.assertIn("OOMPolicy=continue", args)
+        self.assertRegex(args, r"--unit=kani-plugin-\d+-\d+")
         self.assertEqual(result.method, "scope")
         self.assertEqual(result.killed, "memory")
         self.assertEqual(round(result.peak_memory_mb), 2048)
