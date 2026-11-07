@@ -125,29 +125,37 @@ impl Scheduler {
     }
 }
 
-/// The executor set by [`block_on_with_spawn`].
+/// Returns a pointer to the executor set by [`block_on_with_spawn`].
 ///
 /// A task may call [`spawn`], which mutates the executor, so no reference to the executor may be
-/// live while a task runs. Every use goes through a new, short-lived reference from this function.
+/// live while a task runs. The pointer is returned instead of a `&mut`, so callers dereference it
+/// for one operation at a time and never keep a reference across a call to `poll`.
 ///
 /// # Safety
-/// The executor must be set, and the reference must be dead before the next call.
-unsafe fn executor() -> &'static mut Scheduler {
+/// The returned pointer is valid only while the executor is set, which is inside [`block_on_with_spawn`].
+unsafe fn executor() -> *mut Scheduler {
     let executor = &raw mut GLOBAL_EXECUTOR;
-    unsafe { (*executor).as_mut().unwrap() }
+    unsafe {
+        (*executor)
+            .as_mut()
+            .expect("the global executor is set only within `block_on_with_spawn`")
+            as *mut Scheduler
+    }
 }
 
 /// Runs the tasks of the global executor with the given scheduling plan until all of them complete
 fn run(mut scheduling_plan: impl SchedulingStrategy) {
     let waker = unsafe { Waker::from_raw(NOOP_RAW_WAKER) };
     let cx = &mut Context::from_waker(&waker);
-    while unsafe { executor() }.num_running > 0 {
-        let (index, assumption) = scheduling_plan.pick_task(unsafe { executor() }.tasks.len());
+    // The executor's address is fixed, so this pointer stays valid while tasks run and spawn.
+    let exec = unsafe { executor() };
+    while unsafe { (*exec).num_running } > 0 {
+        let (index, assumption) = scheduling_plan.pick_task(unsafe { (*exec).tasks.len() });
         // Take the task out of the list while it runs: tasks it spawns may reallocate the list.
-        if let Some(mut fut) = unsafe { executor() }.tasks[index].take() {
+        if let Some(mut fut) = unsafe { (*exec).tasks[index].take() } {
             match fut.as_mut().poll(cx) {
-                std::task::Poll::Ready(()) => unsafe { executor() }.num_running -= 1,
-                std::task::Poll::Pending => unsafe { executor() }.tasks[index] = Some(fut),
+                std::task::Poll::Ready(()) => unsafe { (*exec).num_running -= 1 },
+                std::task::Poll::Pending => unsafe { (*exec).tasks[index] = Some(fut) },
             }
         } else if let SchedulingAssumption::CanAssumeRunning = assumption {
             crate::assume(false); // useful so that we can assume that a nondeterministically picked task is still running
@@ -167,7 +175,7 @@ impl Future for JoinHandle {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> std::task::Poll<Self::Output> {
         // A task is out of the list only while it runs, and a task does not await itself.
-        if unsafe { executor() }.tasks[self.index].is_some() {
+        if unsafe { (*executor()).tasks[self.index].is_some() } {
             std::task::Poll::Pending
         } else {
             cx.waker().wake_by_ref(); // For completeness. But Kani currently ignores wakers.
@@ -204,7 +212,7 @@ pub fn block_on_with_spawn<F: Future<Output = ()> + Sync + 'static>(
     unsafe {
         assert!(GLOBAL_EXECUTOR.is_none(), "`block_on_with_spawn` should not be nested");
         GLOBAL_EXECUTOR = Some(Scheduler::new());
-        executor().spawn(fut);
+        (*executor()).spawn(fut);
         run(scheduling_plan);
         GLOBAL_EXECUTOR = None;
     }
