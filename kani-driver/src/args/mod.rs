@@ -178,6 +178,10 @@ pub enum StandaloneSubcommand {
     /// Execute concrete playback testcases of a local crate.
     Playback(Box<playback_args::KaniPlaybackArgs>),
     /// Verify the rust standard library.
+    ///
+    /// The build of the standard library is reused while its inputs (the library sources, the Kani
+    /// compiler and its libraries, the arguments and `RUSTFLAGS`) are unchanged. Delete the
+    /// `kani_verify_std` folder in the target directory to force a rebuild.
     VerifyStd(Box<std_args::VerifyStdArgs>),
 }
 
