@@ -10,5 +10,6 @@ mod current_fn;
 mod goto_ctx;
 mod vtable_ctx;
 
+pub use current_fn::LoopDecreases;
 pub use goto_ctx::{GotocCtx, MinimalGotocCtx};
 pub use vtable_ctx::VtableCtx;

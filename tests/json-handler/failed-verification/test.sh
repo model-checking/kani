@@ -2,7 +2,7 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
-# Test JSON export with failed verification - validates error capture
+# Check that JSON export records a failed verification.
 
 set -eu
 
@@ -17,7 +17,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 # Run Kani with JSON export (expect failure, so don't use -e)
 set +e
-kani -Z unstable-options test.rs --export-json "$OUTPUT_FILE"
+kani -Z export-json test.rs --export-json "$OUTPUT_FILE"
 EXIT_CODE=$?
 set -e
 
@@ -37,7 +37,6 @@ fi
 
 echo "JSON file created despite failure"
 
-# Validate that JSON contains failure information
 python3 << 'EOF'
 import json
 import sys
@@ -45,65 +44,43 @@ import sys
 with open('failed_output.json', 'r') as f:
     data = json.load(f)
 
-# Check verification_results shows failure
-vr = data['verification_results']
-summary = vr['summary']
-
-if summary['successful'] != 0:
-    print(f"ERROR: Expected 0 successful, got {summary['successful']}")
+if data['summary']['successful'] != 0:
+    print(f"ERROR: Expected 0 successful, got {data['summary']['successful']}")
     sys.exit(1)
 
-if summary['failed'] != 1:
-    print(f"ERROR: Expected 1 failed, got {summary['failed']}")
+if data['summary']['failed'] != 1:
+    print(f"ERROR: Expected 1 failed, got {data['summary']['failed']}")
     sys.exit(1)
 
 print("Summary shows correct failure count")
 
-# Check that results array contains failure status
-results = vr['results']
-if len(results) != 1:
-    print(f"ERROR: Expected 1 result, got {len(results)}")
+harnesses = data['harnesses']
+if len(harnesses) != 1:
+    print(f"ERROR: Expected 1 harness, got {len(harnesses)}")
     sys.exit(1)
 
-if results[0]['status'] != 'Failure':
-    print(f"ERROR: Expected status 'Failure', got {results[0]['status']}")
+harness = harnesses[0]
+if harness['outcome'].get('verdict') != 'FAILURE':
+    print(f"ERROR: Expected outcome.verdict 'FAILURE', got {harness['outcome'].get('verdict')}")
     sys.exit(1)
 
-print("Result status is 'Failure'")
+print("harnesses[0].outcome.verdict is 'FAILURE'")
 
-# Check that error_details exists and has_errors is true
-if 'error_details' not in data:
-    print("ERROR: error_details field missing")
+if harness['n_failed'] < 1:
+    print(f"ERROR: n_failed should be >= 1, got {harness['n_failed']}")
     sys.exit(1)
 
-# error_details is an array with one entry per harness, each identified by harness_id
-error_details = data['error_details']
-if not isinstance(error_details, list):
-    print(f"ERROR: error_details should be a list, got {type(error_details).__name__}")
+if harness['failure_kind'] == 'NONE':
+    print("ERROR: failure_kind should not be NONE on a failing harness")
     sys.exit(1)
 
-if len(error_details) != 1:
-    print(f"ERROR: Expected 1 error_details entry, got {len(error_details)}")
+print(f"failure_kind field present and non-NONE: {harness['failure_kind']}")
+
+if not harness['failed_properties']:
+    print("ERROR: failed_properties should list at least one property")
     sys.exit(1)
 
-entry = error_details[0]
-
-if 'harness_id' not in entry:
-    print("ERROR: harness_id field missing")
-    sys.exit(1)
-
-if not entry.get('has_errors'):
-    print("ERROR: has_errors should be true")
-    sys.exit(1)
-
-print("error_details.has_errors is true")
-
-# Verify error_type is present
-if 'error_type' not in entry:
-    print("ERROR: error_type field missing")
-    sys.exit(1)
-
-print("error_type field present")
+print("failed_properties is non-empty")
 
 EOF
 

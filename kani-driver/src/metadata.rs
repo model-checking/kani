@@ -108,16 +108,8 @@ impl KaniSession {
             assert_eq!(compiler_filtered_harnesses, filtered_harnesses);
         }
 
-        // If any of the `--harness` filters failed to find a harness (and thus the # of harnesses is less than the # of filters), report that to the user.
-        if self.args.exact && (compiler_filtered_harnesses.len() < self.args.harnesses.len()) {
-            let harness_found_names: BTreeSet<&String> =
-                compiler_filtered_harnesses.iter().map(|&h| &h.pretty_name).collect();
-
-            // Check which harnesses are missing from the difference of targets and all_harnesses
-            let harnesses_missing: Vec<String> =
-                harness_filters.difference(&harness_found_names).map(|&s| s.clone()).collect();
-
-            return Err(no_harness_match_error(&harnesses_missing));
+        if self.args.exact {
+            check_exact_filters_matched(&harness_filters, &compiler_filtered_harnesses)?;
         }
 
         // A `--harness` filter that matches nothing must fail here, before codegen and export.
@@ -127,6 +119,22 @@ impl KaniSession {
 
         Ok(compiler_filtered_harnesses)
     }
+}
+
+/// Checked per filter, not by comparing total counts: a filter matching in more than one crate
+/// can otherwise mask a sibling filter that matched nothing.
+fn check_exact_filters_matched(
+    harness_filters: &BTreeSet<&String>,
+    compiler_filtered_harnesses: &[&HarnessMetadata],
+) -> Result<()> {
+    let harness_found_names: BTreeSet<&String> =
+        compiler_filtered_harnesses.iter().map(|&h| &h.pretty_name).collect();
+    let harnesses_missing: Vec<String> =
+        harness_filters.difference(&harness_found_names).map(|&s| s.clone()).collect();
+    if !harnesses_missing.is_empty() {
+        return Err(no_harness_match_error(&harnesses_missing));
+    }
+    Ok(())
 }
 
 /// The error for a harness filter that failed to match. Every zero-match site reports
@@ -268,5 +276,29 @@ pub mod tests {
             .mangled_name,
             "module::not_check_three"
         );
+    }
+
+    #[test]
+    fn check_exact_filters_matched_rejects_filter_unmatched_across_crates() {
+        let common_crate_a = mock_proof_harness("common", None, Some("crate_a"), None);
+        let common_crate_b = mock_proof_harness("common", None, Some("crate_b"), None);
+        let harnesses = [&common_crate_a, &common_crate_b];
+        let common = "common".to_string();
+        let typo = "typo".to_string();
+        let filters = BTreeSet::from([&common, &typo]);
+
+        let err = check_exact_filters_matched(&filters, &harnesses).unwrap_err();
+        assert!(err.to_string().contains("typo"));
+    }
+
+    #[test]
+    fn check_exact_filters_matched_accepts_every_filter_matched() {
+        let common_crate_a = mock_proof_harness("common", None, Some("crate_a"), None);
+        let common_crate_b = mock_proof_harness("common", None, Some("crate_b"), None);
+        let harnesses = [&common_crate_a, &common_crate_b];
+        let common = "common".to_string();
+        let filters = BTreeSet::from([&common]);
+
+        assert!(check_exact_filters_matched(&filters, &harnesses).is_ok());
     }
 }

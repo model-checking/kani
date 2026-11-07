@@ -1,1 +1,5 @@
+simple_while_loop_decreases_harness.loop_decreases.1\
+	 - Status: SUCCESS\
+	 - Description: "Check variant decreases after step for loop simple_while_loop_decreases_harness.0"
+
 VERIFICATION:- SUCCESSFUL

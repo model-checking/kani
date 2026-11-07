@@ -5,9 +5,9 @@ use super::typ::FN_RETURN_VOID_VAR_NAME;
 use super::typ::TypeExt;
 use super::{PropertyClass, bb_label};
 use crate::codegen_cprover_gotoc::codegen::function::rustc_public_bridge::region_from_coverage_opaque;
+use crate::codegen_cprover_gotoc::context::LoopDecreases;
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
-use cbmc::goto_program::ExprValue;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
 use rustc_abi::Size;
 use rustc_abi::{FieldsShape, Primitive, TagEncoding, Variants};
@@ -17,7 +17,7 @@ use rustc_public::CrateDef;
 use rustc_public::abi::{ArgAbi, FnAbi, PassMode};
 use rustc_public::mir::mono::{Instance, InstanceKind};
 use rustc_public::mir::{
-    AssertMessage, BasicBlockIdx, CopyNonOverlapping, NonDivergingIntrinsic, Operand, Place,
+    AssertMessage, BasicBlockIdx, CopyNonOverlapping, Local, NonDivergingIntrinsic, Operand, Place,
     ProjectionElem, RETURN_LOCAL, Rvalue, Statement, StatementKind, SwitchTargets, Terminator,
     TerminatorKind,
 };
@@ -70,20 +70,18 @@ impl GotocCtx<'_, '_> {
         .call(vec![effective_ptr, size])
     }
 
+    /// The assigns targets of a loop modifies clause, given the right-hand side of its binding:
+    /// a tuple of pointers to the targets (see `loop_modifies_binding` in `kani_macros`), or a
+    /// reference to a local of zero size for an empty clause.
     pub fn rvalue_to_assign_targets(&mut self, rvalue: &Rvalue, location: Location) -> Vec<Expr> {
-        let assigns = self.codegen_rvalue_stable(rvalue, location);
-        let assigns_value = assigns.value().clone();
-        let assign_exprs = if let ExprValue::Struct { values } = assigns_value {
-            values.clone()
-        } else {
-            vec![assigns.clone()]
-        };
         match rvalue {
-            Rvalue::Aggregate(_agg_kind, operands) => {
-                let mut ptr_exprs = Vec::new();
-                for (operand, expr) in operands.iter().zip(assign_exprs.iter()) {
+            // Generate each operand on its own, rather than the tuple: the fields of the
+            // generated tuple are in the order of its layout, which can differ from the order of
+            // the operands.
+            Rvalue::Aggregate(_agg_kind, operands) => operands
+                .iter()
+                .filter_map(|operand| {
                     let operand_ty = self.operand_ty_stable(operand);
-                    debug!("Ty {:?}", operand_ty);
                     // Do not emit an assigns target for a pointer to a ZST. Havocking a
                     // zero-sized location is a no-op (a ZST has a single inhabitant and
                     // occupies zero bytes), so dropping it preserves soundness, while
@@ -92,14 +90,25 @@ impl GotocCtx<'_, '_> {
                     // capture-free closure). This mirrors the function-contract handling
                     // in `codegen_modifies_target`.
                     if pointee_type_stable(operand_ty).is_some_and(|ty| self.is_zst_stable(ty)) {
-                        continue;
+                        return None;
                     }
-                    let ptr_expr = self.ty_to_assign_target(operand_ty, expr);
-                    ptr_exprs.push(ptr_expr)
+                    let expr = self.codegen_operand_stable(operand);
+                    Some(self.ty_to_assign_target(operand_ty, &expr))
+                })
+                .collect(),
+            // A single target. Like above, a pointer to a ZST is not a target, and neither is
+            // the reference to a local of zero size of an empty clause.
+            _ => {
+                let rvalue_ty = self.rvalue_ty_stable(rvalue);
+                if self.is_zst_stable(rvalue_ty)
+                    || pointee_type_stable(rvalue_ty).is_some_and(|ty| self.is_zst_stable(ty))
+                {
+                    vec![]
+                } else {
+                    let assigns = self.codegen_rvalue_stable(rvalue, location);
+                    vec![self.ty_to_assign_target(rvalue_ty, &assigns)]
                 }
-                ptr_exprs
             }
-            _ => vec![assigns.dereference()],
         }
     }
 
@@ -138,6 +147,97 @@ impl GotocCtx<'_, '_> {
         has_deref
     }
 
+    /// Whether `local` is the binding of a `#[kani::loop_decreases]` clause (see `loop_decreases`
+    /// in `kani_macros`).
+    fn is_loop_decreases_binding(&self, local: Local) -> bool {
+        self.current_fn().local_name(local).is_some_and(|name| name == "kani_loop_decreases")
+    }
+
+    /// Whether CBMC can evaluate `rvalue`, the right-hand side of the binding of a decreases
+    /// clause, before and after each iteration of the loop: it must only read user variables and
+    /// arguments, and not temporaries, whose values are computed before the loop. A constant is
+    /// not evaluated at each iteration either.
+    fn is_live_loop_decreases_measure(&self, rvalue: &Rvalue) -> bool {
+        let mut places = vec![];
+        collect_rvalue_places(rvalue, &mut places);
+        if places.is_empty() {
+            return false;
+        }
+        let arg_count = self.current_fn().arg_count();
+        places.iter().all(|place| {
+            let index_locals = place.projection.iter().filter_map(|elem| match elem {
+                ProjectionElem::Index(local) => Some(*local),
+                _ => None,
+            });
+            std::iter::once(place.local)
+                .chain(index_locals)
+                .all(|local| (1..=arg_count).contains(&local) || self.is_user_variable(&local))
+        })
+    }
+
+    /// Record `measure` as the measure of the decreases clause with binding `binding`, which is
+    /// attached to the first loop head generated after it (see `codegen_block`). If the measure
+    /// is `computed_once`, before the loop, the decreases check fails.
+    fn record_loop_decreases(
+        &mut self,
+        binding: Local,
+        measure: Expr,
+        computed_once: bool,
+        span: Span,
+    ) {
+        let decreases = LoopDecreases { binding, measure, computed_once, span };
+        let pending = self.current_fn_mut().loop_decreases_mut().pending.replace(decreases);
+        match pending {
+            Some(pending) if pending.binding == binding => {
+                // Another assignment of the same binding: report it once.
+                if computed_once && !pending.computed_once {
+                    self.report_loop_decreases_computed_once(span);
+                }
+            }
+            pending => {
+                if let Some(pending) = pending {
+                    self.report_ignored_loop_decreases(pending.span);
+                }
+                if computed_once {
+                    self.report_loop_decreases_computed_once(span);
+                }
+            }
+        }
+    }
+
+    /// Warn that the measure of the decreases clause with the binding at `span` is computed once,
+    /// before the loop, so that the decreases check fails.
+    fn report_loop_decreases_computed_once(&self, span: Span) {
+        let msg = "the measure of this `#[kani::loop_decreases]` clause is computed once, before \
+                   the loop, so the decreases check will fail even if the measure decreases";
+        self.tcx
+            .dcx()
+            .struct_span_warn(rustc_internal::internal(self.tcx, span), msg)
+            .with_note(
+                "Kani evaluates a measure at each iteration of the loop only if it reads \
+                 variables directly (e.g. `x`, `s.field` or `*p`). Other measures, such as \
+                 arithmetic with overflow checks, casts, indexing, function calls, `if` \
+                 expressions and constants, are computed before the loop.",
+            )
+            .with_note("see https://github.com/model-checking/kani/issues/4585")
+            .emit();
+    }
+
+    /// Warn that the decreases clause with the binding at `span` is ignored, since loop contracts
+    /// are not enabled.
+    fn report_loop_decreases_without_loop_contracts(&self, span: Span) {
+        let msg = "found `#[kani::loop_decreases]` without `-Z loop-contracts`. The decreases \
+                   clause will be ignored.";
+        self.tcx.dcx().span_warn(rustc_internal::internal(self.tcx, span), msg);
+    }
+
+    /// Warn that the decreases clause with the binding at `span` is not attached to a loop.
+    pub fn report_ignored_loop_decreases(&self, span: Span) {
+        let msg = "found `#[kani::loop_decreases]` that is not attached to a loop with \
+                   `#[kani::loop_invariant]`. The decreases clause will be ignored.";
+        self.tcx.dcx().span_warn(rustc_internal::internal(self.tcx, span), msg);
+    }
+
     /// Generate Goto-C for MIR [Statement]s.
     /// This does not cover all possible "statements" because MIR distinguishes between ordinary
     /// statements and [Terminator]s, which can exclusively appear at the end of a basic block.
@@ -159,30 +259,48 @@ impl GotocCtx<'_, '_> {
             StatementKind::Assign(lhs, rhs) => {
                 let lty = self.place_ty_stable(lhs);
                 let rty = self.rvalue_ty_stable(rhs);
-                let localname = self.codegen_var_name(&lhs.local);
-                if localname.contains("kani_loop_modifies") {
+                let instance = self.current_fn().instance_stable();
+                if lhs.projection.is_empty()
+                    && let Some(register_fn) =
+                        self.transformer.loop_of_modifies_binding(instance, lhs.local)
+                {
+                    // The binding of the loop modifies clause of the loop that the loop contract
+                    // pass determined (see `LoopContractPass::find_loop_modifies_bindings`).
+                    // Record the clause for that loop, even if no target is left (e.g. an empty
+                    // clause, or only targets of zero size).
                     let assigns = self.rvalue_to_assign_targets(rhs, location);
-                    self.current_loop_modifies = assigns.clone();
+                    self.loop_modifies.insert((instance, register_fn), assigns);
                     return Stmt::skip(location);
                 }
-                if localname.contains("kani_loop_decreases") {
+                if self.is_loop_decreases_binding(lhs.local) {
                     if !self
                         .queries
                         .args()
                         .unstable_features
                         .contains(&"loop-contracts".to_string())
                     {
-                        let msg = "found `#[kani::loop_decreases]` without \
-                                   `-Z loop-contracts`. The decreases clause \
-                                   will be ignored.";
-                        let internal_span =
-                            rustc_internal::internal(self.tcx, stmt.source_info.span);
-                        self.tcx.dcx().span_warn(internal_span, msg);
+                        self.report_loop_decreases_without_loop_contracts(stmt.source_info.span);
                         return Stmt::skip(location);
                     }
-                    let decreases_expr = self.codegen_rvalue_stable(rhs, location);
-                    self.current_loop_decreases = Some(decreases_expr);
-                    return Stmt::skip(location);
+                    let pending_binding =
+                        self.current_fn().loop_decreases().pending.as_ref().map(|d| d.binding);
+                    if pending_binding != Some(lhs.local)
+                        && self.is_live_loop_decreases_measure(rhs)
+                    {
+                        // CBMC evaluates the right-hand side of the binding before and after each
+                        // iteration of the loop.
+                        let measure = self.codegen_rvalue_stable(rhs, location);
+                        let span = stmt.source_info.span;
+                        self.record_loop_decreases(lhs.local, measure, false, span);
+                        return Stmt::skip(location);
+                    }
+                    // The right-hand side is a constant or reads values computed before the loop
+                    // (e.g. a temporary holding the result of checked arithmetic), or the binding
+                    // is assigned more than once (e.g. the measure is an `if` expression). Use the
+                    // value of the binding as the measure instead, and assign it below. Since that
+                    // value does not change in the loop, the decreases check fails.
+                    let measure = self.codegen_local(lhs.local, location);
+                    self.record_loop_decreases(lhs.local, measure, true, stmt.source_info.span);
                 }
                 // we ignore assignment for all zero size types
                 if self.is_zst_stable(lty) {
@@ -398,6 +516,21 @@ impl GotocCtx<'_, '_> {
                 self.codegen_drop(place, target, loc)
             }
             TerminatorKind::Call { func, args, destination, target, .. } => {
+                if self.is_loop_decreases_binding(destination.local) {
+                    let span = term.source_info.span;
+                    if self.queries.args().unstable_features.contains(&"loop-contracts".to_string())
+                    {
+                        // The measure of a decreases clause is the result of a call, which is
+                        // only computed before the loop. Use the value of the binding as the
+                        // measure. Since that value does not change in the loop, the decreases
+                        // check fails.
+                        let measure =
+                            self.codegen_local(destination.local, self.codegen_span_stable(span));
+                        self.record_loop_decreases(destination.local, measure, true, span);
+                    } else {
+                        self.report_loop_decreases_without_loop_contracts(span);
+                    }
+                }
                 self.codegen_funcall(func, args, destination, target, term.source_info.span)
             }
             TerminatorKind::Assert { cond, expected, msg, target, .. } => {
