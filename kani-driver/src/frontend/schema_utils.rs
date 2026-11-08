@@ -20,7 +20,7 @@ use serde::Serialize;
 use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::io::{BufWriter, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tempfile::Builder as TempFileBuilder;
 use time::OffsetDateTime;
@@ -44,27 +44,34 @@ pub(crate) struct RunContext {
     started_at: OffsetDateTime,
 }
 
+/// An `--export-json` run whose INCOMPLETE marker is written. Only `begin_export_json` makes one,
+/// and `write_export_json` needs one, so a terminal write without a marker cannot be expressed.
+pub(crate) struct PendingExport {
+    path: PathBuf,
+    ctx: RunContext,
+}
+
 impl KaniSession {
-    /// Writes the `--export-json` marker and returns its context; no-op if unset.
+    /// Writes the `--export-json` marker; `None` if `--export-json` is unset.
     pub(crate) fn begin_export_json(
         &self,
         matched_harnesses: &[&HarnessMetadata],
         started_at: OffsetDateTime,
-    ) -> Result<Option<RunContext>> {
+    ) -> Result<Option<PendingExport>> {
         let Some(path) = &self.args.export_json else { return Ok(None) };
         let ctx = self.build_run_context(matched_harnesses, started_at);
         write_json_atomically(path, &IncompleteRun::from(&ctx))?;
-        Ok(Some(ctx))
+        Ok(Some(PendingExport { path: path.clone(), ctx }))
     }
 
-    /// Writes the terminal `--export-json` document; no-op if unset.
-    pub fn write_export_json(
+    /// Replaces the marker of `pending` with the terminal `--export-json` document.
+    pub(crate) fn write_export_json(
         &self,
         results: &[HarnessResult<'_>],
-        ctx: Option<RunContext>,
+        pending: PendingExport,
         wall_time: Duration,
     ) -> Result<()> {
-        let (Some(path), Some(ctx)) = (&self.args.export_json, ctx) else { return Ok(()) };
+        let PendingExport { path, ctx } = pending;
         let export = ExportedRun::from_harness_results(
             results,
             |harness| {
@@ -77,7 +84,7 @@ impl KaniSession {
             ctx,
             wall_time,
         );
-        write_json_atomically(path, &export)
+        write_json_atomically(&path, &export)
     }
 
     fn build_run_context(

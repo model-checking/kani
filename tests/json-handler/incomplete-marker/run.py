@@ -53,17 +53,42 @@ def wait_for_marker(process, ready, output):
     raise AssertionError("timed out waiting for fake CBMC and the INCOMPLETE marker")
 
 
-def start_kani(command, environment, root, groups):
-    process = subprocess.Popen(
-        command,
-        cwd=root,
-        env=environment,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
+def start_kani(command, environment, root, groups, logs):
+    log = root / f"kani-run-{len(logs)}.log"
+    with log.open("wb") as sink:
+        process = subprocess.Popen(
+            command,
+            cwd=root,
+            env=environment,
+            stdout=sink,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
     groups.append(process.pid)
+    logs.append(log)
     return process
+
+
+def run_to_completion(command, root, environment=None, timeout=None):
+    try:
+        return subprocess.run(
+            command,
+            cwd=root,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as error:
+        output = [stream.decode(errors="replace") if isinstance(stream, bytes) else stream
+                  for stream in (error.stdout, error.stderr) if stream]
+        raise AssertionError(f"Kani timed out after {timeout} s:\n{''.join(output)}") from error
+
+
+def print_logs(logs):
+    for log in logs:
+        print(f"--- output of {log.name} ---", file=sys.stderr)
+        print(log.read_text(encoding="utf-8", errors="replace"), file=sys.stderr)
 
 
 def wait_for_next_utc_second():
@@ -83,6 +108,7 @@ def main():
     suite_dir = pathlib.Path(sys.argv[3]).resolve()
     with tempfile.TemporaryDirectory(prefix="kani-incomplete-marker-") as temporary:
         groups = []
+        logs = []
         root = pathlib.Path(temporary)
         output = root / "export.json"
         ready = root / "ready.json"
@@ -102,10 +128,11 @@ def main():
             str(output),
             "--quiet",
         ]
-        seeded = subprocess.run(base_command, cwd=root, capture_output=True, text=True)
-        assert seeded.returncode == 0, seeded.stderr
+        seeded = run_to_completion(base_command, root)
+        seeded_output = seeded.stdout + seeded.stderr
+        assert seeded.returncode == 0, seeded_output
         seeded_export = load_json(output)
-        assert seeded_export["run_state"] == "COMPLETE"
+        assert seeded_export["run_state"] == "COMPLETE", seeded_output
         wait_for_next_utc_second()
 
         environment = os.environ.copy()
@@ -123,7 +150,7 @@ def main():
             # A killed driver leaves the INCOMPLETE marker bytes in place.
             remove(ready)
             remove(release)
-            process = start_kani(base_command, environment, root, groups)
+            process = start_kani(base_command, environment, root, groups, logs)
             record, marker = wait_for_marker(process, ready, output)
             assert record["ppid"] == process.pid, (record, process.pid)
             marker_bytes = output.read_bytes()
@@ -139,7 +166,7 @@ def main():
             # Releasing CBMC replaces the marker with a terminal document from the same context.
             remove(ready)
             remove(release)
-            process = start_kani(base_command, environment, root, groups)
+            process = start_kani(base_command, environment, root, groups, logs)
             record, marker = wait_for_marker(process, ready, output)
             assert record["ppid"] == process.pid, (record, process.pid)
             wait_for_next_utc_second()
@@ -163,14 +190,7 @@ def main():
             bad_parent = regular_file / "child" / "export.json"
             command = [*base_command]
             command[command.index(str(output))] = str(bad_parent)
-            result = subprocess.run(
-                command,
-                cwd=root,
-                env=environment,
-                capture_output=True,
-                text=True,
-                timeout=POLL_TIMEOUT_S,
-            )
+            result = run_to_completion(command, root, environment, POLL_TIMEOUT_S)
             diagnostic = result.stdout + result.stderr
             assert result.returncode != 0, diagnostic
             assert "Failed to create --export-json output directory" in diagnostic, diagnostic
@@ -181,14 +201,7 @@ def main():
             remove(release)
             seeded_bytes = output.read_bytes()
             command = [*base_command, "--harness", "does-not-exist"]
-            result = subprocess.run(
-                command,
-                cwd=root,
-                env=environment,
-                capture_output=True,
-                text=True,
-                timeout=POLL_TIMEOUT_S,
-            )
+            result = run_to_completion(command, root, environment, POLL_TIMEOUT_S)
             diagnostic = result.stdout + result.stderr
             expected = (
                 "Failed to match the following harness(es):\n"
@@ -199,6 +212,9 @@ def main():
             assert expected in diagnostic, diagnostic
             assert output.read_bytes() == seeded_bytes
             assert not ready.exists()
+        except BaseException:
+            print_logs(logs)
+            raise
         finally:
             for pid in groups:
                 cleanup_group(pid)
