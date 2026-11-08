@@ -792,11 +792,17 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                     // we compute the overall offset of the end of the current struct
                     offset = fld_offset + layout.size;
                 }
-                final_fields.extend(self.codegen_alignment_padding(
-                    offset,
-                    align,
-                    final_fields.len(),
-                ));
+                // A slice or `str` tail is a flexible array. It has to stay the last component
+                // of the struct, and its size is only known at run time, so the struct gets no
+                // trailing padding after it. `size_and_align_of_dst` rounds the dynamic size up
+                // to the alignment instead.
+                if !final_fields.last().is_some_and(|fld| fld.typ().is_flexible_array()) {
+                    final_fields.extend(self.codegen_alignment_padding(
+                        offset,
+                        align,
+                        final_fields.len(),
+                    ));
+                }
                 final_fields
             }
             // Primitives, such as NEVER, have no fields
@@ -1007,8 +1013,8 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     /// There are three kinds of fat pointers:
     /// 1. references to slices (`matches!(pointee_type.kind(), ty::Slice(..) | ty::Str)`).
     /// 2. references to trait objects (`matches!(pointee_type.kind(), ty::Dynamic)`).
-    /// 3. references to structs whose last field is a unsized object (slice / trait)
-    ///    - `matches!(pointee_type.kind(), ty::Adt(..) if self.is_unsized(t))
+    /// 3. references to structs and tuples whose last field is a unsized object (slice / trait)
+    ///    - `matches!(pointee_type.kind(), ty::Adt(..) | ty::Tuple(..) if self.is_unsized(t))
     ///
     fn codegen_fat_ptr(&mut self, pointee_type: Ty<'tcx>) -> Type {
         assert!(
@@ -1020,7 +1026,9 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             let pointer_name = match pointee_type.kind() {
                 ty::Slice(..) => self.ty_mangled_name(pointee_type),
                 ty::Str => "refstr".intern(),
-                ty::Adt(..) => format!("&{}", self.ty_mangled_name(pointee_type)).intern(),
+                ty::Adt(..) | ty::Tuple(..) => {
+                    format!("&{}", self.ty_mangled_name(pointee_type)).intern()
+                }
                 kind => unreachable!("Generating a slice fat pointer to {:?}", kind),
             };
             let pretty_name = format!("&{}", self.ty_pretty_name(pointee_type));
@@ -1028,7 +1036,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                 ty::Slice(elt_type) => self.codegen_ty(*elt_type),
                 ty::Str => Type::unsigned_int(8),
                 // For adt, see https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp
-                ty::Adt(..) => self.codegen_ty(pointee_type),
+                ty::Adt(..) | ty::Tuple(..) => self.codegen_ty(pointee_type),
                 kind => unreachable!("Generating a slice fat pointer to {:?}", kind),
             };
             self.ensure_struct(pointer_name, pretty_name, |_, _| {
