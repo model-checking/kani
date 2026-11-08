@@ -539,12 +539,11 @@ impl GotocCtx<'_, '_> {
             ProjectionElem::ConstantIndex { offset, min_length, from_end } => {
                 self.codegen_constant_index(before, *offset, *min_length, *from_end)
             }
-            // Best effort to codegen subslice projection.
-            // Full support to be added in
-            // https://github.com/model-checking/kani/issues/707
             ProjectionElem::Subslice { from, to, from_end } => {
                 // https://rust-lang.github.io/rfcs/2359-subslice-pattern-syntax.html
                 match before.mir_typ().kind() {
+                    // Sub-array binding is not supported yet; full support to be added in
+                    // https://github.com/model-checking/kani/issues/707
                     TyKind::RigidTy(RigidTy::Array(ty, len)) => {
                         let len = len.eval_target_usize().unwrap();
                         let subarray_len = if *from_end {
@@ -582,10 +581,13 @@ impl GotocCtx<'_, '_> {
                         let index = Expr::int_constant(*from, Type::ssize_t());
                         let from_elem = before.goto_expr.index(index);
                         let data = from_elem.address_of();
-                        let fat_ptr = slice_fat_ptr(goto_type, data, len, &self.symbol_table);
+                        let fat_ptr =
+                            slice_fat_ptr(goto_type, data.clone(), len, &self.symbol_table);
+                        // As after a `Deref` of a slice fat pointer, the place is the slice itself
+                        // (its data pointer), since runtime MIR can project further into it.
                         ProjectedPlace::try_new(
-                            fat_ptr.clone(),
-                            TypeOrVariant::Type(ptr_typ),
+                            data,
+                            TypeOrVariant::Type(typ),
                             Some(fat_ptr),
                             Some(ptr_typ),
                             self,
