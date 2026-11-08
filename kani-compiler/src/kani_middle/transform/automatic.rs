@@ -1221,6 +1221,50 @@ fn build_any_array_storage_ref(
     (storage_lcl, storage_ref_lcl)
 }
 
+/// Like `build_any_array_storage_ref`, but generate the whole `[elem_ty; len]` storage with a
+/// single `kani::any()` call instead of one call per element, and return a `&mut` to it.
+///
+/// The searcher models overwrite their needle storage with a fresh nondeterministic value
+/// themselves (`*needle_storage = kani::any()`), so the harness only needs to provide initialized
+/// storage of the right type. Generating it in one call keeps the harness body the same size
+/// whatever `len` is: `len` comes from the argument type (the `N` of
+/// `CharArrayRefSearcher<'_, '_, N>`), so a per-element expansion would grow the MIR linearly
+/// with a user-written `N`.
+#[allow(clippy::too_many_arguments)]
+fn build_any_whole_array_storage_ref(
+    tcx: TyCtxt,
+    models: AnyModels,
+    body: &mut MutableBody,
+    elem_ty: Ty,
+    len: u64,
+    region: Region,
+    source: &mut SourceInstruction,
+    invariant_cache: &mut FxHashMap<Ty, bool>,
+    mined_cache: &mut FxHashMap<Ty, Vec<MinedConjunct>>,
+) -> Local {
+    let storage_ty = Ty::try_new_array(elem_ty, len).unwrap();
+    let storage_lcl = call_kani_any_for_ty(
+        tcx,
+        models,
+        body,
+        storage_ty,
+        Mutability::Mut,
+        source,
+        invariant_cache,
+        mined_cache,
+    );
+    let storage_ref_ty = Ty::new_ref(region.clone(), storage_ty, Mutability::Mut);
+    let storage_ref_lcl =
+        body.new_local(storage_ref_ty, source.span(body.blocks()), Mutability::Not);
+    body.assign_to(
+        Place::from(storage_ref_lcl),
+        Rvalue::Ref(region, BorrowKind::Mut { kind: MutBorrowKind::Default }, storage_lcl.into()),
+        source,
+        InsertPosition::Before,
+    );
+    storage_ref_lcl
+}
+
 #[allow(clippy::too_many_arguments)]
 fn call_kani_any_for_ty(
     tcx: TyCtxt,
@@ -1606,7 +1650,9 @@ fn call_kani_any_for_ty(
                 // `CharArrayRefSearcher<'a, 'b, const N: usize>`: two lifetimes (haystack, then
                 // needle) and one const generic (the needle char count). Unlike
                 // `CharArraySearcher`, the needle is borrowed, so the caller (here, the harness
-                // body) owns its storage too.
+                // body) owns its storage too. That storage is generated with a single
+                // `kani::any()` call (`build_any_whole_array_storage_ref`), so a large `N` does
+                // not grow the harness body.
                 let [
                     GenericArgKind::Lifetime(haystack_region),
                     GenericArgKind::Lifetime(needle_region),
@@ -1630,7 +1676,7 @@ fn call_kani_any_for_ty(
                     invariant_cache,
                     mined_cache,
                 );
-                let (_, needle_ref_lcl) = build_any_array_storage_ref(
+                let needle_ref_lcl = build_any_whole_array_storage_ref(
                     tcx,
                     models,
                     body,
@@ -1692,7 +1738,7 @@ fn call_kani_any_for_ty(
                     invariant_cache,
                     mined_cache,
                 );
-                let (_, needle_ref_lcl) = build_any_array_storage_ref(
+                let needle_ref_lcl = build_any_whole_array_storage_ref(
                     tcx,
                     models,
                     body,

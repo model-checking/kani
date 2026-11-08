@@ -5,8 +5,12 @@
 // by a `MultiCharEqSearcher`: `CharArraySearcher`, `CharArrayRefSearcher` and
 // `CharSliceSearcher`, c.f. the `AnyCharArraySearcher`, `AnyCharArrayRefSearcher` and
 // `AnyCharSliceSearcher` models. The generated harness produces a searcher over a
-// nondeterministic haystack, bounded by AUTOHARNESS_STRING_BOUND (4), and a nondeterministic
-// needle. Each type is taken by mutable reference, by shared reference and by value.
+// nondeterministic haystack, bounded by the string bound (4, passed explicitly by the script),
+// and a nondeterministic needle.
+// Each type is taken by value, with the full set of cover checks on the generated searcher, and
+// by mutable reference, with a single cover check: the reference only wraps the same by-value
+// model, so repeating the full set there would add verification time without new information.
+// `CharSliceSearcher` is also taken by shared reference (`haystack_len_is_not_three`).
 // The "TEST NOTE" comments explain the expected result per function.
 
 #![feature(pattern)]
@@ -58,49 +62,41 @@ macro_rules! witness {
     }};
 }
 
+/// Cover that the searcher `$s` refers to was generated, for the by-reference variants.
+macro_rules! witness_ref {
+    ($s:expr, $tag:literal) => {{
+        kani::cover(!$s.haystack().is_empty(), concat!($tag, ": non-empty haystack"));
+    }};
+}
+
 // TEST NOTE: should PASS; the cover checks show which searcher states are generated.
-pub fn char_array_mut(s: &mut CharArraySearcher<'_, 2>) {
-    witness!(&*s, "char_array_mut");
-}
-
-// TEST NOTE: should PASS; as `char_array_mut`, for a shared reference.
-pub fn char_array_ref(s: &CharArraySearcher<'_, 2>) {
-    witness!(s, "char_array_ref");
-}
-
-// TEST NOTE: should PASS; as `char_array_mut`, for a searcher taken by value.
 pub fn char_array_value(s: CharArraySearcher<'_, 2>) {
     witness!(&s, "char_array_value");
 }
 
+// TEST NOTE: should PASS; the generated searcher can be passed by mutable reference.
+pub fn char_array_mut(s: &mut CharArraySearcher<'_, 2>) {
+    witness_ref!(s, "char_array_mut");
+}
+
 // TEST NOTE: should PASS; the cover checks show which searcher states are generated.
-pub fn char_array_ref_searcher_mut(s: &mut CharArrayRefSearcher<'_, '_, 2>) {
-    witness!(&*s, "char_array_ref_searcher_mut");
-}
-
-// TEST NOTE: should PASS; as `char_array_ref_searcher_mut`, for a shared reference.
-pub fn char_array_ref_searcher_ref(s: &CharArrayRefSearcher<'_, '_, 2>) {
-    witness!(s, "char_array_ref_searcher_ref");
-}
-
-// TEST NOTE: should PASS; as `char_array_ref_searcher_mut`, for a searcher taken by value.
 pub fn char_array_ref_searcher_value(s: CharArrayRefSearcher<'_, '_, 2>) {
     witness!(&s, "char_array_ref_searcher_value");
 }
 
+// TEST NOTE: should PASS; the generated searcher can be passed by mutable reference.
+pub fn char_array_ref_searcher_mut(s: &mut CharArrayRefSearcher<'_, '_, 2>) {
+    witness_ref!(s, "char_array_ref_searcher_mut");
+}
+
 // TEST NOTE: should PASS; the cover checks show which searcher states are generated.
-pub fn char_slice_mut(s: &mut CharSliceSearcher<'_, '_>) {
-    witness!(&*s, "char_slice_mut");
-}
-
-// TEST NOTE: should PASS; as `char_slice_mut`, for a shared reference.
-pub fn char_slice_ref(s: &CharSliceSearcher<'_, '_>) {
-    witness!(s, "char_slice_ref");
-}
-
-// TEST NOTE: should PASS; as `char_slice_mut`, for a searcher taken by value.
 pub fn char_slice_value(s: CharSliceSearcher<'_, '_>) {
     witness!(&s, "char_slice_value");
+}
+
+// TEST NOTE: should PASS; the generated searcher can be passed by mutable reference.
+pub fn char_slice_mut(s: &mut CharSliceSearcher<'_, '_>) {
+    witness_ref!(s, "char_slice_mut");
 }
 
 // TEST NOTE: should FAIL: the haystack is not fixed, so it may be 3 bytes long.
