@@ -382,6 +382,10 @@ fn unique_ref_def(body: &Body, p: &Place) -> Option<Place> {
 
 /// Field path from the caller's self to the getter receiver. Only the leading dereference
 /// of `&self` can be elided; dereferencing a field would require a different expression AST.
+///
+/// A field whose type is a reference, raw pointer or `Box` ends the path at a pointer: the
+/// getter's fields live behind it, not in the caller's struct. Such paths are rejected here
+/// instead of relying on how rustc happens to lower the call today.
 fn getter_receiver_path(receiver: &Place) -> Option<Vec<(usize, Ty)>> {
     use rustc_public::mir::ProjectionElem;
     if receiver.local != 1 {
@@ -391,7 +395,13 @@ fn getter_receiver_path(receiver: &Place) -> Option<Vec<(usize, Ty)>> {
     for (index, elem) in receiver.projection.iter().enumerate() {
         match elem {
             ProjectionElem::Deref if index == 0 => {}
-            ProjectionElem::Field(field, ty) => path.push((*field, *ty)),
+            ProjectionElem::Field(field, ty) => {
+                let kind = ty.kind();
+                if kind.is_box() || kind.is_raw_ptr() || kind.is_ref() {
+                    return None;
+                }
+                path.push((*field, *ty));
+            }
             _ => return None,
         }
     }
