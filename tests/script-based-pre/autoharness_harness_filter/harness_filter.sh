@@ -24,7 +24,7 @@ if grep -q "panicked" <<< "${OUT}"; then
 fi
 # The filter selects one of the two manual harnesses.
 if ! grep -q "Manual Harness Summary:" <<< "${OUT}" ||
-    ! grep -q "Complete - 1 successfully verified harnesses, 0 failures, 1 total." <<< "${OUT}"; then
+    ! grep -Fq "Complete - 1 successfully verified harnesses, 0 failures, 1 total." <<< "${OUT}"; then
     echo "FAIL: expected exactly one verified manual harness, got:"
     echo "${OUT}"
     exit 1
@@ -41,8 +41,27 @@ if grep -Fq "Checking harness manual_other..." <<< "${OUT}"; then
     exit 1
 fi
 # The automatic harness for `add` is still verified.
-if ! grep -q "Complete - 1 successfully verified functions, 0 failures, 1 total." <<< "${OUT}"; then
+if ! grep -Fq "Complete - 1 successfully verified functions, 0 failures, 1 total." <<< "${OUT}"; then
     echo "FAIL: expected one verified automatic harness, got:"
+    echo "${OUT}"
+    exit 1
+fi
+
+# A filter that matches no harness must not panic either: the run fails with the usual error.
+OUT=$(kani autoharness -Z autoharness fixture.rs --harness nomatch 2>&1)
+CODE=$?
+if [[ ${CODE} -eq 0 ]]; then
+    echo "FAIL: expected a non-zero exit code for --harness nomatch, got:"
+    echo "${OUT}"
+    exit 1
+fi
+if grep -q "panicked" <<< "${OUT}"; then
+    echo "FAIL: the driver panicked for --harness nomatch:"
+    echo "${OUT}"
+    exit 1
+fi
+if ! grep -Fq "Failed to match the following harness(es):" <<< "${OUT}"; then
+    echo "FAIL: expected the no-match error for --harness nomatch, got:"
     echo "${OUT}"
     exit 1
 fi
