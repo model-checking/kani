@@ -12,8 +12,8 @@ use quote::ToTokens;
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::{CRATE_DEF_INDEX, DefId, LOCAL_CRATE, LocalDefId, LocalModId};
 use rustc_hir::{ItemKind, UseKind, UseTree};
-use rustc_middle::ty::TyCtxt;
 use rustc_middle::ty::fast_reject::{self, TreatParams};
+use rustc_middle::ty::{GenericParamDefKind, TyCtxt};
 use rustc_public::CrateDef;
 use rustc_public::mir::mono::Instance;
 use rustc_public::rustc_internal;
@@ -492,6 +492,34 @@ fn resolve_in_trait_impl<'tcx>(
             }
         }
     }
+    // Fill trait defaults before appending the method's own generic arguments.
+    let mut supplied = args.into_iter().map(|arg| rustc_internal::internal(tcx, arg));
+    let mut trait_args = Vec::new();
+    for param in &tcx.generics_of(tcx.parent(trait_fn_id)).own_params {
+        let arg = match param.kind {
+            GenericParamDefKind::Lifetime => tcx.lifetimes.re_erased.into(),
+            GenericParamDefKind::Type { .. } => supplied
+                .next()
+                .or_else(|| {
+                    param.default_value(tcx).map(|default| {
+                        default.instantiate(tcx, &trait_args[..]).skip_normalization()
+                    })
+                })
+                .ok_or(ResolveError::MissingTraitImpl { tcx, trait_fn_id, ty })?,
+            GenericParamDefKind::Const { .. } => {
+                return Err(ResolveError::UnsupportedPath {
+                    kind: "const generic arguments in trait stubs",
+                });
+            }
+        };
+        trait_args.push(arg);
+    }
+    if supplied.next().is_some() {
+        return Err(ResolveError::MissingTraitImpl { tcx, trait_fn_id, ty });
+    }
+    let mut args: Vec<_> =
+        trait_args.into_iter().map(|arg| rustc_internal::stable(arg.kind())).collect();
+
     // Include the method's own generic parameters when selecting its implementation.
     let generics = tcx.generics_of(trait_fn_id);
     let identity_ty = rustc_internal::stable(tcx.type_of(trait_fn_id)).value;

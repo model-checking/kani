@@ -114,3 +114,58 @@ fn early_bound_method_lifetime() {
 fn late_bound_method_lifetime() {
     assert!(Target.late(&1, 2u64));
 }
+
+trait DefaultMethod<'a, T = u8, R = T> {
+    fn defaults<U: Copy>(&self, value: &'a T, other: R, extra: U) -> bool;
+}
+impl<'a> DefaultMethod<'a> for Target {
+    fn defaults<U: Copy>(&self, _: &'a u8, _: u8, _: U) -> bool {
+        false
+    }
+}
+impl<'a> DefaultMethod<'a, u16> for Target {
+    fn defaults<U: Copy>(&self, _: &'a u16, _: u16, _: U) -> bool {
+        false
+    }
+}
+impl<'a> DefaultMethod<'a> for Untouched {
+    fn defaults<U: Copy>(&self, _: &'a u8, _: u8, _: U) -> bool {
+        false
+    }
+}
+fn replace_default<'a: 'a, U: Copy>(_: &Target, _: &'a u8, _: u8, _: U) -> bool {
+    true
+}
+fn replace_default_u16<'a: 'a, U: Copy>(_: &Target, _: &'a u16, _: u16, _: U) -> bool {
+    true
+}
+
+#[kani::proof]
+#[kani::stub(Target::defaults, replace_default)]
+fn unqualified_trait_defaults() {
+    assert!(Target.defaults(&1u8, 2u8, 3u64));
+    assert!(Target.defaults(&1u8, 2u8, 3u8));
+    assert!(!Target.defaults(&1u16, 2u16, 3u8));
+    assert!(!Untouched.defaults(&1u8, 2u8, 3u8));
+}
+
+#[kani::proof]
+#[kani::stub(<Target as DefaultMethod>::defaults, replace_default)]
+fn qualified_trait_defaults() {
+    assert!(Target.defaults(&1u8, 2u8, 3u64));
+}
+
+#[kani::proof]
+#[kani::stub(<Target as DefaultMethod<'static, u16>>::defaults, replace_default_u16)]
+fn partial_trait_defaults() {
+    static INPUT: u16 = 1;
+    assert!(Target.defaults(&INPUT, 2u16, 3u8));
+    assert!(!Target.defaults(&1u8, 2u8, 3u64));
+}
+
+#[kani::proof]
+#[kani::should_panic]
+#[kani::stub(<Target as DefaultMethod>::defaults, replace_default)]
+fn trait_defaults_negative() {
+    assert!(!Target.defaults(&1u8, 2u8, 3u64));
+}
