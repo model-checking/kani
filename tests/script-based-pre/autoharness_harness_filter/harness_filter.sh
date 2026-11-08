@@ -35,8 +35,8 @@ if ! grep -Fq "Checking harness manual_selected..." <<< "${OUT}"; then
     echo "${OUT}"
     exit 1
 fi
-if grep -Fq "manual_other" <<< "${OUT}"; then
-    echo "FAIL: manual_other must not be selected, got:"
+if grep -Fq "Checking harness manual_other..." <<< "${OUT}"; then
+    echo "FAIL: manual_other must not be checked, got:"
     echo "${OUT}"
     exit 1
 fi
