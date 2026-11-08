@@ -18,6 +18,10 @@ use rustc_public::rustc_internal;
 use rustc_public::ty::{RigidTy, Ty, TyKind, VariantDef, VariantIdx};
 use tracing::{debug, trace, warn};
 
+/// Tracking issue for downcasts into variants of uninhabited enums.
+const UNINHABITED_ENUM_DOWNCAST_ISSUE_URL: &str =
+    "https://github.com/model-checking/kani/issues/3596";
+
 /// A projection in Kani can either be to a type (the normal case),
 /// or a variant in the case of a downcast.
 #[derive(Copy, Clone, Debug)]
@@ -619,7 +623,18 @@ impl GotocCtx<'_, '_> {
                 };
                 let layout = self.layout_of(rustc_internal::internal(self.tcx, ty));
                 let expr = match &layout.variants {
-                    Variants::Empty | Variants::Single { .. } => before.goto_expr,
+                    // `Variants::Empty` is the layout rustc gives to some uninhabited types,
+                    // e.g. `enum E { A(!) }`. Its goto struct has no fields, so a following
+                    // field projection has nothing to project into.
+                    Variants::Empty => {
+                        return Err(Box::new(UnimplementedData::new(
+                            "Downcast into a variant of an uninhabited enum",
+                            UNINHABITED_ENUM_DOWNCAST_ISSUE_URL,
+                            self.codegen_ty_stable(ty),
+                            *before.goto_expr.location(),
+                        )));
+                    }
+                    Variants::Single { .. } => before.goto_expr,
                     Variants::Multiple { tag_encoding, .. } => match tag_encoding {
                         TagEncoding::Direct => {
                             let cases = if ty_kind.is_coroutine() {
