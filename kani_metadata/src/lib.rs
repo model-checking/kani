@@ -48,6 +48,10 @@ pub const AUTOHARNESS_STR_BOUND: u64 = 4;
 /// makes simple `String` harnesses exceed Kani's default 60s harness timeout.
 pub const AUTOHARNESS_BOUNDED_ARBITRARY_BOUND: u64 = 4;
 
+/// The start of the description of the cover that automatic harnesses place before the call to
+/// the function under test. kani-driver reports a harness whose cover no input reaches as vacuous.
+pub const AUTOHARNESS_VACUITY_COVER_PREFIX: &str = "autoharness: a generated input reaches ";
+
 /// The structure of `.kani-metadata.json` files, which are emitted for each crate
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KaniMetadata {
