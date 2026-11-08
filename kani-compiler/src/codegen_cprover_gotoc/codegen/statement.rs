@@ -1111,20 +1111,16 @@ impl GotocCtx<'_, '_> {
         if let Some(call_principal) = call_principal {
             // Combine all mismatching vtables into a single assertion to avoid bloating
             // the goto program with one assertion per generated vtable.
-            let mut check: Option<Expr> = None;
-            for (principal, vtable_global, vtable_type) in self.vtable_ctx.vtables().to_vec() {
-                if principal.as_ref() != Some(&call_principal) {
-                    let wrong_vtable = Expr::symbol_expression(vtable_global, vtable_type)
+            let mut mismatches = Vec::new();
+            for vtable in self.vtable_ctx.vtables() {
+                if vtable.principal.as_ref() != Some(&call_principal) {
+                    let wrong_vtable = Expr::symbol_expression(vtable.symbol, vtable.typ.clone())
                         .address_of()
                         .cast_to(vtable_ref.typ().clone());
-                    let neq = vtable_ref.clone().neq(wrong_vtable);
-                    check = Some(match check {
-                        Some(prev) => prev.and(neq),
-                        None => neq,
-                    });
+                    mismatches.push(vtable_ref.clone().neq(wrong_vtable));
                 }
             }
-            if let Some(check) = check {
+            if let Some(check) = and_all(mismatches) {
                 let msg =
                     "invalid vtable metadata: points to a vtable generated for a different trait";
                 ret_stmts.push(self.codegen_assert(check, PropertyClass::SafetyCheck, msg, loc));
@@ -1200,6 +1196,29 @@ impl GotocCtx<'_, '_> {
             .assign(expr, loc)
         }
     }
+}
+
+/// Combine `exprs` with logical and using a balanced tree.
+///
+/// Folding from the left produces a deeply nested expression when there are
+/// many terms (e.g. one per generated vtable), which can overflow the stack
+/// while the expression is traversed or dropped.
+fn and_all(mut exprs: Vec<Expr>) -> Option<Expr> {
+    if exprs.is_empty() {
+        return None;
+    }
+    while exprs.len() > 1 {
+        let mut next = Vec::with_capacity(exprs.len() / 2 + 1);
+        let mut iter = exprs.into_iter();
+        while let Some(lhs) = iter.next() {
+            match iter.next() {
+                Some(rhs) => next.push(lhs.and(rhs)),
+                None => next.push(lhs),
+            }
+        }
+        exprs = next;
+    }
+    exprs.pop()
 }
 
 /// Collect all places appearing in `rvalue` (directly or inside operands).

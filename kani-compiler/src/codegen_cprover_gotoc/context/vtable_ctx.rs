@@ -20,9 +20,20 @@ use crate::codegen_cprover_gotoc::codegen::typ::pointee_type;
 use cbmc::InternedString;
 use cbmc::goto_program::{Stmt, Type};
 use kani_metadata::{CallSite, PossibleMethodEntry, TraitDefinedMethod, VtableCtxResults};
-use rustc_data_structures::fx::FxHashMap;
+use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_public::ty::{Binder, ExistentialTraitRef};
 use tracing::debug;
+
+/// A vtable global generated during codegen, together with the principal trait
+/// it was generated for.
+pub struct GeneratedVtable {
+    /// The principal trait of the vtable, if any.
+    pub principal: Option<Binder<ExistentialTraitRef>>,
+    /// The global symbol name of the vtable.
+    pub symbol: InternedString,
+    /// The type of the vtable global.
+    pub typ: Type,
+}
 
 /// This structure represents data about the vtable that we construct
 /// Per trait, per method, which functions could virtual call sites
@@ -40,9 +51,12 @@ pub struct VtableCtx {
     // Internal tracing of index needed for call site wrappers
     call_site_global_idx: usize,
 
-    // All vtable globals generated so far: (principal trait, global symbol name, global type).
+    // All vtable globals generated so far, in deterministic generation order.
     // Used to detect wide pointer metadata that points to a vtable of a different trait.
-    vtables: Vec<(Option<Binder<ExistentialTraitRef>>, InternedString, Type)>,
+    vtables: Vec<GeneratedVtable>,
+
+    // Symbols of the vtables recorded in `vtables`, for deduplication.
+    vtable_symbols: FxHashSet<InternedString>,
 }
 
 /// Constructor
@@ -55,6 +69,7 @@ impl VtableCtx {
             call_sites: Vec::new(),
             call_site_global_idx: 0,
             vtables: Vec::new(),
+            vtable_symbols: FxHashSet::default(),
         }
     }
 }
@@ -90,13 +105,17 @@ impl VtableCtx {
         vtable_global: InternedString,
         vtable_type: Type,
     ) {
-        if !self.vtables.iter().any(|(_, global, _)| *global == vtable_global) {
-            self.vtables.push((principal, vtable_global, vtable_type));
+        if self.vtable_symbols.insert(vtable_global) {
+            self.vtables.push(GeneratedVtable {
+                principal,
+                symbol: vtable_global,
+                typ: vtable_type,
+            });
         }
     }
 
     /// All vtable globals generated so far.
-    pub fn vtables(&self) -> &[(Option<Binder<ExistentialTraitRef>>, InternedString, Type)] {
+    pub fn vtables(&self) -> &[GeneratedVtable] {
         &self.vtables
     }
 }
