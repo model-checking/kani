@@ -136,9 +136,7 @@ impl Scheduler {
 unsafe fn executor() -> *mut Scheduler {
     let executor = &raw mut GLOBAL_EXECUTOR;
     unsafe {
-        (*executor)
-            .as_mut()
-            .expect("the global executor is set only within `block_on_with_spawn`")
+        (*executor).as_mut().expect("the global executor is set only within `block_on_with_spawn`")
             as *mut Scheduler
     }
 }
@@ -152,10 +150,10 @@ fn run(mut scheduling_plan: impl SchedulingStrategy) {
     while unsafe { (*exec).num_running } > 0 {
         let (index, assumption) = scheduling_plan.pick_task(unsafe { (*exec).tasks.len() });
         // Take the task out of the list while it runs: tasks it spawns may reallocate the list.
-        if let Some(mut fut) = unsafe { (*exec).tasks[index].take() } {
+        if let Some(mut fut) = unsafe { (&mut (*exec).tasks)[index].take() } {
             match fut.as_mut().poll(cx) {
                 std::task::Poll::Ready(()) => unsafe { (*exec).num_running -= 1 },
-                std::task::Poll::Pending => unsafe { (*exec).tasks[index] = Some(fut) },
+                std::task::Poll::Pending => unsafe { (&mut (*exec).tasks)[index] = Some(fut) },
             }
         } else if let SchedulingAssumption::CanAssumeRunning = assumption {
             crate::assume(false); // useful so that we can assume that a nondeterministically picked task is still running
@@ -175,7 +173,7 @@ impl Future for JoinHandle {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> std::task::Poll<Self::Output> {
         // A task is out of the list only while it runs, and a task does not await itself.
-        if unsafe { (*executor()).tasks[self.index].is_some() } {
+        if unsafe { (&(*executor()).tasks)[self.index].is_some() } {
             std::task::Poll::Pending
         } else {
             cx.waker().wake_by_ref(); // For completeness. But Kani currently ignores wakers.
