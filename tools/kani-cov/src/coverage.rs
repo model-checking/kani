@@ -201,10 +201,9 @@ pub fn function_coverage_results(
     let filename = file.to_str()?;
     // Files without instrumented regions (e.g., source files of dependencies)
     // appear in "kanimap" files but not in the aggregated results.
-    let right_filename = results.data.keys().find(|p| filename.ends_with(*p))?;
     // TODO: The filenames in kaniraw files should be absolute, just like in metadata.
     // Otherwise the key for `results` just fails... <https://github.com/model-checking/kani/issues/3542>
-    let file_results = results.data.get(right_filename).unwrap();
+    let (_, file_results) = results.data.iter().find(|(p, _)| filename.ends_with(p.as_str()))?;
     let function = &info.name;
     let fun_results = file_results.iter().find(|(f, _)| *f == *function);
     fun_results.cloned()
