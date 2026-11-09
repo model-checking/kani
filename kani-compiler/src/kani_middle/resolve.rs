@@ -185,6 +185,8 @@ pub enum ResolveError<'tcx> {
     AmbiguousPartialPath { tcx: TyCtxt<'tcx>, name: String, base: DefId, candidates: Vec<DefId> },
     /// Use super past the root of a crate.
     ExtraSuper,
+    /// Generic arguments do not match the declaration.
+    InvalidGenericArguments { reason: String },
     /// Invalid path.
     InvalidPath { msg: String },
     /// Unable to find an item.
@@ -197,6 +199,8 @@ pub enum ResolveError<'tcx> {
     UnexpectedType { tcx: TyCtxt<'tcx>, item: DefId, expected: &'static str },
     /// Error triggered when the identifier is not currently supported.
     UnsupportedPath { kind: &'static str },
+    /// Trait-level const generic arguments are not supported.
+    UnsupportedTraitConstGenerics,
 }
 
 impl fmt::Debug for ResolveError<'_> {
@@ -235,6 +239,9 @@ impl fmt::Display for ResolveError<'_> {
                         .collect::<String>()
                 )
             }
+            ResolveError::InvalidGenericArguments { reason } => {
+                write!(f, "invalid generic arguments: {reason}")
+            }
             ResolveError::InvalidPath { msg } => write!(f, "{msg}"),
             ResolveError::UnexpectedType { tcx, item: def_id, expected } => write!(
                 f,
@@ -255,6 +262,9 @@ impl fmt::Display for ResolveError<'_> {
             }
             ResolveError::UnsupportedPath { kind } => {
                 write!(f, "Kani currently cannot resolve {kind}")
+            }
+            ResolveError::UnsupportedTraitConstGenerics => {
+                write!(f, "Kani currently cannot resolve trait-level const generic arguments")
             }
         }
     }
@@ -477,9 +487,7 @@ fn resolve_in_trait_impl<'tcx>(
                     args.push(GenericArgKind::Type(resolved_ty));
                 }
                 syn::GenericArgument::Const(_) => {
-                    return Err(ResolveError::UnsupportedPath {
-                        kind: "const generic arguments in trait stubs",
-                    });
+                    return Err(ResolveError::UnsupportedTraitConstGenerics);
                 }
                 syn::GenericArgument::Lifetime(_) => {
                     // Erased lifetime slots are restored from the declaration below.
@@ -505,17 +513,19 @@ fn resolve_in_trait_impl<'tcx>(
                         default.instantiate(tcx, &trait_args[..]).skip_normalization()
                     })
                 })
-                .ok_or(ResolveError::MissingTraitImpl { tcx, trait_fn_id, ty })?,
+                .ok_or_else(|| ResolveError::InvalidGenericArguments {
+                    reason: format!("missing required trait type argument `{}`", param.name),
+                })?,
             GenericParamDefKind::Const { .. } => {
-                return Err(ResolveError::UnsupportedPath {
-                    kind: "const generic arguments in trait stubs",
-                });
+                return Err(ResolveError::UnsupportedTraitConstGenerics);
             }
         };
         trait_args.push(arg);
     }
     if supplied.next().is_some() {
-        return Err(ResolveError::MissingTraitImpl { tcx, trait_fn_id, ty });
+        return Err(ResolveError::InvalidGenericArguments {
+            reason: "too many trait type arguments".to_string(),
+        });
     }
     let mut args: Vec<_> =
         trait_args.into_iter().map(|arg| rustc_internal::stable(arg.kind())).collect();
@@ -528,7 +538,9 @@ fn resolve_in_trait_impl<'tcx>(
     };
     args.extend(identity_args.0.iter().skip(generics.parent_count).cloned());
     let desired_generic_args = ctor_args_with_lifetimes(tcx, trait_fn_id, &GenericArgs(args))
-        .ok_or(ResolveError::MissingTraitImpl { tcx, trait_fn_id, ty })?;
+        .ok_or_else(|| ResolveError::InvalidGenericArguments {
+            reason: "arguments do not match the method's generic parameter layout".to_string(),
+        })?;
     let exists = Instance::resolve(trait_fn_fn_def, &desired_generic_args);
 
     // If such an Instance exists, return *its* FnDef (i.e., the FnDef inside the impl block for this `ty`)
