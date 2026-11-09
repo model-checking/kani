@@ -1,0 +1,4 @@
+Failed Checks: Downcast into a variant of an uninhabited enum is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/3596
+| uninhabited_enum_downcast | ok_fn             | #[kani::proof]            | Success             |
+| uninhabited_enum_downcast | trigger           | #[kani::proof]            | Failure             |
+Complete - 1 successfully verified functions, 1 failures, 2 total.
