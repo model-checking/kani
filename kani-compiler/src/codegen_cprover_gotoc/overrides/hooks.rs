@@ -25,7 +25,7 @@ use rustc_public::rustc_internal;
 use rustc_public::ty::ClosureKind;
 use rustc_public::ty::RigidTy;
 use rustc_public::{CrateDef, ty::Span};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use tracing::debug;
 
@@ -1136,6 +1136,8 @@ fn handle_quantifier(
     let new_variable_expr = {
         let new_symbol =
             GotoSymbol::variable(unique_name.clone(), unique_name, lower_bound.typ().clone(), loc);
+        gcx.quantifier_spans
+            .insert(new_symbol.name, rustc_internal::internal(gcx.tcx, span).source_callsite());
         gcx.symbol_table.insert(new_symbol.clone());
         new_symbol.to_expr()
     };
@@ -1146,35 +1148,30 @@ fn handle_quantifier(
     // Falls back to a closure function call (resolved by the handle_quantifiers
     // post-pass) when the predicate contains StatementExpression nodes that
     // substitute_symbol cannot recurse into.
-    let predicate_expr = match build_quantifier_predicate(
-        gcx,
-        &instance,
-        &fargs[2],
-        &new_variable_expr,
-        span,
-    ) {
-        Some(expr) => expr,
-        None => {
-            // CBMC #9189 can misinterpret existential statement-expression predicates.
-            if !gcx.queries.args().ub_check.is_empty()
-                && matches!(quantifier_kind, QuantifierKind::Exists)
-            {
-                utils::span_err(gcx.tcx, span,
-                        "existential quantifier predicates requiring fallback are not supported with extra UB checks".into());
-                gcx.tcx.dcx().abort_if_errors();
+    let predicate_expr =
+        match build_quantifier_predicate(gcx, &instance, &fargs[2], &new_variable_expr, span) {
+            Some(expr) => expr,
+            None => {
+                // CBMC #9189 can misinterpret existential statement-expression predicates.
+                if !gcx.queries.args().ub_check.is_empty()
+                    && matches!(quantifier_kind, QuantifierKind::Exists)
+                {
+                    utils::span_err(gcx.tcx, span, QUANTIFIER_EXISTS_FALLBACK_ERROR.into());
+                    gcx.tcx.dcx().abort_if_errors();
+                    unreachable!("rustc should have aborted after the quantifier fallback error");
+                }
+                // Fallback: emit a closure function call for the post-pass to inline.
+                let closure_call_expr = find_closure_call_expr(&instance, gcx, loc)
+                    .unwrap_or_else(|| unreachable!("Failed to find closure call expression"));
+                let predicate = if fargs[2].is_symbol() {
+                    Expr::address_of(fargs[2].clone())
+                } else {
+                    let predicate_ty = fargs[2].typ().clone().to_pointer();
+                    Expr::nondet(predicate_ty)
+                };
+                closure_call_expr.call(vec![predicate, new_variable_expr.clone()])
             }
-            // Fallback: emit a closure function call for the post-pass to inline.
-            let closure_call_expr = find_closure_call_expr(&instance, gcx, loc)
-                .unwrap_or_else(|| unreachable!("Failed to find closure call expression"));
-            let predicate = if fargs[2].is_symbol() {
-                Expr::address_of(fargs[2].clone())
-            } else {
-                let predicate_ty = fargs[2].typ().clone().to_pointer();
-                Expr::nondet(predicate_ty)
-            };
-            closure_call_expr.call(vec![predicate, new_variable_expr.clone()])
-        }
-    };
+        };
 
     let lower_bound_comparison = lower_bound.clone().le(new_variable_expr.clone());
     let upper_bound_comparison = new_variable_expr.clone().lt(upper_bound.clone());
@@ -1250,6 +1247,23 @@ fn build_quantifier_predicate(
         })
         .unwrap_or_else(|| unreachable!("Failed to codegen closure for quantifier"));
 
+    // Do not newly admit nested predicates by discarding checks, even without extra UB flags.
+    let may_discard_checks = scan_quantifier_statement(&closure_body, QuantifierScan::MayDiscard);
+    if may_discard_checks && let ExprValue::Symbol { identifier } = quantified_var.value() {
+        gcx.checked_quantifiers.insert(*identifier);
+    }
+    if scan_quantifier_statement(
+        &closure_body,
+        QuantifierScan::Nested {
+            checked_variables: &gcx.checked_quantifiers,
+            parent_has_checks: may_discard_checks,
+        },
+    ) {
+        utils::span_err(gcx.tcx, span, QUANTIFIER_NESTED_CHECK_ERROR.into());
+        gcx.tcx.dcx().abort_if_errors();
+        unreachable!("rustc should have aborted after the nested quantifier check error");
+    }
+
     // Extra UB checks are statements; extracting only the return expression would discard them.
     if !gcx.queries.args().ub_check.is_empty() && has_quantifier_safety_check(&closure_body) {
         utils::span_err(gcx.tcx, span, QUANTIFIER_SAFETY_CHECK_ERROR.into());
@@ -1257,7 +1271,9 @@ fn build_quantifier_predicate(
     }
 
     // Preserve calls even if their result is unused, so the post-pass can check their bodies.
-    if !gcx.queries.args().ub_check.is_empty() && scan_quantifier_statement(&closure_body, true) {
+    if !gcx.queries.args().ub_check.is_empty()
+        && scan_quantifier_statement(&closure_body, QuantifierScan::CallsOrSafety)
+    {
         return None;
     }
 
@@ -1312,31 +1328,52 @@ fn build_quantifier_predicate(
     if result.is_side_effect() { None } else { Some(result) }
 }
 
+const QUANTIFIER_NESTED_CHECK_ERROR: &str =
+    "nested quantifier predicates containing checks or function calls are not supported";
+
+const QUANTIFIER_EXISTS_FALLBACK_ERROR: &str =
+    "existential quantifier predicates requiring fallback are not supported with extra UB checks";
+
 pub(crate) const QUANTIFIER_SAFETY_CHECK_ERROR: &str = "quantifier predicates containing safety checks are not supported with -Z valid-value-checks or -Z uninit-checks";
 
 // Walk local syntax, including statements embedded in expressions. Callee bodies are
 // checked separately when the quantifier post-pass inlines them.
 pub(crate) fn has_quantifier_safety_check(stmt: &Stmt) -> bool {
-    scan_quantifier_statement(stmt, false)
+    scan_quantifier_statement(stmt, QuantifierScan::Safety)
 }
 
-fn scan_quantifier_statement(stmt: &Stmt, include_calls: bool) -> bool {
-    let has_stmt = |stmt: &Stmt| scan_quantifier_statement(stmt, include_calls);
-    let has_expr = |expr: &Expr| scan_quantifier_expr(expr, include_calls);
+#[derive(Clone, Copy)]
+enum QuantifierScan<'a> {
+    Safety,
+    CallsOrSafety,
+    MayDiscard,
+    Nested { checked_variables: &'a HashSet<InternedString>, parent_has_checks: bool },
+}
+
+fn scan_quantifier_statement(stmt: &Stmt, scan: QuantifierScan<'_>) -> bool {
+    let has_stmt = |stmt: &Stmt| scan_quantifier_statement(stmt, scan);
+    let has_expr = |expr: &Expr| scan_quantifier_expr(expr, scan);
     match stmt.body() {
         StmtBody::Assert { cond, property_class, .. } => {
-            [
-                PropertyClass::SafetyCheck,
-                PropertyClass::ArithmeticOverflow,
-                PropertyClass::ExactDiv,
-                PropertyClass::FiniteCheck,
-            ]
-            .into_iter()
-            .any(|class| *property_class == class.as_str())
-                || has_expr(cond)
+            let matches_class = match scan {
+                QuantifierScan::Nested { .. } => false,
+                QuantifierScan::MayDiscard => {
+                    *property_class != PropertyClass::ReachabilityCheck.as_str()
+                        && *property_class != PropertyClass::CodeCoverage.as_str()
+                }
+                QuantifierScan::Safety | QuantifierScan::CallsOrSafety => [
+                    PropertyClass::SafetyCheck,
+                    PropertyClass::ArithmeticOverflow,
+                    PropertyClass::ExactDiv,
+                    PropertyClass::FiniteCheck,
+                ]
+                .into_iter()
+                .any(|class| *property_class == class.as_str()),
+            };
+            matches_class || has_expr(cond)
         }
         StmtBody::Assign { lhs, rhs } => has_expr(lhs) || has_expr(rhs),
-        StmtBody::Assume { cond } => has_expr(cond),
+        StmtBody::Assume { cond } => matches!(scan, QuantifierScan::MayDiscard) || has_expr(cond),
         StmtBody::Block(stmts) | StmtBody::AtomicBlock(stmts) => stmts.iter().any(has_stmt),
         StmtBody::Dead(expr) | StmtBody::Expression(expr) => has_expr(expr),
         StmtBody::Decl { lhs, value } => has_expr(lhs) || value.as_ref().is_some_and(has_expr),
@@ -1349,7 +1386,7 @@ fn scan_quantifier_statement(stmt: &Stmt, include_calls: bool) -> bool {
             has_expr(cond) || [init, update, body].into_iter().any(has_stmt)
         }
         StmtBody::FunctionCall { lhs, function, arguments } => {
-            include_calls
+            matches!(scan, QuantifierScan::CallsOrSafety | QuantifierScan::MayDiscard)
                 || lhs.as_ref().is_some_and(has_expr)
                 || has_expr(function)
                 || arguments.iter().any(has_expr)
@@ -1369,12 +1406,12 @@ fn scan_quantifier_statement(stmt: &Stmt, include_calls: bool) -> bool {
     }
 }
 
-fn scan_quantifier_expr(expr: &Expr, include_calls: bool) -> bool {
+fn scan_quantifier_expr(expr: &Expr, scan: QuantifierScan<'_>) -> bool {
     use ExprValue::*;
-    let has_expr = |expr: &Expr| scan_quantifier_expr(expr, include_calls);
+    let has_expr = |expr: &Expr| scan_quantifier_expr(expr, scan);
     match expr.value() {
         StatementExpression { statements, .. } => {
-            statements.iter().any(|stmt| scan_quantifier_statement(stmt, include_calls))
+            statements.iter().any(|stmt| scan_quantifier_statement(stmt, scan))
         }
         AddressOf(e)
         | ArrayOf { elem: e }
@@ -1389,12 +1426,23 @@ fn scan_quantifier_expr(expr: &Expr, include_calls: bool) -> bool {
         Assign { left: lhs, right: rhs }
         | BinOp { lhs, rhs, .. }
         | Index { array: lhs, index: rhs }
-        | ReadOk { ptr: lhs, size: rhs }
-        | Forall { variable: lhs, domain: rhs }
-        | Exists { variable: lhs, domain: rhs } => has_expr(lhs) || has_expr(rhs),
+        | ReadOk { ptr: lhs, size: rhs } => has_expr(lhs) || has_expr(rhs),
+        Forall { variable, domain } | Exists { variable, domain } => {
+            let nested_check =
+                if let QuantifierScan::Nested { checked_variables, parent_has_checks } = scan {
+                    parent_has_checks
+                        || matches!(variable.value(), Symbol { identifier }
+                        if checked_variables.contains(identifier))
+                } else {
+                    false
+                };
+            nested_check || has_expr(variable) || has_expr(domain)
+        }
         If { c, t, e } => has_expr(c) || has_expr(t) || has_expr(e),
         FunctionCall { function, arguments } => {
-            include_calls || has_expr(function) || arguments.iter().any(has_expr)
+            matches!(scan, QuantifierScan::CallsOrSafety | QuantifierScan::MayDiscard)
+                || has_expr(function)
+                || arguments.iter().any(has_expr)
         }
         ShuffleVector { vector1, vector2, indexes } => {
             has_expr(vector1) || has_expr(vector2) || indexes.iter().any(has_expr)
@@ -1732,5 +1780,47 @@ mod quantifier_safety_tests {
                 &checked_expression(class).as_stmt(Location::none())
             ));
         }
+    }
+
+    #[test]
+    fn nested_quantifiers_preserve_check_dependencies() {
+        let loc = Location::none();
+        let variable = Expr::symbol_expression("nested", Type::size_t());
+        let mut checked_variables = HashSet::new();
+        for expr in [
+            Expr::forall_expr(Type::bool(), variable.clone(), Expr::bool_true()),
+            Expr::exists_expr(Type::bool(), variable, Expr::bool_true()),
+        ] {
+            for (parent_has_checks, child_has_checks) in
+                [(false, false), (true, false), (false, true)]
+            {
+                checked_variables.clear();
+                if child_has_checks {
+                    checked_variables.insert("nested".into());
+                }
+                assert_eq!(
+                    scan_quantifier_statement(
+                        &expr.clone().as_stmt(loc),
+                        QuantifierScan::Nested {
+                            checked_variables: &checked_variables,
+                            parent_has_checks,
+                        },
+                    ),
+                    parent_has_checks || child_has_checks,
+                );
+            }
+        }
+        let assertion = checked_expression(PropertyClass::Assertion).as_stmt(loc);
+        assert!(scan_quantifier_statement(&assertion, QuantifierScan::MayDiscard));
+        for class in [PropertyClass::ReachabilityCheck, PropertyClass::CodeCoverage] {
+            assert!(!scan_quantifier_statement(
+                &checked_expression(class).as_stmt(loc),
+                QuantifierScan::MayDiscard,
+            ));
+        }
+        assert!(!scan_quantifier_statement(
+            &Expr::bool_true().as_stmt(loc),
+            QuantifierScan::MayDiscard,
+        ));
     }
 }

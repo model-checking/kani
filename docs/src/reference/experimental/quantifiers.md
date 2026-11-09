@@ -41,9 +41,22 @@ With `-Z valid-value-checks` or `-Z uninit-checks`, predicates containing explic
 
 With either extra UB option, existential predicates that require statement-expression fallback are also rejected because of [CBMC #9189](https://github.com/diffblue/cbmc/issues/9189). Predicates that can be lowered directly to pure expressions are unaffected. Calls requiring quantifier inlining are rejected when no GOTO body is available, including bodyless builtins.
 
+This restriction also affects ordinary pointer predicates. For example, with either extra UB option, the following predicate is rejected even though all accesses are in bounds:
+
+```rust
+#[kani::proof]
+fn pointer_witness() {
+    let values = [1u8, 2];
+    let ptr = values.as_ptr();
+    assert!(kani::exists!(|i in (0, 2)| unsafe { *ptr.add(i) == 2 }));
+}
+```
+
+Without the extra UB options, extraction of non-nested predicates still does not guarantee preservation of default checks, including arithmetic checks and ordinary Rust assertions. The extra-UB guard also does not cover ordinary Rust assertions in non-nested predicates. A successful verification does not establish that those checks hold inside the predicate. Direct extraction conservatively rejects nested predicates when it detects checks or function calls, even without extra UB options, rather than extending this limitation to newly supported capture projections. This includes raw pointer dereferences with default null-pointer checks; capturing and comparing pointers does not require dereferencing them. Indirect calls through function pointers are also unsupported during quantifier inlining.
+
 #### Array Indexing
 
-The performance of quantifiers can be affected by the depth of call stacks in the quantified expressions. If the call stack is too deep, Kani may not be able to evaluate the quantifier effectively, leading to potential timeouts or running out of memory. Actually, array indexing in Rust leads to a deep call stack, which can cause issues with quantifiers. To mitigate this, consider using *unsafe* pointer dereferencing instead of array indexing when working with quantifiers. For example:
+The performance of quantifiers can be affected by the depth of call stacks in the quantified expressions. If the call stack is too deep, Kani may not be able to evaluate the quantifier effectively, leading to potential timeouts or running out of memory. Actually, array indexing in Rust leads to a deep call stack, which can cause issues with quantifiers. To mitigate this, consider using *unsafe* pointer dereferencing instead of array indexing when working with quantifiers. Pointer dereferencing does not bypass the [safety-check limitations for quantifier predicates](#safety-checks-in-predicates); nested pointer reads may still be rejected. For example:
 
 ```rust
 #[kani::proof]
