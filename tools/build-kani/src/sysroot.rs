@@ -6,10 +6,13 @@
 //! - `bin/`: Where all Kani binaries will be located.
 //! - `lib/`: Kani libraries as well as rust standard libraries.
 //!
+//! - `targets/<target-triplet>/lib/`: the `lib/` folder for another target, when one is
+//!   requested with `--lib-target`. Each is a sysroot of its own.
+//!
 //! Rustc expects the sysroot to have a specific folder layout:
 //! `{SYSROOT}/rustlib/<target-triplet>/lib/<libraries>`
 //!
-//! Note: We don't cross-compile. Target is the same as the host.
+//! Kani's binaries always run on the host. Only the libraries are built for another target.
 
 use crate::{AutoRun, cp};
 use anyhow::{Result, bail, format_err};
@@ -60,13 +63,37 @@ pub fn kani_no_core_lib() -> PathBuf {
     path_buf!(kani_sysroot(), "no_core/lib")
 }
 
+/// Returns the path to where Kani and std pre-compiled libraries for `target` are stored, when
+/// `target` is not the host.
+pub fn kani_target_lib(target: &str) -> PathBuf {
+    path_buf!(kani_sysroot(), "targets", target, "lib")
+}
+
+/// The targets that already have a folder under `targets/`, from an earlier
+/// `cargo build-dev --lib-target`, sorted so the build order is stable.
+pub fn existing_lib_targets() -> Result<Vec<String>> {
+    let targets = path_buf!(kani_sysroot(), "targets");
+    if !targets.is_dir() {
+        return Ok(vec![]);
+    }
+    let mut found = vec![];
+    for entry in fs::read_dir(targets)? {
+        let entry = entry?;
+        if entry.file_type()?.is_dir() {
+            found.push(entry.file_name().to_string_lossy().into_owned());
+        }
+    }
+    found.sort();
+    Ok(found)
+}
+
 /// Returns the path to where Kani's pre-compiled binaries are stored.
 fn kani_sysroot_bin() -> PathBuf {
     path_buf!(kani_sysroot(), "bin")
 }
 
-/// Returns the build target
-fn build_target() -> &'static str {
+/// Returns the host target, which Kani's own libraries are built for unless asked otherwise.
+fn host_target() -> &'static str {
     env!("TARGET")
 }
 
@@ -83,12 +110,32 @@ pub fn build_lib(bin_folder: &Path) -> Result<()> {
 /// Build the `lib/` folder for the new sysroot used during verification.
 /// This will include Kani's libraries as well as the standard libraries compiled with --emit-mir.
 fn build_verification_lib(compiler_path: &Path) -> Result<()> {
+    build_verification_lib_for(compiler_path, host_target(), &kani_sysroot_lib())
+}
+
+/// Build the verification `lib/` folder for a target other than the host, in
+/// `targets/<target>/lib/`. Only verification needs it: concrete playback runs on the host, and
+/// `verify-std` uses the host's `no_core` library.
+pub fn build_target_lib(bin_folder: &Path, target: &str) -> Result<()> {
+    if target == host_target() {
+        // The host's libraries are already in `lib/`.
+        return Ok(());
+    }
+    let compiler_path = bin_folder.join("kani-compiler");
+    build_verification_lib_for(&compiler_path, target, &kani_target_lib(target))
+}
+
+fn build_verification_lib_for(
+    compiler_path: &Path,
+    target: &str,
+    sysroot_lib: &Path,
+) -> Result<()> {
     let extra_args =
         ["-Z", "build-std=panic_abort,std,test", "--config", "profile.dev.panic=\"abort\""];
     let compiler_args = ["--kani-compiler", "-Cllvm-args=--ignore-global-asm --build-std"];
     let packages = ["std", "kani", "kani_macros"];
-    let artifacts = build_kani_lib(compiler_path, &packages, &extra_args, &compiler_args)?;
-    copy_artifacts(&artifacts, &kani_sysroot_lib(), true)
+    let artifacts = build_kani_lib(compiler_path, target, &packages, &extra_args, &compiler_args)?;
+    copy_artifacts(&artifacts, sysroot_lib, Some(target))
 }
 
 /// Build the `lib-playback/` folder that will be used during counter example playback.
@@ -97,26 +144,26 @@ fn build_playback_lib(compiler_path: &Path) -> Result<()> {
     let extra_args =
         ["--features=std/concrete_playback,kani/concrete_playback", "-Z", "build-std=std,test"];
     let packages = ["std", "kani", "kani_macros"];
-    let artifacts = build_kani_lib(compiler_path, &packages, &extra_args, &[])?;
-    copy_artifacts(&artifacts, &kani_playback_lib(), true)
+    let artifacts = build_kani_lib(compiler_path, host_target(), &packages, &extra_args, &[])?;
+    copy_artifacts(&artifacts, &kani_playback_lib(), Some(host_target()))
 }
 
 /// Build the no core library folder that will be used during std verification.
 fn build_no_core_lib(compiler_path: &Path) -> Result<()> {
     let extra_args = ["--features=kani_macros/no_core", "--features=kani_core/no_core"];
     let packages = ["kani_core", "kani_macros"];
-    let artifacts = build_kani_lib(compiler_path, &packages, &extra_args, &[])?;
-    copy_artifacts(&artifacts, &kani_no_core_lib(), false)
+    let artifacts = build_kani_lib(compiler_path, host_target(), &packages, &extra_args, &[])?;
+    copy_artifacts(&artifacts, &kani_no_core_lib(), None)
 }
 
 fn build_kani_lib(
     compiler_path: &Path,
+    target: &str,
     packages: &[&str],
     extra_cargo_args: &[&str],
     extra_rustc_args: &[&str],
 ) -> Result<Vec<Artifact>> {
     // Run cargo build with -Z build-std
-    let target = build_target();
     let target_dir = env!("KANI_BUILD_LIBS");
     let args = [
         "build",
@@ -180,7 +227,13 @@ fn build_kani_lib(
 }
 
 /// Copy all the artifacts to their correct place to generate a valid sysroot.
-fn copy_artifacts(artifacts: &[Artifact], sysroot_lib: &Path, copy_std: bool) -> Result<()> {
+/// With `std_target`, the standard libraries are also copied, into the folder rustc expects for
+/// that target.
+fn copy_artifacts(
+    artifacts: &[Artifact],
+    sysroot_lib: &Path,
+    std_target: Option<&str>,
+) -> Result<()> {
     // Create sysroot folder.
     sysroot_lib.exists().then(|| fs::remove_dir_all(sysroot_lib));
     fs::create_dir_all(sysroot_lib)?;
@@ -189,8 +242,8 @@ fn copy_artifacts(artifacts: &[Artifact], sysroot_lib: &Path, copy_std: bool) ->
     copy_libs(artifacts, sysroot_lib, &is_kani_lib);
 
     //  Copy standard libraries into rustlib/<target>/lib/ folder.
-    if copy_std {
-        let std_path = path_buf!(&sysroot_lib, "rustlib", build_target(), "lib");
+    if let Some(target) = std_target {
+        let std_path = path_buf!(&sysroot_lib, "rustlib", target, "lib");
         fs::create_dir_all(&std_path).unwrap_or_else(|_| panic!("Failed to create {std_path:?}"));
         copy_libs(artifacts, &std_path, &is_std_lib);
     }
