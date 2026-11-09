@@ -18,6 +18,10 @@ use rustc_public::rustc_internal;
 use rustc_public::ty::{RigidTy, Ty, TyKind, VariantDef, VariantIdx};
 use tracing::{debug, trace, warn};
 
+/// Tracking issue for downcasts into variants of uninhabited enums.
+const UNINHABITED_ENUM_DOWNCAST_ISSUE_URL: &str =
+    "https://github.com/model-checking/kani/issues/3596";
+
 /// A projection in Kani can either be to a type (the normal case),
 /// or a variant in the case of a downcast.
 #[derive(Copy, Clone, Debug)]
@@ -536,8 +540,8 @@ impl GotocCtx<'_, '_> {
                     self,
                 )
             }
-            ProjectionElem::ConstantIndex { offset, min_length, from_end } => {
-                self.codegen_constant_index(before, *offset, *min_length, *from_end)
+            ProjectionElem::ConstantIndex { offset, from_end, .. } => {
+                self.codegen_constant_index(before, *offset, *from_end)
             }
             ProjectionElem::Subslice { from, to, from_end } => {
                 // https://rust-lang.github.io/rfcs/2359-subslice-pattern-syntax.html
@@ -619,7 +623,18 @@ impl GotocCtx<'_, '_> {
                 };
                 let layout = self.layout_of(rustc_internal::internal(self.tcx, ty));
                 let expr = match &layout.variants {
-                    Variants::Empty | Variants::Single { .. } => before.goto_expr,
+                    // `Variants::Empty` is the layout rustc gives to some uninhabited types,
+                    // e.g. `enum E { A(!) }`. Its goto struct has no fields, so a following
+                    // field projection has nothing to project into.
+                    Variants::Empty => {
+                        return Err(Box::new(UnimplementedData::new(
+                            "Downcast into a variant of an uninhabited enum",
+                            UNINHABITED_ENUM_DOWNCAST_ISSUE_URL,
+                            self.codegen_ty_stable(ty),
+                            *before.goto_expr.location(),
+                        )));
+                    }
+                    Variants::Single { .. } => before.goto_expr,
                     Variants::Multiple { tag_encoding, .. } => match tag_encoding {
                         TagEncoding::Direct => {
                             let cases = if ty_kind.is_coroutine() {
@@ -803,15 +818,16 @@ impl GotocCtx<'_, '_> {
         &mut self,
         before: ProjectedPlace,
         offset: u64,
-        min_length: u64,
         from_end: bool,
     ) -> Result<ProjectedPlace, Box<UnimplementedData>> {
         match before.mir_typ().kind() {
             //TODO, ask on zulip if we can ever have from_end here?
             TyKind::RigidTy(RigidTy::Array(elemt, length)) => {
                 let length = length.eval_target_usize().unwrap();
-                assert!(length >= min_length);
-                let idx = if from_end { length - offset } else { offset };
+                // Like rustc's codegen, ignore `min_length`: it can exceed `length` after a bounds
+                // check that always fails, where GVN turns `a[i]` into `a[i of i+1]`. An
+                // out-of-bounds index that is reached fails CBMC's array bounds check.
+                let idx = if from_end { length.wrapping_sub(offset) } else { offset };
                 let idxe = Expr::int_constant(idx, Type::ssize_t());
                 let expr = self.codegen_idx_array(before.goto_expr, idxe);
                 let typ = TypeOrVariant::Type(elemt);
@@ -825,7 +841,6 @@ impl GotocCtx<'_, '_> {
             }
             TyKind::RigidTy(RigidTy::Slice(elemt)) => {
                 let offset_e = Expr::int_constant(offset, Type::size_t());
-                //TODO, should we assert min_length? Or is that already handled by the typechecker?
                 let idxe = if from_end {
                     let length =
                         before.fat_ptr_goto_expr.clone().unwrap().member("len", &self.symbol_table);
