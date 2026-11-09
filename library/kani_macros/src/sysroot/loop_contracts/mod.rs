@@ -1043,10 +1043,8 @@ pub fn loop_modifies(attr: TokenStream, item: TokenStream) -> TokenStream {
     let targets = proc_macro2::TokenStream::from(attr.clone());
     // Check that the targets parse.
     let _ = parse_macro_input!(attr with Punctuated::<Expr, Token![,]>::parse_terminated);
-    let LoopInput(mut loop_stmt) = match syn::parse(item.clone()) {
-        Ok(parsed) => parsed,
-        Err(error) => return error.to_compile_error().into(),
-    };
+    let original_item = item.clone();
+    let LoopInput(mut loop_stmt) = parse_macro_input!(item as LoopInput);
     match loop_attrs_mut(&mut loop_stmt) {
         Some(attrs) if attrs.iter().any(is_loop_invariant_attr) => {
             attrs.push(parse_quote!(#[kanitool::loop_modifies(#targets)]));
@@ -1059,7 +1057,7 @@ pub fn loop_modifies(attr: TokenStream, item: TokenStream) -> TokenStream {
              `#[kani::loop_invariant]`. The modifies clause will be ignored."
                 .to_string(),
         )
-        .emit_as_item_tokens_or(item.into())
+        .emit_as_item_tokens_or(original_item.into())
         .into(),
     }
 }
@@ -1104,22 +1102,7 @@ pub fn loop_decreases(attr: TokenStream, item: TokenStream) -> TokenStream {
         const fn kani_keep_loop_decreases_binding<T>(_binding: &T) {}
         kani_keep_loop_decreases_binding(&#loop_decreases_ident);
     };
-    let LoopInput(loop_stmt) = match syn::parse::<LoopInput>(item.clone()) {
-        Ok(parsed) => parsed,
-        Err(error) => return error.to_compile_error().into(),
-    };
-    // Validate that the attribute is applied to a loop statement.
-    match &loop_stmt {
-        Stmt::Expr(Expr::While(_) | Expr::Loop(_) | Expr::ForLoop(_), _) => {}
-        _ => {
-            return syn::Error::new_spanned(
-                proc_macro2::TokenStream::from(item),
-                "`#[kani::loop_decreases]` must be applied to a loop statement",
-            )
-            .to_compile_error()
-            .into();
-        }
-    }
+    let LoopInput(loop_stmt) = parse_macro_input!(item as LoopInput);
     let ret: TokenStream = quote!(
     {
         #loop_decreases_stmt

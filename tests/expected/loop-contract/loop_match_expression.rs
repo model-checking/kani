@@ -75,3 +75,20 @@ fn match_for_loop() {
     }
     assert_eq!(count, 3);
 }
+
+#[rustfmt::skip]
+#[kani::proof]
+fn match_labeled_loop() {
+    let mut count = 0u8;
+    match true {
+        true =>
+        #[kani::loop_invariant(count <= 3)]
+        #[kani::loop_modifies(&count)]
+        'outer: loop {
+            if count == 3 { break 'outer; }
+            count += 1;
+        },
+        false => (),
+    }
+    assert_eq!(count, 3);
+}
