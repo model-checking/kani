@@ -1613,7 +1613,9 @@ fn call_kani_any_for_ty(
                         "CharArraySearcher<'_, N> should have one lifetime and one const generic arg, got {args:?}"
                     );
                 };
-                let needle_len = needle_len.eval_target_usize().unwrap();
+                let needle_len = needle_len
+                    .eval_target_usize()
+                    .expect("autoharness instantiates const generics before generating harnesses");
 
                 let (_, storage_ref_lcl) = build_any_array_storage_ref(
                     tcx,
@@ -1663,7 +1665,9 @@ fn call_kani_any_for_ty(
                         "CharArrayRefSearcher<'_, '_, N> should have two lifetimes and one const generic arg, got {args:?}"
                     );
                 };
-                let needle_len = needle_len.eval_target_usize().unwrap();
+                let needle_len = needle_len
+                    .eval_target_usize()
+                    .expect("autoharness instantiates const generics before generating harnesses");
 
                 let (_, storage_ref_lcl) = build_any_array_storage_ref(
                     tcx,

@@ -334,6 +334,33 @@ macro_rules! generate_arbitrary {
             unsafe { core::wtf8::Wtf8::from_bytes_unchecked(&storage[..valid_len]) }
         }
 
+        /// Advance `searcher` a nondeterministic number of steps, up to `N`, from the front with
+        /// `next`, and then up to `N` steps from the back with `next_back`. Shared by the
+        /// `core::str::pattern` searcher models below, whose haystack is at most `N` bytes, hence
+        /// at most `N` chars, long, so these steps reach every state the public API can reach.
+        /// `N` is a const generic so that each loop keeps a constant bound.
+        fn advance_nondet<'a, S, const N: usize>(searcher: &mut S)
+        where
+            S: core_path::str::pattern::ReverseSearcher<'a>,
+        {
+            let mut i = 0;
+            while i < N {
+                if !crate::kani::any::<bool>() {
+                    break;
+                }
+                let _ = core_path::str::pattern::Searcher::next(searcher);
+                i += 1;
+            }
+            let mut j = 0;
+            while j < N {
+                if !crate::kani::any::<bool>() {
+                    break;
+                }
+                let _ = core_path::str::pattern::ReverseSearcher::next_back(searcher);
+                j += 1;
+            }
+        }
+
         /// Generate a `CharArraySearcher<'_, M>` (the associated searcher for `[char; M]` as a
         /// `Pattern`) over the haystack `any_str_ref` produces from `storage`, a nondeterministic
         /// byte array (at most `N` bytes) that the caller keeps alive for as long as the returned
@@ -358,22 +385,7 @@ macro_rules! generate_arbitrary {
             let haystack = crate::kani::any_str_ref(storage);
             let needle: [char; M] = crate::kani::any();
             let mut searcher = core_path::str::pattern::Pattern::into_searcher(needle, haystack);
-            let mut i = 0;
-            while i < N {
-                if !crate::kani::any::<bool>() {
-                    break;
-                }
-                let _ = core_path::str::pattern::Searcher::next(&mut searcher);
-                i += 1;
-            }
-            let mut j = 0;
-            while j < N {
-                if !crate::kani::any::<bool>() {
-                    break;
-                }
-                let _ = core_path::str::pattern::ReverseSearcher::next_back(&mut searcher);
-                j += 1;
-            }
+            advance_nondet::<_, N>(&mut searcher);
             searcher
         }
 
@@ -406,22 +418,7 @@ macro_rules! generate_arbitrary {
             *needle_storage = crate::kani::any();
             let mut searcher =
                 core_path::str::pattern::Pattern::into_searcher(&*needle_storage, haystack);
-            let mut i = 0;
-            while i < N {
-                if !crate::kani::any::<bool>() {
-                    break;
-                }
-                let _ = core_path::str::pattern::Searcher::next(&mut searcher);
-                i += 1;
-            }
-            let mut j = 0;
-            while j < N {
-                if !crate::kani::any::<bool>() {
-                    break;
-                }
-                let _ = core_path::str::pattern::ReverseSearcher::next_back(&mut searcher);
-                j += 1;
-            }
+            advance_nondet::<_, N>(&mut searcher);
             searcher
         }
 
@@ -455,22 +452,7 @@ macro_rules! generate_arbitrary {
             crate::kani::assume(len <= M);
             let mut searcher =
                 core_path::str::pattern::Pattern::into_searcher(&needle_storage[..len], haystack);
-            let mut i = 0;
-            while i < N {
-                if !crate::kani::any::<bool>() {
-                    break;
-                }
-                let _ = core_path::str::pattern::Searcher::next(&mut searcher);
-                i += 1;
-            }
-            let mut j = 0;
-            while j < N {
-                if !crate::kani::any::<bool>() {
-                    break;
-                }
-                let _ = core_path::str::pattern::ReverseSearcher::next_back(&mut searcher);
-                j += 1;
-            }
+            advance_nondet::<_, N>(&mut searcher);
             searcher
         }
 

@@ -446,10 +446,9 @@ needle of a `CharSliceSearcher` is a nondeterministic `&[char]` of up to the sli
 is not bounded by any option, a function that takes such a searcher with a large `N` gets a large
 nondeterministic needle, which can make verification slow, just as for a `[T; N]` argument. (For a
 generic function, `N` is instantiated with the same small value as other `usize` const generic
-parameters.) The
-`Debug::fmt` methods of these searchers are verified as ordinary functions, with both the searcher
-and the `&mut Formatter` generated as bounded arguments, rather than through the approach described
-in [Formatting Trait Implementations](#formatting-trait-implementations).
+parameters.) The `Debug::fmt` methods of these searchers are verified as ordinary functions, with
+both the searcher and the `&mut Formatter` generated as bounded arguments, rather than through the
+approach described in [Formatting Trait Implementations](#formatting-trait-implementations).
 
 Additionally (also requiring `--bounded-arguments`), for arguments whose type implements
 [`BoundedArbitrary`](../bounded_arbitrary.md)
