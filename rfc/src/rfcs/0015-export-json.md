@@ -244,7 +244,8 @@ Each write puts full JSON in a temporary file in the target directory, then atom
 the target (same-filesystem POSIX rename). A mid-write kill leaves the previous target and possibly an
 orphaned temp file, never a partially written target. After building and selecting harnesses, when
 verification begins, an atomic `INCOMPLETE` marker replaces any earlier file. It contains known
-pre-verification fields, without `outcome`, `wall_time_s`, `summary` or `harnesses[]`.
+pre-verification fields, without `outcome`, `wall_time_s`, `summary` or `harnesses[]`. The marker is also
+written for an empty, unfiltered harness selection before the terminal `NO_HARNESSES_SELECTED` document replaces it.
 First check `schema_version` (refuse unsupported major or, pre-1.0, minor), then `run_state`:
 
 - Only `COMPLETE` is complete verification evidence: every selected harness has an entry, regardless of outcome.
@@ -257,7 +258,7 @@ deletion fails closed on `ENOENT`. Concurrent writers to one path are unsupporte
 `NO_HARNESSES_SELECTED` means an unfiltered project/workspace with no selectable proof harness or eligible
 autoharness function: `requested_filters == []`, `unmatched_filters == []`, `matched_count == 0`.
 A wholly unmatched filter set, or any unmatched `--exact` filter, errors non-zero before export (#4743).
-Nonempty `unmatched_filters` occurs only without `--exact` in `COMPLETE`/`PARTIAL` when another filter matched.
+Nonempty `unmatched_filters` occurs only without `--exact` in `INCOMPLETE`/`COMPLETE`/`PARTIAL` when another filter matched.
 
 ## Rationale and alternatives
 
@@ -420,7 +421,7 @@ The narrower `INCOMPLETE` marker follows its presence matrix below.
 | `run_state` | `"INCOMPLETE"` \| `"COMPLETE"` \| `"PARTIAL"` \| `"NO_HARNESSES_SELECTED"` | — | Trust is based on this field; see Completeness under Reading the results. |
 | `target` | string | — | The Rust target triple Kani itself was built for. |
 | `started_at` | string | — | UTC, `YYYY-MM-DDTHH:MM:SSZ` (second resolution). Taken after the build, when target selection starts. |
-| `wall_time_s` | number | — | Seconds from target selection to the start of the export write: target selection, verification and coverage output. The build is not included. Volatile between runs by design (see "Interaction with other flags"). |
+| `wall_time_s` | number | — | Seconds from target selection to the start of the terminal export write: target selection, the tool version probes and the marker write, verification and coverage output. The build is not included. Volatile between runs by design (see "Interaction with other flags"). |
 | `harnesses[]` | array of harness objects | never null, may be empty (e.g. under `NO_HARNESSES_SELECTED`) | Sorted by `(crate_name, file, line, name)`. |
 | `harnesses[].name` | string | — | Fully qualified `pretty_name`; see Selection under Reading the results. |
 | `harnesses[].crate_name` | string | — | Distinguishes same-named harnesses across crates in one workspace. |
