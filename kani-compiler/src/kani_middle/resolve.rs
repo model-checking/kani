@@ -7,13 +7,13 @@
 //!
 //! Note that glob use statements can form loops. The paths can also walk through the loop.
 
-use crate::kani_middle::stable_fn_def;
+use crate::kani_middle::{ctor_args_with_lifetimes, stable_fn_def};
 use quote::ToTokens;
 use rustc_hir::def::{DefKind, Res};
 use rustc_hir::def_id::{CRATE_DEF_INDEX, DefId, LOCAL_CRATE, LocalDefId, LocalModId};
 use rustc_hir::{ItemKind, UseKind, UseTree};
-use rustc_middle::ty::TyCtxt;
 use rustc_middle::ty::fast_reject::{self, TreatParams};
+use rustc_middle::ty::{GenericParamDefKind, TyCtxt};
 use rustc_public::CrateDef;
 use rustc_public::mir::mono::Instance;
 use rustc_public::rustc_internal;
@@ -185,6 +185,8 @@ pub enum ResolveError<'tcx> {
     AmbiguousPartialPath { tcx: TyCtxt<'tcx>, name: String, base: DefId, candidates: Vec<DefId> },
     /// Use super past the root of a crate.
     ExtraSuper,
+    /// Generic arguments do not match the declaration.
+    InvalidGenericArguments { reason: String },
     /// Invalid path.
     InvalidPath { msg: String },
     /// Unable to find an item.
@@ -197,6 +199,8 @@ pub enum ResolveError<'tcx> {
     UnexpectedType { tcx: TyCtxt<'tcx>, item: DefId, expected: &'static str },
     /// Error triggered when the identifier is not currently supported.
     UnsupportedPath { kind: &'static str },
+    /// Trait-level const generic arguments are not supported.
+    UnsupportedTraitConstGenerics,
 }
 
 impl fmt::Debug for ResolveError<'_> {
@@ -235,6 +239,9 @@ impl fmt::Display for ResolveError<'_> {
                         .collect::<String>()
                 )
             }
+            ResolveError::InvalidGenericArguments { reason } => {
+                write!(f, "invalid generic arguments: {reason}")
+            }
             ResolveError::InvalidPath { msg } => write!(f, "{msg}"),
             ResolveError::UnexpectedType { tcx, item: def_id, expected } => write!(
                 f,
@@ -255,6 +262,9 @@ impl fmt::Display for ResolveError<'_> {
             }
             ResolveError::UnsupportedPath { kind } => {
                 write!(f, "Kani currently cannot resolve {kind}")
+            }
+            ResolveError::UnsupportedTraitConstGenerics => {
+                write!(f, "Kani currently cannot resolve trait-level const generic arguments")
             }
         }
     }
@@ -477,12 +487,10 @@ fn resolve_in_trait_impl<'tcx>(
                     args.push(GenericArgKind::Type(resolved_ty));
                 }
                 syn::GenericArgument::Const(_) => {
-                    return Err(ResolveError::UnsupportedPath {
-                        kind: "const generic arguments in trait stubs",
-                    });
+                    return Err(ResolveError::UnsupportedTraitConstGenerics);
                 }
                 syn::GenericArgument::Lifetime(_) => {
-                    // Lifetimes are erased — safe to skip.
+                    // Erased lifetime slots are restored from the declaration below.
                 }
                 _ => {
                     return Err(ResolveError::UnsupportedPath {
@@ -492,12 +500,53 @@ fn resolve_in_trait_impl<'tcx>(
             }
         }
     }
-    let desired_generic_args = GenericArgs(args);
+    // Fill trait defaults before appending the method's own generic arguments.
+    let mut supplied = args.into_iter().map(|arg| rustc_internal::internal(tcx, arg));
+    let mut trait_args = Vec::new();
+    for param in &tcx.generics_of(tcx.parent(trait_fn_id)).own_params {
+        let arg = match param.kind {
+            GenericParamDefKind::Lifetime => tcx.lifetimes.re_erased.into(),
+            GenericParamDefKind::Type { .. } => supplied
+                .next()
+                .or_else(|| {
+                    param.default_value(tcx).map(|default| {
+                        default.instantiate(tcx, &trait_args[..]).skip_normalization()
+                    })
+                })
+                .ok_or_else(|| ResolveError::InvalidGenericArguments {
+                    reason: format!("missing required trait type argument `{}`", param.name),
+                })?,
+            GenericParamDefKind::Const { .. } => {
+                return Err(ResolveError::UnsupportedTraitConstGenerics);
+            }
+        };
+        trait_args.push(arg);
+    }
+    if supplied.next().is_some() {
+        return Err(ResolveError::InvalidGenericArguments {
+            reason: "too many trait type arguments".to_string(),
+        });
+    }
+    let mut args: Vec<_> =
+        trait_args.into_iter().map(|arg| rustc_internal::stable(arg.kind())).collect();
+
+    // Include the method's own generic parameters when selecting its implementation.
+    let generics = tcx.generics_of(trait_fn_id);
+    let identity_ty = rustc_internal::stable(tcx.type_of(trait_fn_id)).value;
+    let TyKind::RigidTy(RigidTy::FnDef(_, identity_args)) = identity_ty.kind() else {
+        unreachable!("Expected a trait method function type")
+    };
+    args.extend(identity_args.0.iter().skip(generics.parent_count).cloned());
+    let desired_generic_args = ctor_args_with_lifetimes(tcx, trait_fn_id, &GenericArgs(args))
+        .ok_or_else(|| ResolveError::InvalidGenericArguments {
+            reason: "arguments do not match the method's generic parameter layout".to_string(),
+        })?;
     let exists = Instance::resolve(trait_fn_fn_def, &desired_generic_args);
 
     // If such an Instance exists, return *its* FnDef (i.e., the FnDef inside the impl block for this `ty`)
     exists.map_or(Err(ResolveError::MissingTraitImpl { tcx, trait_fn_id, ty }), |inst| {
-        Ok(FnResolution::FnImpl { def: inst.ty().kind().fn_def().unwrap().0, ty })
+        let impl_id = rustc_internal::internal(tcx, inst.def.def_id());
+        Ok(FnResolution::FnImpl { def: stable_fn_def(tcx, impl_id).unwrap(), ty })
     })
 }
 
