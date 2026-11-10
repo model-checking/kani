@@ -1185,6 +1185,18 @@ fn fmt_impl_self_ty(tcx: TyCtxt, instance: Instance) -> Option<(FmtTrait, Ty)> {
     let TyKind::RigidTy(RigidTy::Ref(_, self_ty, _)) = sig.inputs().first()?.kind() else {
         return None;
     };
+
+    // The `core::str::pattern` searcher types (`multi_char_eq_searcher_kind`) are supported in
+    // argument position only: their values are bounded and need storage that the harness owns,
+    // and they neither implement nor can derive `Arbitrary`, which the formatting models
+    // require of the self type. Bail out so that their `fmt` methods are handled as ordinary
+    // functions, with both arguments generated through the bounded argument path.
+    if let TyKind::RigidTy(RigidTy::Adt(def, _)) = self_ty.kind()
+        && multi_char_eq_searcher_kind(tcx, def).is_some()
+    {
+        return None;
+    }
+
     Some((fmt_trait, self_ty))
 }
 
@@ -1310,6 +1322,56 @@ fn can_derive_arbitrary(
     }
 }
 
+/// A `core::str::pattern` searcher type backed by a `MultiCharEqSearcher` (the associated
+/// searcher for the char patterns `[char; N]`, `&[char; N]` and `&[char]`), for which a
+/// dedicated generation model exists (`KaniModel::AnyCharArraySearcher`/`AnyCharArrayRefSearcher`/
+/// `AnyCharSliceSearcher`).
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum MultiCharEqSearcherKind {
+    Array,
+    ArrayRef,
+    Slice,
+}
+
+/// Whether `def` is one of
+/// `core::str::pattern::{CharArraySearcher, CharArrayRefSearcher, CharSliceSearcher}`.
+///
+/// Both the eligibility check (`autoharness_supported_arg_ty`) and the harness generation
+/// (`call_kani_any_for_ty`) use this, so that they cannot disagree.
+///
+/// This matches the definition's own path (crate name plus `DefPathData` segments) rather than
+/// `tcx.def_path_str`: `def_path_str` renders through whichever module re-exports the item
+/// (`std::str::pattern` vs `core::str::pattern`), and `strip_local_crate_prefix` in this file
+/// only special-cases that rendering for the *local* crate, so a printed-string comparison would
+/// disagree between the normal flow (`core` external) and the verify-std flow (`core` local).
+pub fn multi_char_eq_searcher_kind(tcx: TyCtxt, def: AdtDef) -> Option<MultiCharEqSearcherKind> {
+    use rustc_hir::definitions::DefPathData;
+
+    let def_id = rustc_internal::internal(tcx, def.def_id());
+    let path = tcx.def_path(def_id);
+    if tcx.crate_name(path.krate).as_str() != "core" {
+        return None;
+    }
+
+    // `core::str::pattern::<Name>`: two module segments, then the item's own name.
+    let [module1, module2, item] = path.data.as_slice() else { return None };
+    let DefPathData::TypeNs(module1) = &module1.data else { return None };
+    let DefPathData::TypeNs(module2) = &module2.data else { return None };
+    let DefPathData::TypeNs(item) = &item.data else { return None };
+    if module1.as_str() != "str" || module2.as_str() != "pattern" {
+        return None;
+    }
+
+    // Match the exact final segment: `CharArraySearcher` and `CharArrayRefSearcher` share a
+    // prefix, so a substring/`starts_with` check would conflate them.
+    match item.as_str() {
+        "CharArraySearcher" => Some(MultiCharEqSearcherKind::Array),
+        "CharArrayRefSearcher" => Some(MultiCharEqSearcherKind::ArrayRef),
+        "CharSliceSearcher" => Some(MultiCharEqSearcherKind::Slice),
+        _ => None,
+    }
+}
+
 /// How an automatic harness can generate a nondeterministic value of a given argument type,
 /// c.f. `autoharness_supported_arg_ty`.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -1408,10 +1470,27 @@ fn autoharness_supported_arg_ty(
             // A `Formatter` is built by `any_formatter` over a harness-local sink, with its width
             // and precision bounded; `fmt` methods take it mutably, so both mutabilities.
             TyKind::RigidTy(RigidTy::Adt(def, _)) if is_formatter(tcx, def) => ArgSupport::Bounded,
+            // A reference to a `core::str::pattern` searcher (`multi_char_eq_searcher_kind`) is
+            // supported for both `&T` and `&mut T`: the searcher's own by-value generation model
+            // already exists for all three kinds, and a reference to a type this function already
+            // knows how to generate is always fine.
+            TyKind::RigidTy(RigidTy::Adt(def, _))
+                if multi_char_eq_searcher_kind(tcx, def).is_some() =>
+            {
+                ArgSupport::Bounded
+            }
             _ => arbitrary_or_derive(ty, ty_arbitrary_cache),
         }
     } else {
-        if arbitrary_or_derive(ty, ty_arbitrary_cache) == ArgSupport::Arbitrary {
+        if let TyKind::RigidTy(RigidTy::Adt(def, _)) = ty.kind()
+            && multi_char_eq_searcher_kind(tcx, def).is_some()
+        {
+            // Checked before `arbitrary_or_derive`: that call reaches `can_derive_arbitrary`,
+            // which rejects any `Adt` whose generic args contain a lifetime, and all three of
+            // these searcher types have one. Their own by-value generation model already
+            // exists (`multi_char_eq_searcher_kind`'s doc comment lists it per kind).
+            ArgSupport::Bounded
+        } else if arbitrary_or_derive(ty, ty_arbitrary_cache) == ArgSupport::Arbitrary {
             ArgSupport::Arbitrary
         } else if smart_pointer_model_instance(tcx, ty, smart_pointer_models).is_some_and(
             |(_, pointee)| {

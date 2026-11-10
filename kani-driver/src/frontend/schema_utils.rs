@@ -20,7 +20,7 @@ use serde::Serialize;
 use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::io::{BufWriter, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tempfile::Builder as TempFileBuilder;
 use time::OffsetDateTime;
@@ -32,7 +32,7 @@ const KANI_GIT_SHA: Option<&str> = option_env!("KANI_GIT_SHA");
 /// `None` exactly when `KANI_GIT_SHA` is `None`.
 const KANI_GIT_DIRTY: Option<&str> = option_env!("KANI_GIT_DIRTY");
 
-struct RunContext {
+pub(crate) struct RunContext {
     cbmc_version: Option<String>,
     rustc_version: Option<String>,
     kani_commit: Option<&'static str>,
@@ -42,21 +42,36 @@ struct RunContext {
     harness_timeout_s: Option<f64>,
     configuration: ConfigurationExport,
     started_at: OffsetDateTime,
-    wall_time: Duration,
+}
+
+/// An `--export-json` run whose INCOMPLETE marker is written. Only `begin_export_json` makes one,
+/// and `write_export_json` needs one, so a terminal write without a marker cannot be expressed.
+pub(crate) struct PendingExport {
+    path: PathBuf,
+    ctx: RunContext,
 }
 
 impl KaniSession {
-    /// Writes `--export-json` for a completed run; no-op if unset. `matched_harnesses` must be
-    /// the pre-verification list, not `results`, which `--fail-fast` can truncate.
-    pub fn write_export_json(
+    /// Writes the `--export-json` marker; `None` if `--export-json` is unset.
+    pub(crate) fn begin_export_json(
         &self,
         matched_harnesses: &[&HarnessMetadata],
-        results: &[HarnessResult<'_>],
         started_at: OffsetDateTime,
+    ) -> Result<Option<PendingExport>> {
+        let Some(path) = &self.args.export_json else { return Ok(None) };
+        let ctx = self.build_run_context(matched_harnesses, started_at);
+        write_json_atomically(path, &IncompleteRun::from(&ctx))?;
+        Ok(Some(PendingExport { path: path.clone(), ctx }))
+    }
+
+    /// Replaces the marker of `pending` with the terminal `--export-json` document.
+    pub(crate) fn write_export_json(
+        &self,
+        results: &[HarnessResult<'_>],
+        pending: PendingExport,
         wall_time: Duration,
     ) -> Result<()> {
-        let Some(path) = &self.args.export_json else { return Ok(()) };
-        let ctx = self.build_run_context(matched_harnesses, started_at, wall_time);
+        let PendingExport { path, ctx } = pending;
         let export = ExportedRun::from_harness_results(
             results,
             |harness| {
@@ -67,15 +82,15 @@ impl KaniSession {
                 )
             },
             ctx,
+            wall_time,
         );
-        write_json_atomically(path, &export)
+        write_json_atomically(&path, &export)
     }
 
     fn build_run_context(
         &self,
         matched_harnesses: &[&HarnessMetadata],
         started_at: OffsetDateTime,
-        wall_time: Duration,
     ) -> RunContext {
         let enabled_unstable_features: BTreeSet<String> = self
             .args
@@ -104,7 +119,6 @@ impl KaniSession {
             harness_timeout_s: self.args.harness_timeout.map(|t| Duration::from(t).as_secs_f64()),
             configuration: configuration_from(&self.args),
             started_at,
-            wall_time,
         }
     }
 }
@@ -285,6 +299,49 @@ struct ToolsExport {
     kani: &'static str,
     rustc: Option<String>,
     cbmc: Option<String>,
+}
+
+#[derive(Serialize)]
+struct IncompleteRun<'a> {
+    schema_version: &'static str,
+    kani_commit: Option<&'static str>,
+    kani_commit_dirty: Option<bool>,
+    tools: ToolsExport,
+    enabled_unstable_features: &'a BTreeSet<String>,
+    harness_selection: &'a HarnessSelectionExport,
+    harness_timeout_s: Option<f64>,
+    configuration: &'a ConfigurationExport,
+    run_state: IncompleteState,
+    target: &'static str,
+    started_at: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+enum IncompleteState {
+    Incomplete,
+}
+
+impl<'a> From<&'a RunContext> for IncompleteRun<'a> {
+    fn from(ctx: &'a RunContext) -> Self {
+        Self {
+            schema_version: SCHEMA_VERSION,
+            kani_commit: ctx.kani_commit,
+            kani_commit_dirty: ctx.kani_commit_dirty,
+            tools: ToolsExport {
+                kani: KANI_VERSION,
+                rustc: ctx.rustc_version.clone(),
+                cbmc: ctx.cbmc_version.clone(),
+            },
+            enabled_unstable_features: &ctx.enabled_unstable_features,
+            harness_selection: &ctx.harness_selection,
+            harness_timeout_s: ctx.harness_timeout_s,
+            configuration: &ctx.configuration,
+            run_state: IncompleteState::Incomplete,
+            target: env!("TARGET"),
+            started_at: format_started_at(ctx.started_at),
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -616,6 +673,7 @@ impl ExportedRun {
         results: &[HarnessResult<'_>],
         resolve: impl Fn(&HarnessMetadata) -> (Option<String>, Option<u32>),
         ctx: RunContext,
+        wall_time: Duration,
     ) -> Self {
         let mut harnesses: Vec<HarnessExport> = results
             .iter()
@@ -660,7 +718,7 @@ impl ExportedRun {
             run_state,
             target: env!("TARGET"),
             started_at: format_started_at(ctx.started_at),
-            wall_time_s: ctx.wall_time.as_secs_f64(),
+            wall_time_s: wall_time.as_secs_f64(),
             harnesses,
             summary,
         }
@@ -885,7 +943,6 @@ mod tests {
             harness_timeout_s: None,
             configuration: test_ctx_config(),
             started_at: started(),
-            wall_time: Duration::from_millis(1),
         }
     }
 
@@ -894,11 +951,84 @@ mod tests {
     }
 
     fn export_with(results: &[HarnessResult<'_>], ctx: RunContext) -> ExportedRun {
-        ExportedRun::from_harness_results(results, cadical, ctx)
+        ExportedRun::from_harness_results(results, cadical, ctx, Duration::from_millis(1))
     }
 
     fn export_one(hr: HarnessResult<'_>) -> ExportedRun {
         export_with(&[hr], test_context())
+    }
+
+    #[test]
+    fn incomplete_marker_serializes_only_marker_fields() {
+        let mut ctx = test_context();
+        ctx.kani_commit = Some("abc123");
+        ctx.kani_commit_dirty = Some(true);
+        ctx.rustc_version = Some("rustc test".to_string());
+        ctx.cbmc_version = Some("CBMC test".to_string());
+        ctx.enabled_unstable_features.insert("export-json".to_string());
+
+        let marker = serde_json::to_value(IncompleteRun::from(&ctx)).unwrap();
+        let keys: BTreeSet<&str> = marker.as_object().unwrap().keys().map(String::as_str).collect();
+        assert_eq!(
+            keys,
+            BTreeSet::from([
+                "configuration",
+                "enabled_unstable_features",
+                "harness_selection",
+                "harness_timeout_s",
+                "kani_commit",
+                "kani_commit_dirty",
+                "run_state",
+                "schema_version",
+                "started_at",
+                "target",
+                "tools",
+            ])
+        );
+        assert_eq!(marker["run_state"], "INCOMPLETE");
+        assert_eq!(marker["kani_commit"], "abc123");
+        assert_eq!(marker["kani_commit_dirty"], true);
+        assert_eq!(marker["tools"]["rustc"], "rustc test");
+        assert_eq!(marker["tools"]["cbmc"], "CBMC test");
+        let null_marker = serde_json::to_value(IncompleteRun::from(&test_context())).unwrap();
+        assert!(null_marker["kani_commit"].is_null());
+        assert!(null_marker["kani_commit_dirty"].is_null());
+        assert!(null_marker["tools"]["rustc"].is_null());
+        assert!(null_marker["tools"]["cbmc"].is_null());
+    }
+
+    #[test]
+    fn incomplete_marker_and_terminal_export_share_context() {
+        let mut ctx = test_context();
+        ctx.kani_commit = Some("shared-commit");
+        ctx.cbmc_version = Some("shared CBMC".to_string());
+        ctx.enabled_unstable_features.insert("export-json".to_string());
+        let marker = serde_json::to_value(IncompleteRun::from(&ctx)).unwrap();
+
+        let h = harness("h");
+        let hr = HarnessResult { harness: &h, result: success_result(vec![]) };
+        let terminal = serde_json::to_value(ExportedRun::from_harness_results(
+            &[hr],
+            cadical,
+            ctx,
+            Duration::from_millis(500),
+        ))
+        .unwrap();
+
+        for key in [
+            "schema_version",
+            "kani_commit",
+            "kani_commit_dirty",
+            "tools",
+            "enabled_unstable_features",
+            "harness_selection",
+            "harness_timeout_s",
+            "configuration",
+            "target",
+            "started_at",
+        ] {
+            assert_eq!(marker[key], terminal[key], "shared field {key}");
+        }
     }
 
     #[test]
@@ -911,12 +1041,9 @@ mod tests {
         let result = success_result(properties);
         let hr = HarnessResult { harness: &h, result };
 
-        let ctx = RunContext {
-            cbmc_version: Some("CBMC 6.8.0".to_string()),
-            wall_time: Duration::from_millis(500),
-            ..test_context()
-        };
-        let export = export_with(&[hr], ctx);
+        let ctx = RunContext { cbmc_version: Some("CBMC 6.8.0".to_string()), ..test_context() };
+        let export =
+            ExportedRun::from_harness_results(&[hr], cadical, ctx, Duration::from_millis(500));
         let v = serde_json::to_value(&export).unwrap();
 
         assert_eq!(v["schema_version"], "0.1.0");
@@ -1797,6 +1924,7 @@ mod tests {
             &[hr],
             |_| (Some("cadical".to_string()), Some(7)),
             test_context(),
+            Duration::from_millis(1),
         ))
         .unwrap();
         let hj = &v["harnesses"][0];
@@ -1936,6 +2064,7 @@ mod tests {
             &[hr],
             |_| (Some("totally-unfamiliar-solver-v9".to_string()), None),
             test_context(),
+            Duration::from_millis(1),
         ))
         .unwrap();
         assert_eq!(v["harnesses"][0]["resolved_solver"], "totally-unfamiliar-solver-v9");
