@@ -1,0 +1,3 @@
+error: quantifier predicates containing safety checks are not supported with -Z valid-value-checks or -Z uninit-checks
+exists_ptr_add_validity.rs:9:13
+error: aborting due to 1 previous error
