@@ -45,8 +45,13 @@ const NOOP_RAW_WAKER: RawWaker = {
     RawWaker::new(std::ptr::null(), &RawWakerVTable::new(clone_waker, noop, noop, noop))
 };
 
-/// The global executor used by [`spawn`] and [`block_on_with_spawn`] to run tasks.
-static mut GLOBAL_EXECUTOR: Option<Scheduler> = None;
+/// The global executor used by [`spawn`] and [`block_on_with_spawn`] to run tasks: a pointer to
+/// a heap-allocated scheduler while [`block_on_with_spawn`] runs, null otherwise.
+///
+/// A task may call [`spawn`] while [`run`] holds a pointer to the executor, so every access must
+/// derive from this one pointer. A `&mut` to the static itself (e.g. through `Option::as_mut`)
+/// would invalidate the pointer that `run` holds, which is undefined behavior.
+static mut GLOBAL_EXECUTOR: *mut Scheduler = std::ptr::null_mut();
 
 type BoxFuture = Pin<Box<dyn Future<Output = ()> + Sync + 'static>>;
 
@@ -125,20 +130,18 @@ impl Scheduler {
     }
 }
 
-/// Returns a pointer to the executor set by [`block_on_with_spawn`].
+/// Returns the pointer to the executor set by [`block_on_with_spawn`].
 ///
 /// A task may call [`spawn`], which mutates the executor, so no reference to the executor may be
-/// live while a task runs. The pointer is returned instead of a `&mut`, so callers dereference it
-/// for one operation at a time and never keep a reference across a call to `poll`.
+/// live while a task runs. Callers dereference the pointer for one operation at a time and never
+/// keep a reference across a call to `poll`.
 ///
 /// # Safety
 /// The returned pointer is valid only while the executor is set, which is inside [`block_on_with_spawn`].
 unsafe fn executor() -> *mut Scheduler {
-    let executor = &raw mut GLOBAL_EXECUTOR;
-    unsafe {
-        (*executor).as_mut().expect("the global executor is set only within `block_on_with_spawn`")
-            as *mut Scheduler
-    }
+    let executor = unsafe { GLOBAL_EXECUTOR };
+    assert!(!executor.is_null(), "the global executor is set only within `block_on_with_spawn`");
+    executor
 }
 
 /// Runs the tasks of the global executor with the given scheduling plan until all of them complete
@@ -186,33 +189,32 @@ impl Future for JoinHandle {
 ///
 /// This function can only be called inside a future passed to [`block_on_with_spawn`].
 #[crate::unstable(feature = "async-lib", issue = 2559, reason = "experimental async support")]
-#[allow(static_mut_refs)]
 pub fn spawn<F: Future<Output = ()> + Sync + 'static>(fut: F) -> JoinHandle {
-    unsafe {
-        if let Some(executor) = GLOBAL_EXECUTOR.as_mut() {
-            executor.spawn(fut)
-        } else {
-            // An explicit panic instead of `.expect(...)` has better location information in Kani's output
-            panic!("`spawn` should only be called within `block_on_with_spawn`")
-        }
+    let executor = unsafe { GLOBAL_EXECUTOR };
+    if executor.is_null() {
+        // An explicit panic instead of `.expect(...)` has better location information in Kani's output
+        panic!("`spawn` should only be called within `block_on_with_spawn`")
     }
+    // SAFETY: the executor is set, and the reference lives for this call only.
+    unsafe { (*executor).spawn(fut) }
 }
 
 /// Polls the given future and the tasks it may spawn until all of them complete
 ///
 /// Contrary to [`block_on`], this allows `spawn`ing other futures
 #[crate::unstable(feature = "async-lib", issue = 2559, reason = "experimental async support")]
-#[allow(static_mut_refs)]
 pub fn block_on_with_spawn<F: Future<Output = ()> + Sync + 'static>(
     fut: F,
     scheduling_plan: impl SchedulingStrategy,
 ) {
     unsafe {
-        assert!(GLOBAL_EXECUTOR.is_none(), "`block_on_with_spawn` should not be nested");
-        GLOBAL_EXECUTOR = Some(Scheduler::new());
+        assert!(GLOBAL_EXECUTOR.is_null(), "`block_on_with_spawn` should not be nested");
+        GLOBAL_EXECUTOR = Box::into_raw(Box::new(Scheduler::new()));
         (*executor()).spawn(fut);
         run(scheduling_plan);
-        GLOBAL_EXECUTOR = None;
+        // SAFETY: the pointer comes from `Box::into_raw` above, and no task is left to use it.
+        drop(Box::from_raw(GLOBAL_EXECUTOR));
+        GLOBAL_EXECUTOR = std::ptr::null_mut();
     }
 }
 
