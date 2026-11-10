@@ -6,6 +6,7 @@
 //! This module contains a context for translating stable MIR into Charon's
 //! unstructured low-level borrow calculus (ULLBC)
 
+use crate::kani_middle::stable_fn_def;
 use charon_lib::ast::meta::{
     AttrInfo as CharonAttrInfo, Loc as CharonLoc, SpanData as CharonRawSpan,
 };
@@ -1611,12 +1612,30 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 // `core::ptr::drop_glue` lang item (which `drop_in_place::<T>` merely wraps), and
                 // Kani already collects it.
                 let place_ty = place.ty(&self.body_locals).unwrap();
-                let drop_glue = Instance::resolve_drop_in_place(place_ty);
-                let fn_ptr = self.translate_fn_ptr(drop_glue);
+                let has_params =
+                    rustc_internal::internal(self.tcx, place_ty).has_non_region_param();
+                let fn_ptr = if !has_params {
+                    self.translate_fn_ptr(Instance::resolve_drop_in_place(place_ty))
+                } else {
+                    // Glue can't be resolved for a type that mentions the caller's type
+                    // parameters (e.g. a bare `T`). Point at the generic `drop_glue::<T>`
+                    // declaration instead, as generic calls do.
+                    let drop_glue = self
+                        .tcx
+                        .lang_items()
+                        .drop_glue_fn()
+                        .expect("`core::ptr::drop_glue` is a lang item");
+                    let drop_glue = stable_fn_def(self.tcx, drop_glue)
+                        .expect("`core::ptr::drop_glue` is a function");
+                    self.translate_fn_def_ptr(
+                        drop_glue.def_id(),
+                        GenericArgs(vec![GenericArgKind::Type(place_ty)]),
+                    )
+                };
                 (
                     None,
                     CharonRawTerminator::Drop {
-                        // Kani translates optimized MIR, where drops are precise.
+                        // Drop elaboration runs at every MIR level, so drops are precise.
                         kind: CharonDropKind::Precise,
                         place: self.translate_place(place),
                         fn_ptr,
