@@ -360,6 +360,26 @@ impl Expr {
     /// Note: Does NOT recurse into `StatementExpression` nodes. These must be
     /// flattened first via `inline_as_pure_expr` before substitution.
     pub fn substitute_symbol(self, old_id: &InternedString, replacement: &Expr) -> (Expr, bool) {
+        self.substitute_symbol_inner(old_id, replacement, None)
+    }
+
+    /// Substitute a captured environment without taking addresses of struct rvalues.
+    /// Reduce type-correct `*(&value)` and struct projections with safely elidable fields.
+    pub fn substitute_quantifier_capture(
+        self,
+        old_id: &InternedString,
+        replacement: &Expr,
+        symbol_table: &SymbolTable,
+    ) -> (Expr, bool) {
+        self.substitute_symbol_inner(old_id, replacement, Some(symbol_table))
+    }
+
+    fn substitute_symbol_inner(
+        self,
+        old_id: &InternedString,
+        replacement: &Expr,
+        projection: Option<&SymbolTable>,
+    ) -> (Expr, bool) {
         let loc = self.location;
         let typ = self.typ.clone();
         let ann = self.size_of_annotation.clone();
@@ -369,7 +389,7 @@ impl Expr {
             location: loc,
             size_of_annotation: ann.clone(),
         };
-        let sub = |e: Expr| e.substitute_symbol(old_id, replacement);
+        let sub = |e: Expr| e.substitute_symbol_inner(old_id, replacement, projection);
         let sub_vec = |v: Vec<Expr>| -> (Vec<Expr>, bool) {
             let mut changed = false;
             let v: Vec<_> = v
@@ -393,6 +413,12 @@ impl Expr {
             }
             ExprValue::Dereference(e) => {
                 let (e, c) = sub(e);
+                if c && projection.is_some()
+                    && let AddressOf(value) = e.value()
+                    && value.typ() == &typ
+                {
+                    return (value.clone().with_location(loc), true);
+                }
                 (mk(Dereference(e)), c)
             }
             ExprValue::Typecast(e) => {
@@ -421,6 +447,21 @@ impl Expr {
             }
             ExprValue::Member { lhs, field } => {
                 let (l, c) = sub(lhs);
+                if c && let Some(symbol_table) = projection
+                    && let Struct { values } = l.value()
+                    && let Some(fields) = l.typ().lookup_components(symbol_table)
+                    && fields.len() == values.len()
+                    // A semantic field read cannot observe nondeterministic padding.
+                    && fields.iter().zip(values).all(|(component, value)| {
+                        (component.is_padding() && matches!(value.value(), Nondet))
+                            || value.can_elide_evaluation()
+                    })
+                    && let Some(index) =
+                        fields.iter().position(|component| !component.is_padding() && component.name() == field)
+                    && values[index].typ() == &typ
+                {
+                    return (values[index].clone().with_location(loc), true);
+                }
                 (mk(Member { lhs: l, field }), c)
             }
             ExprValue::FunctionCall { function, arguments } => {
@@ -508,6 +549,27 @@ impl Expr {
         }
     }
 
+    // Symbols and their struct fields read values whose evaluation has already occurred.
+    // Pointer reads, union projections, and computations need separate safety checks.
+    fn can_elide_evaluation(&self) -> bool {
+        if let Member { lhs, .. } = self.value() {
+            return lhs.typ().is_struct_tag() && lhs.can_elide_evaluation();
+        }
+        matches!(
+            self.value(),
+            Symbol { .. }
+                | IntConstant(_)
+                | BoolConstant(_)
+                | CBoolConstant(_)
+                | DoubleConstant(_)
+                | FloatConstant(_)
+                | Float16Constant(_)
+                | Float128Constant(_)
+                | PointerConstant(_)
+                | StringConstant { .. }
+        )
+    }
+
     /// Returns whether an expression causes side effects or not
     pub fn is_side_effect(&self) -> bool {
         match &*self.value {
@@ -525,9 +587,13 @@ impl Expr {
             BinOp { op: _, lhs, rhs } => lhs.is_side_effect() || rhs.is_side_effect(),
             ByteExtract { e, offset: _ } => e.is_side_effect(),
             Dereference(e) => e.is_side_effect(),
+            Forall { variable, domain } | Exists { variable, domain } => {
+                variable.is_side_effect() || domain.is_side_effect()
+            }
             If { c, t, e } => c.is_side_effect() || t.is_side_effect() || e.is_side_effect(),
             Index { array, index } => array.is_side_effect() || index.is_side_effect(),
             Member { lhs, field: _ } => lhs.is_side_effect(),
+            ReadOk { ptr, size } => ptr.is_side_effect() || size.is_side_effect(),
             ShuffleVector { vector1, vector2, indexes } => {
                 vector1.is_side_effect()
                     || vector2.is_side_effect()
@@ -538,8 +604,17 @@ impl Expr {
             Union { value, field: _ } => value.is_side_effect(),
             UnOp { op: _, e } => e.is_side_effect(),
             Vector { elems } => elems.iter().any(|e| e.is_side_effect()),
-            // The rest of expressions (constants) do not cause side effects
-            _ => false,
+            Symbol { .. }
+            | IntConstant(_)
+            | BoolConstant(_)
+            | CBoolConstant(_)
+            | DoubleConstant(_)
+            | FloatConstant(_)
+            | Float16Constant(_)
+            | Float128Constant(_)
+            | PointerConstant(_)
+            | StringConstant { .. }
+            | EmptyUnion => false,
         }
     }
 
@@ -2003,6 +2078,143 @@ mod tests {
             assert!(matches!(rhs.value(), ExprValue::IntConstant(v) if *v == 1.into()));
         } else {
             panic!("Expected BinOp");
+        }
+    }
+
+    fn capture_table() -> (SymbolTable, Type) {
+        use super::super::Symbol;
+        use crate::machine_model::test_util::machine_model_test_stub;
+        let mut table = SymbolTable::new(machine_model_test_stub());
+        let typ = Type::struct_type(
+            "Capture",
+            vec![
+                DatatypeComponent::field("enabled", Type::bool()),
+                DatatypeComponent::padding("pad", 7),
+                DatatypeComponent::field("index", Type::signed_int(32)),
+            ],
+        );
+        table.ensure(typ.type_name().unwrap(), |_, name| {
+            Symbol::variable(name, name, typ, Location::none())
+        });
+        (table, Type::struct_tag("Capture"))
+    }
+
+    #[test]
+    fn quantifier_capture_projects_padded_environment() {
+        let (table, typ) = capture_table();
+        let closure = Expr::struct_expr(
+            typ.clone(),
+            BTreeMap::from([
+                ("enabled".into(), Expr::bool_constant(false)),
+                ("index".into(), sym("outer_quantified")),
+            ]),
+            &table,
+        );
+        let env = Expr::symbol_expression("env", typ);
+        let read = env.clone().address_of().dereference();
+        let (result, _) = read.clone().member("index", &table).substitute_quantifier_capture(
+            &"env".into(),
+            &closure,
+            &table,
+        );
+        assert!(
+            matches!(result.value(), Symbol { identifier } if *identifier == "outer_quantified")
+        );
+        let (result, _) = read.member("enabled", &table).substitute_quantifier_capture(
+            &"env".into(),
+            &closure,
+            &table,
+        );
+        assert!(matches!(result.value(), BoolConstant(false)));
+        let (result, _) = env.member("index", &table).substitute_symbol(&"env".into(), &closure);
+        assert!(matches!(result.value(), Member { .. }));
+    }
+
+    #[test]
+    fn quantifier_capture_preserves_unused_side_effect() {
+        let (table, typ) = capture_table();
+        let closure = Expr::struct_expr(
+            typ.clone(),
+            BTreeMap::from([
+                ("enabled".into(), Expr::bool_constant(false)),
+                ("index".into(), Expr::nondet(Type::signed_int(32))),
+            ]),
+            &table,
+        );
+        let read = Expr::symbol_expression("env", typ).member("enabled", &table);
+        let (result, _) = read.substitute_quantifier_capture(&"env".into(), &closure, &table);
+        assert!(matches!(result.value(), Member { .. }));
+        assert!(result.is_side_effect());
+    }
+
+    #[test]
+    fn quantifier_side_effect_is_detected() {
+        let effect = Expr::nondet(Type::bool());
+        assert!(Expr::forall_expr(Type::Bool, sym("i"), effect.clone()).is_side_effect());
+        assert!(Expr::exists_expr(Type::Bool, sym("i"), effect).is_side_effect());
+    }
+
+    #[test]
+    fn read_ok_propagates_side_effects() {
+        let ptr = Expr::nondet(Type::void_pointer());
+        let size = Expr::int_constant(1, Type::size_t());
+        assert!(Expr::read_ok(ptr, size.clone()).is_side_effect());
+        assert!(
+            Expr::read_ok(
+                Expr::pointer_constant(0, Type::void_pointer()),
+                Expr::nondet(Type::size_t())
+            )
+            .is_side_effect()
+        );
+        assert!(
+            !Expr::read_ok(Expr::pointer_constant(0, Type::void_pointer()), size).is_side_effect()
+        );
+    }
+
+    #[test]
+    fn quantifier_capture_does_not_project_unrelated_expressions() {
+        let (table, typ) = capture_table();
+        let closure = Expr::struct_expr(
+            typ,
+            BTreeMap::from([
+                ("enabled".into(), Expr::bool_constant(false)),
+                ("index".into(), int(1)),
+            ]),
+            &table,
+        );
+        for expr in [closure.member("index", &table), sym("x").address_of().dereference()] {
+            let (result, changed) =
+                expr.clone().substitute_quantifier_capture(&"absent".into(), &int(2), &table);
+            assert!(!changed);
+            assert_eq!(format!("{result:?}"), format!("{expr:?}"));
+        }
+    }
+
+    #[test]
+    fn quantifier_capture_preserves_potential_safety_checks() {
+        let (table, typ) = capture_table();
+        let array = Expr::array_expr(Type::signed_int(32).array_of(1), vec![int(0)]);
+        for unsafe_value in [
+            Expr::pointer_constant(0, Type::signed_int(32).to_pointer()).dereference(),
+            Expr::pointer_constant(0, typ.clone().to_pointer())
+                .dereference()
+                .member("index", &table),
+            array.index(int(1)),
+            int(1).div(int(0)),
+        ] {
+            let closure = Expr::struct_expr(
+                typ.clone(),
+                BTreeMap::from([
+                    ("enabled".into(), Expr::bool_constant(false)),
+                    ("index".into(), unsafe_value),
+                ]),
+                &table,
+            );
+            let read = Expr::symbol_expression("env", typ.clone()).member("enabled", &table);
+            let (result, changed) =
+                read.substitute_quantifier_capture(&"env".into(), &closure, &table);
+            assert!(changed);
+            assert_eq!(format!("{result:?}"), format!("{:?}", closure.member("enabled", &table)));
         }
     }
 }

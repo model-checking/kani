@@ -1,0 +1,17 @@
+Checking harness check_match_ref...
+
+Status: FAILURE\
+Description: "Downcast into a variant of an uninhabited enum is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/3596"
+
+VERIFICATION:- FAILED
+
+Checking harness check_let_ref...
+
+Status: FAILURE\
+Description: "Downcast into a variant of an uninhabited enum is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/3596"
+
+VERIFICATION:- FAILED
+
+Verification failed for - check_match_ref
+Verification failed for - check_let_ref
+Complete - 0 successfully verified harnesses, 2 failures, 2 total.

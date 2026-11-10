@@ -1,0 +1,10 @@
+mined invariant of `Outer` violated by return value
+mined invariant of `Deep` violated by return value
+| nested | make_borrowed_invalid | #[kani::proof]            | Success             |
+| nested | make_boxed_invalid    | #[kani::proof]            | Success             |
+| nested | make_deep_valid       | #[kani::proof]            | Success             |
+| nested | make_pointed_invalid  | #[kani::proof]            | Success             |
+| nested | make_valid            | #[kani::proof]            | Success             |
+| nested | make_deep_invalid     | #[kani::proof]            | Failure             |
+| nested | make_invalid          | #[kani::proof]            | Failure             |
+Complete - 5 successfully verified functions, 2 failures, 7 total.

@@ -1,0 +1,5 @@
+uninitialized_capture.safety_check.\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`"
+Verification failed for - uninitialized_capture
+Complete - 1 successfully verified harnesses, 1 failures, 2 total.

@@ -7,6 +7,7 @@
 use crate::args::ConcretePlaybackMode;
 use crate::call_cbmc::VerificationResult;
 use crate::cbmc_output_parser::Property;
+use crate::project::Project;
 use crate::session::KaniSession;
 use anyhow::{Context, Result};
 use concrete_vals_extractor::{ConcreteItem, PrimitiveConcreteVal, extract_harness_values};
@@ -24,6 +25,7 @@ impl KaniSession {
     /// The main driver for generating concrete playback unit tests and adding them to source code.
     pub fn gen_and_add_concrete_playback(
         &self,
+        project: &Project,
         harness: &HarnessMetadata,
         verification_result: &mut VerificationResult,
     ) -> Result<()> {
@@ -81,17 +83,14 @@ impl KaniSession {
                                     .join("")
                             );
                         }
-                        self.modify_src_code(
-                            &harness.original_file,
-                            harness.original_end_line,
-                            unit_tests,
-                        )
-                        .unwrap_or_else(|_| {
-                            panic!(
+                        let source_file = project.harness_source_file(harness);
+                        self.modify_src_code(&source_file, harness.original_end_line, unit_tests)
+                            .with_context(|| {
+                            format!(
                                 "Failed to modify source code for the file `{}`",
-                                harness.original_file
+                                source_file.display()
                             )
-                        });
+                        })?;
                     }
                 }
                 verification_result.generated_concrete_test = true;
@@ -103,7 +102,7 @@ impl KaniSession {
     /// Add the unit test to the user's source code, format it, and short circuit if code already present.
     fn modify_src_code(
         &self,
-        src_path: &str,
+        src_path: &Path,
         proof_harness_end_line: usize,
         unit_tests: Vec<UnitTest>,
     ) -> Result<()> {
@@ -117,7 +116,6 @@ impl KaniSession {
         if is_new_injection {
             let unit_test_start_line = proof_harness_end_line + 1;
             let unit_test_end_line = unit_test_start_line + concrete_playback_num_lines - 1;
-            let src_path = Path::new(src_path);
             let (path, file_name) = extract_parent_dir_and_src_file(src_path)?;
             let file_line_ranges = vec![FileLineRange {
                 file: file_name,
@@ -134,14 +132,14 @@ impl KaniSession {
     /// Returns whether new unit test was injected.
     fn add_tests_inplace(
         &self,
-        source_path: &str,
+        source_path: &Path,
         proof_harness_end_line: usize,
         mut unit_tests: Vec<UnitTest>,
     ) -> Result<bool> {
         // Read from source
-        let source_file = File::open(source_path).unwrap();
+        let source_file = File::open(source_path)?;
         let source_reader = BufReader::new(source_file);
-        let source_string = read_to_string(source_path).unwrap();
+        let source_string = read_to_string(source_path)?;
 
         // filter out existing harnesses.
         unit_tests.retain(|unit_test| {
@@ -149,7 +147,8 @@ impl KaniSession {
                 if !self.args.common_args.quiet {
                     println!(
                         "Concrete playback unit test `{}/{}` already found in source code, so skipping modification.",
-                        source_path, unit_test.name,
+                        source_path.display(),
+                        unit_test.name,
                     );
                 }
 
@@ -161,7 +160,7 @@ impl KaniSession {
 
         // Create temp file
         if !unit_tests.is_empty() {
-            let source_basedir = Path::new(source_path).parent().unwrap_or(Path::new("."));
+            let source_basedir = source_path.parent().unwrap_or(Path::new("."));
             let mut temp_file = NamedTempFile::with_prefix_in("concrete_playback", source_basedir)?;
             let mut curr_line_num = 0;
 
@@ -185,7 +184,7 @@ impl KaniSession {
             // Renames are usually atomic, so we won't corrupt the user's source file during a
             // crash; but first flush all updates to disk, which persist wouldn't take care of.
             temp_file.as_file().sync_all()?;
-            temp_file.persist(source_path).expect("Could not rename file");
+            temp_file.persist(source_path)?;
         }
 
         Ok(!unit_tests.is_empty())
