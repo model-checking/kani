@@ -30,7 +30,7 @@ fi
 python3 "$VALIDATOR" "$OUTPUT_FILE" 2>&1 | tail -1
 
 code=0
-kani -Z export-json -Z unstable-options --no-assertion-reach-checks test.rs \
+kani -Z export-json --no-assertion-reach-checks test.rs \
     --export-json "$NO_REACH_OUTPUT_FILE" || code=$?
 if [ "$code" -eq 0 ]; then
     echo "ERROR: expected nonzero exit status from the run without reach checks, got 0"
@@ -46,6 +46,7 @@ python3 << EOF
 import json
 import sys
 
+sys.dont_write_bytecode = True
 sys.path.insert(0, "$PROJECT_ROOT/scripts")
 from validate_json_export import vacuous_pass, vacuity_suspect
 
@@ -63,7 +64,7 @@ def check(condition, message):
 
 
 EXPECTED = (
-    'check_contradictory_assume', 'check_real_failure', 'check_real_success',
+    'check_contradictory_assume', 'check_partly_vacuous', 'check_real_failure', 'check_real_success',
     'check_checkless_success', 'check_should_panic_success',
     'check_should_panic_failing_vacuous',
 )
@@ -89,6 +90,24 @@ if h is not None:
     check(h['n_failed'] == 0, f"n_failed should be 0, got {h['n_failed']}")
     check(vacuous_pass(h, data['configuration']) is True,
           "vacuous_pass(check_contradictory_assume) should be True")
+    check(vacuity_suspect(h, data['configuration']) is True,
+          "vacuity_suspect(check_contradictory_assume) should be True: a SUCCESS in which every "
+          "check is unreachable has unreachable checks")
+
+h = by_name.get('check_partly_vacuous')
+if h is not None:
+    checks = h['checks']
+    check(h['outcome'].get('verdict') == 'SUCCESS',
+          f"check_partly_vacuous: outcome.verdict should be SUCCESS, got "
+          f"{h['outcome'].get('verdict')}")
+    check(0 < len(checks['unreachable']) < checks['total'],
+          f"check_partly_vacuous: some but not all checks should be unreachable, got "
+          f"{len(checks['unreachable'])} of {checks['total']}")
+    check(vacuous_pass(h, data['configuration']) is False,
+          "vacuous_pass(check_partly_vacuous) should be False: a reachable assertion remains")
+    check(vacuity_suspect(h, data['configuration']) is True,
+          "vacuity_suspect(check_partly_vacuous) should be True: the advisory rule catches the "
+          "partial vacuity that vacuous_pass misses")
 
 h = by_name.get('check_real_failure')
 if h is not None:
@@ -165,6 +184,18 @@ for name, h in no_reach_by_name.items():
           f"vacuous_pass({name}) should be None (not applicable) with assertion_reach_checks off")
     check(vacuity_suspect(h, no_reach_data['configuration']) is None,
           f"vacuity_suspect({name}) should be None (not applicable) with assertion_reach_checks off")
+
+# Without reach checks the contradictory-assume assertions are reported as plain successes, which
+# is why the predicates cannot report vacuity there.
+h = no_reach_by_name.get('check_contradictory_assume')
+if h is not None:
+    checks = h['checks']
+    check(checks['unreachable'] == [],
+          f"no-reach check_contradictory_assume: checks.unreachable should be empty, got "
+          f"{checks['unreachable']}")
+    check(checks['total'] > 0 and checks['success'] == checks['total'],
+          f"no-reach check_contradictory_assume: every check should be reported under success, "
+          f"got success={checks['success']} of total={checks['total']}")
 
 if failures:
     for failure in failures:

@@ -10,6 +10,16 @@ fn check_contradictory_assume() {
 }
 
 #[kani::proof]
+fn check_partly_vacuous() {
+    let x: u8 = kani::any();
+    kani::assume(x < 100);
+    assert!(x < 200);
+    if x > 150 {
+        assert!(x > 160);
+    }
+}
+
+#[kani::proof]
 fn check_real_failure() {
     let x: u8 = kani::any();
     kani::assume(x < 5);

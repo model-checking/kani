@@ -199,7 +199,7 @@ if failures:
 
 print("structured-warnings: both caps, exact record text, omitted counts, the ignored-quantifier "
       "ERROR classification and the CRASHED/TIMEOUT/OUT_OF_MEMORY field shapes and elapsed times "
-      "match RFC 0015")
+      "match the implementation (the caps are the call_cbmc.rs constants)")
 PYEOF
 
 echo "All structured-warnings checks passed!"

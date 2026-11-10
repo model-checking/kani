@@ -2,19 +2,30 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
-# Check that a harness completed before a --fail-fast abort stays in the export.
+# Test JSON export under --fail-fast: a harness that completed before the abort must
+# still appear in the export, and the aborted run's document must still validate.
+# The rendered-summary half of this regression lives in
+# tests/script-based-pre/fail_fast_keeps_completed/.
 
 set -eu
+# The validator's exit status is piped into `tail` below; `pipefail` makes the
+# pipeline report it and `set -e` makes that status fatal — both are needed, or a
+# failed validation is masked and this test passes regardless.
 set -o pipefail
 
 OUTPUT_FILE="fail_fast_output.json"
 COMPLETE_OUTPUT_FILE="fail_fast_complete_output.json"
+# Remove the exports on every exit path, not just the happy one.
 trap 'rm -f "$OUTPUT_FILE" "$COMPLETE_OUTPUT_FILE"' EXIT
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 VALIDATOR="$PROJECT_ROOT/scripts/validate_json_export.py"
 
+# `sort_harnesses_by_loc` runs later-appearing harnesses first, so sequentially
+# `z_passes` completes before `a_fails` aborts the run, and `a0_never_runs` is skipped.
+# The run exits non-zero by design (a harness fails), so only this invocation is exempted
+# from `set -e`.
 set +e
 kani -Z export-json test.rs --fail-fast --export-json "$OUTPUT_FILE"
 CODE=$?
@@ -31,8 +42,10 @@ if [ ! -f "$OUTPUT_FILE" ]; then
     exit 1
 fi
 
+# An aborted run still has to produce a structurally valid document.
 python3 "$VALIDATOR" "$OUTPUT_FILE" 2>&1 | tail -1
 
+# Selecting only the two harnesses that run makes the abort land on the last selected one.
 set +e
 kani -Z export-json test.rs --fail-fast --harness z_passes --harness a_fails \
     --export-json "$COMPLETE_OUTPUT_FILE"
@@ -85,6 +98,7 @@ check(data['harness_selection']['matched_count'] == data['summary']['total'],
 
 with open('$OUTPUT_FILE', 'r') as f:
     data = json.load(f)
+# The completed pass must survive the abort, in the counters and in the harnesses.
 summary = data['summary']
 for field, want in [('total', 2), ('successful', 1), ('failed', 1)]:
     check(summary[field] == want,
@@ -95,9 +109,6 @@ check(data['run_state'] == 'PARTIAL',
 check(data['harness_selection']['matched_count'] == 3,
       f"harness_selection.matched_count should be 3, got "
       f"{data['harness_selection']['matched_count']}")
-check(summary['total'] < data['harness_selection']['matched_count'],
-      f"summary.total ({summary['total']}) should be < matched_count "
-      f"({data['harness_selection']['matched_count']}) under PARTIAL")
 check(verdicts_of(data) == {'z_passes': 'SUCCESS', 'a_fails': 'FAILURE'},
       f"harnesses[] should hold exactly z_passes=SUCCESS and a_fails=FAILURE (no entry for "
       f"a0_never_runs), got {verdicts_of(data)}")

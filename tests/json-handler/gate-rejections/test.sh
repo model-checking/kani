@@ -2,7 +2,7 @@
 # Copyright Kani Contributors
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
-# Check that rejected arguments fail before compilation and leave an existing export file or directory untouched.
+# Check that rejected arguments and compilation errors leave an existing export file or directory untouched.
 
 set -eu
 
@@ -85,9 +85,38 @@ check_rejected "--only-codegen" \
     "Conflicting options: --export-json isn't compatible with --only-codegen." \
     "$OUT" -Z export-json "$FIXTURE" --export-json "$OUT" --only-codegen
 
+check_rejected "--no-codegen" \
+    "Conflicting options: --export-json isn't compatible with --no-codegen." \
+    "$OUT" -Z export-json -Z unstable-options "$FIXTURE" --export-json "$OUT" --no-codegen
+check_rejected "-Z lean" \
+    "Conflicting options: --export-json isn't compatible with -Z lean." \
+    "$OUT" -Z export-json -Z lean "$FIXTURE" --export-json "$OUT"
+
 check_rejected "existing directory" \
     "\`--export-json\` argument \`$DIR_OUT\` is a directory" \
     "$DIR_OUT/sentinel.txt" -Z export-json "$FIXTURE" --export-json "$DIR_OUT"
+
+# A compilation error is not a gating rejection: compilation runs, fails, and leaves the file alone.
+printf 'sentinel: not a real export document\n' > "$OUT"
+cp "$OUT" "$SAVED"
+set +e
+out=$(kani -Z export-json "$FIXTURE" --export-json "$OUT" 2>&1)
+code=$?
+set -e
+if [ "$code" -eq 0 ]; then
+    echo "FAIL [compilation error]: exited 0, expected a compilation failure"
+    echo "$out"
+    fail=1
+elif ! grep -qF 'error[E0308]' <<< "$out"; then
+    echo "FAIL [compilation error]: expected the rustc error E0308, got:"
+    echo "$out"
+    fail=1
+elif [ ! -f "$OUT" ] || ! cmp -s "$OUT" "$SAVED"; then
+    echo "FAIL [compilation error]: the pre-existing file $OUT was deleted or modified"
+    fail=1
+else
+    echo "OK [compilation error]: compilation failed with E0308, $OUT unchanged"
+fi
 
 if [ "$fail" -ne 0 ]; then
     exit 1

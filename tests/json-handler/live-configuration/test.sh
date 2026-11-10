@@ -16,24 +16,28 @@ ARTIFACTS=(
     baseline.json cli_unwind.json cli_solver.json cbmc_args_solver.json
     cbmc_args_smt_override.json bare_smt2.json coverage.json coverage_baseline.json
     check_flags.json default_unwind_vs_attribute.json default_unwind_vs_cli.json
+    baseline.out cli_solver.out cbmc_args_solver.out cbmc_args_smt_override.out bare_smt2.out
 )
-trap 'rm -f "${ARTIFACTS[@]}"' EXIT
+# `--coverage` writes its kanicov_<timestamp> directory next to the input file.
+trap 'rm -f "${ARTIFACTS[@]}"; rm -rf "$SCRIPT_DIR"/kanicov_*' EXIT
 
-kani -Z export-json "$FIXTURE" --harness configured_harness --export-json baseline.json
+kani -Z export-json "$FIXTURE" --harness configured_harness --export-json baseline.json \
+    > baseline.out
 python3 "$VALIDATOR" baseline.json 2>&1 | tail -1
 
 kani -Z export-json "$FIXTURE" --harness configured_harness --unwind 6 --export-json cli_unwind.json
 python3 "$VALIDATOR" cli_unwind.json 2>&1 | tail -1
 
-kani -Z export-json "$FIXTURE" --harness configured_harness --solver cadical --export-json cli_solver.json
+kani -Z export-json "$FIXTURE" --harness configured_harness --solver cadical \
+    --export-json cli_solver.json > cli_solver.out
 python3 "$VALIDATOR" cli_solver.json 2>&1 | tail -1
 
 kani -Z export-json -Z unstable-options "$FIXTURE" --harness configured_harness --solver cadical \
-    --export-json cbmc_args_solver.json --cbmc-args --sat-solver minisat
+    --export-json cbmc_args_solver.json --cbmc-args --sat-solver minisat > cbmc_args_solver.out
 python3 "$VALIDATOR" cbmc_args_solver.json 2>&1 | tail -1
 
 kani -Z export-json -Z unstable-options "$FIXTURE" --harness configured_harness --solver cadical \
-    --export-json cbmc_args_smt_override.json --cbmc-args --z3
+    --export-json cbmc_args_smt_override.json --cbmc-args --z3 > cbmc_args_smt_override.out
 python3 "$VALIDATOR" cbmc_args_smt_override.json 2>&1 | tail -1
 
 kani -Z export-json "$FIXTURE" --harness configured_harness --default-unwind 99 \
@@ -45,7 +49,7 @@ kani -Z export-json "$FIXTURE" --harness configured_harness --default-unwind 99 
 python3 "$VALIDATOR" default_unwind_vs_cli.json 2>&1 | tail -1
 
 kani -Z export-json -Z unstable-options "$FIXTURE" --harness configured_harness \
-    --export-json bare_smt2.json --cbmc-args --smt2
+    --export-json bare_smt2.json --cbmc-args --smt2 > bare_smt2.out
 python3 "$VALIDATOR" bare_smt2.json 2>&1 | tail -1
 
 kani -Z export-json -Z source-coverage "$FIXTURE" --harness coverage_harness --coverage \
@@ -79,6 +83,29 @@ def one_harness(path):
         return None, doc
     return hs[0], doc
 
+# CBMC's own solver line, as printed in the run's stdout.
+CBMC_SOLVER_LINES = {
+    "minisat": "Solving with MiniSAT",
+    "cadical": "Solving with CaDiCaL",
+    "z3": "Running SMT2 QF_AUFBV using Z3",
+}
+
+
+def cbmc_solver_lines(path):
+    with open(path) as f:
+        lines = f.read().splitlines()
+    return sorted({ln for ln in lines if ln.startswith(("Solving with", "Running SMT2"))})
+
+
+def check_cbmc_solver(name, resolved):
+    """The solver CBMC says it used must be the exported resolved_solver."""
+    seen = cbmc_solver_lines(f"{name}.out")
+    want = CBMC_SOLVER_LINES[resolved]
+    check(seen and all(ln.startswith(want) for ln in seen),
+          f"{name}: CBMC's solver line(s) should all start with '{want}' to match "
+          f"resolved_solver {resolved!r}, got {seen}")
+
+
 h, doc = one_harness("baseline.json")
 if h is not None:
     check(h["resolved_unwind"] == 5,
@@ -87,6 +114,7 @@ if h is not None:
     check(h["resolved_solver"] == "minisat",
           f"baseline: resolved_solver should be minisat (the #[kani::solver] attribute), got "
           f"{h['resolved_solver']}")
+    check_cbmc_solver("baseline", "minisat")
     check(doc["configuration"]["cbmc_args"] == [],
           f"baseline: cbmc_args should be empty, got {doc['configuration']['cbmc_args']}")
 
@@ -101,14 +129,14 @@ if h is not None:
     check(h["resolved_solver"] == "cadical",
           f"cli_solver: CLI --solver cadical should win over the #[kani::solver(minisat)] "
           f"attribute, got {h['resolved_solver']}")
+    check_cbmc_solver("cli_solver", "cadical")
 
 h, doc = one_harness("cbmc_args_solver.json")
 if h is not None:
     check(h["resolved_solver"] == "cadical",
-          f"cbmc_args_solver: CBMC's own --sat-solver handling is first-occurrence-wins, and "
-          f"CLI --solver's --sat-solver is always positionally first, so a same-family "
-          f"--cbmc-args --sat-solver is a no-op here; expected cadical, got "
-          f"{h['resolved_solver']}")
+          f"cbmc_args_solver: a same-family --cbmc-args --sat-solver minisat should not change "
+          f"CLI --solver cadical; expected cadical, got {h['resolved_solver']}")
+    check_cbmc_solver("cbmc_args_solver", "cadical")
     check(doc["configuration"]["cbmc_args"] == ["--sat-solver", "minisat"],
           f"cbmc_args_solver: cbmc_args should still be recorded verbatim even though it had no "
           f"effect, got {doc['configuration']['cbmc_args']}")
@@ -116,8 +144,9 @@ if h is not None:
 h, doc = one_harness("cbmc_args_smt_override.json")
 if h is not None:
     check(h["resolved_solver"] == "z3",
-          f"cbmc_args_smt_override: a --cbmc-args SMT-family flag (--z3) does override CLI "
-          f"--solver's SAT-family flag, regardless of position, got {h['resolved_solver']}")
+          f"cbmc_args_smt_override: a --cbmc-args SMT-family flag (--z3) should override CLI "
+          f"--solver cadical, got {h['resolved_solver']}")
+    check_cbmc_solver("cbmc_args_smt_override", "z3")
     check(doc["configuration"]["cbmc_args"] == ["--z3"],
           f"cbmc_args_smt_override: cbmc_args should be recorded verbatim, got "
           f"{doc['configuration']['cbmc_args']}")
@@ -139,6 +168,9 @@ if h is not None:
     check(h["resolved_solver"] is None,
           f"bare_smt2: bare --smt2 should yield resolved_solver: null, got "
           f"{h['resolved_solver']}")
+    seen = cbmc_solver_lines("bare_smt2.out")
+    check(seen and all(ln.startswith("Running SMT2") for ln in seen),
+          f"bare_smt2: CBMC should run an SMT2 solver, not a SAT solver, got {seen}")
 
 h, doc = one_harness("coverage.json")
 check(doc["configuration"]["coverage_enabled"] is True,
@@ -175,7 +207,7 @@ if failures:
     sys.exit(1)
 
 print(
-    "live-configuration: unwind/solver precedence, verbatim cbmc_args, bare --smt2, "
+    "live-configuration: unwind/solver precedence (confirmed by CBMC's solver line), verbatim cbmc_args, bare --smt2, "
     "--coverage and live check-flag toggles all match RFC 0015"
 )
 PYEOF
