@@ -216,7 +216,9 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
         session.save_coverage_results(&project, &results, &timestamp)?;
     }
 
-    session.write_export_json(&results, export_context, start_instant.elapsed())?;
+    if let Some(pending) = export_context {
+        session.write_export_json(&results, pending, start_instant.elapsed())?;
+    }
     session.write_sarif(&results)?;
     if !session.args.common_args.quiet {
         session.print_final_summary(&results)?;

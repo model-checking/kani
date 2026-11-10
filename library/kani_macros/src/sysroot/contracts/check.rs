@@ -185,6 +185,15 @@ impl<'a> ContractConditionsHandler<'a> {
             .unwrap_or(false)
     }
 
+    /// Return whether the original function takes `self` by value (an owned
+    /// receiver), e.g. `fn into_inner(self)`.
+    pub fn has_owned_receiver(&self) -> bool {
+        let first_arg = self.annotated_fn.sig.inputs.first();
+        first_arg
+            .map(|arg| matches!(arg, FnArg::Receiver(syn::Receiver { reference: None, .. },)))
+            .unwrap_or(false)
+    }
+
     /// Generate argument re-definitions for arguments.
     ///
     /// This is used so Kani doesn't think that modifying a local argument value is a side effect,

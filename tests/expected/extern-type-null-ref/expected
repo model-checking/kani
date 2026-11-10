@@ -1,0 +1,6 @@
+Checking harness check_null_raw_ptr...
+VERIFICATION:- SUCCESSFUL
+Checking harness check_null_ref...
+Failed Checks: dereference failure: pointer invalid
+VERIFICATION:- FAILED
+Complete - 1 successfully verified harnesses, 1 failures, 2 total.

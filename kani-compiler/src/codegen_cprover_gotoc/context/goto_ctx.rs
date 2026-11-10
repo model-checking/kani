@@ -17,7 +17,9 @@
 use super::current_fn::CurrentFnCtx;
 use super::vtable_ctx::VtableCtx;
 use crate::codegen_cprover_gotoc::UnsupportedConstructs;
-use crate::codegen_cprover_gotoc::overrides::{GotocHooks, fn_hooks};
+use crate::codegen_cprover_gotoc::overrides::{
+    GotocHooks, QUANTIFIER_SAFETY_CHECK_ERROR, fn_hooks, has_quantifier_safety_check,
+};
 use crate::codegen_cprover_gotoc::utils::full_crate_name;
 use crate::kani_middle::transform::BodyTransformation;
 use crate::kani_queries::QueryDb;
@@ -94,8 +96,18 @@ pub struct GotocCtx<'tcx, 'r> {
     pub transformer: &'r mut BodyTransformation,
     /// If there exist some usage of loop contracts int context.
     pub has_loop_contracts: bool,
-    /// Track loop assign clause
-    pub current_loop_modifies: Vec<Expr>,
+    /// The targets of the loop modifies clause of each loop whose clause binding has been
+    /// generated but whose loop latch has not, by the instance of the function that contains the
+    /// loop and the instance of the register function of the loop. A loop without an entry has no
+    /// clause, which is not the same as a clause without targets.
+    pub loop_modifies: HashMap<(Instance, Instance), Vec<Expr>>,
+    /// The location of the MIR statement or terminator being codegen'd. Valid only inside one:
+    /// `Location::none()` otherwise, since it is cleared after each basic block.
+    pub current_stmt_loc: Location,
+    /// Source spans of quantified variables, retained for post-pass diagnostics.
+    pub quantifier_spans: HashMap<InternedString, Span>,
+    /// Quantified variables whose predicates may lose checks during pure extraction.
+    pub checked_quantifiers: HashSet<InternedString>,
 }
 
 /// Constructor
@@ -126,7 +138,10 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             concurrent_constructs: FxHashMap::default(),
             transformer,
             has_loop_contracts: false,
-            current_loop_modifies: Vec::new(),
+            loop_modifies: HashMap::new(),
+            current_stmt_loc: Location::none(),
+            quantifier_spans: HashMap::new(),
+            checked_quantifiers: HashSet::new(),
         }
     }
 
@@ -719,6 +734,7 @@ impl GotocCtx<'_, '_> {
                 let new_rhs = match &rhs.value() {
                     ExprValue::Typecast(quantified_expr) => match &quantified_expr.value() {
                         ExprValue::Forall { variable, domain } => {
+                            let span = self.quantifier_span(variable);
                             // We store the function symbols we have inlined to avoid recursion.
                             let mut visited_func_symbols: HashSet<InternedString> = HashSet::new();
                             // We count the number of function that we have inlined, and use the count to
@@ -730,6 +746,7 @@ impl GotocCtx<'_, '_> {
                                     domain,
                                     &mut visited_func_symbols,
                                     suffix_count,
+                                    span,
                                 )
                                 .unwrap(),
                                 *domain.location(),
@@ -748,6 +765,7 @@ impl GotocCtx<'_, '_> {
                             res.cast_to(Type::CInteger(CIntType::Bool))
                         }
                         ExprValue::Exists { variable, domain } => {
+                            let span = self.quantifier_span(variable);
                             // We store the function symbols we have inlined to avoid recursion.
                             let mut visited_func_symbols: HashSet<InternedString> = HashSet::new();
                             // We count the number of function that we have inlined, and use the count to
@@ -759,6 +777,7 @@ impl GotocCtx<'_, '_> {
                                     domain,
                                     &mut visited_func_symbols,
                                     &mut suffix_count,
+                                    span,
                                 )
                                 .unwrap(),
                                 *domain.location(),
@@ -919,6 +938,20 @@ impl GotocCtx<'_, '_> {
         }
     }
 
+    fn quantifier_span(&self, variable: &Expr) -> Span {
+        if let ExprValue::Symbol { identifier } = variable.value() {
+            self.quantifier_spans.get(identifier).copied().unwrap_or(rustc_span::DUMMY_SP)
+        } else {
+            rustc_span::DUMMY_SP
+        }
+    }
+
+    fn quantifier_error(&self, span: Span, message: String) -> ! {
+        self.tcx.dcx().span_err(span, message);
+        self.tcx.dcx().abort_if_errors();
+        unreachable!("rustc should have aborted after the quantifier error")
+    }
+
     /// Recursively inline all function calls in `expr`.
     /// `visited_func_symbols` contain all function symbols in the stack.
     /// `suffix_count` is used to make inlined labels unique.
@@ -927,6 +960,7 @@ impl GotocCtx<'_, '_> {
         expr: &Expr,
         visited_func_symbols: &mut HashSet<InternedString>,
         suffix_count: &mut u16,
+        span: Span,
     ) -> Option<Expr> {
         match &expr.value() {
             // For function call expression, we find the function symbol and function body from the
@@ -965,6 +999,13 @@ impl GotocCtx<'_, '_> {
                             "Detected recursions in the usage of quantifiers."
                         );
                         visited_func_symbols.insert(*identifier);
+
+                        // All callee bodies are available here, including inline(never) helpers.
+                        if !self.queries.args().ub_check.is_empty()
+                            && has_quantifier_safety_check(function_body)
+                        {
+                            self.quantifier_error(span, QUANTIFIER_SAFETY_CHECK_ERROR.to_owned());
+                        }
 
                         let inlined_body: &Stmt = function_body;
                         let mut stmts_of_inlined_body: Vec<Stmt> =
@@ -1047,37 +1088,61 @@ impl GotocCtx<'_, '_> {
                             ),
                             visited_func_symbols,
                             suffix_count,
+                            span,
                         );
 
                         visited_func_symbols.remove(identifier);
 
                         return res;
                     } else {
-                        unreachable!()
+                        let name = self
+                            .symbol_table
+                            .lookup(*identifier)
+                            .and_then(|symbol| symbol.pretty_name)
+                            .unwrap_or(*identifier);
+                        self.quantifier_error(span, format!(
+                            "cannot inline a call to `{name}` in a quantifier predicate: no GOTO body is available"
+                        ));
                     }
+                } else {
+                    self.quantifier_error(
+                        span,
+                        "cannot inline an indirect function call in a quantifier predicate".into(),
+                    );
                 }
             }
             // Recursively inline function calls in ops.
             ExprValue::BinOp { op, lhs, rhs } => {
                 return Some(
-                    self.inline_function_calls_in_expr(lhs, visited_func_symbols, suffix_count)
-                        .unwrap()
-                        .binop(
-                            *op,
-                            self.inline_function_calls_in_expr(
-                                rhs,
-                                visited_func_symbols,
-                                suffix_count,
-                            )
-                            .unwrap(),
-                        ),
+                    self.inline_function_calls_in_expr(
+                        lhs,
+                        visited_func_symbols,
+                        suffix_count,
+                        span,
+                    )
+                    .unwrap()
+                    .binop(
+                        *op,
+                        self.inline_function_calls_in_expr(
+                            rhs,
+                            visited_func_symbols,
+                            suffix_count,
+                            span,
+                        )
+                        .unwrap(),
+                    ),
                 );
             }
             ExprValue::StatementExpression { statements, location: _ } => {
                 let inlined_stmts: Vec<Stmt> = statements
                     .iter()
                     .filter_map(|stmt| {
-                        self.inline_function_calls_in_stmt(stmt, visited_func_symbols, suffix_count)
+                        self.inline_function_calls_in_stmt(
+                            stmt,
+                            visited_func_symbols,
+                            suffix_count,
+                            span,
+                        )
                     })
                     .collect();
                 return Some(Expr::statement_expression(
@@ -1099,25 +1164,36 @@ impl GotocCtx<'_, '_> {
         stmt: &Stmt,
         visited_func_symbols: &mut HashSet<InternedString>,
         suffix_count: &mut u16,
+        span: Span,
     ) -> Option<Stmt> {
         match stmt.body() {
             StmtBody::Expression(expr) => self
-                .inline_function_calls_in_expr(expr, visited_func_symbols, suffix_count)
+                .inline_function_calls_in_expr(expr, visited_func_symbols, suffix_count, span)
                 .map(|inlined_expr| Stmt::code_expression(inlined_expr, *expr.location())),
             StmtBody::Assign { lhs, rhs } => self
-                .inline_function_calls_in_expr(rhs, visited_func_symbols, suffix_count)
+                .inline_function_calls_in_expr(rhs, visited_func_symbols, suffix_count, span)
                 .map(|inlined_rhs| Stmt::assign(lhs.clone(), inlined_rhs, *stmt.location())),
             StmtBody::Block(stmts) => {
                 let inlined_block = stmts
                     .iter()
                     .filter_map(|s| {
-                        self.inline_function_calls_in_stmt(s, visited_func_symbols, suffix_count)
+                        self.inline_function_calls_in_stmt(
+                            s,
+                            visited_func_symbols,
+                            suffix_count,
+                            span,
+                        )
                     })
                     .collect();
                 Some(Stmt::block(inlined_block, *stmt.location()))
             }
             StmtBody::Label { label, body } => {
-                match self.inline_function_calls_in_stmt(body, visited_func_symbols, suffix_count) {
+                match self.inline_function_calls_in_stmt(
+                    body,
+                    visited_func_symbols,
+                    suffix_count,
+                    span,
+                ) {
                     None => Some(Stmt::skip(*stmt.location()).with_label(*label)),
                     Some(inlined_body) => Some(inlined_body.with_label(*label)),
                 }
@@ -1125,7 +1201,12 @@ impl GotocCtx<'_, '_> {
             StmtBody::Switch { control, cases, default } => {
                 // Inline function calls in the discriminant expression
                 let inlined_control = self
-                    .inline_function_calls_in_expr(control, visited_func_symbols, suffix_count)
+                    .inline_function_calls_in_expr(
+                        control,
+                        visited_func_symbols,
+                        suffix_count,
+                        span,
+                    )
                     .unwrap_or_else(|| control.clone());
 
                 // Inline function calls in each case
@@ -1137,6 +1218,7 @@ impl GotocCtx<'_, '_> {
                                 sc.body(),
                                 visited_func_symbols,
                                 suffix_count,
+                                span,
                             )
                             .unwrap_or_else(|| sc.body().clone());
                         SwitchCase::new(sc.case().clone(), inlined_stmt)
@@ -1145,8 +1227,13 @@ impl GotocCtx<'_, '_> {
 
                 // Inline function calls in the default case, if it exists
                 let inlined_default = default.as_ref().map(|stmt| {
-                    self.inline_function_calls_in_stmt(stmt, visited_func_symbols, suffix_count)
-                        .unwrap_or_else(|| stmt.clone())
+                    self.inline_function_calls_in_stmt(
+                        stmt,
+                        visited_func_symbols,
+                        suffix_count,
+                        span,
+                    )
+                    .unwrap_or_else(|| stmt.clone())
                 });
 
                 // Construct the new switch statement
