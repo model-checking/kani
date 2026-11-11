@@ -5,8 +5,10 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::codegen_cprover_gotoc::codegen::cache::{CacheEntry, cache_entry};
+use crate::kani_middle::attributes::attrs_by_path;
 use cbmc::goto_program::Location;
 use lazy_static::lazy_static;
+use rustc_ast::attr::AttributeExt;
 use rustc_attr_ir::Attribute;
 use rustc_public::rustc_internal;
 use rustc_public::ty::Span as SpanStable;
@@ -153,13 +155,12 @@ pub fn disabled_check_pragmas(
         rustc_span::symbol::Symbol::intern("kanitool"),
         rustc_span::symbol::Symbol::intern("disable_checks"),
     ];
-    let disabled_checks: Vec<_> = gcx
-        .tcx
-        .get_attrs_by_path(
-            rustc_internal::internal(gcx.tcx, instance.def.def_id()),
-            &should_skip_ptr_checks_attr,
-        )
-        .collect();
+    let disabled_checks: Vec<_> = attrs_by_path(
+        gcx.tcx,
+        rustc_internal::internal(gcx.tcx, instance.def.def_id()),
+        &should_skip_ptr_checks_attr,
+    )
+    .collect();
     disabled_checks
         .iter()
         .map(|attr| {

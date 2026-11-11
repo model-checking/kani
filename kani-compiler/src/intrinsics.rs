@@ -7,7 +7,7 @@ use rustc_middle::ty::TyCtxt;
 use rustc_public::{
     mir::{Mutability, mono::Instance},
     rustc_internal,
-    ty::{FloatTy, IntTy, RigidTy, Ty, TyKind, UintTy},
+    ty::{FloatTy, FnSig, IntTy, RigidTy, Ty, TyKind, UintTy},
 };
 
 // Enumeration of all intrinsics we support right now, with the last option being a catch-all. This
@@ -539,6 +539,11 @@ impl Intrinsic {
                 TyKind::RigidTy(RigidTy::Float(FloatTy::F128)) => Self::FabsF128,
                 other => unreachable!("Unexpected `fabs` argument type: {other:?}"),
             },
+            name if GENERIC_FLOAT_INTRINSICS.contains(&name) => generic_float_intrinsic(name, &sig)
+                .unwrap_or(Self::Unimplemented {
+                    name: intrinsic_str,
+                    issue_link: "https://github.com/model-checking/kani/issues/new/choose".into(),
+                }),
             _ => try_match_atomic(intrinsic_instance)
                 .or_else(|| try_match_simd(intrinsic_instance))
                 .or_else(|| try_match_f32(intrinsic_instance))
@@ -732,6 +737,115 @@ fn try_match_simd(intrinsic_instance: &Instance) -> Option<Intrinsic> {
             }
         }
     }
+}
+
+/// Float intrinsics that rustc made generic over the float type in nightly-2026-10-24
+/// (rust-lang/rust#162395), where each used to be one intrinsic per width (`ceilf32` and friends).
+///
+/// Each now has a fallback body that calls a per-width libm function. Some of those have no CBMC
+/// model (e.g. `__powisf2` for `powi`), so Kani keeps its own model for the widths it has one for;
+/// see [`uses_kani_model`].
+pub const GENERIC_FLOAT_INTRINSICS: &[&str] =
+    &["ceil", "floor", "fma", "powf", "powi", "round", "round_ties_even", "sqrt", "trunc"];
+
+/// The Kani model of the generic float intrinsic `name` for the float type of its first argument,
+/// if Kani has one for that width (f32 and f64).
+fn generic_float_intrinsic(name: &str, sig: &FnSig) -> Option<Intrinsic> {
+    use Intrinsic::*;
+    let width = match sig.inputs().first()?.kind() {
+        TyKind::RigidTy(RigidTy::Float(width)) => width,
+        _ => return None,
+    };
+    let f32 = matches!(width, FloatTy::F32);
+    if !f32 && !matches!(width, FloatTy::F64) {
+        return None;
+    }
+    Some(match name {
+        "ceil" => {
+            if f32 {
+                CeilF32
+            } else {
+                CeilF64
+            }
+        }
+        "floor" => {
+            if f32 {
+                FloorF32
+            } else {
+                FloorF64
+            }
+        }
+        "fma" => {
+            if f32 {
+                FmafF32
+            } else {
+                FmafF64
+            }
+        }
+        "powf" => {
+            if f32 {
+                PowF32
+            } else {
+                PowF64
+            }
+        }
+        "powi" => {
+            if f32 {
+                PowIF32
+            } else {
+                PowIF64
+            }
+        }
+        "round" => {
+            if f32 {
+                RoundF32
+            } else {
+                RoundF64
+            }
+        }
+        "round_ties_even" => {
+            if f32 {
+                RoundTiesEvenF32
+            } else {
+                RoundTiesEvenF64
+            }
+        }
+        "sqrt" => {
+            if f32 {
+                SqrtF32
+            } else {
+                SqrtF64
+            }
+        }
+        "trunc" => {
+            if f32 {
+                TruncF32
+            } else {
+                TruncF64
+            }
+        }
+        _ => return None,
+    })
+}
+
+/// Whether a call to the intrinsic `instance` uses Kani's model instead of the fallback body.
+///
+/// An intrinsic without a fallback body always uses Kani's model. One with a fallback body uses it,
+/// except for the generic float intrinsics, where Kani's model is used for the widths it has one
+/// for: that is what Kani did before rustc made them generic.
+pub fn uses_kani_model(instance: &Instance) -> bool {
+    let TyKind::RigidTy(RigidTy::FnDef(def, _)) = instance.ty().kind() else {
+        unreachable!("Expected function type for intrinsic: {instance:?}")
+    };
+    // The compiler is currently transitioning how to handle intrinsic fallback body.
+    // Until https://github.com/rust-lang/project-stable-mir/issues/79 is implemented
+    // we have to check `must_be_overridden` and `has_body`.
+    if def.as_intrinsic().unwrap().must_be_overridden() || !instance.has_body() {
+        return true;
+    }
+    let name = instance.intrinsic_name().unwrap();
+    GENERIC_FLOAT_INTRINSICS.contains(&name.as_str())
+        && !matches!(Intrinsic::from_instance(instance), Intrinsic::Unimplemented { .. })
 }
 
 /// Match f32 arithmetic intrinsics by instance, returning an instance of the intrinsics enum if the match
