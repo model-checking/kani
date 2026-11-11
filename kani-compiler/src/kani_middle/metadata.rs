@@ -7,7 +7,10 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::kani_middle::codegen_units::Harness;
-use crate::kani_middle::{KaniAttributes, SourceLocation, readable_name, strip_local_crate_prefix};
+use crate::kani_middle::{
+    KaniAttributes, SourceLocation, readable_name, reject_explicit_tail_calls,
+    strip_local_crate_prefix,
+};
 use kani_metadata::ContractedFunction;
 use kani_metadata::{ArtifactType, HarnessAttributes, HarnessKind, HarnessMetadata};
 use rustc_middle::ty::TyCtxt;
@@ -25,6 +28,8 @@ pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> 
 
     // We get the body span to include the entire function definition.
     // This is required for concrete playback to properly position the generated test.
+    // A `become` in the harness panics in `rustc_public`'s MIR conversion; reject it first.
+    reject_explicit_tail_calls(tcx, instance);
     let loc = SourceLocation::new(instance.body().unwrap().span);
     let file_stem = format!("{}_{mangled_name}", base_name.file_stem().unwrap().to_str().unwrap());
     let model_file = base_name.with_file_name(file_stem).with_extension(ArtifactType::SymTabGoto);

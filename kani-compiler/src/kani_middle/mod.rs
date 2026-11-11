@@ -128,6 +128,46 @@ pub fn check_crate_items(tcx: TyCtxt, ignore_asm: bool) {
     tcx.dcx().abort_if_errors();
 }
 
+/// Reject explicit tail calls (`become`) before `rustc_public` converts the body.
+///
+/// Stable `rustc_public::mir::TerminatorKind` has no `TailCall` variant, so converting a body that
+/// contains one hits `unimplemented!()` inside the toolchain and aborts the compilation, c.f.
+/// <https://github.com/model-checking/kani/issues/5131>. The feature is incomplete; report every
+/// such terminator and abort once. Leave the call unmodeled: an ordinary `Call` would keep the
+/// caller's frame live, which disagrees with `become`.
+///
+/// The check reads the *internal* body — `tcx.instance_mir` on the instance's `def`, the same body
+/// `rustc_public_bridge`'s `BodyBuilder` converts — because that conversion is what panics.
+/// Callers invoke this immediately before `instance.body()`.
+pub fn reject_explicit_tail_calls(tcx: TyCtxt, instance: Instance) {
+    if !instance.has_body() {
+        return;
+    }
+    // `BodyBuilder` loads an intrinsic's fallback body as the item. `instance_mir` rejects
+    // `InstanceKind::Intrinsic`.
+    use rustc_middle::ty::InstanceKind;
+    let internal_instance = rustc_internal::internal(tcx, instance);
+    let def = match internal_instance.def {
+        InstanceKind::Intrinsic(def_id) => InstanceKind::Item(def_id),
+        InstanceKind::Item(def_id) => InstanceKind::Item(def_id),
+        InstanceKind::LlvmIntrinsic(def_id) => InstanceKind::LlvmIntrinsic(def_id),
+        InstanceKind::Shim(kind) => InstanceKind::Shim(kind),
+        InstanceKind::Virtual(def_id, idx) => InstanceKind::Virtual(def_id, idx),
+    };
+    let body = tcx.instance_mir(def);
+    for bb in body.basic_blocks.iter() {
+        let rustc_middle::mir::TerminatorKind::TailCall { fn_span, .. } = &bb.terminator().kind
+        else {
+            continue;
+        };
+        tcx.dcx()
+            .struct_span_err(*fn_span, "explicit tail calls (`become`) are not supported by Kani")
+            .with_note("see https://github.com/model-checking/kani/issues/5131")
+            .emit();
+    }
+    tcx.dcx().abort_if_errors();
+}
+
 /// Whether `instance` is a C-variadic function whose calling convention is not the C one, e.g.
 /// `unsafe extern "sysv64" fn(_: ...)`.
 ///

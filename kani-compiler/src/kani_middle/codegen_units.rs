@@ -916,6 +916,9 @@ fn resolve_deferred_fn_slots<'tcx>(
 /// it, which fails that harness instead of the run; see
 /// <https://github.com/model-checking/kani/issues/4926>.
 fn invalid_simd_instantiation(tcx: TyCtxt, instance: Instance) -> Option<String> {
+    // Instantiation search loads this body before `automatic_harness_partition`'s eligibility
+    // check. A `become` panics in `rustc_public`'s MIR conversion, so reject it here too.
+    crate::kani_middle::reject_explicit_tail_calls(tcx, instance);
     let body = instance.body()?;
     body.blocks.iter().find_map(|block| {
         let TerminatorKind::Call { func, .. } = &block.terminator.kind else {
@@ -1219,6 +1222,9 @@ fn automatic_harness_partition(
             "{crate_name}::{}",
             crate::kani_middle::strip_local_crate_prefix(instance.name())
         );
+        // Autoharness loads every local body directly. A `become` panics in `rustc_public`'s MIR
+        // conversion; reject it before that load.
+        crate::kani_middle::reject_explicit_tail_calls(tcx, instance);
         let body = instance.body().unwrap();
 
         if is_proof_harness(tcx, instance)
