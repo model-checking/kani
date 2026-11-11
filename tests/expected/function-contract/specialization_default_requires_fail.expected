@@ -1,0 +1,7 @@
+assertion\
+- Status: FAILURE\
+- Description: "value != 0"
+
+Failed Checks: value != 0
+
+VERIFICATION:- FAILED
