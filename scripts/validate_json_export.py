@@ -312,11 +312,6 @@ def validate_field_path(json_file, field_path, schema=None):
     return True
 
 
-def join_key(harness):
-    """Harness names are unique only within a crate (RFC "Selection")."""
-    return (harness["crate_name"], harness["name"])
-
-
 def _all_unreachable(bucket):
     return bool(bucket["total"]) and len(bucket["unreachable"]) == bucket["total"]
 
@@ -336,23 +331,6 @@ def vacuity_suspect(harness, configuration):
     if not configuration["checks"]["assertion_reach_checks"]:
         return None
     return harness["outcome"].get("verdict") == "SUCCESS" and bool(harness["checks"]["unreachable"])
-
-
-def cover_only_vacuous(harness):
-    """Every cover of the harness is unreachable, which `checks` cannot show."""
-    return _all_unreachable(harness["covers"])
-
-
-def warnings_shape_equivalent(doc_a, doc_b):
-    """True if two exports have the same warning records per harness, ignoring the message text."""
-
-    def shapes(doc):
-        return {
-            join_key(h): ([(w["truncated"], w["original_chars"]) for w in h["warnings"]], h["warnings_truncated"])
-            for h in doc["harnesses"]
-        }
-
-    return shapes(doc_a) == shapes(doc_b)
 
 
 def main():

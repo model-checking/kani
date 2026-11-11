@@ -194,10 +194,7 @@ FAILING = set_at(f"{H0}.outcome.verdict", "FAILURE")
 
 def predicate(name):
     def call(validator, doc):
-        harness = doc["harnesses"][0]
-        if name == "cover_only_vacuous":
-            return validator.cover_only_vacuous(harness)
-        return getattr(validator, name)(harness, doc["configuration"])
+        return getattr(validator, name)(doc["harnesses"][0], doc["configuration"])
     return call
 
 
@@ -219,17 +216,6 @@ PREDICATES = [
      predicate("vacuity_suspect"), False),
     ("vacuity_suspect: failing verdict", SUCCESS, FAILING, predicate("vacuity_suspect"), False),
     ("vacuity_suspect: reach checks off", SUCCESS, REACH_CHECKS_OFF, predicate("vacuity_suspect"), None),
-    ("cover_only_vacuous: a satisfied cover", SUCCESS, None, predicate("cover_only_vacuous"), False),
-    ("cover_only_vacuous: every cover unreachable", SUCCESS, covers_all_unreachable,
-     predicate("cover_only_vacuous"), True),
-    ("cover_only_vacuous: one of two covers unreachable", SUCCESS, all_of(
-        set_at(f"{H0}.covers.total", 2), set_at(f"{H0}.covers.unreachable", ["check_ok.cover.2"])),
-     predicate("cover_only_vacuous"), False),
-    ("cover_only_vacuous: no covers", SUCCESS,
-     all_of(set_at(f"{H0}.covers.total", 0), set_at(f"{H0}.covers.satisfied", [])),
-     predicate("cover_only_vacuous"), False),
-    ("cover_only_vacuous: every check unreachable", SUCCESS, checks_all_unreachable,
-     predicate("cover_only_vacuous"), False),
 ]
 
 def load_validator(path):
@@ -237,41 +223,6 @@ def load_validator(path):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
-
-
-def check_join_key_and_warnings(validator, failures):
-    """`join_key` tells same-named harnesses of two crates apart, which warnings_shape_equivalent relies on."""
-    doc = load_base(SUCCESS)
-    other_crate = copy.deepcopy(doc["harnesses"][0])
-    other_crate["crate_name"] = "other"
-    doc["harnesses"].append(other_crate)
-    if validator.join_key(doc["harnesses"][0]) == validator.join_key(doc["harnesses"][1]):
-        failures.append("join_key does not tell same-named harnesses of two crates apart")
-
-    def with_warnings(warnings, dropped=0, index=0):
-        changed = copy.deepcopy(doc)
-        changed["harnesses"][index]["warnings"] = warnings
-        changed["harnesses"][index]["warnings_truncated"] = dropped
-        return changed
-
-    plain = {"message": "warning: a", "truncated": False, "original_chars": None}
-    cut = {"message": "warning: a", "truncated": True, "original_chars": 90}
-    with_plain = with_warnings([plain])
-    cases = [
-        ("the same document", doc, doc, True),
-        ("a different message", with_plain, with_warnings([{**plain, "message": "warning: b"}]), True),
-        ("an added warning", doc, with_plain, False),
-        ("a truncated warning", with_plain, with_warnings([cut]), False),
-        ("a dropped warning count", doc, with_warnings([], 1), False),
-        ("a warning on the first of two same-named harnesses", doc, with_warnings([plain], 0, 0), False),
-        ("a warning on the second of two same-named harnesses", doc, with_warnings([plain], 0, 1), False),
-        ("a missing harness", doc, {"harnesses": doc["harnesses"][:1]}, False),
-    ]
-    for name, left, right, expected in cases:
-        if validator.warnings_shape_equivalent(left, right) is not expected:
-            failures.append(f"warnings_shape_equivalent should be {expected} for {name}")
-        else:
-            print(f"  warnings_shape_equivalent for {name}: {expected}")
 
 
 def run_validator(validator, path):
@@ -331,7 +282,6 @@ def main():
             failures.append(f"{name}: expected {expected}, got {result}")
         else:
             print(f"  {name}: {expected}")
-    check_join_key_and_warnings(module, failures)
 
     for failure in failures:
         print(f"ERROR: {failure}")
