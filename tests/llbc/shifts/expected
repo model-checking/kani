@@ -43,5 +43,6 @@ pub fn main()\
     _2 = shr(const -8i64, const 1u32)\
     ↳⚡ undefined_behavior\
     storage_dead(_2)\
+    _0 = ()\
     return\
 }

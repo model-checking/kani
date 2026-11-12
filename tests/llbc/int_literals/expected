@@ -35,5 +35,6 @@ pub fn main()\
     _2 = unsigned()\
     ↳⚡ undefined_behavior\
     storage_dead(_2)\
+    _0 = ()\
     return\
 }

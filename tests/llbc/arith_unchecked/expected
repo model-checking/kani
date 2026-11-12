@@ -62,5 +62,6 @@ pub fn main()\
     _3 = mul(const 3u32, const 4u32)\
     ↳⚡ undefined_behavior\
     storage_dead(_3)\
+    _0 = ()\
     return\
 }

@@ -22,5 +22,6 @@ pub fn main()\
     _1 = is_zero(const 0i32)\
     ↳⚡ undefined_behavior\
     storage_dead(_1)\
+    _0 = ()\
     return\
 }

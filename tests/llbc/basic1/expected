@@ -34,5 +34,6 @@ pub fn main()\
     _1 = select(const true, const 3i32, const 7i32)\
     ↳⚡ undefined_behavior\
     storage_dead(_1)\
+    _0 = ()\
     return\
 }
