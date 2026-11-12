@@ -285,7 +285,7 @@ impl GotocCtx<'_, '_> {
                 let tys = genarg.0.clone();
                 let t = tys.first().unwrap().ty().unwrap();
                 let layout = self.layout_of_stable(*t);
-                let expr = Expr::int_constant(layout.align.abi.bytes(), Type::size_t());
+                let expr = Expr::int_constant(layout.align.bytes(), Type::size_t());
                 self.codegen_expr_to_place_stable(place, expr, loc)
             }
             Intrinsic::ArithOffset => self.codegen_arith_offset(fargs, place, loc),
@@ -1411,7 +1411,7 @@ impl GotocCtx<'_, '_> {
         if !layout.is_unsized() {
             let size = Expr::int_constant(layout.size.bytes_usize(), Type::size_t())
                 .with_size_of_annotation(self.codegen_ty_stable(ty));
-            let align = Expr::int_constant(layout.align.abi.bytes(), usizet);
+            let align = Expr::int_constant(layout.align.bytes(), usizet);
             return SizeAlign { size, align };
         }
         match ty.kind() {
@@ -1428,7 +1428,7 @@ impl GotocCtx<'_, '_> {
                 // so only the fields before it count, as in rustc's own `dereferenceable` bounds.
                 SizeAlign {
                     size: Type::size_t().zero(),
-                    align: Expr::int_constant(layout.align.abi.bytes(), usizet),
+                    align: Expr::int_constant(layout.align.bytes(), usizet),
                 }
             }
             TyKind::RigidTy(RigidTy::Slice(_)) | TyKind::RigidTy(RigidTy::Str) => {
@@ -1443,7 +1443,7 @@ impl GotocCtx<'_, '_> {
                 let size = Expr::int_constant(unit.size.bytes_usize(), Type::size_t())
                     .with_size_of_annotation(self.codegen_ty_stable(unit_t))
                     .mul(arg.member("len", &self.symbol_table));
-                let align = Expr::int_constant(layout.align.abi.bytes(), usizet);
+                let align = Expr::int_constant(layout.align.bytes(), usizet);
                 SizeAlign { size, align }
             }
             _ => {
@@ -1466,7 +1466,7 @@ impl GotocCtx<'_, '_> {
                 let sized_size =
                     Expr::int_constant(layout.fields.offset(n).bytes(), Type::size_t())
                         .with_size_of_annotation(self.codegen_ty_stable(ty));
-                let sized_align = Expr::int_constant(layout.align.abi.bytes(), Type::size_t());
+                let sized_align = Expr::int_constant(layout.align.bytes(), Type::size_t());
 
                 // Call this function recursively to compute the size and align for the last field.
                 let field_ty = rustc_internal::stable(layout.field(self, n).ty);
@@ -2039,7 +2039,7 @@ impl GotocCtx<'_, '_> {
         let pointee_type = pointee_type_stable(ty).unwrap();
         // Obtain the alignment for the pointee type `T`
         let layout = self.layout_of_stable(pointee_type);
-        let align = Expr::int_constant(layout.align.abi.bytes(), Type::size_t());
+        let align = Expr::int_constant(layout.align.bytes(), Type::size_t());
         // Cast the pointer to `usize` and return the alignment expression
         let cast_ptr = ptr.cast_to(Type::size_t());
         let zero = Type::size_t().zero();

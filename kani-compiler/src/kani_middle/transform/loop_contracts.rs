@@ -1034,7 +1034,7 @@ impl LoopContractPass {
                     ));
                 }
                 move_call_list.push((closest_loop_head, current_local_decl_blocks.clone()));
-                current_local_decl_blocks = Vec::new();
+                current_local_decl_blocks.clear();
                 current_user_local = 0;
             }
 

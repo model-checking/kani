@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, HashSet};
 use kani_metadata::{CbmcSolver, HarnessAttributes, HarnessKind, Stub};
 use quote::ToTokens;
 use rustc_ast::attr::AttributeExt;
-use rustc_ast::{LitKind, MetaItem, MetaItemKind};
+use rustc_ast::{LitKind, MetaItem, MetaItemInner, MetaItemKind};
 use rustc_attr_ir::{AttrArgs, AttrItem, Attribute};
 use rustc_data_structures::fx::FxHashMap;
 use rustc_errors::ErrorGuaranteed;
@@ -48,14 +48,30 @@ pub fn attrs_by_path<'tcx>(
 }
 
 /// The item of a `kanitool::*` attribute. rustc does not parse tool attributes, so they are
-/// always `Attribute::Unparsed`.
+/// always `Attribute::Tool`.
 fn normal_item(attr: &Attribute) -> &AttrItem {
     match attr {
-        Attribute::Unparsed(item) => item,
-        Attribute::Parsed(_) => {
+        Attribute::Tool(item) => item,
+        Attribute::Parsed(_) | Attribute::DeriveHelper(_) => {
             unreachable!("Kani attributes are unparsed tool attributes: {attr:?}")
         }
     }
+}
+
+/// The meta items of a `kanitool::*` attribute delimited with parentheses, e.g. `a, b = "c"` in
+/// `#[kanitool::key(a, b = "c")]`. rustc removed `meta_item_list` for tool attributes in
+/// rust-lang/rust#165201, so read them from the delimited arguments, as it used to.
+pub fn attr_meta_item_list(attr: &Attribute) -> Option<Vec<MetaItemInner>> {
+    match &normal_item(attr).args {
+        AttrArgs::Delimited(args) => MetaItemKind::list_from_tokens(args.tokens.clone())
+            .map(|items| items.into_iter().collect()),
+        _ => None,
+    }
+}
+
+/// Whether a `kanitool::*` attribute has no arguments, e.g. `#[kanitool::proof]`.
+pub fn attr_is_word(attr: &Attribute) -> bool {
+    matches!(normal_item(attr).args, AttrArgs::Empty)
 }
 
 /// The span of a `kanitool::*` attribute (rustc removed `Attribute::span` in rust-lang/rust#164744).
@@ -971,7 +987,7 @@ impl<'tcx> KaniAttributes<'tcx> {
         #[allow(deprecated)]
         let attrs = self.tcx.get_all_attrs(def_id);
         let stub_set_attr = attrs.iter().find(|a| {
-            if let Attribute::Unparsed(normal) = a {
+            if let Attribute::Tool(normal) = a {
                 let segments = &normal.path.segments;
                 segments.len() == 2
                     && segments[0].as_str() == "kanitool"
@@ -1205,7 +1221,7 @@ impl<'a> TryFrom<&'a Attribute> for UnstableAttribute {
 }
 
 fn expect_no_args(tcx: TyCtxt, kind: KaniAttributeKind, attr: &Attribute) {
-    if !attr.is_word() {
+    if !attr_is_word(attr) {
         tcx.dcx()
             .struct_span_err(
                 attr_span(attr),
@@ -1251,7 +1267,7 @@ fn parse_solver(tcx: TyCtxt, attr: &Attribute) -> Option<CbmcSolver> {
         )
     };
 
-    let attr_args = attr.meta_item_list().unwrap();
+    let attr_args = attr_meta_item_list(attr).unwrap();
     if attr_args.len() != 1 {
         tcx.dcx().span_err(
             attr_span(attr),
@@ -1296,7 +1312,7 @@ fn parse_solver(tcx: TyCtxt, attr: &Attribute) -> Option<CbmcSolver> {
 /// For example, `unwind(8)` return `Some(8)`
 fn parse_integer(attr: &Attribute) -> Option<u128> {
     // Vector of meta items , that contain the arguments given the attribute
-    let attr_args = attr.meta_item_list()?;
+    let attr_args = attr_meta_item_list(attr)?;
     // Only extracts one integer value as argument
     if attr_args.len() == 1 {
         let x = attr_args[0].lit()?;
@@ -1323,8 +1339,8 @@ fn parse_paths(tcx: TyCtxt, attr: &Attribute) -> Result<Vec<TypePath>, syn::Erro
 
 /// Parse the arguments of the attribute into a (key, value) map.
 fn parse_key_values(attr: &Attribute) -> Result<BTreeMap<String, String>, String> {
-    trace!(list=?attr.meta_item_list(), ?attr, "parse_key_values");
-    let args = attr.meta_item_list().ok_or("malformed attribute input")?;
+    trace!(list=?attr_meta_item_list(attr), ?attr, "parse_key_values");
+    let args = attr_meta_item_list(attr).ok_or("malformed attribute input")?;
     args.iter()
         .map(|arg| match arg.meta_item() {
             Some(MetaItem { path: key, kind: MetaItemKind::NameValue(val), .. }) => {
@@ -1340,7 +1356,7 @@ fn parse_key_values(attr: &Attribute) -> Result<BTreeMap<String, String>, String
 
 /// If the attribute is named `kanitool::name`, this extracts `name`
 fn attr_kind(tcx: TyCtxt, attr: &Attribute) -> Option<KaniAttributeKind> {
-    if let Attribute::Unparsed(normal) = attr {
+    if let Attribute::Tool(normal) = attr {
         let segments = &normal.path.segments;
         if (!segments.is_empty()) && segments[0].as_str() == "kanitool" {
             let ident_str = segments[1..]

@@ -5,10 +5,9 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::codegen_cprover_gotoc::codegen::cache::{CacheEntry, cache_entry};
-use crate::kani_middle::attributes::attrs_by_path;
+use crate::kani_middle::attributes::{attr_meta_item_list, attrs_by_path};
 use cbmc::goto_program::Location;
 use lazy_static::lazy_static;
-use rustc_ast::attr::AttributeExt;
 use rustc_attr_ir::Attribute;
 use rustc_public::rustc_internal;
 use rustc_public::ty::Span as SpanStable;
@@ -128,7 +127,7 @@ impl GotocCtx<'_, '_> {
 /// For example, `disable_checks(foo)` return `Some("foo")`
 fn parse_word(attr: &Attribute) -> Option<String> {
     // Vector of meta items , that contain the arguments given the attribute
-    let attr_args = attr.meta_item_list()?;
+    let attr_args = attr_meta_item_list(attr)?;
     // Only extracts one string ident as a string
     if attr_args.len() == 1 {
         attr_args[0].ident().map(|ident| ident.to_string())
