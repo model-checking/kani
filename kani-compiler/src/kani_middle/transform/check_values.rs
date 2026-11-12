@@ -353,6 +353,9 @@ struct CheckValueVisitor<'a, 'b> {
     bb: BasicBlockIdx,
     /// Machine information needed to calculate Niche.
     machine: MachineInfo,
+    /// Whether the place being visited has its value read (`Copy`/`Move`), rather
+    /// than only its address taken or being written.
+    reading_value: bool,
 }
 
 impl<'a, 'b> CheckValueVisitor<'a, 'b> {
@@ -370,6 +373,7 @@ impl<'a, 'b> CheckValueVisitor<'a, 'b> {
             target: None,
             bb,
             machine: MachineInfo::target(),
+            reading_value: false,
         };
         visitor.visit_basic_block(&body.blocks()[bb]);
         visitor.target
@@ -499,6 +503,14 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
         }
     }
 
+    fn visit_operand(&mut self, operand: &Operand, location: Location) {
+        // `Copy`/`Move` read the operand's value; other uses (`&raw`, `&`, stores) don't.
+        let prev = self.reading_value;
+        self.reading_value = matches!(operand, Operand::Copy(_) | Operand::Move(_));
+        self.super_operand(operand, location);
+        self.reading_value = prev;
+    }
+
     fn visit_place(&mut self, place: &Place, ptx: PlaceContext, location: Location) {
         for (idx, elem) in place.projection.iter().enumerate() {
             let place_ref = PlaceRef { local: place.local, projection: &place.projection[..idx] };
@@ -562,9 +574,45 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                 }
                 ProjectionElem::Downcast(_) => {}
                 ProjectionElem::OpaqueCast(_) => {}
-                ProjectionElem::Index(_)
-                | ProjectionElem::ConstantIndex { .. }
-                | ProjectionElem::Subslice { .. } => { /* safe */ }
+                ProjectionElem::Index(_) | ProjectionElem::ConstantIndex { .. } => {
+                    // A slice `[T]` has no static length, so the whole-slice deref
+                    // above checks no elements; check the one indexed element here
+                    // (a symbolic index makes CBMC cover every element, no length
+                    // loop). Sized arrays are already checked by the deref, so only
+                    // slices need this. Guard on a direct read of the whole element:
+                    // an address-of or write reads nothing, and a deeper projection
+                    // reads only a subplace.
+                    let base_ty = place_ref.ty(self.locals).unwrap();
+                    if let TyKind::RigidTy(RigidTy::Slice(elem_ty)) = base_ty.kind()
+                        && self.reading_value
+                        && place.projection.len() == idx + 1
+                    {
+                        let validity = ty_validity_per_offset(self.tcx, &self.machine, elem_ty, 0);
+                        match validity {
+                            Ok(ranges) if !ranges.is_empty() => {
+                                self.push_target(SourceOp::BytesValidity {
+                                    target_ty: elem_ty,
+                                    rvalue: Rvalue::Use(
+                                        Operand::Copy(Place {
+                                            local: place.local,
+                                            projection: place.projection[..=idx].to_vec(),
+                                        }),
+                                        WithRetag::No,
+                                    ),
+                                    ranges,
+                                })
+                            }
+                            Err(_msg) => self.push_target(SourceOp::UnsupportedCheck {
+                                check: "slice element read".to_string(),
+                                ty: elem_ty,
+                            }),
+                            _ => {}
+                        }
+                    }
+                }
+                // A subslice is still an unsized `[T]`; checking all its elements
+                // needs a runtime-length loop this pass does not have.
+                ProjectionElem::Subslice { .. } => { /* safe */ }
             }
         }
         self.super_place(place, ptx, location)
