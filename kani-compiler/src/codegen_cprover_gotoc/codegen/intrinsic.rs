@@ -88,6 +88,19 @@ impl GotocCtx<'_, '_> {
                 "transmuting to uninhabited type has undefined behavior",
                 span,
             ),
+            // Reject uninhabited ZST results even when MIR has no return target.
+            "volatile_load"
+                if {
+                    let ret_ty = instance.ty().kind().fn_sig().unwrap().skip_binder().output();
+                    self.is_zst_stable(ret_ty) && self.layout_of_stable(ret_ty).is_uninhabited()
+                } =>
+            {
+                self.codegen_fatal_error(
+                    PropertyClass::SafetyCheck,
+                    "volatile load of an uninhabited type has undefined behavior",
+                    span,
+                )
+            }
             _ => self.codegen_fatal_error(
                 PropertyClass::UnsupportedConstruct,
                 &format!("Unsupported intrinsic {intrinsic}"),
@@ -1897,7 +1910,7 @@ impl GotocCtx<'_, '_> {
     /// <https://doc.rust-lang.org/std/ptr/fn.read_volatile.html>
     ///
     /// Undefined behavior if any of these conditions are violated:
-    ///  * `src` must be valid for writes (done by `--pointer-check`)
+    ///  * For non-ZSTs, `src` must be valid for reads (done by `--pointer-check`)
     ///  * `src` must be properly aligned (done by `align_check` below)
     ///
     /// TODO: Add a check for the condition:
@@ -1919,7 +1932,22 @@ impl GotocCtx<'_, '_> {
             "`src` must be properly aligned",
             loc,
         );
-        let expr = src.dereference();
+        let pointee_type = pointee_type_stable(src_typ).unwrap();
+        let expr = if self.is_zst_stable(pointee_type) {
+            // ZST reads do not access memory, but still require alignment and a valid value.
+            if self.layout_of_stable(pointee_type).is_uninhabited() {
+                let validity_check = self.codegen_assert_assume_false(
+                    PropertyClass::SafetyCheck,
+                    "volatile load of an uninhabited type has undefined behavior",
+                    loc,
+                );
+                return Stmt::block(vec![align_check, validity_check], loc);
+            }
+            let typ = self.codegen_ty_stable(pointee_type);
+            Expr::init_unit(typ, &self.symbol_table)
+        } else {
+            src.dereference()
+        };
         let res_stmt = self.codegen_expr_to_place_stable(p, expr, loc);
         Stmt::block(vec![align_check, res_stmt], loc)
     }
