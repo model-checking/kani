@@ -105,6 +105,8 @@ pub enum KaniModel {
     AnyCharSliceSearcher,
     #[strum(serialize = "AnyFormatterModel")]
     AnyFormatter,
+    #[strum(serialize = "AnyAliasModel")]
+    AnyAlias,
     #[strum(serialize = "AnyPtrModel")]
     AnyPtr,
     #[strum(serialize = "AnyRcModel")]
