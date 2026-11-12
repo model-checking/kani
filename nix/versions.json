@@ -1,0 +1,80 @@
+{
+  "releases": {
+    "0.66.0": {
+      "bundles": {
+        "aarch64-apple-darwin": "sha256-PNhFBfc32lXZhwmFw8JLfvTig22MlAHdHBdMNsUxkyc=",
+        "aarch64-unknown-linux-gnu": "sha256-Iavp+4TfNAeSwe/3yRy1YOvY9wyQLC89n52u28HYQCI=",
+        "x86_64-apple-darwin": "sha256-JTANwDxPHtxs+0s5RI/6ggSQYptgqhnHQa0jofPCp1g=",
+        "x86_64-unknown-linux-gnu": "sha256-1QXI0yZQAhVmGpL7k+Jdpxq1/Rpus1R2c1D4iC1IYhk="
+      },
+      "cbmc": "6.8.0",
+      "kissat": "4.0.1",
+      "toolchain": {
+        "channel": "nightly-2025-11-05",
+        "components": [
+          "llvm-tools",
+          "rustc-dev",
+          "rust-src",
+          "rustfmt"
+        ]
+      }
+    },
+    "0.67.0": {
+      "bundles": {
+        "aarch64-apple-darwin": "sha256-f9C3ETCqN70eNG66Z1qtCem2bks4P3B/xlczDOsp7uw=",
+        "aarch64-unknown-linux-gnu": "sha256-l0Eo9E3UNhigbSHl/m2f9nGI3lmG/gvFe1NLDkY577k=",
+        "x86_64-apple-darwin": "sha256-45TD2UDtnfT2fvU4jFYS8b9j5nFnCxk4RNa1nJJUS8k=",
+        "x86_64-unknown-linux-gnu": "sha256-O196/TtRYD7nINt7wbxP5GtaT1022q2ZOcS0xli1GsA="
+      },
+      "cbmc": "6.8.0",
+      "kissat": "4.0.1",
+      "toolchain": {
+        "channel": "nightly-2025-11-21",
+        "components": [
+          "llvm-tools",
+          "rustc-dev",
+          "rust-src",
+          "rustfmt"
+        ]
+      }
+    },
+    "0.68.0": {
+      "bundles": {
+        "aarch64-apple-darwin": "sha256-pdOaXV50glOlU6pi8pXGw5coeSeijl4yaR1/8u2gw5g=",
+        "aarch64-unknown-linux-gnu": "sha256-AELSaIvxVQJw3vSnnJaq7qE4YxgYy0q1SAEg8tUalCw=",
+        "x86_64-apple-darwin": "sha256-sTZ/aUwTUKvK4TNwH3izvj/W6b62ZoGiLqC8rAzDSAg=",
+        "x86_64-unknown-linux-gnu": "sha256-MuK0hNc+3gu/ZKLPCHnEJZQiSX2K7E7mfUSN6a54Q9M="
+      },
+      "cbmc": "6.11.0",
+      "kissat": "4.0.1",
+      "toolchain": {
+        "channel": "nightly-2026-08-21",
+        "components": [
+          "llvm-tools",
+          "rustc-dev",
+          "rust-src",
+          "rustfmt"
+        ]
+      }
+    }
+  },
+  "sources": {
+    "cadical": {
+      "2.0.0": "sha256-qoeEM9SdpuFuBPeQlCzuhPLcJ+bMQkTUTGiT8QdU8rc=",
+      "3.0.0": "sha256-pymbSC6bwQQ0YCtJd3xWZiC22UEkFiKSLObSOnoQj9I="
+    },
+    "cbmc": {
+      "6.11.0": {
+        "cadical": "3.0.0",
+        "hash": "sha256-GHpgcGBE/AAhTVxGVzTPMdZ8BkuXa7/OgMumZJ8ENRc="
+      },
+      "6.8.0": {
+        "cadical": "2.0.0",
+        "hash": "sha256-PT6AYiwkplCeyMREZnGZA0BKl4ZESRC02/9ibKg7mYU="
+      }
+    },
+    "kissat": {
+      "4.0.1": "sha256-+y9TlSEgnMTtRT9F6OBSle9OqGfljChcHOFJ5lgwjyk="
+    }
+  }
+}

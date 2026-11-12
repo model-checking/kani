@@ -90,3 +90,7 @@ tests/kani-multicrate/type-mismatch/mismatch/target
 /docs/gen_src
 /docs/mdbook*
 /kani-*.tar.gz
+
+# `nix build` output links
+/result
+/result-*

@@ -8,6 +8,7 @@
 .public.key
 CHANGELOG
 Cargo.lock
+flake.lock
 LICENSE-APACHE
 LICENSE-MIT
 editorconfig
