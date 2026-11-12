@@ -78,7 +78,12 @@ impl KaniSession {
                 let base = self.resolved_solver(&harness.attributes.solver);
                 (
                     effective_solver(&self.args.cbmc_args, base),
-                    resolve_effective_unwind(&self.args, harness, &self.args.cbmc_args),
+                    resolve_effective_unwind(
+                        &self.args,
+                        harness,
+                        self.autoharness_default_unwind,
+                        &self.args.cbmc_args,
+                    ),
                 )
             },
             ctx,
@@ -116,7 +121,13 @@ impl KaniSession {
                 ),
                 matched_count: matched_harnesses.len(),
             },
-            harness_timeout_s: self.args.harness_timeout.map(|t| Duration::from(t).as_secs_f64()),
+            // In an autoharness run without `--harness-timeout`, report the timeout automatic
+            // harnesses get (as before #5103); manual harnesses in that run have none.
+            harness_timeout_s: self
+                .args
+                .harness_timeout
+                .or(self.autoharness_harness_timeout)
+                .map(|t| Duration::from(t).as_secs_f64()),
             configuration: configuration_from(&self.args),
             started_at,
         }
@@ -280,9 +291,10 @@ fn effective_solver(cbmc_args: &[OsString], base: &CbmcSolver) -> Option<String>
 fn resolve_effective_unwind(
     args: &VerificationArgs,
     harness: &HarnessMetadata,
+    autoharness_default_unwind: Option<u32>,
     cbmc_args: &[OsString],
 ) -> Option<u32> {
-    if let Some(native) = resolve_unwind_value(args, harness) {
+    if let Some(native) = resolve_unwind_value(args, harness, autoharness_default_unwind) {
         return Some(native);
     }
     let mut cbmc_args = cbmc_args.iter();
@@ -2359,15 +2371,19 @@ mod tests {
         #[test]
         fn raw_only_cbmc_args_unwind_applies_when_no_native_bound() {
             let h = mock_proof_harness("check_one", None, None, None);
-            let resolved =
-                resolve_effective_unwind(&verify_opts(&[]), &h, &cbmc_args(&["--unwind", "7"]));
+            let resolved = resolve_effective_unwind(
+                &verify_opts(&[]),
+                &h,
+                None,
+                &cbmc_args(&["--unwind", "7"]),
+            );
             assert_eq!(resolved, Some(7));
         }
 
         #[test]
         fn no_native_bound_and_no_raw_unwind_is_null() {
             let h = mock_proof_harness("check_one", None, None, None);
-            let resolved = resolve_effective_unwind(&verify_opts(&[]), &h, &cbmc_args(&[]));
+            let resolved = resolve_effective_unwind(&verify_opts(&[]), &h, None, &cbmc_args(&[]));
             assert_eq!(resolved, None);
         }
 
@@ -2377,6 +2393,7 @@ mod tests {
             let resolved = resolve_effective_unwind(
                 &verify_opts(&["--unwind", "3", "--harness", "check_one"]),
                 &h,
+                None,
                 &cbmc_args(&["--unwind", "99"]),
             );
             assert_eq!(resolved, Some(3));
@@ -2388,12 +2405,14 @@ mod tests {
             let resolved = resolve_effective_unwind(
                 &verify_opts(&[]),
                 &h,
+                None,
                 &cbmc_args(&["--unwind", "10", "--unwind", "3"]),
             );
             assert_eq!(resolved, Some(10));
             let resolved = resolve_effective_unwind(
                 &verify_opts(&[]),
                 &h,
+                None,
                 &cbmc_args(&["--unwind", "3", "--unwind", "10"]),
             );
             assert_eq!(resolved, Some(3));
@@ -2402,9 +2421,44 @@ mod tests {
         #[test]
         fn harness_attribute_bound_counts_as_native() {
             let h = mock_proof_harness("check_one", Some(4), None, None);
-            let resolved =
-                resolve_effective_unwind(&verify_opts(&[]), &h, &cbmc_args(&["--unwind", "99"]));
+            let resolved = resolve_effective_unwind(
+                &verify_opts(&[]),
+                &h,
+                None,
+                &cbmc_args(&["--unwind", "99"]),
+            );
             assert_eq!(resolved, Some(4));
+        }
+
+        /// The autoharness default is reported for automatic harnesses only (#5103); a manual
+        /// harness in the same run falls through to `--cbmc-args`, as CBMC itself does.
+        #[test]
+        fn autoharness_default_unwind_is_reported_for_automatic_harnesses_only() {
+            let manual = mock_proof_harness("check_one", None, None, None);
+            let mut automatic = mock_proof_harness("check_one", None, None, None);
+            automatic.is_automatically_generated = true;
+            let raw = cbmc_args(&["--unwind", "7"]);
+            assert_eq!(
+                resolve_effective_unwind(&verify_opts(&[]), &manual, Some(20), &raw),
+                Some(7)
+            );
+            assert_eq!(
+                resolve_effective_unwind(&verify_opts(&[]), &manual, Some(20), &cbmc_args(&[])),
+                None
+            );
+            assert_eq!(
+                resolve_effective_unwind(&verify_opts(&[]), &automatic, Some(20), &raw),
+                Some(20)
+            );
+            assert_eq!(
+                resolve_effective_unwind(
+                    &verify_opts(&["--default-unwind", "5"]),
+                    &manual,
+                    Some(20),
+                    &raw
+                ),
+                Some(5)
+            );
         }
 
         #[test]
@@ -2413,6 +2467,7 @@ mod tests {
             let resolved = resolve_effective_unwind(
                 &verify_opts(&[]),
                 &h,
+                None,
                 &cbmc_args(&["--unwind", "not-a-number"]),
             );
             assert_eq!(resolved, None);

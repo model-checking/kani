@@ -17,7 +17,7 @@ use strum_macros::Display;
 use tokio::process::Command as TokioCommand;
 
 use crate::args::common::Verbosity;
-use crate::args::{OutputFormat, VerificationArgs};
+use crate::args::{OutputFormat, Timeout, VerificationArgs};
 use crate::cbmc_output_parser::{
     CheckStatus, ParserItem, Property, VerificationOutput, extract_results, process_cbmc_output,
 };
@@ -171,13 +171,15 @@ impl KaniSession {
     /// Verify a goto binary that's been prepared with goto-instrument
     pub fn run_cbmc(&self, file: &Path, harness: &HarnessMetadata) -> Result<VerificationResult> {
         let args: Vec<OsString> = self.cbmc_flags(file, harness)?;
+        let timeout =
+            resolve_harness_timeout(&self.args, harness, self.autoharness_harness_timeout);
 
         // TODO get cbmc path from self
         let mut cmd = TokioCommand::new("cbmc");
         cmd.args(args);
 
         let verification_results = if self.args.output_format() == crate::args::OutputFormat::Old {
-            if self.run_terminal_timeout(cmd).is_err() {
+            if self.run_terminal_timeout(cmd, timeout).is_err() {
                 VerificationResult::mock_failure()
             } else {
                 VerificationResult::mock_success()
@@ -188,7 +190,7 @@ impl KaniSession {
             // TODO: move this now that we don't use --visualize
             cmd.arg("--json-ui");
 
-            self.runtime.block_on(self.run_cbmc_piped(cmd, harness))?
+            self.runtime.block_on(self.run_cbmc_piped(cmd, harness, timeout))?
         };
 
         Ok(verification_results)
@@ -198,6 +200,7 @@ impl KaniSession {
         &self,
         mut cmd: TokioCommand,
         harness: &HarnessMetadata,
+        timeout: Option<Timeout>,
     ) -> Result<VerificationResult> {
         if self.args.common_args.verbose() {
             println!("[Kani] Running: `{}`", render_command(cmd.as_std()).to_string_lossy());
@@ -221,7 +224,7 @@ impl KaniSession {
             )
         });
 
-        let res = if let Some(timeout) = self.args.harness_timeout {
+        let res = if let Some(timeout) = timeout {
             tokio::time::timeout(timeout.into(), process_cbmc_output(&mut cbmc_process, filter))
                 .await
         } else {
@@ -267,7 +270,9 @@ impl KaniSession {
             args.push(object_bits.to_string().into());
         }
 
-        if let Some(unwind_value) = resolve_unwind_value(&self.args, harness_metadata) {
+        if let Some(unwind_value) =
+            resolve_unwind_value(&self.args, harness_metadata, self.autoharness_default_unwind)
+        {
             args.push("--unwind".into());
             args.push(unwind_value.to_string().into());
         }
@@ -760,13 +765,34 @@ fn coverage_results_from_properties(properties: &[Property]) -> Option<CoverageR
     Some(CoverageResults::new(coverage_results))
 }
 /// Solve Unwind Value from conflicting inputs of unwind values. (--default-unwind, annotation-unwind, --unwind)
+///
+/// The precedence is `--unwind` > `#[kani::unwind]` > `--default-unwind` > the autoharness
+/// default. The autoharness default (`autoharness_default_unwind`, `None` outside autoharness)
+/// only applies to automatically generated harnesses: manual harnesses verified in the same
+/// `autoharness` run must resolve exactly as they would under plain `kani`/`cargo kani` (#5103).
 pub fn resolve_unwind_value(
     args: &VerificationArgs,
     harness_metadata: &HarnessMetadata,
+    autoharness_default_unwind: Option<u32>,
 ) -> Option<u32> {
     // Check for which flag is being passed and prioritize extracting unwind from the
     // respective flag/annotation.
-    args.unwind.or(harness_metadata.attributes.unwind_value).or(args.default_unwind)
+    args.unwind
+        .or(harness_metadata.attributes.unwind_value)
+        .or(args.default_unwind)
+        .or(autoharness_default_unwind.filter(|_| harness_metadata.is_automatically_generated))
+}
+
+/// Resolve the timeout for verifying a harness: `--harness-timeout` if passed, otherwise the
+/// autoharness default (`autoharness_harness_timeout`, `None` outside autoharness), which, like
+/// the autoharness unwinding default, only applies to automatically generated harnesses.
+pub fn resolve_harness_timeout(
+    args: &VerificationArgs,
+    harness_metadata: &HarnessMetadata,
+    autoharness_harness_timeout: Option<Timeout>,
+) -> Option<Timeout> {
+    args.harness_timeout
+        .or(autoharness_harness_timeout.filter(|_| harness_metadata.is_automatically_generated))
 }
 
 #[cfg(test)]
@@ -1187,6 +1213,7 @@ mod tests {
             resolve_unwind_value(
                 &args::StandaloneArgs::try_parse_from(args).unwrap().verify_opts,
                 harness,
+                None,
             )
         }
 
@@ -1201,5 +1228,92 @@ mod tests {
         assert_eq!(resolve(&args_only_default, &harness_some), Some(3));
         assert_eq!(resolve(&args_only_harness, &harness_some), Some(1));
         assert_eq!(resolve(&args_both, &harness_some), Some(1));
+    }
+
+    fn verify_opts(args: &[&str]) -> VerificationArgs {
+        args::StandaloneArgs::try_parse_from(args).unwrap().verify_opts
+    }
+
+    fn automatic_harness(name: &str) -> HarnessMetadata {
+        let mut harness = mock_proof_harness(name, None, None, None);
+        harness.is_automatically_generated = true;
+        harness
+    }
+
+    /// The autoharness unwinding default only reaches automatically generated harnesses, c.f.
+    /// https://github.com/model-checking/kani/issues/5103.
+    #[test]
+    fn autoharness_default_unwind_is_scoped_to_automatic_harnesses() {
+        const AUTO: Option<u32> = Some(20);
+        let args_empty = ["kani", "x.rs"];
+        let args_only_default = ["kani", "x.rs", "--default-unwind", "2"];
+        let args_only_harness = ["kani", "x.rs", "--unwind", "1", "--harness", "check_one"];
+
+        let manual_none = mock_proof_harness("check_one", None, None, None);
+        let manual_some = mock_proof_harness("check_one", Some(3), None, None);
+        let automatic = automatic_harness("check_one");
+
+        // A manual harness without `#[kani::unwind]` keeps CBMC's default (no `--unwind`), as
+        // under plain `kani`; an automatic harness gets the autoharness default.
+        assert_eq!(resolve_unwind_value(&verify_opts(&args_empty), &manual_none, AUTO), None);
+        assert_eq!(resolve_unwind_value(&verify_opts(&args_empty), &automatic, AUTO), Some(20));
+
+        // A manual harness's `#[kani::unwind]` attribute still applies.
+        assert_eq!(resolve_unwind_value(&verify_opts(&args_empty), &manual_some, AUTO), Some(3));
+
+        // An explicit `--default-unwind` / `--unwind` still applies to every harness and beats
+        // the autoharness default.
+        for harness in [&manual_none, &automatic] {
+            assert_eq!(
+                resolve_unwind_value(&verify_opts(&args_only_default), harness, AUTO),
+                Some(2)
+            );
+            assert_eq!(
+                resolve_unwind_value(&verify_opts(&args_only_harness), harness, AUTO),
+                Some(1)
+            );
+        }
+        // `--unwind` still beats the attribute, and the attribute still beats `--default-unwind`.
+        assert_eq!(
+            resolve_unwind_value(&verify_opts(&args_only_harness), &manual_some, AUTO),
+            Some(1)
+        );
+        assert_eq!(
+            resolve_unwind_value(&verify_opts(&args_only_default), &manual_some, AUTO),
+            Some(3)
+        );
+
+        // Outside autoharness there is no autoharness default, whatever the harness.
+        assert_eq!(resolve_unwind_value(&verify_opts(&args_empty), &automatic, None), None);
+    }
+
+    /// Like the unwinding default, the autoharness timeout only reaches automatically generated
+    /// harnesses, while an explicit `--harness-timeout` applies to every harness.
+    #[test]
+    fn autoharness_timeout_is_scoped_to_automatic_harnesses() {
+        let auto_timeout: Option<Timeout> = Some("60s".parse().unwrap());
+        let args_empty = ["kani", "x.rs"];
+        let args_timeout = ["kani", "x.rs", "-Z", "unstable-options", "--harness-timeout", "5m"];
+        let explicit: Option<Timeout> = Some("5m".parse().unwrap());
+
+        let manual = mock_proof_harness("check_one", None, None, None);
+        let automatic = automatic_harness("check_one");
+
+        assert_eq!(resolve_harness_timeout(&verify_opts(&args_empty), &manual, auto_timeout), None);
+        assert_eq!(
+            resolve_harness_timeout(&verify_opts(&args_empty), &automatic, auto_timeout),
+            auto_timeout
+        );
+        for harness in [&manual, &automatic] {
+            assert_eq!(
+                resolve_harness_timeout(&verify_opts(&args_timeout), harness, auto_timeout),
+                explicit
+            );
+            assert_eq!(
+                resolve_harness_timeout(&verify_opts(&args_timeout), harness, None),
+                explicit
+            );
+        }
+        assert_eq!(resolve_harness_timeout(&verify_opts(&args_empty), &automatic, None), None);
     }
 }

@@ -421,7 +421,7 @@ The bounds are configurable with `--slice-bound` and `--string-bound` (and
 accept positive bounds only. They apply only to bounded generators; the unbounded primitive
 slice and `Vec` models continue to use nondeterministic lengths. A larger bound covers more
 inputs at a higher solver cost. A bound that is not below the effective loop-unwinding bound
-(`--default-unwind`, 20 by default) leaves loops over such an argument only partially unwound, and Kani warns when a
+(`--default-unwind`, 20 by default for automatic harnesses) leaves loops over such an argument only partially unwound, and Kani warns when a
 configured bound reaches it. The note printed after the summary table reports the bounds a run
 actually used.
 
@@ -653,20 +653,28 @@ results arrive in nondeterministic order; the summary table printed at the end i
 
 ### Default settings
 
-Unless you pass them yourself, `kani autoharness` sets two verification options so that a
-single harness cannot hold up the whole run:
+Unless you pass them yourself, `kani autoharness` verifies the automatic harnesses with two
+defaults so that a single harness cannot hold up the whole run:
 
-- `--harness-timeout 60s`: a harness whose verification takes longer than 60 seconds is
-  stopped and reported as a failure.
-- `--default-unwind 20`: loops are unwound up to 20 times. Automatic harnesses carry no
-  `#[kani::unwind]` attribute, so this bound applies to every loop unless you pass
-  `--unwind`. Kani's unwinding checks stay enabled, so a loop that needs more iterations fails
-  an unwinding assertion instead of being silently cut short.
+- a timeout of 60 seconds (as if `--harness-timeout 60s` had been passed): a harness whose
+  verification takes longer is stopped and reported as a failure.
+- a loop-unwinding bound of 20 (as if `--default-unwind 20` had been passed): loops are unwound
+  up to 20 times. Automatic harnesses carry no `#[kani::unwind]` attribute, so this bound
+  applies to every loop unless you pass `--unwind`. Kani's unwinding checks stay enabled, so a
+  loop that needs more iterations fails an unwinding assertion instead of being silently cut
+  short.
 
-To change either value, pass the option explicitly. When any automatic harness fails, Kani
-prints a reminder of these two defaults after the summary table, because the failure may come
-from a timeout or an insufficient unwinding bound rather than from a bug in the function. In
-that case, try larger values or, where possible, add a [loop contract](./loop-contracts.md).
+These defaults apply only to automatic harnesses. Manual harnesses (`#[kani::proof]` or
+`#[kani::proof_for_contract]`) that `autoharness` also verifies get the same bounds they would
+get under `kani`/`cargo kani`.
+
+To change either value, pass the option explicitly. An explicit `--harness-timeout`,
+`--default-unwind` or `--unwind` applies to every harness, manual or automatic, and a manual
+harness's `#[kani::unwind]` attribute still takes precedence over `--default-unwind`.
+
+When any automatic harness fails, Kani prints a reminder of these two defaults after the
+summary table, because the failure may come from a timeout or an insufficient unwinding bound
+rather than from a bug in the function. In that case, try larger values or, where possible, add a [loop contract](./loop-contracts.md).
 The default bounds for [bounded arguments](#bounded-argument-generation) are
 chosen to stay below the unwinding bound, and Kani warns if a configured bound reaches it.
 
