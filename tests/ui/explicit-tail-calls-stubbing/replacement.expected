@@ -1,0 +1,2 @@
+error: explicit tail calls (`become`) are not supported by Kani
+replacement.rs:22:12

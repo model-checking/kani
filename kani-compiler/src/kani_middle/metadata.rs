@@ -8,8 +8,7 @@ use std::path::Path;
 
 use crate::kani_middle::codegen_units::Harness;
 use crate::kani_middle::{
-    KaniAttributes, SourceLocation, readable_name, reject_explicit_tail_calls,
-    strip_local_crate_prefix,
+    KaniAttributes, SourceLocation, checked_body, readable_name, strip_local_crate_prefix,
 };
 use kani_metadata::ContractedFunction;
 use kani_metadata::{ArtifactType, HarnessAttributes, HarnessKind, HarnessMetadata};
@@ -28,9 +27,7 @@ pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> 
 
     // We get the body span to include the entire function definition.
     // This is required for concrete playback to properly position the generated test.
-    // A `become` in the harness panics in `rustc_public`'s MIR conversion; reject it first.
-    reject_explicit_tail_calls(tcx, instance);
-    let loc = SourceLocation::new(instance.body().unwrap().span);
+    let loc = SourceLocation::new(checked_body(tcx, instance).unwrap().span);
     let file_stem = format!("{}_{mangled_name}", base_name.file_stem().unwrap().to_str().unwrap());
     let model_file = base_name.with_file_name(file_stem).with_extension(ArtifactType::SymTabGoto);
 
@@ -137,7 +134,7 @@ pub fn gen_automatic_proof_metadata(
     let mangled_name = fn_to_verify.mangled_name();
 
     // Leave the concrete playback instrumentation for now, but this feature does not actually support concrete playback.
-    let loc = SourceLocation::new(fn_to_verify.body().unwrap().span);
+    let loc = SourceLocation::new(checked_body(tcx, *fn_to_verify).unwrap().span);
     let sha1_result = Sha1::try_digest(mangled_name);
     assert!(!sha1_result.has_collision());
     let file_stem = format!(

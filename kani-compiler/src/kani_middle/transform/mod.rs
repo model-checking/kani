@@ -154,10 +154,9 @@ impl BodyTransformation {
             .cache
             .entry(instance)
             .or_insert_with(|| {
-                // `become` panics in `rustc_public`'s MIR conversion; reject it before loading.
-                crate::kani_middle::reject_explicit_tail_calls(tcx, instance);
                 // Transform and add to the cache if there's no existing entry.
-                let mut body = instance.body().unwrap_or_else(|| build_missing_body(tcx, instance));
+                let mut body = crate::kani_middle::checked_body(tcx, instance)
+                    .unwrap_or_else(|| build_missing_body(tcx, instance));
 
                 let mut modified = false;
                 for pass in self.stub_passes.iter_mut().chain(self.inst_passes.iter_mut()) {
