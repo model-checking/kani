@@ -1091,12 +1091,41 @@ impl GotocCtx<'_, '_> {
         );
 
         let vtable_ref = trait_fat_ptr.to_owned().member("vtable", &self.symbol_table);
-        let vtable = vtable_ref.dereference();
+        let vtable = vtable_ref.clone().dereference();
         let fn_ptr = vtable.member(vtable_field_name, &self.symbol_table);
         trace!(fn_typ=?fn_ptr.typ(), "codegen_virtual_funcall");
 
         let data_ptr = trait_fat_ptr.to_owned().member("data", &self.symbol_table);
         let mut ret_stmts = vec![];
+
+        // A wide pointer can carry metadata that points to a vtable generated for a
+        // different trait (e.g. built via `ptr::from_raw_parts`), which is UB. Detect
+        // when this call uses a vtable that we generated for a different principal trait.
+        let dyn_ty = match self_ty.kind() {
+            TyKind::RigidTy(RigidTy::Adt(adt_def, adt_subst)) if adt_def.is_box() => {
+                Some(*adt_subst.0.first().unwrap().expect_ty())
+            }
+            _ => pointee_type_stable(self_ty),
+        };
+        let call_principal = dyn_ty.and_then(|ty| ty.kind().trait_principal());
+        if let Some(call_principal) = call_principal {
+            // Combine all mismatching vtables into a single assertion to avoid bloating
+            // the goto program with one assertion per generated vtable.
+            let mut mismatches = Vec::new();
+            for vtable in self.vtable_ctx.vtables() {
+                if vtable.principal.as_ref() != Some(&call_principal) {
+                    let wrong_vtable = Expr::symbol_expression(vtable.symbol, vtable.typ.clone())
+                        .address_of()
+                        .cast_to(vtable_ref.typ().clone());
+                    mismatches.push(vtable_ref.clone().neq(wrong_vtable));
+                }
+            }
+            if let Some(check) = and_all(mismatches) {
+                let msg =
+                    "invalid vtable metadata: points to a vtable generated for a different trait";
+                ret_stmts.push(self.codegen_assert(check, PropertyClass::SafetyCheck, msg, loc));
+            }
+        }
         fargs[0] = if self_ty.kind().is_adt() {
             // Generate a temp variable and assign its inner pointer to the fat_ptr.data.
             match fn_ptr.typ() {
@@ -1167,6 +1196,29 @@ impl GotocCtx<'_, '_> {
             .assign(expr, loc)
         }
     }
+}
+
+/// Combine `exprs` with logical and using a balanced tree.
+///
+/// Folding from the left produces a deeply nested expression when there are
+/// many terms (e.g. one per generated vtable), which can overflow the stack
+/// while the expression is traversed or dropped.
+fn and_all(mut exprs: Vec<Expr>) -> Option<Expr> {
+    if exprs.is_empty() {
+        return None;
+    }
+    while exprs.len() > 1 {
+        let mut next = Vec::with_capacity(exprs.len() / 2 + 1);
+        let mut iter = exprs.into_iter();
+        while let Some(lhs) = iter.next() {
+            match iter.next() {
+                Some(rhs) => next.push(lhs.and(rhs)),
+                None => next.push(lhs),
+            }
+        }
+        exprs = next;
+    }
+    exprs.pop()
 }
 
 /// Collect all places appearing in `rvalue` (directly or inside operands).
