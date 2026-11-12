@@ -32,11 +32,15 @@ struct Six {
 #[derive(Debug)]
 struct Pair(bool, ());
 
+// `derive(Debug)` calls `debug_c_like_enum_write_str` only for fieldless enums with at least five
+// variants.
 #[derive(Debug)]
 enum Color {
     Red,
     Green,
     Blue,
+    Cyan,
+    Magenta,
 }
 
 #[derive(Debug)]
@@ -52,14 +56,13 @@ fn structs() {
     let _ = format!("{:?}", Pair(false, ()));
 }
 
+// Each variant is formatted on its own: formatting a nondeterministic variant of a five-variant
+// enum takes minutes, with or without the models.
 #[kani::proof]
-fn any_c_like_variant() {
-    let color = match kani::any::<u8>() % 3 {
-        0 => Color::Red,
-        1 => Color::Green,
-        _ => Color::Blue,
-    };
-    let _ = format!("{color:?}");
+fn c_like_variants() {
+    let _ = format!("{:?}", Color::Red);
+    let _ = format!("{:?}", Color::Blue);
+    let _ = format!("{:?}", Color::Magenta);
 }
 
 #[kani::proof]

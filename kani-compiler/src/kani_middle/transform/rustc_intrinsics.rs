@@ -7,6 +7,7 @@
 //! here.
 
 use crate::intrinsics::Intrinsic;
+use crate::kani_middle::codegen_units::Stubs;
 use crate::kani_middle::kani_functions::{KaniFunction, KaniModel};
 use crate::kani_middle::transform::body::{
     InsertPosition, MutMirVisitor, MutableBody, SourceInstruction,
@@ -32,6 +33,8 @@ use tracing::debug;
 pub struct RustcIntrinsicsPass {
     /// Used to cache FnDef lookups for intrinsics models.
     models: HashMap<KaniModel, FnDef>,
+    /// The functions the harness stubs. A stub takes precedence over Kani's own models.
+    stubs: Stubs,
 }
 
 impl TransformPass for RustcIntrinsicsPass {
@@ -55,8 +58,12 @@ impl TransformPass for RustcIntrinsicsPass {
         debug!(function=?instance.name(), "transform");
 
         let mut new_body = MutableBody::from(body);
-        let mut visitor =
-            ReplaceIntrinsicCallVisitor::new(&self.models, new_body.locals().to_vec(), tcx);
+        let mut visitor = ReplaceIntrinsicCallVisitor::new(
+            &self.models,
+            &self.stubs,
+            new_body.locals().to_vec(),
+            tcx,
+        );
         visitor.visit_body(&mut new_body);
         let changed = self.replace_lowered_intrinsics(tcx, &mut new_body);
         (visitor.changed || changed, new_body.into())
@@ -89,7 +96,7 @@ fn fmt_derive_helper_model(tcx: &TyCtxt, def_id: rustc_public::DefId) -> Option<
 }
 
 impl RustcIntrinsicsPass {
-    pub fn new(queries: &QueryDb) -> Self {
+    pub fn new(queries: &QueryDb, stubs: &Stubs) -> Self {
         let models = queries
             .kani_functions()
             .iter()
@@ -98,7 +105,7 @@ impl RustcIntrinsicsPass {
             })
             .collect();
         debug!(?models, "RustcIntrinsicsPass::new");
-        RustcIntrinsicsPass { models }
+        RustcIntrinsicsPass { models, stubs: stubs.clone() }
     }
 
     /// This function checks if we need to replace intrinsics that have been lowered.
@@ -161,6 +168,7 @@ impl RustcIntrinsicsPass {
 
 struct ReplaceIntrinsicCallVisitor<'a, 'tcx> {
     models: &'a HashMap<KaniModel, FnDef>,
+    stubs: &'a Stubs,
     locals: Vec<LocalDecl>,
     tcx: TyCtxt<'tcx>,
     changed: bool,
@@ -169,10 +177,11 @@ struct ReplaceIntrinsicCallVisitor<'a, 'tcx> {
 impl<'a, 'tcx> ReplaceIntrinsicCallVisitor<'a, 'tcx> {
     fn new(
         models: &'a HashMap<KaniModel, FnDef>,
+        stubs: &'a Stubs,
         locals: Vec<LocalDecl>,
         tcx: TyCtxt<'tcx>,
     ) -> Self {
-        ReplaceIntrinsicCallVisitor { models, locals, changed: false, tcx }
+        ReplaceIntrinsicCallVisitor { models, stubs, locals, changed: false, tcx }
     }
 }
 
@@ -212,7 +221,11 @@ impl MutMirVisitor for ReplaceIntrinsicCallVisitor<'_, '_> {
             } else if is_panic_function(&self.tcx, def.0) {
                 // If we find a panic function, we replace it with our stub.
                 self.models[&KaniModel::PanicStub]
-            } else if let Some(model) = fmt_derive_helper_model(&self.tcx, def.0) {
+            } else if let Some(model) = fmt_derive_helper_model(&self.tcx, def.0)
+                // A user stub of the helper replaces its body (`FnStubPass`); redirecting the
+                // call to the model would bypass it.
+                && !self.stubs.contains_key(&def)
+            {
                 // The models are free functions with no generic parameters, while the
                 // `Formatter` methods they replace have (erased) lifetime parameters.
                 let new_instance =

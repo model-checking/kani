@@ -76,18 +76,34 @@ macro_rules! generate_models {
             }
 
             /// Model of `core::fmt::Formatter::debug_c_like_enum_write_str`, which
-            /// `derive(Debug)` uses for enums whose variants have no fields: `names` holds every
-            /// variant name separated by spaces, and the variant's name starts at `start_index`.
-            /// Like [`debug_struct_fields_finish`], this finds the end of the name with a
-            /// byte-by-byte loop instead of `memchr`, and writes the same string.
+            /// `derive(Debug)` uses for enums of at least five variants that have no fields:
+            /// `names` holds every variant name separated by spaces, and the variant's name starts
+            /// at `start_index`. It writes the same string as the standard library.
+            ///
+            /// The model walks the names in order and writes the one that starts at `start_index`,
+            /// so each write is of a constant slice of `names`, as with the `match` on variants the
+            /// derive generated before rust-lang/rust#164726. Slicing at a nondeterministic
+            /// `start_index` instead, as the standard library does, writes a string of
+            /// nondeterministic length, which is far more expensive to verify.
             #[kanitool::fn_marker = "DebugCLikeEnumWriteStrModel"]
             pub fn debug_c_like_enum_write_str(
                 f: &mut core::fmt::Formatter<'_>,
                 names: &str,
                 start_index: usize,
             ) -> core::fmt::Result {
-                let end = next_space(names.as_bytes(), start_index);
-                f.write_str(&names[start_index..end])
+                let bytes = names.as_bytes();
+                let mut start = 0;
+                while start <= bytes.len() {
+                    let end = next_space(bytes, start);
+                    if start == start_index {
+                        return f.write_str(&names[start..end]);
+                    }
+                    start = end + 1;
+                }
+                // `start_index` is not the start of a name, which `derive(Debug)` never passes. Do
+                // what the standard library does: write from `start_index` to the next space,
+                // panicking if `start_index` is out of bounds.
+                f.write_str(&names[start_index..next_space(bytes, start_index)])
             }
 
             /// The index of the first space in `bytes` at or after `start`, or `bytes.len()`.

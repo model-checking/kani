@@ -73,11 +73,14 @@ struct Pair(u8, &'static str);
 #[derive(Debug)]
 struct Unit;
 
+// Five variants: `derive(Debug)` uses `debug_c_like_enum_write_str` only from five on.
 #[derive(Debug)]
 enum Color {
     Red,
     Green,
     Blue,
+    Cyan,
+    Magenta,
 }
 
 #[derive(Debug)]
@@ -121,10 +124,12 @@ fn nested() {
 
 #[test]
 fn c_like_enums() {
-    let names = "Red Green Blue";
+    let names = "Red Green Blue Cyan Magenta";
     assert_same(&Color::Red, &ViaEnumModel { names, start_index: 0 });
     assert_same(&Color::Green, &ViaEnumModel { names, start_index: 4 });
     assert_same(&Color::Blue, &ViaEnumModel { names, start_index: 10 });
+    assert_same(&Color::Cyan, &ViaEnumModel { names, start_index: 15 });
+    assert_same(&Color::Magenta, &ViaEnumModel { names, start_index: 20 });
 }
 
 #[test]

@@ -102,6 +102,7 @@ derived `Debug` orders of magnitude slower in CBMC; the models scan the same
 string byte by byte. The models rely on `derive(Debug)` passing names that
 match the number of fields (a mismatch panics, as in the standard library) and
 on names never containing spaces, which holds for Rust identifiers.
+A harness that stubs one of these helpers (`#[kani::stub]`) uses its stub, not the model.
 
 ## Reporting Soundness Issues
 
