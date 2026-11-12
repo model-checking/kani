@@ -643,7 +643,7 @@ impl RustcInternalMir for Body {
                         .iter()
                         .map(|statement| statement.internal_mir(tcx))
                         .collect();
-                    let terminator = Some(stable_basic_block.terminator.internal_mir(tcx));
+                    let terminator = stable_basic_block.terminator.internal_mir(tcx);
                     let is_cleanup = false;
                     rustc_middle::mir::BasicBlockData::new_stmts(statements, terminator, is_cleanup)
                 })

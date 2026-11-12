@@ -85,6 +85,25 @@ issue**: the analysis may exclude valid targets, causing Kani to miss real
 failures (false negatives). See
 [#802](https://github.com/model-checking/kani/issues/802) for details.
 
+### Models of standard library functions
+Kani replaces a few standard library functions with its own implementations
+(models) when it compiles a harness. Verification results then hold for the
+models, so each model is an assumption that it behaves like the function it
+replaces. The models live in `library/kani_core/src/models.rs`.
+
+| Function | Model | Assumption |
+|---|---|---|
+| `core::fmt::Formatter::debug_struct_fields_finish` | `debug_struct_fields_finish` | Produces the same output as the standard library: the derive passes the struct name and field names as one string separated by spaces (`"Point x y"`), or only the name for a tuple struct (`"Pair"`), and the model formats them with the same `debug_struct` / `debug_tuple` builders. |
+| `core::fmt::Formatter::debug_c_like_enum_write_str` | `debug_c_like_enum_write_str` | Writes the same variant name: the space-separated word of `names` that starts at `start_index`. |
+
+These are the helpers that `#[derive(Debug)]` calls. The standard library
+looks up the names with `memchr`, whose word-at-a-time loop makes verifying any
+derived `Debug` orders of magnitude slower in CBMC; the models scan the same
+string byte by byte. The models rely on `derive(Debug)` passing names that
+match the number of fields (a mismatch panics, as in the standard library) and
+on names never containing spaces, which holds for Rust identifiers.
+A harness that stubs one of these helpers (`#[kani::stub]`) uses its stub, not the model.
+
 ## Reporting Soundness Issues
 
 If you believe Kani has failed to detect a genuine issue (false negative),

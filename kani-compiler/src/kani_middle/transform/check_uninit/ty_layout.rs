@@ -390,6 +390,12 @@ fn data_bytes_for_ty(
                     }
                     _ => unreachable!("RigidTy::RawPtr | RigidTy::Ref with a non-scalar ABI."),
                 }),
+                // A closure or function item that captures nothing is zero-sized, so it has no
+                // bytes whose initialization needs tracking. As of nightly-2026-11-11, calling a
+                // closure through a function pointer argument can take a pointer to it.
+                RigidTy::FnDef(_, _) | RigidTy::Closure(_, _) if layout.size.bytes() == 0 => {
+                    Ok(vec![])
+                }
                 RigidTy::FnDef(_, _)
                 | RigidTy::FnPtr(_)
                 | RigidTy::Closure(_, _)

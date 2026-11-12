@@ -101,6 +101,10 @@ pub enum KaniModel {
     AnyCharArrayRefSearcher,
     #[strum(serialize = "AnyCharArraySearcherModel")]
     AnyCharArraySearcher,
+    #[strum(serialize = "DebugCLikeEnumWriteStrModel")]
+    DebugCLikeEnumWriteStr,
+    #[strum(serialize = "DebugStructFieldsFinishModel")]
+    DebugStructFieldsFinish,
     #[strum(serialize = "AnyCharSliceSearcherModel")]
     AnyCharSliceSearcher,
     #[strum(serialize = "AnyFormatterModel")]

@@ -7,40 +7,40 @@
 //  * A value such that the difference between it and the argument is between
 //    zero and one.
 #![feature(core_intrinsics)]
-use std::intrinsics::ceilf32;
+use std::intrinsics::ceil;
 
 #[kani::proof]
 fn test_one() {
     let one = 1.0;
-    let ceil_res = unsafe { ceilf32(one) };
+    let ceil_res = unsafe { ceil::<f32>(one) };
     assert!(ceil_res == 1.0);
 }
 
 #[kani::proof]
 fn test_one_frac() {
     let one_frac = 1.2;
-    let ceil_res = unsafe { ceilf32(one_frac) };
+    let ceil_res = unsafe { ceil::<f32>(one_frac) };
     assert!(ceil_res == 2.0);
 }
 
 #[kani::proof]
 fn test_one_neg() {
     let one_neg = -1.8;
-    let ceil_res = unsafe { ceilf32(one_neg) };
+    let ceil_res = unsafe { ceil::<f32>(one_neg) };
     assert!(ceil_res == -1.0);
 }
 
 #[kani::proof]
 fn test_conc() {
     let conc = -42.6;
-    let ceil_res = unsafe { ceilf32(conc) };
+    let ceil_res = unsafe { ceil::<f32>(conc) };
     assert!(ceil_res == -42.0);
 }
 
 #[kani::proof]
 fn test_conc_sci() {
     let conc = 5.4e-2;
-    let ceil_res = unsafe { ceilf32(conc) };
+    let ceil_res = unsafe { ceil::<f32>(conc) };
     assert!(ceil_res == 1.0);
 }
 
@@ -48,7 +48,7 @@ fn test_conc_sci() {
 fn test_towards_inf() {
     let x: f32 = kani::any();
     kani::assume(!x.is_nan());
-    let ceil_res = unsafe { ceilf32(x) };
+    let ceil_res = unsafe { ceil::<f32>(x) };
     assert!(ceil_res >= x);
 }
 
@@ -57,7 +57,7 @@ fn test_diff_one() {
     let x: f32 = kani::any();
     kani::assume(!x.is_nan());
     kani::assume(!x.is_infinite());
-    let ceil_res = unsafe { ceilf32(x) };
+    let ceil_res = unsafe { ceil::<f32>(x) };
     let diff = (x - ceil_res).abs();
     // `diff` can be 1.0 if `x` is very small (e.g., 1.840879e-35)
     assert!(diff <= 1.0);

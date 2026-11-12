@@ -7,7 +7,7 @@ pub enum MyEnum {\
 // Full name: test::enum_match\
 pub fn enum_match(e: MyEnum) -> i32\
 {\
-    let _0: i32; // return\
+    let mut _0: i32; // return\
     let e: MyEnum; // arg #1\
     let i: i32; // local\
 \
@@ -32,7 +32,7 @@ pub fn enum_match(e: MyEnum) -> i32\
 // Full name: test::main\
 pub fn main()\
 {\
-    let _0: (); // return\
+    let mut _0: (); // return\
     let e: MyEnum; // local\
     let i: i32; // local\
 \
@@ -43,6 +43,7 @@ pub fn main()\
     e = MyEnum::A { _0: const 1i32 }\
     i = enum_match(copy e)\
     ↳⚡ undefined_behavior\
+    _0 = ()\
     storage_dead(i)\
     storage_dead(e)\
     return\

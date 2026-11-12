@@ -32,7 +32,7 @@ tracing-tree = "0.4.0"
 # Future proofing: enable backend dependencies using feature.
 [features]
 default = ['cprover']
-llbc = ['charon']
+llbc = ['charon', 'serde']
 cprover = ['cbmc', 'num', 'serde']
 
 [package.metadata.rust-analyzer]
