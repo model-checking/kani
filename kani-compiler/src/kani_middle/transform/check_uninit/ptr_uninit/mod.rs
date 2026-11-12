@@ -70,7 +70,7 @@ impl TransformPass for UninitPass {
             self.safety_check_type.clone(),
             self.unsupported_check_type.clone(),
             &mut self.mem_init_fn_cache,
-            CheckUninitVisitor::new(),
+            CheckUninitVisitor::new(tcx, instance),
         );
 
         (changed || instrumentation_added, body)

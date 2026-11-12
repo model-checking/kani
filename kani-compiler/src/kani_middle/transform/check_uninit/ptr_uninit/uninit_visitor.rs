@@ -5,7 +5,6 @@
 
 use crate::{
     intrinsics::Intrinsic,
-    kani_middle::nonnull_pointee,
     kani_middle::transform::{
         body::{InsertPosition, MutableBody, SourceInstruction},
         check_uninit::{
@@ -14,8 +13,10 @@ use crate::{
             ty_layout::{LayoutComputationError, tys_layout_compatible_to_size},
         },
     },
+    kani_middle::{nonnull_pointee, points_to::resolve_call},
 };
-use rustc_public::CrateDefType;
+use rustc_middle::ty::TyCtxt;
+use rustc_public::{CrateDefType, rustc_internal};
 use rustc_public::{
     mir::{
         AggregateKind, CastKind, LocalDecl, MirVisitor, NonDivergingIntrinsic, Operand, Place,
@@ -28,7 +29,9 @@ use rustc_public::{
     ty::{AdtKind, ConstantKind, RigidTy, Ty, TyConstKind, TyKind},
 };
 
-pub struct CheckUninitVisitor {
+pub struct CheckUninitVisitor<'tcx> {
+    tcx: TyCtxt<'tcx>,
+    instance: Instance,
     locals: Vec<LocalDecl>,
     /// All target instructions in the body.
     targets: Vec<InitRelevantInstruction>,
@@ -36,7 +39,7 @@ pub struct CheckUninitVisitor {
     current_target: InitRelevantInstruction,
 }
 
-impl TargetFinder for CheckUninitVisitor {
+impl TargetFinder for CheckUninitVisitor<'_> {
     fn find_all(mut self, body: &MutableBody) -> Vec<InitRelevantInstruction> {
         self.locals = body.locals().to_vec();
         for (bb_idx, bb) in body.blocks().iter().enumerate() {
@@ -63,7 +66,19 @@ impl TargetFinder for CheckUninitVisitor {
                     .take(body.arg_count())
                     .filter(|(_, local)| local.ty.kind().is_union())
                     .collect();
-                if !union_args.is_empty() {
+                // RustCall and other generated ABIs do not establish the legacy union
+                // slot pairing. Guard entry before any fallback LoadArgument can bless it.
+                if self.instance.kind == InstanceKind::Shim
+                    && body
+                        .locals()
+                        .iter()
+                        .take(body.arg_count() + 1)
+                        .any(|local| shim_type_may_carry_shadow(self.tcx, local.ty))
+                {
+                    self.push_target(MemoryInitOp::Unsupported {
+                        reason: unsupported_call_reason("shadow transfers through Shim instances"),
+                    });
+                } else if !union_args.is_empty() {
                     for (idx, _) in union_args {
                         self.push_target(MemoryInitOp::LoadArgument {
                             operand: Operand::Copy(Place { local: idx, projection: vec![] }),
@@ -78,9 +93,11 @@ impl TargetFinder for CheckUninitVisitor {
     }
 }
 
-impl CheckUninitVisitor {
-    pub fn new() -> Self {
+impl<'tcx> CheckUninitVisitor<'tcx> {
+    pub fn new(tcx: TyCtxt<'tcx>, instance: Instance) -> Self {
         Self {
+            tcx,
+            instance,
             locals: vec![],
             targets: vec![],
             current_target: InitRelevantInstruction {
@@ -96,7 +113,7 @@ impl CheckUninitVisitor {
     }
 }
 
-impl MirVisitor for CheckUninitVisitor {
+impl MirVisitor for CheckUninitVisitor<'_> {
     fn visit_statement(&mut self, stmt: &Statement, location: Location) {
         // Leave it as an exhaustive match to be notified when a new kind is added.
         match &stmt.kind {
@@ -260,16 +277,32 @@ impl MirVisitor for CheckUninitVisitor {
         }
         // Leave it as an exhaustive match to be notified when a new kind is added.
         match &term.kind {
-            TerminatorKind::Call { func, args, destination, .. } => {
+            TerminatorKind::Call { func, args, destination, .. } => 'call: {
                 self.super_terminator(term, location);
                 let instance = match try_resolve_instance(&self.locals, func) {
                     Ok(instance) => instance,
                     Err(reason) => {
-                        self.super_terminator(term, location);
                         self.push_target(MemoryInitOp::Unsupported { reason });
-                        return;
+                        // Keep entry loads and operations collected while visiting the call.
+                        // The common terminator epilogue must publish this target, even on error.
+                        break 'call;
                     }
                 };
+                // Inspect the source operands and destination before any StoreArgument.
+                // Tuple wrapping must not hide a union behind an unproved generated ABI.
+                if instance.kind == InstanceKind::Shim
+                    && (args.iter().any(|arg| {
+                        shim_type_may_carry_shadow(self.tcx, arg.ty(&self.locals).unwrap())
+                    }) || shim_type_may_carry_shadow(
+                        self.tcx,
+                        destination.ty(&self.locals).unwrap(),
+                    ))
+                {
+                    self.push_target(MemoryInitOp::Unsupported {
+                        reason: unsupported_call_reason("shadow transfers through Shim instances"),
+                    });
+                    break 'call;
+                }
                 match instance.kind {
                     InstanceKind::Intrinsic => {
                         match Intrinsic::from_instance(&instance) {
@@ -372,7 +405,9 @@ impl MirVisitor for CheckUninitVisitor {
                             }
                         }
                     }
-                    InstanceKind::Item => {
+                    InstanceKind::Item | InstanceKind::Shim => {
+                        // The resolver checked actual instance body availability, with foreign
+                        // models retained. Non-shadow shims follow the ordinary MIR path.
                         if instance.is_foreign_item() {
                             match instance.name().as_str() {
                                 "alloc::alloc::__rust_alloc" | "alloc::alloc::__rust_realloc" => {
@@ -414,7 +449,9 @@ impl MirVisitor for CheckUninitVisitor {
                             }
                         }
                     }
-                    _ => {}
+                    InstanceKind::Virtual { .. } | InstanceKind::LlvmIntrinsic => {
+                        unreachable!("the shared resolver rejects unsupported callees")
+                    }
                 }
             }
             TerminatorKind::Drop { place, .. } => {
@@ -724,13 +761,46 @@ fn try_remove_topmost_deref(place: &Place) -> Option<Place> {
 
 /// Try retrieving instance for the given function operand.
 fn try_resolve_instance(locals: &[LocalDecl], func: &Operand) -> Result<Instance, String> {
-    let ty = func.ty(locals).unwrap();
-    match ty.kind() {
-        TyKind::RigidTy(RigidTy::FnDef(def, args)) => Ok(Instance::resolve(def, &args).unwrap()),
-        _ => Err(format!(
-            "Kani was not able to resolve the instance of the function operand `{ty:?}`. Currently, memory initialization checks in presence of function pointers and vtable calls are not supported. For more information about planned support, see https://github.com/model-checking/kani/issues/3300."
-        )),
+    resolve_call(func.ty(locals).unwrap())
+}
+
+/// Conservative admission guard for generated ABIs, not an expansion of the shadow model.
+/// Inspect only by-value storage: references and pointers do not transfer their pointee shadow.
+/// Unknown storage is rejected rather than treated as an empty tuple or ordinary bytes.
+fn shim_type_may_carry_shadow(tcx: TyCtxt<'_>, ty: Ty) -> bool {
+    fn inspect<'tcx>(tcx: TyCtxt<'tcx>, ty: rustc_middle::ty::Ty<'tcx>) -> bool {
+        use rustc_middle::ty::TyKind;
+        match ty.kind() {
+            TyKind::Adt(def, args) => {
+                def.is_union()
+                    || def
+                        .all_fields()
+                        .any(|field| inspect(tcx, field.ty(tcx, args).skip_normalization()))
+            }
+            TyKind::Tuple(fields) => fields.iter().any(|field| inspect(tcx, field)),
+            TyKind::Array(element, _) | TyKind::Pat(element, _) => inspect(tcx, *element),
+            TyKind::Closure(_, args) => inspect(tcx, args.as_closure().tupled_upvars_ty()),
+            TyKind::Bool
+            | TyKind::Char
+            | TyKind::Int(_)
+            | TyKind::Uint(_)
+            | TyKind::Float(_)
+            | TyKind::Never
+            | TyKind::FnDef(..)
+            | TyKind::FnPtr(..)
+            | TyKind::RawPtr(..)
+            | TyKind::Ref(..) => false,
+            _ => true,
+        }
     }
+    inspect(tcx, rustc_internal::internal(tcx, ty))
+}
+
+/// Describe a call whose memory effects cannot be tracked by the uninitialized-memory passes.
+fn unsupported_call_reason(kind: &str) -> String {
+    format!(
+        "Kani does not support memory initialization checks across {kind}. For more information about planned support, see https://github.com/model-checking/kani/issues/3300."
+    )
 }
 
 /// The pointer argument of an allocation shim, as a raw pointer.
