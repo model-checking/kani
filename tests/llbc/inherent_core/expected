@@ -1,7 +1,7 @@
 // Full name: core::num::{u8}::wrapping_add\
 pub fn wrapping_add(_1: u8, _2: u8) -> u8\
-= <opaque>\
-\
+= <opaque>
+
 pub opaque type ()
 
 // Full name: test::wrap\
