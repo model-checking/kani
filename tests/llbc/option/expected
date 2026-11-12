@@ -7,13 +7,13 @@ pub enum Option<T> {\
 // Full name: core::ptr::drop_glue\
 pub fn drop_glue<'_0, T>(_1: &'_0 mut T)\
 where\
-    TypeOutlives0: T: '_0,\
+    Outlives0: (T: '_0),\
 = <opaque>
 
 // Full name: test::both_none\
 pub fn both_none<T, U>(a: Option<T>, b: Option<U>) -> bool\
 {\
-    let _0: bool; // return\
+    let mut _0: bool; // return\
     let a: Option<T>; // arg #1\
     let b: Option<U>; // arg #2\
 \
@@ -45,7 +45,7 @@ pub fn both_none<T, U>(a: Option<T>, b: Option<U>) -> bool\
 // Full name: test::main\
 pub fn main()\
 {\
-    let _0: (); // return\
+    let mut _0: (); // return\
     let a: Option<u32>; // local\
     let b: Option<i32>; // local\
     let i: bool; // local\

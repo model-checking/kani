@@ -6,6 +6,8 @@
 //! This module contains a context for translating stable MIR into Charon's
 //! unstructured low-level borrow calculus (ULLBC)
 
+use crate::kani_middle::resolve::resolve_item;
+use crate::kani_middle::stable_fn_def;
 use charon_lib::ast::meta::{
     AttrInfo as CharonAttrInfo, Loc as CharonLoc, SpanData as CharonRawSpan,
 };
@@ -32,19 +34,20 @@ use charon_lib::ast::{
     LifetimeMutability as CharonLifetimeMutability, Local as CharonVar, LocalId as CharonVarId,
     Locals as CharonLocals, Name as CharonName, Operand as CharonOperand,
     OverflowMode as CharonOverflowMode, PathElem as CharonPathElem, Place as CharonPlace,
-    PolyTraitDeclRef as CharonPolyTraitDeclRef, PredicateOrigin as CharonPredicateOrigin,
-    ProjectionElem as CharonProjectionElem, PtrMetadata as CharonPtrMetadata,
-    RefKind as CharonRefKind, Region as CharonRegion, RegionBinder as CharonRegionBinder,
-    RegionId as CharonRegionId, RegionParam as CharonRegionVar, Rvalue as CharonRvalue,
-    ScalarTy as CharonLiteralTy, Span as CharonSpan, SwitchData as CharonSwitchData,
-    SwitchScrutinee as CharonSwitchScrutinee, TargetInfo as CharonTargetInfo,
-    TraitClauseId as CharonTraitClauseId, TraitDecl as CharonTraitDecl,
-    TraitDeclId as CharonTraitDeclId, TraitDeclRef as CharonTraitDeclRef,
-    TraitDeclSource as CharonTraitDeclSource, TraitImpl as CharonTraitImpl,
-    TraitImplId as CharonTraitImplId, TraitImplSource as CharonTraitImplSource,
-    TraitParam as CharonTraitClause, TraitRef as CharonTraitRef,
-    TraitRefKind as CharonTraitRefKind, TranslatedCrate as CharonTranslatedCrate,
-    TypeDecl as CharonTypeDecl, TypeDeclId as CharonTypeDeclId, TypeDeclKind as CharonTypeDeclKind,
+    PolyTraitDeclRef as CharonPolyTraitDeclRef, PolyTraitRef as CharonPolyTraitRef,
+    PredicateOrigin as CharonPredicateOrigin, ProjectionElem as CharonProjectionElem,
+    PtrMetadata as CharonPtrMetadata, RefKind as CharonRefKind, Region as CharonRegion,
+    RegionArgs as CharonRegionArgs, RegionBinder as CharonRegionBinder, RegionId as CharonRegionId,
+    RegionParam as CharonRegionVar, Rvalue as CharonRvalue, ScalarTy as CharonLiteralTy,
+    Span as CharonSpan, SwitchData as CharonSwitchData, SwitchScrutinee as CharonSwitchScrutinee,
+    TargetInfo as CharonTargetInfo, TraitClauseId as CharonTraitClauseId,
+    TraitDecl as CharonTraitDecl, TraitDeclId as CharonTraitDeclId,
+    TraitDeclRef as CharonTraitDeclRef, TraitDeclSource as CharonTraitDeclSource,
+    TraitImpl as CharonTraitImpl, TraitImplId as CharonTraitImplId,
+    TraitImplSource as CharonTraitImplSource, TraitParam as CharonTraitClause,
+    TraitRef as CharonTraitRef, TraitRefKind as CharonTraitRefKind,
+    TranslatedCrate as CharonTranslatedCrate, TypeDecl as CharonTypeDecl,
+    TypeDeclId as CharonTypeDeclId, TypeDeclKind as CharonTypeDeclKind,
     TypeDeclRef as CharonTypeDeclRef, TypeParam as CharonTypeVar, TypeSource as CharonTypeSource,
     TypeVarId as CharonTypeVarId, UIntTy as CharonUIntTy, UnOp as CharonUnOp,
     VTableDecl as CharonVTableDecl, Variance as CharonVariance, Variant as CharonVariant,
@@ -62,6 +65,7 @@ use charon_lib::{error_assert, raise_error, register_error};
 use core::panic;
 use indexmap::IndexMap;
 use rustc_data_structures::fx::FxHashMap;
+use rustc_hir::def_id::CRATE_DEF_ID;
 use rustc_middle::ty::{TyCtxt, TypingEnv};
 use rustc_public::mir::mono::{Instance, InstanceDef};
 use rustc_public::mir::{
@@ -96,6 +100,12 @@ pub struct Context<'a, 'tcx> {
     /// Block ID of the synthetic block that aborts. It is the target of every call's unwind edge
     /// (Kani does not model unwinding) and of the return edge of calls that never return.
     abort_block: CharonBlockId,
+    /// Blocks that the translation adds to a body beyond the MIR blocks, numbered from
+    /// `first_extra_block`: a MIR block is split after each checked binary operation, which becomes
+    /// a call (see `checked_op_call`). `None` until the block is complete.
+    extra_blocks: Vec<Option<CharonBlockData>>,
+    /// Block ID of the first of `extra_blocks`, right after the abort block.
+    first_extra_block: usize,
     /// How Charon numbers the generic parameters of the item whose declaration is being
     /// translated (see [`ItemGenerics`]); `None` outside of declarations.
     item_generics: Option<ItemGenerics>,
@@ -147,6 +157,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             local_names,
             file_to_id,
             abort_block,
+            extra_blocks: Vec::new(),
+            first_extra_block: 0,
             item_generics: None,
             binder_depth: 0,
         }
@@ -274,15 +286,14 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             };
             let c_traitdecl_id = self.translate_traitdecl(trait_def);
             let c_genarg = self.translate_generic_args_without_trait(trait_ref.args().clone());
-            let c_polytrait = CharonPolyTraitDeclRef {
-                regions: CharonVector::new(),
-                skip_binder: CharonTraitDeclRef {
-                    id: c_traitdecl_id,
-                    generics: Box::new(c_genarg.clone()),
-                },
-            };
+            let c_traitdeclref =
+                CharonTraitDeclRef { id: c_traitdecl_id, generics: Box::new(c_genarg.clone()) };
             let debr = CharonDeBruijnVar::free(CharonTraitClauseId::from_usize(i));
-            let c_traitref = CharonTraitRef::new(CharonTraitRefKind::Clause(debr), c_polytrait);
+            // The clauses translated here bind no regions of their own.
+            let c_traitref = CharonTraitRef::new(
+                CharonTraitRefKind::Clause(debr, CharonRegionArgs::new(CharonVector::new())),
+                c_traitdeclref,
+            );
             c_trait_refs.push(c_traitref);
             c_spans.push(self.translate_span(rustc_internal::stable(span)));
         }
@@ -314,6 +325,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             let c_genarg = self.translate_generic_args_without_trait(trait_ref.args().clone());
             let c_polytrait = CharonPolyTraitDeclRef {
                 regions: CharonVector::new(),
+                outlives: Vec::new(),
                 skip_binder: CharonTraitDeclRef {
                     id: c_traitdecl_id,
                     generics: Box::new(c_genarg),
@@ -492,6 +504,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                         name: Some(name),
                         variance: CharonVariance::Unknown,
                         mutability: CharonLifetimeMutability::Unknown,
+                        late_bound: false,
                     };
                     c_regions.push(c_region);
                 }
@@ -527,8 +540,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             types: c_types,
             const_generics: c_const_generics,
             trait_clauses: CharonVector::new(),
-            regions_outlive: Vec::new(),
-            types_outlive: Vec::new(),
+            outlives: Vec::new(),
             trait_type_constraints: CharonVector::new(),
         }
     }
@@ -553,6 +565,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                             name: Some(epr.name),
                             variance: CharonVariance::Unknown,
                             mutability: CharonLifetimeMutability::Unknown,
+                            late_bound: false,
                         };
                         c_regions.push(c_region);
                     }
@@ -601,6 +614,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 name,
                 variance: CharonVariance::Unknown,
                 mutability: CharonLifetimeMutability::Unknown,
+                late_bound: true,
             });
         }
         let trait_clauses = self.get_traitclauses_from_defid(fndef.def_id());
@@ -609,8 +623,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             types: c_types,
             const_generics: c_const_generics,
             trait_clauses,
-            regions_outlive: Vec::new(),
-            types_outlive: Vec::new(),
+            outlives: Vec::new(),
             trait_type_constraints: CharonVector::new(),
         }
     }
@@ -635,6 +648,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                             name: Some(epr.name),
                             variance: CharonVariance::Unknown,
                             mutability: CharonLifetimeMutability::Unknown,
+                            late_bound: false,
                         };
                         c_regions.push(c_region);
                     }
@@ -682,8 +696,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             types: c_types,
             const_generics: c_const_generics,
             trait_clauses,
-            regions_outlive: Vec::new(),
-            types_outlive: Vec::new(),
+            outlives: Vec::new(),
             trait_type_constraints: CharonVector::new(),
         }
     }
@@ -1120,6 +1133,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                         name: (name != "'_").then_some(name),
                         variance: CharonVariance::Unknown,
                         mutability: CharonLifetimeMutability::Unknown,
+                        late_bound: false,
                     });
                 }
                 rustc_middle::ty::GenericParamDefKind::Type { .. } => {
@@ -1145,8 +1159,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             types,
             const_generics,
             trait_clauses: self.get_traitclauses_from_defid(impl_def),
-            regions_outlive: Vec::new(),
-            types_outlive: Vec::new(),
+            outlives: Vec::new(),
             trait_type_constraints: CharonVector::new(),
         }
     }
@@ -1240,6 +1253,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         // their `on_unwind` target, and as their return target when the callee
         // never returns.
         self.abort_block = CharonBlockId::from_usize(mir_body.blocks.len());
+        self.first_extra_block = mir_body.blocks.len() + 1;
+        self.extra_blocks.clear();
         let mut body: CharonBodyContents =
             mir_body.blocks.iter().map(|bb| self.translate_block(bb)).collect();
 
@@ -1251,6 +1266,9 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         };
         body.push(abort_block);
         assert_eq!(self.abort_block.index(), body.len() - 1);
+        for block in std::mem::take(&mut self.extra_blocks) {
+            body.push(block.expect("every block that splits a MIR block is completed"));
+        }
 
         // TODO: Kani does not bind any region in bodies.
         let body_expr =
@@ -1282,10 +1300,11 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             }
         }
         let (gen_trait_refs, spans) = self.get_traitrefs_and_span_from_defid(defid);
-        let mut trait_refs: CharonVector<CharonTraitClauseId, CharonTraitRef> = CharonVector::new();
+        let mut trait_refs: CharonVector<CharonTraitClauseId, CharonPolyTraitRef> =
+            CharonVector::new();
         let trait_ref_span_zip = zip(spans.clone(), gen_trait_refs.clone());
         for (_, trait_ref) in trait_ref_span_zip {
-            let traitgenarg = trait_ref.trait_decl_ref.skip_binder.generics.clone();
+            let traitgenarg = trait_ref.trait_decl_ref.generics.clone();
             let t_regions: CharonVector<CharonRegionId, CharonRegion> = CharonVector::new();
             let mut t_types: CharonVector<CharonTypeVarId, CharonTy> = CharonVector::new();
             let t_const_generics: CharonVector<CharonConstGenericVarId, CharonConstantExpr> =
@@ -1294,10 +1313,10 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 match tyvar.kind() {
                     CharonTyKind::TypeVar(dbtyvarid) => {
                         let tyvarid = match dbtyvarid {
-                            CharonDeBruijnVar::Free(tyvarid) => *tyvarid,
+                            CharonDeBruijnVar::Free(tyvarid) => tyvarid,
                             _ => panic!("Expect free type var id"),
                         };
-                        let subs_ty = c_types.get(tyvarid).unwrap().clone();
+                        let subs_ty = c_types.get(*tyvarid).unwrap().clone();
                         t_types.push(subs_ty);
                     }
                     _ => todo!("TyKind of gen must be TyVar: {:?}", tyvar.kind()),
@@ -1307,16 +1326,11 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 regions: t_regions,
                 types: t_types,
                 const_generics: t_const_generics,
-                trait_refs: trait_ref.trait_decl_ref.skip_binder.generics.trait_refs.clone(),
+                trait_refs: trait_ref.trait_decl_ref.generics.trait_refs.clone(),
             };
-            let traitdecl_id = trait_ref.trait_decl_ref.skip_binder.id;
-            let subs_traitdeclref = CharonPolyTraitDeclRef {
-                regions: trait_ref.trait_decl_ref.regions.clone(),
-                skip_binder: CharonTraitDeclRef {
-                    id: traitdecl_id,
-                    generics: Box::new(generics.clone()),
-                },
-            };
+            let traitdecl_id = trait_ref.trait_decl_ref.id;
+            let subs_traitdeclref =
+                CharonTraitDeclRef { id: traitdecl_id, generics: Box::new(generics.clone()) };
             // TODO: this proof is a placeholder, as it was before Charon changed the
             // representation: Kani does not resolve which impl proves the clause.
             let subs_traitref = CharonTraitRef::new(
@@ -1328,7 +1342,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 },
                 subs_traitdeclref,
             );
-            trait_refs.push(subs_traitref);
+            trait_refs.push(CharonPolyTraitRef::empty(subs_traitref));
         }
         CharonGenericArgs {
             regions: c_regions,
@@ -1456,6 +1470,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 // TODO: populate regions?
                 CharonTy::new(CharonTyKind::FnDef(CharonRegionBinder {
                     regions: CharonVector::new(),
+                    outlives: Vec::new(),
                     skip_binder: fn_ptr,
                 }))
             }
@@ -1496,6 +1511,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                         name,
                         variance: CharonVariance::Unknown,
                         mutability: CharonLifetimeMutability::Unknown,
+                        late_bound: true,
                     });
                 }
                 let value = polyfunsig.value;
@@ -1510,7 +1526,11 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     inputs,
                     output,
                 };
-                CharonTy::new(CharonTyKind::FnPtr(CharonRegionBinder { regions, skip_binder: sig }))
+                CharonTy::new(CharonTyKind::FnPtr(CharonRegionBinder {
+                    regions,
+                    outlives: Vec::new(),
+                    skip_binder: sig,
+                }))
             }
             // Kani never translated trait objects: this used to be a placeholder predicate, and
             // Charon now requires the real one.
@@ -1531,21 +1551,137 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             let ty = self.translate_ty(local_decl.ty);
             let name = self.local_names.get(&local).cloned();
             let span = self.translate_span(local_decl.span);
-            locals.push_with(|index| CharonVar { index, name, span, ty, drop_flag_for: None });
+            // Anonymous locals are always mutable, as in Charon's own translation.
+            let mutable = name.is_none() || local_decl.mutability == Mutability::Mut;
+            locals.push_with(|index| CharonVar {
+                index,
+                name,
+                span,
+                ty,
+                mutable,
+                borrowck_constraints: Vec::new(),
+                drop_flag_for: None,
+            });
         });
         locals
     }
 
     fn translate_block(&mut self, bb: &BasicBlock) -> CharonBlockData {
-        let mut statements: Vec<CharonStatement> =
-            bb.statements.iter().filter_map(|stmt| self.translate_statement(stmt)).collect();
+        // The MIR block, translated as one or more blocks: it is split after each checked binary
+        // operation, which becomes a call terminator. `first` is the part that keeps the MIR
+        // block's ID; `current` is the extra block being filled, if any.
+        let mut first = None;
+        let mut current = None;
+        let mut statements = Vec::new();
+        for stmt in &bb.statements {
+            if let Some((call, dest)) = self.checked_op_call(stmt) {
+                let target = self.new_extra_block();
+                let span = self.translate_span(stmt.source_info.span);
+                let terminator = CharonTerminator::new(
+                    span,
+                    CharonRawTerminator::Call { call, dest, target, on_unwind: self.abort_block },
+                );
+                let block = CharonBlockData {
+                    statements: std::mem::take(&mut statements),
+                    terminator,
+                    kind: CharonUnwindKind::Regular,
+                };
+                self.complete_block(&mut first, current, block);
+                current = Some(target);
+            } else if let Some(statement) = self.translate_statement(stmt) {
+                statements.push(statement);
+            }
+        }
         let (statement, terminator) = self.translate_terminator(&bb.terminator);
         if let Some(statement) = statement {
             statements.push(statement);
         }
         // Kani does not model unwinding: every unwind edge goes to the abort block instead of a
         // cleanup block, so no block is reached while unwinding.
-        CharonBlockData { statements, terminator, kind: CharonUnwindKind::Regular }
+        let block = CharonBlockData { statements, terminator, kind: CharonUnwindKind::Regular };
+        self.complete_block(&mut first, current, block);
+        first.expect("the first part of a MIR block is always completed")
+    }
+
+    /// Reserve the ID of a block beyond the MIR blocks (see `extra_blocks`).
+    fn new_extra_block(&mut self) -> CharonBlockId {
+        self.extra_blocks.push(None);
+        CharonBlockId::from_usize(self.first_extra_block + self.extra_blocks.len() - 1)
+    }
+
+    /// Record `block` as the first part of the MIR block being translated (`current` is `None`) or
+    /// as the extra block `current`.
+    fn complete_block(
+        &mut self,
+        first: &mut Option<CharonBlockData>,
+        current: Option<CharonBlockId>,
+        block: CharonBlockData,
+    ) {
+        match current {
+            None => *first = Some(block),
+            Some(id) => self.extra_blocks[id.index() - self.first_extra_block] = Some(block),
+        }
+    }
+
+    /// The call that a MIR checked binary operation (`x = AddWithOverflow(a, b)`, and `Sub`, `Mul`)
+    /// in `stmt` translates to, with its destination.
+    ///
+    /// As in Charon's own translation, it is a call to the `add_with_overflow` (or `sub_`, `mul_`)
+    /// intrinsic: Charon has no operator for an operation that returns `(result, overflowed)`, and
+    /// its `reconstruct_fallible_operations` pass folds the call and the overflow `Assert` that
+    /// follows into a panicking operation.
+    fn checked_op_call(&mut self, stmt: &Statement) -> Option<(CharonCall, CharonPlace)> {
+        let StatementKind::Assign(place, Rvalue::CheckedBinaryOp(bin_op, lhs, rhs)) = &stmt.kind
+        else {
+            return None;
+        };
+        let name = match bin_op {
+            BinOp::Add => "add_with_overflow",
+            BinOp::Sub => "sub_with_overflow",
+            BinOp::Mul => "mul_with_overflow",
+            _ => unreachable!("MIR has no checked {bin_op:?}"),
+        };
+        let ty = lhs.ty(self.instance.body().unwrap().locals()).unwrap();
+        let path = format!("core::intrinsics::{name}");
+        let def_id = resolve_item(self.tcx, CRATE_DEF_ID, &path)
+            .unwrap_or_else(|_| panic!("failed to resolve `{path}`"));
+        let fn_def = stable_fn_def(self.tcx, def_id).expect("an intrinsic is a function");
+        let intrinsic = Instance::resolve(fn_def, &GenericArgs(vec![GenericArgKind::Type(ty)]))
+            .expect("the overflow intrinsics take one type argument");
+        self.declare_intrinsic(intrinsic, name);
+        let call = CharonCall {
+            func: CharonFnOperand::Regular(self.translate_fn_ptr(intrinsic)),
+            args: vec![self.translate_operand(lhs), self.translate_operand(rhs)],
+            safety: CharonCallSafety::Inherit,
+        };
+        Some((call, self.translate_place(place)))
+    }
+
+    /// Declare the intrinsic `instance` named `name`, as Charon declares intrinsics
+    /// (`Body::Intrinsic`), unless it is declared already.
+    fn declare_intrinsic(&mut self, instance: Instance, name: &str) {
+        let fid = self.register_fun_decl_id(instance.def.def_id());
+        if self.translated.fun_decls.get(fid).is_some() {
+            return;
+        }
+        let Ok(item_meta) = self.translate_item_meta_from_rid(instance) else { return };
+        let (generics, signature) = self.translate_function_signature(instance);
+        let arg_names = vec![None; signature.inputs.len()];
+        let body = CharonBody::Intrinsic {
+            name: name.to_owned(),
+            arg_names,
+            fallback: None,
+            fallback_is_spec: false,
+        };
+        let fun_decl = CharonFunDecl {
+            def_id: fid,
+            item_meta,
+            generics,
+            signature: Box::new(signature),
+            src: CharonFunSource::Normal,
+            body,
+        };
+        self.translated.fun_decls.set_slot(fid, fun_decl);
     }
 
     fn translate_statement(&mut self, stmt: &Statement) -> Option<CharonStatement> {
@@ -1627,13 +1763,14 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 let call = CharonCall {
                     func: c_func_op,
                     args: args.iter().map(|arg| self.translate_operand(arg)).collect(),
-                    dest: self.translate_place(destination),
                     safety: CharonCallSafety::Inherit,
                 };
+                let dest = self.translate_place(destination);
                 (
                     None,
                     CharonRawTerminator::Call {
                         call,
+                        dest,
                         // A call to a diverging function has no return target in MIR. ULLBC
                         // requires one, so point it at the synthetic abort block: control cannot
                         // reach it, and aborting if it somehow did matches how the CBMC backend
@@ -1762,11 +1899,9 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 ptr_metadata: missing_ptr_metadata(),
             },
             Rvalue::AddressOf(_, _) => todo!(),
-            Rvalue::Len(place) => CharonRvalue::Len(
-                self.translate_place(place),
-                self.translate_ty(rvalue.ty(self.instance.body().unwrap().locals()).unwrap()),
-                None,
-            ),
+            // rustc's MIR no longer has `Len` (bounds checks read the pointer metadata instead), and
+            // `rustc_public` never produces it.
+            Rvalue::Len(_) => unreachable!("rustc no longer emits `Rvalue::Len`"),
             Rvalue::Cast(kind, operand, ty) => CharonRvalue::UnaryOp(
                 CharonUnOp::Cast(self.translate_cast(*kind, operand, *ty)),
                 self.translate_operand(operand),
@@ -1776,11 +1911,11 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 self.translate_operand(lhs),
                 self.translate_operand(rhs),
             ),
-            Rvalue::CheckedBinaryOp(bin_op, lhs, rhs) => CharonRvalue::BinaryOp(
-                translate_checked_bin_op(*bin_op),
-                self.translate_operand(lhs),
-                self.translate_operand(rhs),
-            ),
+            Rvalue::CheckedBinaryOp(..) => {
+                unreachable!(
+                    "a checked binary operation is translated as a call by `translate_block`"
+                )
+            }
             Rvalue::UnaryOp(op, operand) => {
                 CharonRvalue::UnaryOp(translate_un_op(*op), self.translate_operand(operand))
             }
@@ -1841,11 +1976,42 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         }
     }
 
+    /// A proof that `ty` is `Copy`, which Charon now attaches to every copy.
+    ///
+    /// TODO: this proof is a placeholder, like the other trait proofs of this backend: Kani does not
+    /// resolve which impl proves `Copy` for a user type, and records a builtin proof instead.
+    fn copy_proof(&mut self, ty: CharonTy) -> CharonTraitRef {
+        let copy_id = self.tcx.lang_items().copy_trait().expect("`Copy` is a lang item");
+        // The stable `TraitDef` of `Copy`, through a trait reference (its `Self` type is irrelevant).
+        let copy_ref = rustc_middle::ty::TraitRef::new(self.tcx, copy_id, [self.tcx.types.unit]);
+        let copy_def = rustc_internal::stable(copy_ref).def_id;
+        let id = self.translate_traitdecl(copy_def);
+        let generics = CharonGenericArgs {
+            regions: CharonVector::new(),
+            types: [ty].into_iter().collect(),
+            const_generics: CharonVector::new(),
+            trait_refs: CharonVector::new(),
+        };
+        CharonTraitRef::new(
+            CharonTraitRefKind::BuiltinOrAuto {
+                builtin_data: CharonBuiltinImplData::Copy,
+                parent_trait_refs: CharonVector::new(),
+                types: Default::default(),
+                vtable: None,
+            },
+            CharonTraitDeclRef { id, generics: Box::new(generics) },
+        )
+    }
+
     fn translate_operand(&mut self, operand: &Operand) -> CharonOperand {
         trace!("translate_operand: {operand:?}");
         match operand {
             Operand::Constant(constant) => CharonOperand::Const(self.translate_constant(constant)),
-            Operand::Copy(place) => CharonOperand::Copy(self.translate_place(&place)),
+            Operand::Copy(place) => {
+                let place = self.translate_place(place);
+                let proof = self.copy_proof(place.ty().clone());
+                CharonOperand::Copy(place, proof)
+            }
             Operand::Move(place) => CharonOperand::Move(self.translate_place(&place)),
             // `Operand::RuntimeChecks` (rust-lang/rust#148766) is not yet modeled by the
             // experimental LLBC backend.
@@ -2017,10 +2183,10 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     current_var = varid.to_index();
                 }
                 ProjectionElem::Index(local) => {
-                    let c_operand = CharonOperand::Copy(CharonPlace::new(
-                        CharonVarId::from_usize(*local),
-                        current_ty.clone(),
-                    ));
+                    let index_place =
+                        CharonPlace::new(CharonVarId::from_usize(*local), current_ty.clone());
+                    let proof = self.copy_proof(current_ty.clone());
+                    let c_operand = CharonOperand::Copy(index_place, proof);
                     c_provec.push((
                         CharonProjectionElem::Index {
                             offset: Box::new(c_operand),
@@ -2140,13 +2306,33 @@ pub fn prepare_translated_crate(tcx: TyCtxt, translated: &mut CharonTranslatedCr
         rustc_abi::Integer::I64 => CharonIntTy::I64,
         rustc_abi::Integer::I128 => CharonIntTy::I128,
     };
+    let target = &tcx.sess.target;
     let info = CharonTargetInfo {
+        arch: from_rustc_variant(&target.arch),
+        vendor: target.vendor_symbol().to_string(),
+        os: from_rustc_variant(&target.os),
+        env: from_rustc_variant(&target.env),
+        cfg_abi: from_rustc_variant(&target.cfg_abi),
+        families: target.families.iter().map(|family| family.to_string()).collect(),
+        binary_format: from_rustc_variant(&target.binary_format),
         target_pointer_size: target_data.pointer_size().bytes(),
         is_little_endian: matches!(target_data.endian, rustc_abi::Endian::Little),
         c_enum_smallest_repr_ty,
         primitive_alignments,
     };
     translated.target_information.insert(tcx.sess.opts.target_triple.tuple().to_owned(), info);
+}
+
+/// Convert a rustc target enum (`Arch`, `Os`, ...) to Charon's copy of it in `ast::from_rustc`.
+///
+/// Charon mirrors these enums with the same variant names, and fills them with conversions that
+/// live in its driver, which Kani does not link. Convert through the variant name instead; a value
+/// Charon does not know becomes its `Other` variant.
+fn from_rustc_variant<T: serde::de::DeserializeOwned>(value: &impl std::fmt::Debug) -> T {
+    let name = format!("{value:?}");
+    serde_json::from_value(serde_json::Value::String(name.clone()))
+        .or_else(|_| serde_json::from_value(serde_json::json!({ "Other": name })))
+        .unwrap_or_else(|_| panic!("unknown target property `{name}`"))
 }
 
 /// Record every declaration's name in `item_names`, which Charon's passes and printer read and
@@ -2265,17 +2451,6 @@ fn translate_uint_ty(uint_ty: UintTy) -> CharonIntegerTy {
         UintTy::U128 => CharonUIntTy::U128,
         UintTy::Usize => CharonUIntTy::Usize,
     })
-}
-
-/// The operator of a MIR `CheckedBinaryOp`, which yields `(result, overflowed)`. Charon folds it with
-/// the overflow `Assert` that follows into a panicking operator.
-fn translate_checked_bin_op(bin_op: BinOp) -> CharonBinOp {
-    match bin_op {
-        BinOp::Add => CharonBinOp::AddChecked,
-        BinOp::Sub => CharonBinOp::SubChecked,
-        BinOp::Mul => CharonBinOp::MulChecked,
-        _ => translate_bin_op(bin_op),
-    }
 }
 
 /// The operator of a plain MIR `BinaryOp`, mapped as Charon's own translation does

@@ -1,7 +1,7 @@
 // Full name: test::is_a\
 pub fn is_a(c: char) -> bool\
 {\
-    let _0: bool; // return\
+    let mut _0: bool; // return\
     let c: char; // arg #1\
 \
     storage_live(_0)\
@@ -13,7 +13,7 @@ pub fn is_a(c: char) -> bool\
 // Full name: test::always\
 pub fn always() -> bool\
 {\
-    let _0: bool; // return\
+    let mut _0: bool; // return\
 \
     storage_live(_0)\
     _0 = const true\
@@ -23,9 +23,9 @@ pub fn always() -> bool\
 // Full name: test::main\
 pub fn main()\
 {\
-    let _0: (); // return\
-    let _1: bool; // anonymous local\
-    let _2: bool; // anonymous local\
+    let mut _0: (); // return\
+    let mut _1: bool; // anonymous local\
+    let mut _2: bool; // anonymous local\
 \
     storage_live(_0)\
     storage_live(_1)\
