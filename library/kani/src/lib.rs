@@ -45,6 +45,9 @@ pub mod vec;
 
 mod models;
 
+#[cfg(test)]
+mod fmt_model_tests;
+
 #[cfg(feature = "concrete_playback")]
 pub use concrete_playback::concrete_playback_run;
 

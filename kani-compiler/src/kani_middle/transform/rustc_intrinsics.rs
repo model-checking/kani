@@ -71,6 +71,23 @@ fn is_panic_function(tcx: &TyCtxt, def_id: rustc_public::DefId) -> bool {
         || Some(def_id) == tcx.lang_items().begin_panic_fn()
 }
 
+/// The Kani model of `def_id` if it is one of the `core::fmt::Formatter` helpers that
+/// `derive(Debug)` calls and that look up names with `memchr` (see the models in `kani_core`).
+fn fmt_derive_helper_model(tcx: &TyCtxt, def_id: rustc_public::DefId) -> Option<KaniModel> {
+    let def_id = rustc_internal::internal(*tcx, def_id);
+    let impl_id = tcx.impl_of_assoc(def_id)?;
+    let self_ty = tcx.type_of(impl_id).instantiate_identity().skip_normalization();
+    let rustc_middle::ty::Adt(adt, _) = self_ty.kind() else { return None };
+    if tcx.get_diagnostic_item(rustc_span::Symbol::intern("Formatter")) != Some(adt.did()) {
+        return None;
+    }
+    match tcx.item_name(def_id).as_str() {
+        "debug_struct_fields_finish" => Some(KaniModel::DebugStructFieldsFinish),
+        "debug_c_like_enum_write_str" => Some(KaniModel::DebugCLikeEnumWriteStr),
+        _ => None,
+    }
+}
+
 impl RustcIntrinsicsPass {
     pub fn new(queries: &QueryDb) -> Self {
         let models = queries
@@ -195,6 +212,16 @@ impl MutMirVisitor for ReplaceIntrinsicCallVisitor<'_, '_> {
             } else if is_panic_function(&self.tcx, def.0) {
                 // If we find a panic function, we replace it with our stub.
                 self.models[&KaniModel::PanicStub]
+            } else if let Some(model) = fmt_derive_helper_model(&self.tcx, def.0) {
+                // The models are free functions with no generic parameters, while the
+                // `Formatter` methods they replace have (erased) lifetime parameters.
+                let new_instance =
+                    Instance::resolve(self.models[&model], &GenericArgs(vec![])).unwrap();
+                let literal = MirConst::try_new_zero_sized(new_instance.ty()).unwrap();
+                let span = term.source_info.span;
+                *func = Operand::Constant(ConstOperand { span, user_ty: None, const_: literal });
+                self.changed = true;
+                return self.super_terminator(term);
             } else {
                 return self.super_terminator(term);
             };

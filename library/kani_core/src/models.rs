@@ -39,6 +39,66 @@ macro_rules! generate_models {
                 loop {}
             }
 
+            /// Model of `core::fmt::Formatter::debug_struct_fields_finish`, which `derive(Debug)`
+            /// uses for structs and tuple structs (directly, or through the
+            /// `debug_struct_field{1..5}_finish` helpers).
+            ///
+            /// Since rust-lang/rust#164726, the derive passes all names as one string separated
+            /// by spaces, `"Point x y"` for `Point { x, y }` or `"Point"` for a tuple struct, and
+            /// the helper finds the names with `memchr`. `memchr` reads the bytes a word at a time
+            /// with a loop whose bounds depend on the pointer's alignment, which CBMC cannot fold,
+            /// so verifying any derived `Debug` became orders of magnitude slower. This model
+            /// splits the names with a byte-by-byte loop over the same string and builds the same
+            /// output through the same public builders.
+            #[kanitool::fn_marker = "DebugStructFieldsFinishModel"]
+            pub fn debug_struct_fields_finish(
+                f: &mut core::fmt::Formatter<'_>,
+                names: &str,
+                values: &[&dyn core::fmt::Debug],
+            ) -> core::fmt::Result {
+                let bytes = names.as_bytes();
+                let mut end = next_space(bytes, 0);
+                if end == bytes.len() {
+                    // No space: a tuple struct, `names` is its name.
+                    let mut builder = f.debug_tuple(names);
+                    for value in values {
+                        builder.field(value);
+                    }
+                    return builder.finish();
+                }
+                let mut builder = f.debug_struct(&names[..end]);
+                for value in values {
+                    let start = end + 1;
+                    end = next_space(bytes, start);
+                    builder.field(&names[start..end], value);
+                }
+                builder.finish()
+            }
+
+            /// Model of `core::fmt::Formatter::debug_c_like_enum_write_str`, which
+            /// `derive(Debug)` uses for enums whose variants have no fields: `names` holds every
+            /// variant name separated by spaces, and the variant's name starts at `start_index`.
+            /// Like [`debug_struct_fields_finish`], this finds the end of the name with a
+            /// byte-by-byte loop instead of `memchr`, and writes the same string.
+            #[kanitool::fn_marker = "DebugCLikeEnumWriteStrModel"]
+            pub fn debug_c_like_enum_write_str(
+                f: &mut core::fmt::Formatter<'_>,
+                names: &str,
+                start_index: usize,
+            ) -> core::fmt::Result {
+                let end = next_space(names.as_bytes(), start_index);
+                f.write_str(&names[start_index..end])
+            }
+
+            /// The index of the first space in `bytes` at or after `start`, or `bytes.len()`.
+            fn next_space(bytes: &[u8], start: usize) -> usize {
+                let mut i = start;
+                while i < bytes.len() && bytes[i] != b' ' {
+                    i += 1;
+                }
+                i
+            }
+
             #[kanitool::fn_marker = "AlignOfValRawModel"]
             pub fn align_of_val_raw<T: ?Sized>(ptr: *const T) -> usize {
                 if let Some(size) = kani::mem::checked_align_of_raw(ptr) {
