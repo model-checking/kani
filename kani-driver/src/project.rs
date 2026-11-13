@@ -6,13 +6,14 @@
 
 use crate::args::NumThreads;
 use crate::metadata::from_json;
-use crate::session::KaniSession;
+use crate::session::{KaniSession, lib_no_core_folder};
 use crate::util::{crate_name, info_operation};
 use anyhow::{Context, Result};
 use kani_metadata::{
     ArtifactType, ArtifactType::*, HarnessMetadata, KaniMetadata, artifact::convert_type,
 };
 use rayon::prelude::*;
+use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::env::current_dir;
 use std::fs;
@@ -360,20 +361,86 @@ pub(crate) fn std_project(std_path: &Path, session: &KaniSession) -> Result<Proj
     fs::create_dir_all(&outdir)?; // This is a no-op if directory exists.
     let outdir = outdir.canonicalize()?;
 
-    // Create dummy crate needed to build using `cargo -Z build-std`
+    // Create dummy crate needed to build using `cargo -Z build-std`.
+    // Cargo does not check the standard library sources for changes, so the
+    // dummy crate, and with it the previous build, is kept only if a
+    // fingerprint of the build inputs is unchanged.
+    let std_path = std_path.canonicalize()?;
     let dummy_crate = outdir.join("kani_verify_std");
-    if dummy_crate.exists() {
-        fs::remove_dir_all(&dummy_crate)?;
+    let fingerprint_file = dummy_crate.join("kani-build-inputs.fingerprint");
+    // An input that cannot be read (a dangling symlink, say) means no fingerprint, so a rebuild.
+    let fingerprint = std_build_fingerprint(&std_path, &outdir, session)
+        .inspect_err(|err| debug!(?err, "no verify-std build fingerprint, so no reuse"))
+        .ok();
+    let reuse = fingerprint
+        .as_ref()
+        .is_some_and(|new| fs::read_to_string(&fingerprint_file).is_ok_and(|old| old == *new));
+    if reuse {
+        // Written again only after the build succeeds, so a failed or interrupted build is not reused.
+        fs::remove_file(&fingerprint_file)?;
+    } else {
+        if dummy_crate.exists() {
+            fs::remove_dir_all(&dummy_crate)?;
+        }
+        session.cargo_init_lib(&dummy_crate)?;
     }
-    session.cargo_init_lib(&dummy_crate)?;
 
     // Build cargo project for dummy crate.
-    let std_path = std_path.canonicalize()?;
     let outputs = session.cargo_build_std(std_path.parent().unwrap(), &dummy_crate)?;
+    if let Some(fingerprint) = &fingerprint {
+        fs::write(&fingerprint_file, fingerprint)?;
+    }
 
     // Get the metadata and return a Kani project.
     let metadata = outputs.iter().map(|md_file| from_json(md_file)).collect::<Result<Vec<_>>>()?;
     Project::try_new(session, outdir, None, metadata, None)
+}
+
+/// SHA-256 of what a `verify-std` build depends on: the path and contents of
+/// every file under `std_path` (except `outdir`), the Kani compiler binary, its
+/// precompiled libraries, the command line and `RUSTFLAGS`. Contents rather than
+/// modification times, so that an edit is seen even when it keeps the size and
+/// the timestamp.
+fn std_build_fingerprint(std_path: &Path, outdir: &Path, session: &KaniSession) -> Result<String> {
+    /// Each item with its length first, so that two different sequences never hash the same bytes.
+    fn put(hasher: &mut Sha256, bytes: &[u8]) {
+        hasher.update((bytes.len() as u64).to_le_bytes());
+        hasher.update(bytes);
+    }
+    fn hash_tree(dir: &Path, skip: &Path, hasher: &mut Sha256) -> Result<()> {
+        let mut entries = fs::read_dir(dir)?.collect::<Result<Vec<_>, _>>()?;
+        entries.sort_by_key(|entry| entry.file_name());
+        for entry in entries {
+            let path = entry.path();
+            let file_type = entry.file_type()?;
+            if path == skip || entry.file_name() == ".git" {
+                continue;
+            }
+            if file_type.is_dir() {
+                hash_tree(&path, skip, hasher)?;
+            } else {
+                hash_file(&path, hasher)?;
+            }
+        }
+        Ok(())
+    }
+    fn hash_file(path: &Path, hasher: &mut Sha256) -> Result<()> {
+        put(hasher, path.as_os_str().as_encoded_bytes());
+        put(hasher, &fs::read(path).with_context(|| format!("cannot read {}", path.display()))?);
+        Ok(())
+    }
+    let mut hasher = Sha256::new();
+    hash_tree(std_path, outdir, &mut hasher)?;
+    hash_file(&session.kani_compiler, &mut hasher)?;
+    // Cargo sees only the flag that names this folder, not the libraries in it.
+    hash_tree(&lib_no_core_folder()?, outdir, &mut hasher)?;
+    for arg in std::env::args_os() {
+        put(&mut hasher, arg.as_encoded_bytes());
+    }
+    let rustflags = std::env::var_os("RUSTFLAGS");
+    put(&mut hasher, &[u8::from(rustflags.is_some())]);
+    put(&mut hasher, rustflags.unwrap_or_default().as_encoded_bytes());
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 #[cfg(test)]

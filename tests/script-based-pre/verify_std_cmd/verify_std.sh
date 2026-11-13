@@ -78,6 +78,52 @@ kani verify-std \
     -Z stubbing \
     -Z mem-predicates
 
+# A second run with unchanged inputs reuses the build, and an edit to the
+# library is built again. See https://github.com/model-checking/kani/issues/4079
+echo "[TEST] Run kani verify-std again without changes"
+kani verify-std \
+    -Z unstable-options \
+    "${TMP_DIR}/library" \
+    --target-dir "${TMP_DIR}/target" \
+    -Z function-contracts \
+    -Z stubbing \
+    -Z mem-predicates > "${TMP_DIR}/rerun.log" 2>&1
+grep -q "Compiling core" "${TMP_DIR}/rerun.log" \
+    && echo "Unexpected rebuild of core" \
+    || echo "No rebuild of core as expected"
+grep "Complete -" "${TMP_DIR}/rerun.log"
+
+echo "[TEST] Run kani verify-std after editing the library"
+echo "// edited" >> "${TMP_DIR}/library/core/src/lib.rs"
+kani verify-std \
+    -Z unstable-options \
+    "${TMP_DIR}/library" \
+    --target-dir "${TMP_DIR}/target" \
+    -Z function-contracts \
+    -Z stubbing \
+    -Z mem-predicates > "${TMP_DIR}/edit.log" 2>&1
+grep -q "Compiling core" "${TMP_DIR}/edit.log" \
+    && echo "Rebuild of core after the edit as expected" \
+    || echo "Unexpected reuse of the build after the edit"
+grep "Complete -" "${TMP_DIR}/edit.log"
+
+echo "[TEST] Run kani verify-std after an edit that keeps the size and timestamp"
+touch -r "${TMP_DIR}/library/core/src/lib.rs" "${TMP_DIR}/core_lib_time"
+sed 's|^// edited$|// EDITED|' "${TMP_DIR}/library/core/src/lib.rs" > "${TMP_DIR}/lib.rs.new"
+mv "${TMP_DIR}/lib.rs.new" "${TMP_DIR}/library/core/src/lib.rs"
+touch -r "${TMP_DIR}/core_lib_time" "${TMP_DIR}/library/core/src/lib.rs"
+kani verify-std \
+    -Z unstable-options \
+    "${TMP_DIR}/library" \
+    --target-dir "${TMP_DIR}/target" \
+    -Z function-contracts \
+    -Z stubbing \
+    -Z mem-predicates > "${TMP_DIR}/same-size.log" 2>&1
+grep -q "Compiling core" "${TMP_DIR}/same-size.log" \
+    && echo "Rebuild of core after the same-size edit as expected" \
+    || echo "Unexpected reuse of the build after the same-size edit"
+grep "Complete -" "${TMP_DIR}/same-size.log"
+
 # Test that uninit-checks basic setup works on a no-core library
 echo "[TEST] Run kani verify-std -Z uninit-checks"
 RUSTFLAGS="--cfg=uninit_checks" kani verify-std \
