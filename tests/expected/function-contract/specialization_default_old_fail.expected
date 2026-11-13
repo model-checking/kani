@@ -1,0 +1,7 @@
+assertion\
+- Status: FAILURE\
+- Description: "|_| *value == old(*value)"
+
+Failed Checks: |_| *value == old(*value)
+
+VERIFICATION:- FAILED

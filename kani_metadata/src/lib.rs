@@ -108,6 +108,10 @@ pub enum AutoHarnessSkipReason {
     /// (The Vec<(String, String)> contains the list of (name, type) tuples for each such argument.)
     #[strum(serialize = "Requires --bounded-arguments for argument(s)")]
     RequiresBoundedArguments(Vec<(String, String)>),
+    /// The function's body contains an explicit tail call (`become`), which Kani does not support
+    /// (c.f. https://github.com/model-checking/kani/issues/5131).
+    #[strum(serialize = "Explicit tail calls are not supported")]
+    UnsupportedTailCall,
     /// The function is a C-variadic whose calling convention Kani cannot model, e.g.
     /// `unsafe extern "sysv64" fn(_: ...)`.
     #[strum(serialize = "Unsupported variadic calling convention")]

@@ -6,7 +6,7 @@
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
-use syn::{Expr, ItemFn, Stmt};
+use syn::{Expr, ImplItemFn, Stmt};
 
 use super::{ContractConditionsHandler, INTERNAL_RESULT_IDENT, helpers::*};
 
@@ -38,7 +38,7 @@ impl<'a> ContractConditionsHandler<'a> {
         // expanded outside in. This way other contract annotations in `attrs`
         // sees those attributes and can use them to determine
         // `function_state`.
-        let ItemFn { attrs, vis, sig, block } = &self.annotated_fn;
+        let ImplItemFn { attrs, vis, defaultness, sig, block } = self.annotated_fn;
         self.output.extend(quote!(
             #(#attrs)*
             #[kanitool::recursion_check = #recursion_name]
@@ -46,7 +46,7 @@ impl<'a> ContractConditionsHandler<'a> {
             #[kanitool::replaced_with = #replace_name]
             #[kanitool::asserted_with = #assert_name]
             #[kanitool::modifies_wrapper = #modifies_name]
-            #vis #sig {
+            #vis #defaultness #sig {
                 // Dummy functions used to force the compiler to annotate Kani's
                 // closures as `FnOnce`. Without this, Rust infers the generated closures as `FnMut`,
                 // preventing us from writing contracts for functions returning mutable references.
@@ -112,7 +112,7 @@ impl<'a> ContractConditionsHandler<'a> {
     /// to the attribute being handled.
     pub fn handle_expanded(&mut self) {
         let mut annotated_fn = self.annotated_fn.clone();
-        let ItemFn { block, .. } = &mut annotated_fn;
+        let ImplItemFn { block, .. } = &mut annotated_fn;
         let recursion_closure = expect_closure_in_match(&mut block.stmts, "recursion_check");
         self.expand_recursion(recursion_closure);
 
@@ -134,7 +134,7 @@ impl<'a> ContractConditionsHandler<'a> {
         replace_closure: &TokenStream,
         check_closure: &TokenStream,
     ) -> TokenStream {
-        let ItemFn { sig, .. } = self.annotated_fn;
+        let ImplItemFn { sig, .. } = self.annotated_fn;
         let output = &sig.output;
         let span = Span::call_site();
         let result = Ident::new(INTERNAL_RESULT_IDENT, span);

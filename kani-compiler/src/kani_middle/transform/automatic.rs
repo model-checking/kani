@@ -395,7 +395,7 @@ fn inline_with_assumed_panics(
     arg_locals: &[Local],
     ret_ty: Ty,
 ) -> Option<Local> {
-    let callee_body = callee.body()?;
+    let callee_body = crate::kani_middle::body_without_tail_calls(tcx, callee)?;
     let span = source.span(body.blocks());
     let ret_lcl = body.new_local(ret_ty, span, Mutability::Mut);
 
@@ -540,7 +540,8 @@ fn inline_with_assumed_panics(
                         } else if depth < INLINE_MAX_DEPTH
                             && let Some((def, fn_args)) = &fn_def
                             && let Ok(inst) = Instance::resolve(*def, fn_args)
-                            && let Some(inner_body) = inst.body()
+                            && let Some(inner_body) =
+                                crate::kani_middle::body_without_tail_calls(self.tcx, inst)
                             && inner_body.blocks.len() <= INLINE_MAX_BLOCKS
                             && self.worth_inlining(&inner_body)
                         {
@@ -2394,7 +2395,7 @@ impl TransformPass for AutomaticHarnessPass {
         let kind = instance.args().0[0].expect_ty().kind();
         let (def, args) = kind.fn_def().unwrap();
         let fn_to_verify = Instance::resolve(def, args).unwrap();
-        let fn_to_verify_body = fn_to_verify.body().unwrap();
+        let fn_to_verify_body = crate::kani_middle::checked_body(tcx, fn_to_verify).unwrap();
 
         let mut harness_body = MutableBody::from(body);
         harness_body.clear_body(TerminatorKind::Return);

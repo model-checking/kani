@@ -131,7 +131,7 @@ impl ExternFnStubPass {
 }
 
 fn has_body(def: FnDef) -> bool {
-    def.body().is_some()
+    def.has_body()
 }
 
 /// Validate that the body of the stub is valid for the given instantiation
@@ -145,7 +145,7 @@ struct FnStubValidator<'a, 'tcx> {
 impl FnStubValidator<'_, '_> {
     fn validate(tcx: TyCtxt, stub: (FnDef, FnDef), new_instance: Instance) -> Option<Body> {
         if validate_stub_const(tcx, new_instance) {
-            let body = new_instance.body().unwrap();
+            let body = crate::kani_middle::checked_body(tcx, new_instance).unwrap();
             let mut validator =
                 FnStubValidator { stub, tcx, locals: body.locals(), is_valid: true };
             validator.visit_body(&body);

@@ -72,7 +72,7 @@ impl GlobalPass for DelayedUbPass {
         let targets: HashSet<_> = instances
             .iter()
             .flat_map(|instance| {
-                let body = instance.body().unwrap();
+                let body = crate::kani_middle::checked_body(tcx, *instance).unwrap();
                 let mut visitor = InitialTargetVisitor::new(body.clone());
                 visitor.visit_body(&body);
                 // Convert all places into the format of aliasing graph for later comparison.
@@ -104,7 +104,7 @@ impl GlobalPass for DelayedUbPass {
                     MonoItem::GlobalAsm(_) => None,
                 };
                 if let Some(instance) = entry_fn {
-                    let body = instance.body().unwrap();
+                    let body = crate::kani_middle::checked_body(tcx, instance).unwrap();
                     let results = run_points_to_analysis(&body, tcx, instance, call_graph);
                     global_points_to_graph.join(&results);
                 }

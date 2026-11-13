@@ -830,7 +830,10 @@ macro_rules! kani_intrinsics {
                 // the depth is guaranteed >= 1 regardless of the initial
                 // value.
                 unsafe {
-                    CONTRACT_CLAUSE_DEPTH = CONTRACT_CLAUSE_DEPTH.saturating_add(1);
+                    let depth = CONTRACT_CLAUSE_DEPTH;
+                    if depth < usize::MAX {
+                        CONTRACT_CLAUSE_DEPTH = depth + 1;
+                    }
                 }
             }
 
@@ -843,7 +846,10 @@ macro_rules! kani_intrinsics {
             #[unsafe(export_name = "__VERIFIER_kani_exit_contract_clause")]
             pub fn exit_contract_clause() {
                 unsafe {
-                    CONTRACT_CLAUSE_DEPTH = CONTRACT_CLAUSE_DEPTH.saturating_sub(1);
+                    let depth = CONTRACT_CLAUSE_DEPTH;
+                    if depth > 0 {
+                        CONTRACT_CLAUSE_DEPTH = depth - 1;
+                    }
                 }
             }
 
