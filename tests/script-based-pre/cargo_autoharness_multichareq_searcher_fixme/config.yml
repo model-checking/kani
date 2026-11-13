@@ -1,0 +1,7 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+# Disabled ("fixme" in the directory name): it times out on the macos-15-intel runner.
+# Re-enable by renaming the directory back once https://github.com/model-checking/kani/issues/5162 is fixed.
+script: multichareq-searcher.sh
+expected: multichareq-searcher.expected
+exit_code: 1
