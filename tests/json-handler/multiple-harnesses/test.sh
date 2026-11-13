@@ -66,6 +66,10 @@ summary = data['summary']
 for field, want in [('total', 3), ('successful', 3), ('failed', 0)]:
     check(summary[field] == want,
           f"summary.{field} should be {want}, got {summary[field]}")
+check(data['harness_selection']['matched_count'] == 3,
+      f"harness_selection.matched_count should be 3, got "
+      f"{data['harness_selection']['matched_count']}")
+check(data['run_state'] == 'COMPLETE', f"run_state should be COMPLETE, got {data['run_state']!r}")
 
 check(all(h.get('outcome', {}).get('verdict') == 'SUCCESS' for h in harnesses),
       "every harness should report SUCCESS")
