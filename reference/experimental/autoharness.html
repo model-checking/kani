@@ -1,0 +1,1005 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Automatic Harness Generation - The Kani Rust Verifier</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Documentation for the Kani Rust Verifier">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../../css/general-2459343d.css">
+        <link rel="stylesheet" href="../../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../../searchindex-ce5a4d5d.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../../toc-4b903d4a.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Kani Rust Verifier</h1>
+
+                    <div class="right-buttons">
+                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/model-checking/kani" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/model-checking/kani/edit/main/docs/src/reference/experimental/autoharness.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="automatic-harness-generation"><a class="header" href="#automatic-harness-generation">Automatic Harness Generation</a></h1>
+<p>Recall the harness for <code>estimate_size</code> that we wrote in <a href="../../tutorial-first-steps.html">First Steps</a>:</p>
+<pre><code class="language-rust">#[cfg(kani)]
+#[kani::proof]
+fn check_estimate_size() {
+    let x: u32 = kani::any();
+    estimate_size(x);
+}</code></pre>
+<p>This harness first declares a local variable <code>x</code> using <code>kani::any()</code>, then calls <code>estimate_size</code> with argument <code>x</code>.
+Many proof harnesses follow this predictable format—to verify a function <code>foo</code>, we create arbitrary values for each of <code>foo</code>’s arguments, then call <code>foo</code> on those arguments.</p>
+<p>The <code>autoharness</code> subcommand leverages this observation to automatically generate harnesses and run Kani against them.
+Kani scans the crate for functions whose arguments it can generate nondeterministically (see <a href="#generating-harnesses">Generating harnesses</a>), generates harnesses for them, then runs them.
+These harnesses are internal to Kani—i.e., Kani does not make any changes to your source code.</p>
+<h2 id="usage"><a class="header" href="#usage">Usage</a></h2>
+<p>Run either:</p>
+<pre><code># cargo kani autoharness -Z autoharness
+</code></pre>
+<p>or</p>
+<pre><code># kani autoharness -Z autoharness &lt;FILE&gt;
+</code></pre>
+<p>If Kani can generate all of a function <code>foo</code>’s arguments, it will generate and run a <code>#[kani::proof]</code> harness, which prints:</p>
+<pre><code>Autoharness: Checking function foo against all possible inputs...
+&lt;VERIFICATION RESULTS&gt;
+</code></pre>
+<p>However, if Kani detects that <code>foo</code> has a <a href="./contracts.html">function contract</a>, it will instead generate a <code>#[kani::proof_for_contract]</code> harness and verify the contract:</p>
+<pre><code>Autoharness: Checking function foo's contract against all possible inputs...
+&lt;VERIFICATION RESULTS&gt;
+</code></pre>
+<p>Similarly, Kani will detect the presence of <a href="./loop-contracts.html">loop contracts</a> and verify them.</p>
+<p>Thus, <code>-Z autoharness</code> implies <code>-Z function-contracts</code> and <code>-Z loop-contracts</code>, i.e., opting into the experimental
+autoharness feature means that you are also opting into the function contracts and loop contracts features.</p>
+<p>Kani generates and runs these harnesses internally—the user only sees the verification results.</p>
+<p>For a full list of options, run <code>kani autoharness --help</code>.</p>
+<p>To run autoharness on the Rust standard library itself, pass <code>--std</code> to the standalone
+command and point it at the <code>library</code> directory of a standard library checkout, such as the
+one in <a href="https://github.com/model-checking/verify-rust-std">verify-rust-std</a>:</p>
+<pre><code># kani autoharness -Z autoharness --std &lt;PATH&gt;/library
+</code></pre>
+<p>The path must be a directory named <code>library</code>. Kani builds it with <code>cargo -Z build-std</code> through
+a temporary crate in the target directory, as <code>kani verify-std</code> does. <code>--std</code> is only available
+on <code>kani autoharness</code>, not on <code>cargo kani autoharness</code>.</p>
+<p>When verifying the standard library, only the Kani definitions available to <code>core</code> can be
+used. Some models are available only in the full <code>kani</code> library: <code>Box</code>, <code>Rc</code> and <code>Arc</code>
+arguments, unbounded primitive slices and <code>Vec</code>s, and the function models for <code>Fn</code>-bound
+type parameters. These models are unavailable with <code>--std</code>. Affected arguments are generated
+with bounded values where <code>core</code> provides a bounded generator and <code>--bounded-arguments</code> is
+passed; otherwise the function is skipped.</p>
+<p>Concrete playback (<code>-Z concrete-playback</code>) is not supported by the <code>autoharness</code> subcommand
+(<a href="https://github.com/model-checking/kani/issues/5109">#5109</a>).</p>
+<h2 id="example"><a class="header" href="#example">Example</a></h2>
+<p>Using the <code>estimate_size</code> example from <a href="../../tutorial-first-steps.html">First Steps</a> again:</p>
+<pre><code class="language-rust">fn estimate_size(x: u32) -&gt; u32 {
+    if x &lt; 256 {
+        if x &lt; 128 {
+            return 1;
+        } else {
+            return 3;
+        }
+    } else if x &lt; 1024 {
+        if x &gt; 1022 {
+            panic!("Oh no, a failing corner case!");
+        } else {
+            return 5;
+        }
+    } else {
+        if x &lt; 2048 {
+            return 7;
+        } else {
+            return 9;
+        }
+    }
+}</code></pre>
+<p>We get (passing <code>--output-format=regular</code> so that the per-check detail is shown, c.f.
+<a href="#parallel-verification">Parallel verification</a>):</p>
+<pre><code># cargo kani autoharness -Z autoharness --output-format=regular
+Autoharness: Checking function estimate_size against all possible inputs...
+RESULTS:
+Check 3: estimate_size.assertion.1
+         - Status: FAILURE
+         - Description: "Oh no, a failing corner case!"
+[...]
+
+Verification failed for - estimate_size
+Complete - 0 successfully verified functions, 1 failures, 1 total.
+</code></pre>
+<h2 id="how-it-works"><a class="header" href="#how-it-works">How it works</a></h2>
+<p>For each selected function, autoharness builds the harness you would otherwise write by
+hand: generate nondeterministic arguments, call the function, and check the result. It
+works in three phases; click a box to jump to its section:</p>
+<pre><code class="language-text">                         ┌────────────────────────────────────┐
+                         │      AUTOHARNESS: the core idea    │
+                         │  "for each fn: x = any(); f(x)"    │
+                         └─────────────────┬──────────────────┘
+                                           │
+        ┌──────────────────────────────────┼──────────────────────────────────┐
+        ▼                                  ▼                                  ▼
+┌────────────────┐            ┌─────────────────────────┐          ┌────────────────────┐
+│ <a href="#selecting-functions">1. SELECT</a>      │            │ <a href="#generating-harnesses">2. GENERATE</a>             │          │ <a href="#verifying-and-reading-results">3. VERIFY &amp; REPORT</a> │
+│ which fns?     │            │ what goes in each       │          │ run it, read it    │
+│                │            │ harness?                │          │                    │
+├────────────────┤            ├─────────────────────────┤          ├────────────────────┤
+│ • include /    │            │ 2a. ARGUMENTS           │          │ • parallel / -j    │
+│   exclude regex│            │   Unbounded (default):  │          │ • terse vs regular │
+│ • --list       │            │   ├ Arbitrary / derive  │          │ • 60s timeout,     │
+│ • skip reasons │            │   ├ raw pointers        │          │   unwind 20        │
+│ • generics:    │            │   ├ Box / Rc / Arc      │          │ • summary table    │
+│   pick one     │            │   ├ prim. slices / Vec  │          │ • (bounded) /      │
+│   instantiation│            │   ├ Fn-bound closures   │          │   (ctor) markers   │
+│   (Fn bounds,  │            │   └ fmt-trait impls     │          │ • bounds note      │
+│   SIMD, const) │            │   Opt-in (under-approx):│          └────────────────────┘
+└────────────────┘            │   ├ --bounded-arguments │
+                              │   └ --constructor-args  │
+                              │ 2b. ASSUMPTIONS         │
+                              │   ├ contracts (requires)│
+                              │   ├ Invariant::is_safe  │
+                              │   ├ layout niches       │
+                              │   └ mined inv. (ctor)   │
+                              │ 2c. CHECKS              │
+                              │   ├ UB / panics (always)│
+                              │   ├ contracts (ensures) │
+                              │   └ --check-invariants  │
+                              └─────────────────────────┘
+                                           │
+        ┌──────────────────────────────────┴──────────────────────────────────┐
+        ▼                                                                     ▼
+┌───────────────────────────────────────┐   ┌──────────────────────────────────────────┐
+│ <a href="#soundness-caveats">SOUNDNESS CAVEATS</a> (what "Success"     │   │ <a href="#architecture-for-contributors">ARCHITECTURE (for contributors)</a>          │
+│ does NOT mean)                        │   │ driver → partition → harness pass →      │
+│ • one monomorphization only           │   │ codegen → CBMC → summary                 │
+│ • no aliasing between args (#4750)    │   │ (see the architecture diagram below)     │
+│ • bounded args only up to bound       │   └──────────────────────────────────────────┘
+│ • ctor may reach only some inputs     │
+│ • mined-invariant heuristic (#4763)   │
+└───────────────────────────────────────┘
+</code></pre>
+
+<h2 id="selecting-functions"><a class="header" href="#selecting-functions">Selecting functions</a></h2>
+<p>Autoharness considers functions defined in the crate being verified, including free functions, inherent methods, trait-implementation methods, and trait methods with default implementations. Functions from dependencies are not candidates. For each eligible function, Kani selects one automatic harness; functions that fail a selection check are skipped. Kani reports selected functions and visible skip reasons before verification, unless <code>--quiet</code> is specified.</p>
+<p>Each candidate function goes through a fixed sequence of selection checks, and the first check it fails determines its skip reason. Kani-internal and compile-time-only functions are rejected before generic instantiation. Generic functions are then instantiated (see <a href="#generic-functions">Generic Functions</a>), and the instantiated function is checked, in order, for a body, excluded if it is a proof harness or a Kani trait implementation, matched against the include and exclude patterns, checked for an unsupported calling convention, and finally checked for whether its arguments can be generated. The details of argument generation are described in <a href="#generating-harnesses">Generating harnesses</a>.</p>
+<h3 id="include-and-exclude-patterns"><a class="header" href="#include-and-exclude-patterns">Include and exclude patterns</a></h3>
+<p>The <code>autoharness</code> subcommand has options <code>--include-pattern [REGEX]</code> and <code>--exclude-pattern [REGEX]</code> to include and exclude particular functions using regular expressions.
+When matching, Kani prefixes the function’s path with the crate name. For example, a non-generic function <code>foo</code> in the <code>my_crate</code> crate is matched as <code>my_crate::foo</code>.
+The selection algorithm is as follows:</p>
+<ul>
+<li>If only <code>--include-pattern</code>s are provided, include a function if it matches any of the provided patterns.</li>
+<li>If only <code>--exclude-pattern</code>s are provided, include a function if it does not match any of the provided patterns.</li>
+<li>If both are provided, include a function if it matches an include pattern <em>and</em> does not match any of the exclude patterns. Note that this implies that the exclude pattern takes precedence, i.e., if a function matches both an include pattern and an exclude pattern, it will be excluded.</li>
+</ul>
+<p>Here are some examples:</p>
+<pre><code class="language-bash"># Include functions containing foo but not bar
+kani autoharness -Z autoharness --include-pattern 'foo' --exclude-pattern 'bar'
+
+# Include my_crate::foo exactly
+kani autoharness -Z autoharness --include-pattern '^my_crate::foo$'
+
+# Include functions in the foo module, but not in foo::bar
+kani autoharness -Z autoharness --include-pattern 'foo::.*' --exclude-pattern 'foo::bar::.*'
+
+# Include functions starting with test_, but not if they're in a private module
+kani autoharness -Z autoharness --include-pattern 'test_.*' --exclude-pattern '.*::private::.*'
+
+# This ends up including nothing since all foo::bar matches will also contain bar.
+# Kani will emit a warning that these options conflict.
+kani autoharness -Z autoharness --include-pattern 'foo::bar' --exclude-pattern 'bar'
+</code></pre>
+<p>Note that because Kani prefixes function paths with the crate name, some patterns might match more than you expect.
+For example, given a function <code>foo_top_level</code> inside crate <code>my_crate</code>, the regex <code>.*::foo_.*</code> will match <code>foo_top_level</code>, since Kani interprets it as <code>my_crate::foo_top_level</code>.
+To match only <code>foo_</code> functions inside modules, use a more specific pattern, e.g. <code>.*::[^:]+::foo_.*</code>.</p>
+<p>Patterns match the <strong>instantiated name</strong> of a generic function. For example, <code>my_crate::foo::&lt;i32&gt;</code> does not match <code>^my_crate::foo$</code>, although an unanchored <code>foo</code> pattern matches it. Regular expressions are unanchored unless explicitly anchored; invalid expressions and patterns containing whitespace are rejected. Kani also warns if an include-pattern string contains an exclude-pattern string.</p>
+<p>Generic instantiation happens before include/exclude filtering. Consequently, a generic function for which Kani cannot find an instantiation is reported with the <code>Generic Function</code> skip reason even if the function would not match the supplied filters. The same applies to compile-time-only functions, which are rejected even before instantiation.</p>
+<h3 id="listing-functions"><a class="header" href="#listing-functions">Listing functions</a></h3>
+<p>Autoharness also accepts <code>--list</code>, which compiles the project and runs the <a href="../list.html">list subcommand</a>, including automatic harnesses, <strong>without running verification</strong>. Unless <code>--quiet</code> is passed, Kani first prints the selected-functions and skipped-functions tables.</p>
+<p>Use <code>--list --format &lt;FORMAT&gt;</code> to choose the output format:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Format</th><th>Output</th></tr>
+</thead>
+<tbody>
+<tr><td><code>pretty</code> (default)</td><td>Print the list to the terminal.</td></tr>
+<tr><td><code>markdown</code></td><td>Write <code>kani-list.md</code> in the current directory.</td></tr>
+<tr><td><code>json</code></td><td>Write <code>kani-list.json</code> in the current directory.</td></tr>
+</tbody>
+</table>
+</div>
+<p>For file-based formats, Kani prints the path of the written file. The <code>--format</code> option requires <code>--list</code>. Combining <code>--quiet</code> with <code>--list --format pretty</code> is not supported.</p>
+<p>For example:</p>
+<pre><code class="language-bash"># List functions and harnesses without verification
+cargo kani autoharness -Z autoharness --list
+
+# Write the list as JSON
+cargo kani autoharness -Z autoharness --list --format json
+</code></pre>
+<h3 id="skip-reasons"><a class="header" href="#skip-reasons">Skip reasons</a></h3>
+<p>Autoharness records one skip reason per skipped function: the first failed check in its selection process. The skipped-functions table has <code>Crate</code>, <code>Skipped Function</code>, and <code>Reason for Skipping</code> columns. Reasons visible to users include, in the order the checks run:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Reason shown</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Can only be called at compile time</code></td><td>The function is marked for compile-time execution and cannot be selected for an automatic harness.</td></tr>
+<tr><td><code>Generic Function: &lt;detail&gt;</code></td><td>Kani could not find a supported instantiation satisfying the function’s constraints. The detail provides the specific cause; see <a href="#generic-functions">Generic Functions</a>.</td></tr>
+<tr><td><code>The function does not have a body</code></td><td>There is no function body available to verify, as with a trait method without a default implementation.</td></tr>
+<tr><td><code>Did not match provided filters</code></td><td>The function was excluded by the include/exclude patterns.</td></tr>
+<tr><td><code>Explicit tail calls are not supported</code></td><td>The function’s body contains an explicit tail call (<code>become</code>), which Kani does not support.</td></tr>
+<tr><td><code>Unsupported variadic calling convention</code></td><td>The function is a C-variadic function whose calling convention Kani cannot model (for example, <code>extern "sysv64"</code>).</td></tr>
+<tr><td><code>Missing Arbitrary implementation for argument(s) x: T, y: U</code></td><td>At least one argument cannot be generated using a supported argument model. The argument names and types depend on the function.</td></tr>
+<tr><td><code>Requires --bounded-arguments for argument(s) x: T</code></td><td>At least one argument requires opting into bounded generation. The argument names and types depend on the function.</td></tr>
+</tbody>
+</table>
+</div>
+<p>Missing argument names are displayed as <code>_</code>. If a function has both unsupported arguments and arguments requiring bounded generation, <code>Missing Arbitrary implementation</code> is the skip reason reported. See <a href="#generating-harnesses">Generating harnesses</a> for the supported argument models and <a href="#bounded-argument-generation">Bounded Arguments</a> for the opt-in behavior.</p>
+<p>Kani’s internal implementation functions and functions already used as proof harnesses may be excluded internally with the <code>Kani implementation</code> reason, but these entries are <strong>not displayed</strong> in the skipped-functions table. The selected-functions table contains <code>Crate</code> and <code>Selected Function</code> columns. Where a generic instantiation is chosen, the tables display the instantiated function name (for example, <code>foo::&lt;i32&gt;</code>); a generic function that cannot be instantiated is listed under its uninstantiated name.</p>
+<h3 id="generic-functions"><a class="header" href="#generic-functions">Generic Functions</a></h3>
+<p>For a generic function, Kani generates a harness for a <strong>single monomorphic instantiation</strong>: it substitutes concrete types for the function’s type parameters, requires the instantiation to satisfy the trait bounds and <code>where</code> clauses, and erases lifetime parameters.</p>
+<p>Kani first tries the following primitive candidate types, using the same type for each type parameter: <code>i32</code>, <code>u32</code>, <code>usize</code>, <code>u8</code>, <code>i64</code>, <code>u64</code>, <code>f64</code>, <code>f32</code>, <code>bool</code>, and <code>char</code>. If no uniform choice works, it searches combinations of candidate types for individual parameters. Alongside the primitives, the candidates can include up to 16 concrete types derived from implementations of the parameter’s trait bounds (for example, a crate-local struct implementing a crate-local trait). This combinatorial search is limited to 256 attempts. If it finds no suitable instantiation, Kani makes one final attempt using <code>()</code> for every type parameter.</p>
+<p>For example, given:</p>
+<pre><code class="language-rust">fn foo&lt;T: Eq&gt;(x: T, y: T) {
+    if x == y {
+        panic!("x and y are equal");
+    }
+}</code></pre>
+<p>Kani generates and runs a harness that verifies <code>foo::&lt;i32&gt;</code>, and the summary table shows the instantiated name, e.g.:</p>
+<pre><code class="language-text">| Crate    | Selected Function | Kind of Automatic Harness | Verification Result |
+| my_crate | foo::&lt;i32&gt;        | #[kani::proof]            | Failure             |
+</code></pre>
+<p>Verifying a single instantiation is an underapproximation of all of the function’s possible behaviors: a successful result for <code>foo::&lt;i32&gt;</code> does not imply that other instantiations of <code>foo</code> are also safe. Kani makes the chosen instantiation explicit by displaying its name. See <a href="#single-monomorphization">Single monomorphization</a> for the implications of this limitation.</p>
+<p><strong>Const generic parameters.</strong> <code>usize</code> const generic parameters, such as array lengths, are instantiated with the value <code>2</code>, so an instantiated function name might include <code>::&lt;2&gt;</code>. Other const-generic parameter types are currently unsupported. Kani also skips a function if its const-generic parameter can reach a <code>const {}</code> block whose evaluation may constrain that parameter (for example, <code>const { assert!(N &gt;= 4) }</code>). This check is conservative: Kani may skip a function even if the substituted value would satisfy the assertion, rather than risk an invalid compile-time evaluation.</p>
+<p><strong>Function-trait bounds.</strong> For parameters bounded by <code>Fn</code>, <code>FnMut</code>, or <code>FnOnce</code>, Kani can try nondeterministic function models instead of skipping the generic function. The models support zero to three by-value inputs, or one to two inputs involving shared references (including mixed reference/value arguments). The return type must implement <code>Arbitrary</code>. Models can also be selected for signatures that involve the generic function’s other type parameters, when the resulting bounds can be satisfied. If no available model is suitable, the function may be skipped as a generic function. See <a href="#fn-bound-closures">Fn-bound closures</a> for the model’s behavior and limitations.</p>
+<p><strong>Other instantiation failures.</strong> Kani may skip a generic function when no candidate satisfies its bounds or the instantiation search reaches its limit. It also rejects candidate instantiations that would call a <code>simd_*</code> intrinsic in the function’s own body with incompatible non-SIMD types or an invalid SIMD comparison-result type; another valid candidate may still be selected. The <code>Generic Function</code> skip-reason detail identifies applicable failures, including unsupported const generics, const-generic preconditions, SIMD constraints, exhausted search attempts, or unsatisfied trait bounds.</p>
+<p>If some caller of a generic function is eligible for an automatic harness, then additional monomorphized versions of the generic function may still be reachable (and thus verified) through the caller’s harness.</p>
+<p>After Kani selects a function and, when necessary, an instantiation, it generates the harness arguments as described in <a href="#generating-harnesses">Generating harnesses</a>.</p>
+<h2 id="generating-harnesses"><a class="header" href="#generating-harnesses">Generating harnesses</a></h2>
+<h3 id="arguments"><a class="header" href="#arguments">Arguments</a></h3>
+<h4 id="unbounded-default"><a class="header" href="#unbounded-default">Unbounded (default)</a></h4>
+<p>Kani uses the following argument generators by default, without requiring
+<code>--bounded-arguments</code>. Their supported types and modeling limits are described below.</p>
+<h5 id="arguments-implementing-arbitrary"><a class="header" href="#arguments-implementing-arbitrary">Arguments Implementing Arbitrary</a></h5>
+<p>Kani generates an automatic harness when it can generate each of the function’s arguments
+nondeterministically. For an argument implementing <a href="../arbitrary.html"><code>Arbitrary</code></a>, it uses
+<code>kani::any()</code>. For a shared or mutable reference to such a type, it generates a value of the
+referenced type in storage that lives for the entire harness, then passes a reference to it.</p>
+<p>For supported structs and enums without an <code>Arbitrary</code> implementation, Kani can synthesize
+one by generating fields and, for enums, selecting a variant nondeterministically. Private
+fields are supported, but field generation has additional restrictions: bare reference
+fields and <code>NonNull</code> fields (including wrappers such as <code>Option&lt;NonNull&lt;T&gt;&gt;</code>) are not
+synthesized, and types with lifetime arguments cannot use automatic derivation. Other
+fields must implement <code>Arbitrary</code> or meet the recursive derivation requirements. Automatic
+derivation is available only for autoharness and does not require adding a derive attribute
+to the type. The argument models below do not make unsupported field types derivable.</p>
+<p>The following sections describe additional argument models. Types that require a bounded
+generator are covered under <a href="#bounded-argument-generation">Bounded Arguments</a>.</p>
+<h5 id="raw-pointers"><a class="header" href="#raw-pointers">Raw Pointers</a></h5>
+<p>For a function with raw pointer arguments (<code>*const T</code>/<code>*mut T</code>, including nested raw pointers),
+the generated harness produces pointers in a nondeterministic allocation state, provided that the
+pointee type implements <code>Arbitrary</code> (or can derive it). Each generated pointer is aligned and is either:</p>
+<ul>
+<li>null,</li>
+<li>out of bounds of its allocation (and thus invalid for reads or writes), or</li>
+<li>valid: pointing to a nondeterministic value of the pointee type, which stays allocated for the entire harness.</li>
+</ul>
+<p>Therefore, a function that dereferences a raw pointer argument without being able to rule out
+the null and out-of-bounds states will fail verification. For safe functions, such a failure points at a
+real robustness issue, since safe code can pass any pointer value. For functions whose safety relies on
+caller obligations (e.g., <code>unsafe fn</code>s with documented preconditions), add
+<a href="contracts.html">function contracts</a> with Kani’s
+<a href="https://model-checking.github.io/kani/crates/doc/kani/mem/index.html">memory predicates</a> such as
+<code>#[kani::requires(kani::mem::can_dereference(ptr))]</code>: the automatic contract harness assumes the
+precondition, which excludes the invalid pointer states.</p>
+<p>Current limitations of the generated pointers:</p>
+<ul>
+<li>Pointers are always aligned; misaligned-pointer bugs are not covered.</li>
+<li>No pointers to deallocated objects are generated (Kani’s memory predicates cannot reason about those).</li>
+<li>Distinct pointer arguments never alias each other, and the pointee is always initialized in the valid state.</li>
+<li>Raw pointers are only supported as direct arguments (possibly nested in other raw pointers), not behind
+references or inside user-defined types.</li>
+</ul>
+<h5 id="box-rc-and-arc"><a class="header" href="#box-rc-and-arc">Box, Rc and Arc</a></h5>
+<p><code>Box&lt;T&gt;</code>, <code>Rc&lt;T&gt;</code> and <code>Arc&lt;T&gt;</code> arguments are supported when the sized pointee type <code>T</code>
+implements <code>Arbitrary</code> or Kani can derive it automatically. Kani generates a nondeterministic
+pointee and constructs a new smart pointer around it. These arguments require no
+<code>--bounded-arguments</code> flag and do not add a “(bounded)” marker.</p>
+<p>The generation models require allocation support and use the default allocator. They cover
+the pointee’s generated values; <code>Rc</code> and <code>Arc</code> start with one strong reference and no weak
+references, so states with existing owners or weak references are not explored. Unsized
+pointees such as <code>str</code> and <code>[T]</code> are outside these models; some types, such as <code>Box&lt;[T]&gt;</code>,
+can instead be generated through <code>BoundedArbitrary</code> with <code>--bounded-arguments</code>.</p>
+<h5 id="primitive-slices-and-vec"><a class="header" href="#primitive-slices-and-vec">Primitive slices and Vec</a></h5>
+<p>Direct <code>&amp;[T]</code>, <code>&amp;mut [T]</code> and <code>Vec&lt;T&gt;</code> arguments are generated without a length bound when
+<code>T</code> is a primitive integer or floating-point type, for example <code>u8</code>, <code>i32</code> or <code>f64</code>. Each
+argument uses a fresh allocation with nondeterministic length and contents. The length is
+restricted only by Rust’s allocation-size requirements. Mutable slices have exclusive
+backing storage; the generated <code>Vec</code> uses the global allocator and a capacity of
+<code>len.max(1)</code>.</p>
+<p>These models require allocation support. They are enabled by default, do not add a
+“(bounded)” marker, and take precedence over bounded generation even when
+<code>--bounded-arguments</code> is passed. <code>--slice-bound</code> and <code>--bounded-arbitrary-bound</code> do not limit
+them. Element types such as <code>bool</code>, <code>char</code>, <code>NonZeroU32</code> and user-defined structs use the
+bounded generators instead, when supported.</p>
+<p>Unbounded argument length does not remove the loop-unwinding bound. A function that
+iterates over the input can fail an unwinding assertion if that bound is insufficient;
+see <a href="../../tutorial-loop-unwinding.html">Loop unwinding</a>. Nested slice references such as
+<code>&amp;&amp;[u8]</code> and slices inside user-defined types are outside these argument models.</p>
+<h5 id="fn-bound-closures"><a class="header" href="#fn-bound-closures">Fn-bound closures</a></h5>
+<p>For supported generic parameters bounded by <code>Fn</code>, <code>FnMut</code> or <code>FnOnce</code>, Kani supplies a
+function item that returns a fresh <code>kani::any()</code> value on each call. The return type must
+implement <code>Arbitrary</code>. Repeated calls can return different values, even for the same inputs.
+The function item itself needs no <code>Arbitrary</code> implementation.</p>
+<p>Models support zero through three arguments passed by value. For shared-reference inputs,
+models support one or two arguments, including a mix of shared references and values.
+The referenced types must be sized. These reference models can satisfy higher-ranked bounds
+such as <code>for&lt;'a&gt; Fn(&amp;'a T) -&gt; R</code>; there is no corresponding model for higher-ranked mutable
+references. Eligibility also depends on satisfying the generic function’s other bounds;
+see <a href="#generic-functions">Generic Functions</a>.</p>
+<p>These models check the function under verification against arbitrary callback results.
+They do not execute a particular closure’s body or model its captures, mutations or other
+side effects. Use a handwritten harness when verification depends on a particular callback
+implementation. See <a href="#other-limitations">Other limitations</a> for what this means for a
+<code>Success</code> result, and <a href="https://github.com/model-checking/kani/issues/4994">#4994</a>.</p>
+<h5 id="formatting-trait-implementations"><a class="header" href="#formatting-trait-implementations">Formatting Trait Implementations</a></h5>
+<p>For the <code>fmt</code> methods of <code>Debug</code>, <code>Display</code>, <code>Binary</code>, <code>Octal</code>, <code>LowerHex</code>, <code>UpperHex</code>, <code>LowerExp</code>,
+<code>UpperExp</code> and <code>Pointer</code> implementations, Kani uses a special harness rather than the
+general <a href="#bounded-argument-generation">bounded <code>Formatter</code> model</a>. It formats a
+nondeterministic value of the implementing type into a sink that discards the output: the
+<code>Formatter</code> is constructed by the core formatting machinery (so it is always valid), and panics
+or undefined behavior inside the <code>fmt</code> implementation are detected as usual.
+These harnesses are unbounded with respect to the implementing type (its value is generated with
+<code>kani::any</code>), so they are generated by default and are unaffected by <code>--bounded-arguments</code>. If the
+implementing type implements <a href="#type-safety-invariants"><code>Invariant</code></a>, the generated value is assumed
+to satisfy it, as for any other automatic harness.</p>
+<p>Current limitations:</p>
+<ul>
+<li>The <code>Formatter</code> carries the default formatting parameters, i.e. it is the one that <code>format!</code>
+with the trait’s bare specifier (<code>{:?}</code>, <code>{}</code>, <code>{:x}</code>, …) would produce. Code paths that a <code>fmt</code>
+implementation takes only for a non-default width, precision, fill, alignment, sign, or the
+alternate flag (<code>{:#?}</code>, <code>{:#x}</code>, and so on) are therefore not covered.</li>
+<li>The sink never fails, so <code>fmt</code> implementations that propagate write errors with <code>?</code> are not
+verified against the error path.</li>
+<li>Because the harness goes through <code>core::fmt</code>, the core formatting machinery is verified along
+with the <code>fmt</code> implementation, so a reported failure may point at a location inside <code>core</code>.</li>
+<li>A <code>fmt</code> method that carries a <a href="contracts.html">function contract</a> is not handled this way: the
+automatic contract harness calls the function directly, so its <code>&amp;mut Formatter</code> argument comes
+from the bounded <code>Formatter</code> model and requires <code>--bounded-arguments</code>.</li>
+</ul>
+<h4 id="opt-in-under-approximations"><a class="header" href="#opt-in-under-approximations">Opt-in under-approximations</a></h4>
+<h5 id="bounded-argument-generation"><a class="header" href="#bounded-argument-generation">Bounded argument generation</a></h5>
+<p>Some argument types require a bounded generator, including strings and slices whose
+elements are not primitive integers or floats. Because a bug requiring a larger input
+would be missed, these generators are <strong>disabled by default</strong> and require
+<code>--bounded-arguments</code>. Functions that would become eligible with the option are reported
+in the skipped-functions table with reason “Requires –bounded-arguments”. Harnesses that
+use bounded values are marked <strong>“(bounded)”</strong> in the summary table, and a note after the
+table repeats this limitation.</p>
+<p>With <code>--bounded-arguments</code>, for a function with <code>&amp;[T]</code>/<code>&amp;mut [T]</code> arguments outside the
+<a href="#primitive-slices-and-vec">unbounded primitive models</a> (where <code>T</code> implements or can derive
+<code>Arbitrary</code>), or with <code>&amp;str</code>, <code>&amp;CStr</code>, <code>&amp;ByteStr</code> or <code>&amp;Wtf8</code> arguments, the
+generated harness produces a slice of nondeterministic length, backed by nondeterministic storage
+that lives for the entire harness: by default <strong>up to 16 elements</strong> for slices and byte strings,
+<strong>up to 4 bytes</strong> for strings and WTF-8 strings, and <strong>up to 15 bytes</strong> plus the terminating NUL
+for C strings (which follow the slice bound, less one for the NUL). Strings cover all
+valid UTF-8 contents up to the bound (the generated string is the longest valid-UTF-8 prefix of
+nondeterministic bytes, the same approach as <code>String</code>’s <code>BoundedArbitrary</code> implementation); the
+smaller bound reflects the cost of reasoning about UTF-8 for symbolic execution. WTF-8 strings are
+generated the same way, as the longest well-formed WTF-8 prefix, so they also cover values holding
+unpaired surrogate code points. The bounds are
+chosen to stay below the default loop-unwinding bound of 20, so that loops over the slice can
+be fully unwound by default.</p>
+<p>The bounds are configurable with <code>--slice-bound</code> and <code>--string-bound</code> (and
+<code>--bounded-arbitrary-bound</code>, see below). All three flags require <code>--bounded-arguments</code> and
+accept positive bounds only. They apply only to bounded generators; the unbounded primitive
+slice and <code>Vec</code> models continue to use nondeterministic lengths. A larger bound covers more
+inputs at a higher solver cost. A bound that is not below the effective loop-unwinding bound
+(<code>--default-unwind</code>, 20 by default) leaves loops over such an argument only partially unwound, and Kani warns when a
+configured bound reaches it. The note printed after the summary table reports the bounds a run
+actually used.</p>
+<p><code>&amp;Formatter</code> and <code>&amp;mut Formatter</code> arguments (also requiring <code>--bounded-arguments</code>) are generated by
+<code>any_formatter</code>: a <code>Formatter</code> over a sink that discards its output, with every formatting option
+nondeterministic and its width and precision bounded by the slice bound. The sink never fails, so
+paths that handle a write error are not reached.</p>
+<p>The <code>core::str::pattern</code> searchers <code>CharArraySearcher&lt;'_, N&gt;</code>, <code>CharArrayRefSearcher&lt;'_, '_, N&gt;</code>
+and <code>CharSliceSearcher&lt;'_, '_&gt;</code> (the searchers for <code>[char; N]</code>, <code>&amp;[char; N]</code> and <code>&amp;[char]</code>
+patterns) are also supported as arguments, by value or by reference (also requiring
+<code>--bounded-arguments</code>). The harness builds the searcher through the public <code>Pattern::into_searcher</code>
+API over a nondeterministic haystack (a <code>&amp;str</code> bounded by the string bound), and then advances it
+a nondeterministic number of steps from each end, so that searchers in partially advanced states
+are also generated. Because the searcher is only ever constructed and advanced through the public
+API, it satisfies the library’s internal invariants as long as its haystack is valid UTF-8. The
+haystack comes from the same generator as <code>&amp;str</code> arguments, so it shares their current limitation:
+under verify-std it can be invalid UTF-8 and cause spurious failures (see
+<a href="https://github.com/model-checking/kani/issues/5030">#5030</a>). The needle of a <code>CharArraySearcher</code> or
+<code>CharArrayRefSearcher</code> is a nondeterministic <code>[char; N]</code> whose length <code>N</code> is fixed by the type; the
+needle of a <code>CharSliceSearcher</code> is a nondeterministic <code>&amp;[char]</code> of up to the slice bound. Since <code>N</code>
+is not bounded by any option, a function that takes such a searcher with a large <code>N</code> gets a large
+nondeterministic needle, which can make verification slow, just as for a <code>[T; N]</code> argument. (For a
+generic function, <code>N</code> is instantiated with the same small value as other <code>usize</code> const generic
+parameters.) The <code>Debug::fmt</code> methods of these searchers are verified as ordinary functions, with
+both the searcher and the <code>&amp;mut Formatter</code> generated as bounded arguments, rather than through the
+approach described in <a href="#formatting-trait-implementations">Formatting Trait Implementations</a>.</p>
+<p>Additionally (also requiring <code>--bounded-arguments</code>), for arguments whose type implements
+<a href="../bounded_arbitrary.html"><code>BoundedArbitrary</code></a>
+(e.g. <code>Vec&lt;bool&gt;</code>, <code>String</code>, or user types deriving it), the harness generates a bounded
+nondeterministic value with a <strong>default bound of 4</strong> (via <code>kani::bounded_any</code>), overridable
+with <code>--bounded-arbitrary-bound</code>. The same caveat applies:
+verification results only hold up to the bound. The smaller bound reflects that these values are
+heap allocated and, for <code>String</code>, involve UTF-8 reasoning, both of which are costly for symbolic
+execution.</p>
+<p>These argument models do not synthesize nested slice references (e.g. <code>&amp;&amp;[u8]</code>) or
+slice fields inside user-defined types; a source-defined <code>Arbitrary</code> implementation can
+supply such fields.</p>
+<h5 id="constructor-based-generation"><a class="header" href="#constructor-based-generation">Constructor-based generation</a></h5>
+<p>By default, when a type does not implement <code>Arbitrary</code>, Kani synthesizes values field by field.
+For types whose private fields carry a representation invariant (e.g. a date type storing a
+packed, validated ordinal), raw field synthesis can produce values that violate the invariant,
+causing false alarms in every harness that generates the type. With <code>--constructor-args</code>, Kani
+instead generates values of private-field struct types through one of the type’s own
+constructors, preferring (in order):</p>
+<ol>
+<li>An <em>assert-guarded representation constructor</em>: an <code>unsafe</code>, <code>#[doc(hidden)]</code>, or
+<code>*_unchecked</code>-named associated function returning <code>Self</code> directly, whose preconditions are
+stated as assertions (e.g. <code>debug_assert!</code>) rather than validated returns. Kani inlines its
+body with nondeterministic arguments and converts every validity statement — <code>kani::assert</code>
+and <code>assert_unchecked</code> calls, panic entry points, and overflow (<code>Assert</code>) checks — into an
+assumption, so the constructor’s own assertions filter the arguments down to the values the
+crate considers valid. Calls the constructor makes to further assert-guarded helpers are
+inlined recursively (bounded in depth and size). Visibility is irrelevant here, since the
+body is inlined rather than called.</li>
+<li>Otherwise, a <em>checked public constructor</em>: a public associated function returning <code>Self</code>,
+<code>Option&lt;Self&gt;</code>, or <code>Result&lt;Self, E&gt;</code>, called with nondeterministic arguments (assuming
+success for the <code>Option&lt;Self&gt;</code>/<code>Result&lt;Self, E&gt;</code> shapes).</li>
+</ol>
+<p>Zero-argument constructors and constructors introducing their own type or const generic
+parameters are not considered. Constructors may have their own lifetime parameters.</p>
+<p><code>--constructor-args</code> additionally enables <em>mined-invariant filtering</em>: generated struct and
+enum values are constrained via <code>kani::assume</code> to satisfy the conditions Kani can extract
+from assertions in the type’s own methods (see <a href="#mined-invariants">Mined invariants</a>).
+This filtering also applies to types with no usable constructor, at lower formula cost
+than constructor inlining.</p>
+<p>This option is opt-in because it under-approximates: harnesses whose values are generated or
+constrained this way are marked “(ctor)” in the output. That marker therefore covers all of the
+mechanisms above — assert-guarded/checked constructors <em>and</em> mined-invariant filtering — and
+signals that verification results only cover values the chosen mechanism admits; a bug that
+requires a different value will not be found. Note also that a checked constructor which itself
+panics for some of its inputs (rather than rejecting them via <code>Option</code>/<code>Result</code>) turns those
+inputs into harness failures, so this option can trade one class of false alarm for another.</p>
+<p>One exception: values of a type that has its own <code>Arbitrary</code> implementation are still filtered
+by mined invariants, but the harness is currently not marked “(ctor)” and no note is printed;
+see <a href="https://github.com/model-checking/kani/issues/4995">#4995</a>.</p>
+<p>See <a href="#soundness-caveats">Soundness caveats</a>.</p>
+<h3 id="assumptions"><a class="header" href="#assumptions">Assumptions</a></h3>
+<p>Assumptions restrict the values and execution paths that the generated harness explores.
+The following mechanisms supply assumptions before Kani checks the function’s behavior.</p>
+<h4 id="contracts-requires"><a class="header" href="#contracts-requires">Contracts (requires)</a></h4>
+<p>When the selected function has a <a href="contracts.html">function contract</a>, Kani generates a
+<code>#[kani::proof_for_contract]</code> harness. The function’s <code>#[kani::requires(...)]</code> preconditions
+are assumed at entry, so verification covers only inputs that satisfy them. For example,
+<code>#[kani::requires(x != 0)]</code> excludes <code>x == 0</code> from the automatic contract harness.</p>
+<p>Autoharness does not infer caller obligations from an <code>unsafe fn</code> declaration or its safety
+documentation. Express those obligations as preconditions to avoid checking the function
+with inputs its callers are required to exclude; see the <a href="#raw-pointers">raw pointer example</a>.</p>
+<h4 id="type-safety-invariants"><a class="header" href="#type-safety-invariants">Type Safety Invariants</a></h4>
+<p>If a type implements the <a href="https://model-checking.github.io/kani/crates/doc/kani/trait.Invariant.html"><code>Invariant</code></a> trait,
+Kani assumes that the nondeterministic struct and enum values it generates for automatic harnesses respect the type’s safety invariant,
+i.e., each generated value <code>v</code> satisfies <code>v.is_safe()</code>.
+When Kani synthesizes a struct or enum’s generation field by field, it also assumes the
+safety invariants of the struct and enum fields it generates, even if the enclosing type
+does not implement <code>Invariant</code>. For a source-defined <code>Arbitrary</code> implementation, nested
+invariants must be enforced by that implementation or the enclosing type’s <code>Invariant</code>.
+Invariants implemented for non-ADT types (e.g., tuples or arrays) are currently not assumed.</p>
+<p>This matches the <a href="https://rust-lang.github.io/unsafe-code-guidelines/glossary.html#validity-and-safety-invariant">Unsafe Code Guidelines’ definition of a safety invariant</a>:
+safe code is allowed to assume that the values it receives uphold their types’ safety invariants,
+so verifying a function against invariant-violating inputs would produce spurious counterexamples.</p>
+<h4 id="layout-niches"><a class="header" href="#layout-niches">Layout niches</a></h4>
+<p>When Kani automatically derives <code>Arbitrary</code> for a struct or enum, it must respect any
+compiler-defined restrictions on its fields’ values. A field’s underlying integer type
+may allow more values than the field type itself. Kani reads the field type’s valid scalar
+range from the compiler’s layout information and adds <code>kani::assume</code> constraints when
+generating values.</p>
+<p>For example, consider a <code>Month</code> type without an <code>Arbitrary</code> implementation whose field
+type restricts an underlying <code>u8</code> to <code>1..=12</code>. Generating an arbitrary <code>u8</code> alone would also
+allow 0 and 13 through 255. Kani constrains it to <code>1..=12</code> before constructing the restricted
+field, so automatic derivation produces only valid month values. This relies on a
+restriction expressed in the field’s type; Kani does not infer it from the name <code>Month</code>.</p>
+<p>Invalid bit patterns that the compiler can use for layout optimizations are called
+<em>niches</em>. For <code>NonZeroU32</code>, zero is such a pattern. Its existing <code>Arbitrary</code> implementation
+already excludes zero, so the additional layout assumption is redundant on that generation
+path; it is needed when automatically synthesizing generation for restricted types that
+have no such implementation.</p>
+<p>These assumptions exclude language-level invalid values, preserving the valid inputs
+that the generator represents. They require no flag or <code>Invariant</code> implementation and
+do not add a “(ctor)” marker. They prevent false alarms caused by invalid scalar values;
+they do not infer additional relationships between fields or application-level invariants.</p>
+<h4 id="mined-invariants"><a class="header" href="#mined-invariants">Mined invariants</a></h4>
+<p>Many types state conditions on their fields through assertions in their own inherent
+methods, such as <code>assert!(self.value &gt;= 1)</code>. Kani can <em>mine</em> these assertions, treating a
+condition as a candidate type invariant when:</p>
+<ul>
+<li>The assertion occurs on every path to a normal return of the method or the relevant
+enum match arm (post-dominance).</li>
+<li>Its condition is a supported pure expression over <code>self</code>’s fields and constants,
+including simple field getters whose expressions Kani can extract.</li>
+<li>The same condition is asserted in at least two distinct methods.</li>
+</ul>
+<p>For enums, a condition read from a matched variant is applied only to that variant.
+Requiring assertions in two methods reduces the risk of treating a method’s precondition
+as a type invariant, but does not prove that the condition holds for every valid value.</p>
+<p>Mining currently applies to struct and enum types without generic arguments. Methods can
+take <code>self</code> by value, shared reference or mutable reference; methods with their own type or
+const generic parameters are excluded.</p>
+<p>Under <code>--constructor-args</code>, the mined conditions are <em>assumed</em> for generated values. This
+input filtering also applies when the type already implements <code>Arbitrary</code>; such harnesses are
+currently not marked “(ctor)” (<a href="https://github.com/model-checking/kani/issues/4995">#4995</a>). It can exclude
+valid values if a mined condition is actually a precondition of the methods rather than
+an invariant of the type; see
+<a href="#soundness-caveats">Soundness caveats</a>. The separate
+<a href="#--check-invariants"><code>--check-invariants</code></a> option checks mined conditions on return values.</p>
+<h3 id="checks"><a class="header" href="#checks">Checks</a></h3>
+<h4 id="undefined-behavior-and-panics"><a class="header" href="#undefined-behavior-and-panics">Undefined behavior and panics</a></h4>
+<p>By default, automatic harnesses use Kani’s usual checks for the selected function and code
+reachable from it, including assertions, panics, integer overflow, division by zero and
+invalid memory accesses. These checks also run when the function has a contract. The inputs they
+cover depend on the argument models and assumptions above.</p>
+<p>See <a href="../../undefined-behaviour.html">Undefined Behaviour</a> for the forms of undefined behavior
+Kani can detect and its current limitations, and
+<a href="../../verification-results.html">Verification results</a> for how individual checks are reported.</p>
+<h4 id="contracts-ensures"><a class="header" href="#contracts-ensures">Contracts (ensures)</a></h4>
+<p>For a function with a contract, the automatic contract harness checks each
+<code>#[kani::ensures(...)]</code> postcondition on return, under the function’s assumed preconditions.
+For example, <code>#[kani::ensures(|result| result.is_safe())]</code> checks that the returned value
+respects its type’s safety invariant.</p>
+<p>Assuming <code>Invariant::is_safe()</code> for generated inputs does not automatically check it on
+outputs. Add such a postcondition to verify the returned value’s safety invariant;
+see <a href="contracts.html">function contracts</a>.</p>
+<h4 id="--check-invariants"><a class="header" href="#--check-invariants"><code>--check-invariants</code></a></h4>
+<p>With <code>--check-invariants</code>, Kani asserts the type’s <a href="#mined-invariants">mined invariants</a>
+on values returned by verified functions. Supported returns include a direct <code>T</code>, a
+reference to <code>T</code>, or the <code>Some(T)</code>/<code>Ok(T)</code> payload of an <code>Option&lt;T&gt;</code>/<code>Result&lt;T, E&gt;</code>;
+<code>T</code> must be a struct or enum for which conditions can be mined. <code>None</code> and <code>Err</code> returns
+do not check a payload. The checks do not recursively unwrap returns such as <code>Option&lt;&amp;T&gt;</code>,
+inspect tuple or array elements, or check modified input arguments.</p>
+<p>Failures include a message identifying the type and the methods that asserted the mined
+condition. Because mining is heuristic, a failure means the returned value violates a
+condition asserted by those methods, which may or may not indicate a bug in the returning
+function. This option checks mined predicates, rather than <code>Invariant::is_safe()</code>, and can
+be used independently of <code>--constructor-args</code>. For functions with contracts, these additional
+checks run under the same preconditions and supplement the postcondition checks.</p>
+<h2 id="verifying-and-reading-results"><a class="header" href="#verifying-and-reading-results">Verifying and reading results</a></h2>
+<h3 id="parallel-verification"><a class="header" href="#parallel-verification">Parallel verification</a></h3>
+<p>Since autoharness typically generates many harnesses, it verifies them in parallel by default,
+i.e. as if <code>--jobs</code> (the thread pool’s default number of threads, normally one per logical CPU)
+and <code>--output-format=terse</code> had been passed. Note that plain <code>kani</code>/<code>cargo kani</code> verification is
+unaffected and remains sequential by default.</p>
+<p>To override the default:</p>
+<ul>
+<li><code>-j &lt;N&gt;</code> / <code>--jobs=&lt;N&gt;</code> caps the number of harnesses verified concurrently. Each thread runs
+its own CBMC process, so peak memory grows with the number of threads; lower <code>&lt;N&gt;</code> if a run
+exhausts the available memory. <code>--jobs=1</code> keeps the terse output but verifies sequentially.</li>
+<li><code>--output-format=regular</code> verifies harnesses sequentially, with Kani’s default, more detailed
+per-check output. (Parallel verification requires terse output, because interleaved detailed
+output is hard to read; passing <code>--jobs</code> together with <code>--output-format=regular</code> is therefore
+an error.)</li>
+</ul>
+<p>In parallel runs each harness result line is prefixed with the thread that produced it, and
+results arrive in nondeterministic order; the summary table printed at the end is always sorted.</p>
+<h3 id="default-settings"><a class="header" href="#default-settings">Default settings</a></h3>
+<p>Unless you pass them yourself, <code>kani autoharness</code> sets two verification options so that a
+single harness cannot hold up the whole run:</p>
+<ul>
+<li><code>--harness-timeout 60s</code>: a harness whose verification takes longer than 60 seconds is
+stopped and reported as a failure.</li>
+<li><code>--default-unwind 20</code>: loops are unwound up to 20 times. Automatic harnesses carry no
+<code>#[kani::unwind]</code> attribute, so this bound applies to every loop unless you pass
+<code>--unwind</code>. Kani’s unwinding checks stay enabled, so a loop that needs more iterations fails
+an unwinding assertion instead of being silently cut short.</li>
+</ul>
+<p>To change either value, pass the option explicitly. When any automatic harness fails, Kani
+prints a reminder of these two defaults after the summary table, because the failure may come
+from a timeout or an insufficient unwinding bound rather than from a bug in the function. In
+that case, try larger values or, where possible, add a <a href="./loop-contracts.html">loop contract</a>.
+The default bounds for <a href="#bounded-argument-generation">bounded arguments</a> are
+chosen to stay below the unwinding bound, and Kani warns if a configured bound reaches it.</p>
+<p>Verification itself runs in parallel by default; see
+<a href="#parallel-verification">Parallel verification</a>.</p>
+<h3 id="summary-table-and-markers"><a class="header" href="#summary-table-and-markers">Summary table and markers</a></h3>
+<p>A run of <code>kani autoharness</code> prints its results in three stages:</p>
+<ol>
+<li>Before verification, unless <code>--quiet</code> is passed, the tables of selected and skipped
+functions (see <a href="#skip-reasons">Skip reasons</a>).</li>
+<li>During verification, the result of each harness as it finishes.</li>
+<li>After verification, the <code>Autoharness Summary</code> table, followed by a line of the form
+<code>Complete - N successfully verified functions, M failures, T total.</code> If the crate also
+contains manual harnesses, they are verified in the same run and reported separately in a
+<code>Manual Harness Summary</code>.</li>
+</ol>
+<p>The summary table has the columns <code>Crate</code>, <code>Selected Function</code>, <code>Kind of Automatic Harness</code>
+and <code>Verification Result</code>. Rows are sorted by function name, with successes listed before
+failures. For a generic function, <code>Selected Function</code> shows the verified instantiation, e.g.
+<code>foo::&lt;i32&gt;</code>. <code>Kind of Automatic Harness</code> is <code>#[kani::proof]</code>, or
+<code>#[kani::proof_for_contract]</code> when the function has a <a href="contracts.html">function contract</a>, and
+may carry one or both of these markers:</p>
+<ul>
+<li><strong>“(bounded)”</strong>: some arguments were generated with bounded values under
+<code>--bounded-arguments</code>. A note after the table lists the bounds the run used (slice length,
+string length, and the <code>BoundedArbitrary</code> bound) and repeats that the result only holds up
+to them.</li>
+<li><strong>“(ctor)”</strong>: some values were generated through one of a type’s own constructors, or
+constrained by mined invariants, under
+<a href="#constructor-based-generation"><code>--constructor-args</code></a>. A note after the
+table repeats that the result only covers values reachable through that constructor.
+Harnesses filtered only by the mined invariants of a type with its own <code>Arbitrary</code>
+implementation are currently not marked; see
+<a href="#mined-invariant-heuristic">Mined-invariant heuristic</a>.</li>
+</ul>
+<p>A <code>Success</code> without either marker still has the limitations described in
+<a href="#soundness-caveats">Soundness caveats</a>.</p>
+<h2 id="soundness-caveats"><a class="header" href="#soundness-caveats">Soundness caveats</a></h2>
+<p>A <code>Success</code> result means that Kani found no failing check for any of the inputs the harness
+generated. The cases below are where those inputs, or the instantiation being verified, do not
+cover everything a caller could do, so a <code>Success</code> can still miss a bug. With Kani’s default
+checks, a harness that times out or needs more loop unwinding than the bound allows is reported
+as a failure, not a success (see <a href="#default-settings">Default settings</a>).</p>
+<h3 id="single-monomorphization"><a class="header" href="#single-monomorphization">Single monomorphization</a></h3>
+<p>For a generic function, autoharness verifies a single instantiation (see
+<a href="#generic-functions">Generic Functions</a>): each type parameter is replaced by one concrete type
+that satisfies its bounds, and each <code>usize</code> const generic parameter by the value 2. A <code>Success</code>
+for <code>foo::&lt;i32&gt;</code> therefore does not imply that <code>foo::&lt;u8&gt;</code> or <code>foo::&lt;MyType&gt;</code> is also safe. The
+summary table always shows the instantiated name, so it is visible which instantiation was
+verified.</p>
+<p>Type parameters bounded by <code>Fn</code>, <code>FnMut</code> or <code>FnOnce</code> are the exception: they are instantiated
+with a model that covers every value a closure with that signature could return, rather than
+with one particular closure (see <a href="#other-limitations">Other limitations</a> for what the model does
+not cover). The function’s other type parameters are still verified for one choice only.</p>
+<h3 id="no-aliasing-between-arguments"><a class="header" href="#no-aliasing-between-arguments">No aliasing between arguments</a></h3>
+<p>Each reference, pointer, slice, or string argument is generated from its own independent
+nondeterministic storage. Autoharness therefore does <em>not</em> explore aliasing <em>between</em> distinct
+arguments: for example, given <code>fn f(a: &amp;T, b: &amp;T)</code>, the generated harness always passes two
+references to separate allocations, so <code>a</code> and <code>b</code> never share an address (<code>core::ptr::eq(a, b)</code>
+is always <code>false</code>), even though a caller could pass the same reference twice. A successful
+automatic harness is thus an underapproximation with respect to caller-controlled aliasing, in
+the same way that verifying a single monomorphization is an underapproximation for <a href="#generic-functions">generic
+functions</a>. This applies to all reference/pointer arguments and is
+independent of the length bound that <code>--bounded-arguments</code> introduces.
+Modeling caller-controlled aliasing between arguments is tracked in
+<a href="https://github.com/model-checking/kani/issues/4750">#4750</a>.</p>
+<h3 id="bounded-arguments"><a class="header" href="#bounded-arguments">Bounded arguments</a></h3>
+<p>Harnesses marked “(bounded)” use bounded nondeterministic values for some arguments, which
+<code>--bounded-arguments</code> enables (see <a href="#bounded-argument-generation">Bounded Arguments</a>).
+Their results only hold for inputs up to those bounds: a bug that needs a longer slice or string,
+or a larger <code>BoundedArbitrary</code> value, is not found. The bounds a run used are printed in a note
+after the summary table. Arguments that are generated without bounds by default, such as slices
+and <code>Vec</code>s of primitive integers or floats, are not affected.</p>
+<h3 id="vacuous-constructors"><a class="header" href="#vacuous-constructors">Vacuous constructors</a></h3>
+<p>This applies to harnesses marked “(ctor)”, i.e. runs with <code>--constructor-args</code> (see
+<a href="#constructor-based-generation">Constructor-based generation</a>). If the chosen
+constructor is <em>unsatisfiable</em> for the generated type — an assert-guarded constructor every
+argument of which trips an assertion, or a checked constructor that always returns
+<code>None</code>/<code>Err</code> — the generated body assumes <code>false</code> on all paths. Mined conditions that no
+generated value satisfies have the same effect. If no generated input then reaches the function
+under test, the harness is <strong>vacuous</strong>: none of its checks can fail. Kani covers the call to that
+function (<code>autoharness: a generated input reaches `...`</code>) and reports such a harness as a
+failure, with the line <code>Vacuous harness: no generated input reaches `...`</code>. For a function
+with a contract, its <code>requires</code> clause is assumed inside the call, after the cover, so a
+precondition that excludes every generated input is not reported as vacuous. A harness that
+reaches the function with only some of its inputs, for example with <code>None</code> for an <code>Option</code>
+argument whose payload cannot be generated, is reported as usual; the excluded inputs, such as
+the <code>Some</code> path, are never checked. <code>--constructor-args</code> cannot be combined with
+<code>--output-format=old</code>, which cannot detect a vacuous harness.</p>
+<h3 id="mined-invariant-heuristic"><a class="header" href="#mined-invariant-heuristic">Mined-invariant heuristic</a></h3>
+<p>This applies to runs with <code>--constructor-args</code>, where mined invariants are assumed for generated
+values (see <a href="#mined-invariants">Mined invariants</a>). Such harnesses are normally marked “(ctor)”,
+but not when the filtered type has its own <code>Arbitrary</code> implementation, so a <code>Success</code> without
+the marker can still be affected; see <a href="https://github.com/model-checking/kani/issues/4995">#4995</a>. The “asserted in ≥2 methods” filter is a
+heuristic, not a proof of type-invariance. If two methods share a <em>precondition</em> that is not a
+universal invariant, it is assumed for all generated values and may exclude otherwise-valid
+inputs — a potential missed bug. This is acceptable only under the opt-in, under-approximating
+<code>--constructor-args</code> contract; see <a href="https://github.com/model-checking/kani/issues/4763">#4763</a>.</p>
+<h3 id="other-limitations"><a class="header" href="#other-limitations">Other limitations</a></h3>
+<p>The following under-approximations apply by default, and the summary table does not mark the
+harnesses they affect:</p>
+<ul>
+<li><strong>Closures have no side effects.</strong> The model used for <code>Fn</code>/<code>FnMut</code>/<code>FnOnce</code>-bounded type
+parameters returns a fresh nondeterministic value on every call but never modifies anything.
+It therefore does not cover closures that modify state the function can also observe, such as
+a <code>static</code> or a <code>Cell</code> that the caller also passes as an argument; see
+<a href="https://github.com/model-checking/kani/issues/4994">#4994</a>.</li>
+<li><strong>Raw pointers are well-behaved.</strong> Generated raw pointers are always aligned, never point to
+deallocated memory, and point to an initialized value whenever they are valid, so bugs that
+need a misaligned or dangling pointer are not found (see <a href="#raw-pointers">Raw Pointers</a>).</li>
+<li><strong>Formatting uses the default parameters and a sink that never fails.</strong> Harnesses for <code>fmt</code>
+trait implementations only cover the default formatting parameters, not a non-default width,
+precision, fill, alignment, sign or the alternate flag, and never reach the error path of a
+failed write (see <a href="#formatting-trait-implementations">Formatting Trait Implementations</a>). The
+<code>&amp;Formatter</code> model used under <code>--bounded-arguments</code> also writes to a sink that never fails.</li>
+<li><strong>Specifications are assumed.</strong> Function contract preconditions and the <code>is_safe()</code> predicate
+of types implementing <code>Invariant</code> are assumed for generated values, so a precondition or
+invariant that is stronger than necessary excludes inputs that a caller could pass (see
+<a href="#contracts-requires">Contracts (requires)</a> and <a href="#type-safety-invariants">Type Safety Invariants</a>).</li>
+</ul>
+<h2 id="architecture-for-contributors"><a class="header" href="#architecture-for-contributors">Architecture (for contributors)</a></h2>
+<p>This section is for contributors who want to change how autoharness works. The work is split
+between the driver (<code>kani-driver</code>), which handles the command line and runs verification, and
+the compiler (<code>kani-compiler</code>), which selects functions and builds the harnesses while it
+compiles the crate:</p>
+<pre><code class="language-text">┌──────────────────────────── kani-driver ────────────────────────────┐
+│ args/autoharness_args.rs   CLI: --include/--exclude-pattern,        │
+│                            --bounded-arguments, --constructor-args, │
+│                            --check-invariants, --list, bounds       │
+│ autoharness/mod.rs  setup_session(): parallel defaults, timeout,    │
+│                     unwind, add_auto_harness_args() →               │
+│                     --autoharness-* compiler flags                  │
+│ call_single_file.rs: adds those flags to the kani-compiler call     │
+└────────────────┬────────────────────────────────────────────────────┘
+                 ▼
+┌──────────────────────────── kani-compiler ──────────────────────────┐
+│ kani_middle/codegen_units.rs                                        │
+│   automatic_harness_partition()  → chosen / skipped (+reasons)      │
+│   get_all_automatic_harnesses()  → AutomaticHarnessIntrinsic::&lt;fn&gt;  │
+│                                    + gen_automatic_proof_metadata() │
+│ kani_middle/transform/automatic.rs                                  │
+│   AutomaticHarnessPass    dummy body → [contract init] args = any() │
+│                           [assume invariants] f(args) [checks]      │
+│   AutomaticArbitraryPass  T::any() for derivable types              │
+│ codegen_cprover_gotoc → goto; KaniMetadata { autoharness_md, ... }  │
+└────────────────┬────────────────────────────────────────────────────┘
+                 ▼
+┌──────────────────────────── kani-driver ────────────────────────────┐
+│ postprocess_project(): chosen/skipped tables, --list stops here     │
+│ harness_runner.rs: CBMC per harness → print_autoharness_summary()   │
+└─────────────────────────────────────────────────────────────────────┘
+</code></pre>
+<ol>
+<li><strong>Options and session setup</strong> (<code>kani-driver</code>). <code>args/autoharness_args.rs</code> defines and
+validates the <code>autoharness</code> options. <code>setup_session</code> in <code>autoharness/mod.rs</code> enables function
+and loop contracts, applies the <a href="#parallel-verification">parallel verification</a> defaults and
+the <a href="#default-settings">default timeout and unwinding bound</a>, and <code>add_auto_harness_args</code>
+turns the autoharness options into <code>--autoharness-*</code> flags, which the driver passes to
+<code>kani-compiler</code> (see <code>call_single_file.rs</code>).</li>
+<li><strong>Selection</strong> (<code>kani-compiler</code>, <code>kani_middle/codegen_units.rs</code>).
+<code>automatic_harness_partition</code> decides for every function in the crate whether it gets a
+harness, choosing an instantiation for generic functions and otherwise recording one of the
+<a href="#skip-reasons">skip reasons</a>. It also records whether a harness will use bounded or
+constructor-based values; these become the “(bounded)” and “(ctor)”
+<a href="#summary-table-and-markers">markers</a>. For each selected function,
+<code>get_all_automatic_harnesses</code> creates an instance of the <code>automatic_harness</code> intrinsic in
+<code>kani_core</code> (marked <code>AutomaticHarnessIntrinsic</code>), whose body is still a placeholder, and
+generates its metadata with <code>gen_automatic_proof_metadata</code>.</li>
+<li><strong>Harness bodies</strong> (<code>kani-compiler</code>, <code>kani_middle/transform/automatic.rs</code>).
+<code>AutomaticHarnessPass</code> replaces each placeholder body with the actual harness: it sets up
+contract instrumentation if the function has a contract, generates each argument as
+described in <a href="#generating-harnesses">Generating harnesses</a>, assumes the applicable
+<a href="#assumptions">assumptions</a>, calls the function, and adds the <a href="#checks">checks</a>.
+<code>AutomaticArbitraryPass</code> synthesizes <code>T::any()</code> for structs and enums that can derive
+<code>Arbitrary</code> automatically.</li>
+<li><strong>Code generation</strong>. <code>codegen_cprover_gotoc</code> translates the crate, including the harnesses,
+into a goto program for CBMC, and the selected and skipped functions are stored in the
+<code>autoharness_md</code> field of the crate’s <code>KaniMetadata</code>.</li>
+<li><strong>Results</strong> (<code>kani-driver</code>). <code>postprocess_project</code> in <code>autoharness/mod.rs</code> prints the
+selected and skipped tables; with <code>--list</code>, the run stops here. Otherwise
+<code>harness_runner.rs</code> runs CBMC on each harness and then calls <code>print_autoharness_summary</code> to
+print the <a href="#summary-table-and-markers">summary table</a>.</li>
+</ol>
+<h2 id="request-for-comments"><a class="header" href="#request-for-comments">Request for comments</a></h2>
+<p>This feature is experimental and is therefore subject to change.
+If you have ideas for improving the user experience of this feature,
+please add them to <a href="https://github.com/model-checking/kani/issues/3832">this GitHub issue</a>.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../../reference/experimental/experimental-features.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../../reference/experimental/coverage.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../../reference/experimental/experimental-features.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../../reference/experimental/coverage.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../../mark-09e88c2c.min.js"></script>
+        <script src="../../searcher-c2a407aa.js"></script>
+
+        <script src="../../clipboard-1626706a.min.js"></script>
+        <script src="../../highlight-abc7f01d.js"></script>
+        <script src="../../book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>
