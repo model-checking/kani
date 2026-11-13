@@ -259,6 +259,9 @@ fn exit_status_rule(exit_status: &ExitStatus) -> (&'static str, &'static str) {
             ("kani.cbmc.incomplete", "CBMC did not finish reporting its results")
         }
         ExitStatus::Other(_) => ("kani.cbmc.failed", "CBMC failed"),
+        ExitStatus::InstrumentationFailed(_) => {
+            ("kani.instrumentation.failed", "Kani could not prepare the goto model for CBMC")
+        }
     }
 }
 
@@ -395,5 +398,22 @@ mod tests {
         assert_eq!(r["level"], "error");
         assert_eq!(r["locations"][0]["physicalLocation"]["artifactLocation"]["uri"], "src/lib.rs");
         assert_eq!(r["locations"][0]["physicalLocation"]["region"]["startLine"], 10);
+    }
+
+    #[test]
+    fn sarif_includes_instrumentation_failures() {
+        let harness = harness("my_harness");
+        let result = VerificationResult::instrumentation_failure(
+            "goto-instrument exited with status exit status: 6".to_string(),
+        );
+        let harness_result = HarnessResult { harness: &harness, result };
+
+        let log = SarifLog::from_harness_results(&[harness_result]);
+        let v = serde_json::to_value(log).unwrap();
+        assert_eq!(v["runs"][0]["results"].as_array().unwrap().len(), 1);
+
+        let r = &v["runs"][0]["results"][0];
+        assert_eq!(r["ruleId"], "kani.instrumentation.failed");
+        assert_eq!(r["level"], "error");
     }
 }
