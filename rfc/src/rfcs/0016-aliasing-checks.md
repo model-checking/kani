@@ -3,7 +3,7 @@
 - **RFC PR:** [#5111](https://github.com/model-checking/kani/pull/5111)
 - **Status:** Under Review
 - **Version:** 0
-- **Proof-of-concept:** branch [`aliasing-core`](https://github.com/feliperodri/kani/tree/aliasing-core); contracts support on [`aliasing-contracts`](https://github.com/feliperodri/kani/tree/aliasing-contracts)
+- **Proof-of-concept:** branch [`aliasing-contracts`](https://github.com/feliperodri/kani/tree/aliasing-contracts); first PR [#5120](https://github.com/model-checking/kani/pull/5120)
 
 -------------------
 
