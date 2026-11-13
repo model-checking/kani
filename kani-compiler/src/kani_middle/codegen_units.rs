@@ -916,7 +916,9 @@ fn resolve_deferred_fn_slots<'tcx>(
 /// it, which fails that harness instead of the run; see
 /// <https://github.com/model-checking/kani/issues/4926>.
 fn invalid_simd_instantiation(tcx: TyCtxt, instance: Instance) -> Option<String> {
-    let body = instance.body()?;
+    // Instantiation search runs before `automatic_harness_partition`'s eligibility check, which
+    // skips a function with an explicit tail call. Do not report it here.
+    let body = crate::kani_middle::body_without_tail_calls(tcx, instance)?;
     body.blocks.iter().find_map(|block| {
         let TerminatorKind::Call { func, .. } = &block.terminator.kind else {
             return None;
@@ -1219,7 +1221,12 @@ fn automatic_harness_partition(
             "{crate_name}::{}",
             crate::kani_middle::strip_local_crate_prefix(instance.name())
         );
-        let body = instance.body().unwrap();
+        // Autoharness loads every local body. Skip a function whose body `rustc_public` cannot
+        // convert, rather than aborting the run for every other function.
+        if crate::kani_middle::has_explicit_tail_call(tcx, instance) {
+            return Err(AutoHarnessSkipReason::UnsupportedTailCall);
+        }
+        let body = crate::kani_middle::checked_body(tcx, instance).unwrap();
 
         if is_proof_harness(tcx, instance)
             || name.contains("kani::Arbitrary")
@@ -1393,7 +1400,7 @@ fn automatic_harness_partition(
                 // Whether any generated value will come from a type's public constructor
                 // rather than raw field synthesis, which the summary reports as "(ctor)".
                 let is_ctor_based = args.autoharness_constructor_args
-                    && instance.body().is_some_and(|body| {
+                    && crate::kani_middle::checked_body(tcx, instance).is_some_and(|body| {
                         body.arg_locals().iter().any(|arg| {
                             crate::kani_middle::uses_ctor_generation(
                                 tcx,
