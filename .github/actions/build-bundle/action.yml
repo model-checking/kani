@@ -55,6 +55,31 @@ runs:
         cargo bundle -- ${{ env.VERSION }}
         echo "BUNDLE=kani-${{ env.VERSION }}-${{ inputs.platform }}.tar.gz" >> $GITHUB_ENV
 
+    - name: Check minimum macOS version
+      if: ${{ runner.os == 'macOS' }}
+      shell: bash
+      run: |
+        # Every binary in the bundle must run on macOS 11.0, the oldest version rustc targets. A tool
+        # built from source on the runner targets the runner's macOS unless told otherwise, so a
+        # runner upgrade can silently drop support for older versions.
+        oldest=11.0
+        dir=$(mktemp -d)
+        tar -xzf "${{ env.BUNDLE }}" -C "$dir"
+        status=0
+        for bin in "$dir"/kani-*/bin/*; do
+          file "$bin" | grep -q Mach-O || continue
+          minos=$(otool -l "$bin" | awk '
+            /LC_BUILD_VERSION/ { b = 1 } b && $1 == "minos" { print $2; b = 0 }
+            /LC_VERSION_MIN_MACOSX/ { v = 1 } v && $1 == "version" { print $2; v = 0 }' | sort -V | tail -1)
+          echo "$(basename "$bin"): minimum macOS ${minos:-unknown}"
+          if [ -z "$minos" ] || [ "$(printf '%s\n%s\n' "$minos" "$oldest" | sort -V | tail -1)" != "$oldest" ]; then
+            echo "::error::$(basename "$bin") requires macOS ${minos:-unknown}, but the bundle must run on macOS $oldest"
+            status=1
+          fi
+        done
+        rm -rf "$dir"
+        exit $status
+
     - name: Build package
       shell: bash
       run: |

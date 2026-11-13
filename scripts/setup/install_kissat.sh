@@ -28,6 +28,13 @@ fi
 FILE="rel-${KISSAT_VERSION}.tar.gz"
 URL="https://github.com/arminbiere/kissat/archive/refs/tags/$FILE"
 
+# The release bundle ships this binary. On macOS, build it for macOS 11.0, the oldest version that rustc
+# targets for both macOS targets and that the rest of the bundle supports, instead of the runner's own
+# version (which compilers use by default).
+if [[ "$(uname)" == "Darwin" ]]; then
+  export MACOSX_DEPLOYMENT_TARGET=11.0
+fi
+
 set -x
 
 curl -L --remote-name "$URL"
