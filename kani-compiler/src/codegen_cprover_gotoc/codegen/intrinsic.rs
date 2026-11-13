@@ -1068,16 +1068,9 @@ impl GotocCtx<'_, '_> {
         Stmt::atomic_block(vec![decl_stmt, success_decl, cond_update_stmt, res_stmt], loc)
     }
 
-    /// An atomic store updates the value referenced in
-    /// its primary argument and returns its previous value
-    /// -------------------------
-    /// var = atomic_store(var1, var2)
-    /// -------------------------
-    /// unsigned char tmp;
-    /// tmp = *var1;
-    /// *var1 = var2;
-    /// var = tmp;
-    /// -------------------------
+    /// Code generation shared by atomic stores and exchanges.
+    /// A store writes the new value without reading the old one.
+    /// An exchange also reads and returns the previous value.
     fn codegen_atomic_store(
         &mut self,
         intrinsic: &str,
@@ -1088,9 +1081,12 @@ impl GotocCtx<'_, '_> {
         self.store_concurrent_construct(intrinsic, loc);
         let var1_ref = fargs.remove(0);
         let var1 = var1_ref.dereference().with_location(loc);
+        let var2 = fargs.remove(0).with_location(loc);
+        if self.place_ty_stable(place).kind().is_unit() {
+            return Stmt::atomic_block(vec![var1.assign(var2, loc)], loc);
+        }
         let (tmp, decl_stmt) =
             self.decl_temp_variable(var1.typ().clone(), Some(var1.to_owned()), loc);
-        let var2 = fargs.remove(0).with_location(loc);
         let assign_stmt = var1.assign(var2, loc);
         let res_stmt = self.codegen_expr_to_place_stable(place, tmp, loc);
         Stmt::atomic_block(vec![decl_stmt, assign_stmt, res_stmt], loc)
