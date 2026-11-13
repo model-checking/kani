@@ -1972,6 +1972,7 @@ mod tests {
     fn export_harness_attributes_round_trip() {
         let mut h = harness("panicking_stubbed_harness");
         h.attributes.should_panic = true;
+        h.attributes.no_unwinding_checks = true;
         h.attributes.unwind_value = Some(5);
         h.attributes.stubs =
             vec![Stub { original: "real_fn".to_string(), replacement: "stub_fn".to_string() }];
@@ -1982,6 +1983,7 @@ mod tests {
         let attrs = &v["harnesses"][0]["attributes"];
 
         assert_eq!(attrs["should_panic"], true);
+        assert_eq!(attrs["no_unwinding_checks"], true);
         assert_eq!(attrs["unwind_value"], 5);
         assert_eq!(
             attrs["stubs"],
