@@ -15,11 +15,15 @@ echo "[with --bounded-arguments]"
 # The haystack of every searcher is sized by the string bound, and the needle of a
 # `CharSliceSearcher` by the slice bound; both are passed explicitly so that the test does not
 # depend on their defaults.
-# The other autoharness tests use a 5m harness timeout. The slowest harness here
-# (`char_slice_value`) takes about 70s locally and gets close to 5 minutes on slower CI runners
-# (macos-15-intel), so this test gets a wider limit to avoid a spurious timeout. The verification
-# time is driven mostly by the string bound (the haystack size), not by the slice bound.
+# `--default-unwind 6` replaces autoharness's default of 20. With a haystack of at most 4 bytes,
+# the loops that validate and decode UTF-8 (`core::str::validations`) run at most 4 times, but
+# their length is symbolic, so CBMC unrolls them up to the unwinding bound: at 20, the
+# `CharSliceSearcher` harnesses reach 1.4-1.7M SAT variables and time out on the macos-15-intel
+# runner (https://github.com/model-checking/kani/issues/5162). At 6 they are about 2.3x smaller.
+# This keeps the result sound: unwinding assertions stay enabled, so a bound below a loop's real
+# iteration count fails verification rather than cutting behavior off. If the string or slice
+# bound grows, raise the unwinding bound with it.
 # This run reports a failure (`haystack_len_is_not_three`), so it exits non-zero (see
 # config.yml).
 cargo kani autoharness -Z autoharness -Z unstable-options --output-format=regular \
-    --bounded-arguments --string-bound 4 --slice-bound 4 --harness-timeout 10m
+    --bounded-arguments --string-bound 4 --slice-bound 4 --default-unwind 6 --harness-timeout 10m

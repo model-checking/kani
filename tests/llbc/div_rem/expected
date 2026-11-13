@@ -43,5 +43,6 @@ pub fn main()\
     _2 = rem(const 7i32, const 2i32)\
     ↳⚡ undefined_behavior\
     storage_dead(_2)\
+    _0 = ()\
     return\
 }

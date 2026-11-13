@@ -6,7 +6,7 @@
 #[kani::proof]
 fn sqrt_unused() {
     assert!(kani::internal::kani_forall(0, 2, |i: usize| {
-        let _ = unsafe { core::intrinsics::sqrtf64(i as f64) };
+        let _ = unsafe { core::intrinsics::sqrt::<f64>(i as f64) };
         i < 2
     }));
 }
