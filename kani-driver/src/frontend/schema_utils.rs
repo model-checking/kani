@@ -436,6 +436,12 @@ impl From<&ExitStatus> for Outcome {
                 code: Some(*code),
                 message: Some(format!("CBMC failed with status {code}")),
             },
+            ExitStatus::InstrumentationFailed(error) => Outcome::Crashed {
+                code: None,
+                message: Some(format!(
+                    "Failed to prepare the goto model for verification: {error}"
+                )),
+            },
         }
     }
 }
@@ -1357,6 +1363,25 @@ mod tests {
         assert_eq!(crashed_v["harnesses"][0]["resources"]["verification_time_s"], 1.0);
         assert_harness_shape_fields_present(&crashed_v["harnesses"][0]);
         assert_not_completed_matrix_fields(&crashed_v["harnesses"][0]);
+
+        let instrumentation_v = serde_json::to_value(export_one(HarnessResult {
+            harness: &h,
+            result: mk(ExitStatus::InstrumentationFailed(
+                "goto-instrument exited with status exit status: 6".to_string(),
+            )),
+        }))
+        .unwrap();
+        let outcome = &instrumentation_v["harnesses"][0]["outcome"];
+        assert_eq!(outcome["kind"], "CRASHED");
+        assert!(outcome["code"].is_null());
+        assert!(outcome.get("verdict").is_none());
+        assert_eq!(
+            outcome["message"],
+            "Failed to prepare the goto model for verification: \
+             goto-instrument exited with status exit status: 6"
+        );
+        assert_harness_shape_fields_present(&instrumentation_v["harnesses"][0]);
+        assert_not_completed_matrix_fields(&instrumentation_v["harnesses"][0]);
     }
 
     /// The exported outcome for a CBMC run with one reported property, by exit status, by

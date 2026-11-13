@@ -141,13 +141,14 @@ impl<'pr> HarnessRunner<'_, 'pr> {
                 let goto_file =
                     self.project.get_harness_artifact(harness, ArtifactType::Goto).unwrap();
 
-                self.sess.instrument_model(goto_file, goto_file, self.project, harness)?;
-
-                if self.sess.args.synthesize_loop_contracts {
-                    self.sess.synthesize_loop_contracts(goto_file, goto_file, harness)?;
-                }
-
-                let result = self.sess.check_harness(goto_file, self.project, harness)?;
+                // A failure to prepare one harness's goto model (e.g. goto-instrument running out
+                // of memory) fails that harness only, like a CBMC failure would, instead of
+                // aborting the run and losing the results of the other harnesses. See
+                // <https://github.com/model-checking/kani/issues/4966>.
+                let result = match self.prepare_harness(goto_file, harness) {
+                    Ok(()) => self.sess.check_harness(goto_file, self.project, harness)?,
+                    Err(error) => self.sess.instrumentation_failed(harness, &error),
+                };
 
                 // Update progress indicator if active
                 if progress_indicator.is_active() {
@@ -172,9 +173,44 @@ impl<'pr> HarnessRunner<'_, 'pr> {
 
         Ok(results)
     }
+
+    /// Instrument the goto model of `harness` in place and, if requested, synthesize its loop
+    /// contracts, so that it is ready for CBMC.
+    fn prepare_harness(&self, goto_file: &Path, harness: &HarnessMetadata) -> Result<()> {
+        self.sess.instrument_model(goto_file, goto_file, self.project, harness)?;
+
+        if self.sess.args.synthesize_loop_contracts {
+            self.sess.synthesize_loop_contracts(goto_file, goto_file, harness)?;
+        }
+
+        Ok(())
+    }
 }
 
 impl KaniSession {
+    /// Report that the goto model of `harness` could not be prepared for CBMC, and return the
+    /// failed result that stands in for its verification result.
+    fn instrumentation_failed(
+        &self,
+        harness: &HarnessMetadata,
+        error: &anyhow::Error,
+    ) -> VerificationResult {
+        let thread_index = rayon::current_thread_index().unwrap_or_default();
+        let result = VerificationResult::instrumentation_failure(format!("{error:#}"));
+
+        if !self.args.common_args.quiet {
+            let msg = format!("Failed to prepare harness {} for verification", harness.pretty_name);
+            if rayon::current_num_threads() > 1 {
+                self.emit_line(&format!("Thread {thread_index}: {msg}"));
+            } else {
+                self.emit_line(&msg);
+            }
+        }
+        self.process_output(&result, harness, thread_index);
+
+        result
+    }
+
     fn process_output(
         &self,
         result: &VerificationResult,

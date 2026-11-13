@@ -125,8 +125,8 @@ pub enum FailedProperties {
     Error,
 }
 
-/// The possible CBMC exit statuses
-#[derive(Clone, Copy, Debug)]
+/// The reasons a harness can end without a complete set of CBMC results
+#[derive(Clone, Debug)]
 pub enum ExitStatus {
     Timeout,
     OutOfMemory,
@@ -135,6 +135,9 @@ pub enum ExitStatus {
     IncompleteResults(i32),
     /// the integer is the process exit status
     Other(i32),
+    /// Preparing the goto model for this harness (goto-cc, goto-instrument or goto-synthesizer)
+    /// failed, so CBMC never ran; the string is the error that stopped it
+    InstrumentationFailed(String),
 }
 
 /// Our (kani-driver) notions of CBMC results.
@@ -564,6 +567,23 @@ impl VerificationResult {
         }
     }
 
+    /// The result of a harness whose goto model could not be prepared for CBMC, e.g. because
+    /// goto-instrument ran out of memory. It counts as a failed harness, so the run goes on with
+    /// the other harnesses and still ends with a summary and a failure exit code.
+    pub fn instrumentation_failure(error: String) -> VerificationResult {
+        VerificationResult {
+            status: VerificationStatus::Failure,
+            failed_properties: FailedProperties::None,
+            results: Err(ExitStatus::InstrumentationFailed(error)),
+            runtime: Duration::from_secs(0),
+            generated_concrete_test: false,
+            ignored_quantifiers: 0,
+            coverage_results: None,
+            warnings: Vec::new(),
+            warnings_truncated: 0,
+        }
+    }
+
     fn mock_failure() -> VerificationResult {
         VerificationResult {
             status: VerificationStatus::Failure,
@@ -641,6 +661,12 @@ impl VerificationResult {
                     ExitStatus::Other(exit_status) => {
                         (format!("CBMC failed with status {exit_status}"), "")
                     }
+                    ExitStatus::InstrumentationFailed(error) => (
+                        format!("Failed to prepare the goto model for verification: {error}"),
+                        "CBMC did not run for this harness. If the preparation ran out of memory, \
+                    you may want to rerun your proof in an environment with additional memory or \
+                    use stubbing to reduce the size of the code the verifier reasons about.\n",
+                    ),
                 };
                 format!(
                     "\n{header}\n\
@@ -929,6 +955,22 @@ mod tests {
         assert!(matches!(vr.status, VerificationStatus::Failure));
         assert!(matches!(vr.failed_properties, FailedProperties::Other));
         assert!(matches!(vr.results, Err(ExitStatus::Other(6))));
+    }
+
+    #[test]
+    fn instrumentation_failure_is_a_failed_result_that_renders_the_error() {
+        let error = "goto-instrument exited with status exit status: 6";
+        let vr = VerificationResult::instrumentation_failure(error.to_string());
+        assert_eq!(vr.status, VerificationStatus::Failure);
+        assert!(matches!(&vr.results, Err(ExitStatus::InstrumentationFailed(e)) if e == error));
+
+        let rendered = vr.render(&OutputFormat::Regular, false);
+        let header = format!("Failed to prepare the goto model for verification: {error}");
+        assert!(rendered.contains(&header));
+        assert!(rendered.contains("VERIFICATION:- "));
+        assert!(rendered.contains("FAILED"));
+        assert!(rendered.contains("CBMC did not run for this harness."));
+        assert!(!rendered.contains("CBMC failed"));
     }
 
     #[test]
