@@ -1,0 +1,817 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/model-checking/kani/agent-plugin/schemas/verifiability-map.schema.json",
+  "title": "Kani Crate Verifiability Map",
+  "description": "A planning aid, not a proof certificate. See references/verifiability-map.md.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "kind",
+    "generator",
+    "configuration",
+    "workspace",
+    "functions",
+    "edges",
+    "components",
+    "harnesses",
+    "sources",
+    "uncertainty",
+    "summary"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^0\\.1\\.[0-9]+$"
+    },
+    "kind": {
+      "const": "kani-verifiability-map"
+    },
+    "generator": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "tools": {
+          "type": "object",
+          "properties": {
+            "cargo-callgraph": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kani": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "cargo-callgraph",
+            "kani"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "tools"
+      ]
+    },
+    "configuration": {
+      "type": "object",
+      "properties": {
+        "call_graph": {
+          "enum": [
+            "cargo-callgraph",
+            "text-scan"
+          ]
+        },
+        "features": {
+          "type": "string"
+        },
+        "root": {
+          "type": "string"
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "call_graph",
+        "features",
+        "root",
+        "note"
+      ]
+    },
+    "workspace": {
+      "type": "object",
+      "properties": {
+        "packages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "crate": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              },
+              "edition": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "manifest": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "dir": {
+                "type": "string"
+              },
+              "targets": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "src": {
+                      "type": "string"
+                    },
+                    "required_features": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "kind",
+                    "src",
+                    "required_features"
+                  ]
+                }
+              },
+              "features": {
+                "type": "object"
+              },
+              "workspace_dependencies": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "name",
+              "crate",
+              "version",
+              "edition",
+              "manifest",
+              "dir",
+              "targets",
+              "features",
+              "workspace_dependencies"
+            ]
+          }
+        }
+      },
+      "required": [
+        "packages"
+      ]
+    },
+    "functions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "qualified_path": {
+            "type": "string"
+          },
+          "package": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer"
+          },
+          "end_line": {
+            "type": "integer"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "self_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "trait": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "generic": {
+            "type": "boolean"
+          },
+          "public": {
+            "type": "boolean"
+          },
+          "unsafe_fn": {
+            "type": "boolean"
+          },
+          "signals": {
+            "type": "object",
+            "properties": {
+              "loop_keywords": {
+                "type": "integer"
+              },
+              "branch_keywords": {
+                "type": "integer"
+              },
+              "unsafe_blocks": {
+                "type": "integer"
+              },
+              "parameters": {
+                "type": "integer"
+              },
+              "unbounded_input_types": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "loop_invariants": {
+                "type": "integer"
+              },
+              "loop_decreases": {
+                "type": "integer"
+              },
+              "loop_modifies": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "loop_keywords",
+              "branch_keywords",
+              "unsafe_blocks",
+              "parameters",
+              "unbounded_input_types",
+              "loop_invariants",
+              "loop_decreases",
+              "loop_modifies"
+            ]
+          },
+          "contracts": {
+            "type": "object"
+          },
+          "has_loop_contract": {
+            "type": "boolean"
+          },
+          "cfg": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "callees": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "callers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "candidate_callees": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "unresolved_callees": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "kind"
+              ]
+            }
+          },
+          "external_callees": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "component": {
+            "type": "string"
+          },
+          "recursive": {
+            "type": "boolean"
+          },
+          "level": {
+            "type": "integer"
+          },
+          "transitive_callers": {
+            "type": "integer"
+          },
+          "has_harness": {
+            "type": "boolean"
+          },
+          "harnesses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "complexity": {
+            "type": "object",
+            "properties": {
+              "source": {
+                "type": "string"
+              },
+              "status": {
+                "const": "not_computed"
+              },
+              "metrics": {
+                "type": "object",
+                "properties": {
+                  "branches": {
+                    "type": "null"
+                  },
+                  "loops": {
+                    "type": "null"
+                  },
+                  "function_calls": {
+                    "type": "null"
+                  },
+                  "arithmetic_operations": {
+                    "type": "null"
+                  },
+                  "memory_operations": {
+                    "type": "null"
+                  }
+                },
+                "required": [
+                  "branches",
+                  "loops",
+                  "function_calls",
+                  "arithmetic_operations",
+                  "memory_operations"
+                ]
+              }
+            },
+            "required": [
+              "source",
+              "status",
+              "metrics"
+            ]
+          },
+          "verification": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "enum": [
+                  "verified",
+                  "conditional",
+                  "failed",
+                  "inconclusive",
+                  "unsupported",
+                  "not_attempted",
+                  "stale"
+                ]
+              },
+              "scope": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "harness",
+                    "relation",
+                    "status"
+                  ]
+                }
+              },
+              "caveats": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "status",
+              "scope",
+              "evidence",
+              "caveats"
+            ]
+          },
+          "uncertainty": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "flag": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "flag",
+                "reason"
+              ]
+            }
+          },
+          "unverified_callees": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "strategy": {
+            "type": "object",
+            "properties": {
+              "primary": {
+                "type": "string"
+              },
+              "also": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "rationale": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "primary",
+              "also",
+              "rationale"
+            ]
+          },
+          "priority": {
+            "type": "number"
+          },
+          "priority_inputs": {
+            "type": "object",
+            "properties": {
+              "impact": {
+                "type": "number"
+              },
+              "effort": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "impact",
+              "effort"
+            ]
+          },
+          "first_line": {
+            "type": "integer"
+          },
+          "recursion_attribute": {
+            "type": "boolean"
+          },
+          "contract_status": {
+            "enum": [
+              "none",
+              "declared",
+              "verified",
+              "failed",
+              "inconclusive",
+              "unsupported"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "qualified_path",
+          "package",
+          "file",
+          "line",
+          "end_line",
+          "scope",
+          "self_type",
+          "trait",
+          "generic",
+          "public",
+          "unsafe_fn",
+          "signals",
+          "contracts",
+          "has_loop_contract",
+          "cfg",
+          "callees",
+          "callers",
+          "candidate_callees",
+          "unresolved_callees",
+          "external_callees",
+          "component",
+          "recursive",
+          "level",
+          "transitive_callers",
+          "has_harness",
+          "harnesses",
+          "complexity",
+          "verification",
+          "uncertainty",
+          "unverified_callees",
+          "strategy",
+          "priority",
+          "priority_inputs",
+          "first_line",
+          "recursion_attribute",
+          "contract_status"
+        ]
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "enum": [
+              "direct",
+              "trait-impl-candidate",
+              "trait-dispatch",
+              "name-candidate",
+              "external",
+              "unknown"
+            ]
+          },
+          "resolved": {
+            "type": "boolean"
+          },
+          "source": {
+            "enum": [
+              "cargo-callgraph",
+              "text-scan"
+            ]
+          },
+          "call_site": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "line": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "file",
+              "line"
+            ]
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "kind",
+          "resolved",
+          "source",
+          "call_site"
+        ]
+      }
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "recursive": {
+            "type": "boolean"
+          },
+          "level": {
+            "type": "integer"
+          },
+          "depends_on": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "members",
+          "recursive",
+          "level",
+          "depends_on"
+        ]
+      }
+    },
+    "harnesses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "package": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "proof",
+              "proof_for_contract"
+            ]
+          },
+          "contract_target": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "attributes": {
+            "type": "object"
+          },
+          "assumptions": {
+            "type": "integer"
+          },
+          "function": {
+            "type": "string"
+          },
+          "reaches": {
+            "type": "object",
+            "properties": {
+              "contract_target": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "reachable": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "maybe_reachable": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "stubbed": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "contract_assumed": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "contract_target",
+              "reachable",
+              "maybe_reachable",
+              "stubbed",
+              "contract_assumed"
+            ]
+          },
+          "automatic": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "package",
+          "file",
+          "line",
+          "kind",
+          "contract_target",
+          "attributes",
+          "assumptions",
+          "function",
+          "reaches"
+        ]
+      }
+    },
+    "sources": {
+      "type": "object"
+    },
+    "uncertainty": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "flag": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "flag",
+          "reason"
+        ]
+      }
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "functions": {
+          "type": "integer"
+        },
+        "by_status": {
+          "type": "object"
+        },
+        "harnesses": {
+          "type": "integer"
+        },
+        "harnesses_with_results": {
+          "type": "integer"
+        },
+        "recursive_components": {
+          "type": "integer"
+        },
+        "edges": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "functions",
+        "by_status",
+        "harnesses",
+        "harnesses_with_results",
+        "recursive_components",
+        "edges"
+      ]
+    }
+  }
+}

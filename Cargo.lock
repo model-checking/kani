@@ -1246,6 +1246,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "kani-mcp"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "kani-verifier"
 version = "0.68.0"
 dependencies = [

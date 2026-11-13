@@ -1,0 +1,353 @@
+{
+ "schema_version": "0.1.0",
+ "kani_commit": "cd355b0bccd32300713bc2ce4f765dafa1510607",
+ "kani_commit_dirty": true,
+ "tools": {
+  "kani": "0.68.0",
+  "rustc": "1.101.0-nightly (1a2c4797e 2026-10-21)",
+  "cbmc": "6.11.0 (cbmc-6.11.0-dirty)"
+ },
+ "enabled_unstable_features": [
+  "export-json",
+  "function-contracts",
+  "stubbing"
+ ],
+ "harness_selection": {
+  "requested_filters": [],
+  "exact": false,
+  "unmatched_filters": [],
+  "matched_count": 4
+ },
+ "harness_timeout_s": null,
+ "configuration": {
+  "checks": {
+   "memory_safety": true,
+   "overflow": true,
+   "unwinding": true,
+   "undefined_function": true,
+   "assertion_reach_checks": true,
+   "ignore_global_asm": false,
+   "extra_pointer_checks": false,
+   "assert_contracts": true,
+   "prove_safety_only": false
+  },
+  "cbmc_args": [],
+  "coverage_enabled": false
+ },
+ "outcome": {
+  "kind": "COMPLETED"
+ },
+ "run_state": "COMPLETE",
+ "target": "aarch64-apple-darwin",
+ "started_at": "2026-11-07T01:51:53Z",
+ "wall_time_s": 1.22430975,
+ "harnesses": [
+  {
+   "name": "proofs::passes",
+   "crate_name": "lib",
+   "file": "src/lib.rs",
+   "line": 31,
+   "contract": null,
+   "is_automatically_generated": false,
+   "has_loop_contracts": false,
+   "is_bounded": false,
+   "attributes": {
+    "kind": "Proof",
+    "should_panic": false,
+    "solver": null,
+    "unwind_value": null,
+    "stubs": [],
+    "verified_stubs": []
+   },
+   "outcome": {
+    "kind": "COMPLETED",
+    "verdict": "SUCCESS"
+   },
+   "resolved_solver": "cadical",
+   "resolved_unwind": null,
+   "generated_concrete_test": false,
+   "resources": {
+    "verification_time_s": 0.016026625
+   },
+   "n_properties": 3,
+   "n_failed": 0,
+   "failure_kind": "NONE",
+   "failed_properties": [],
+   "unsupported_constructs": [],
+   "warnings": [
+    {
+     "message": "The specified solver, 'cadical', is not available. The default solver will be used instead.",
+     "truncated": false,
+     "original_chars": null
+    }
+   ],
+   "warnings_truncated": 0,
+   "checks": {
+    "total": 2,
+    "success": 1,
+    "failure": [],
+    "unreachable": [
+     "proofs::passes.assertion.1"
+    ],
+    "undetermined": [],
+    "error": [],
+    "unknown": [],
+    "other": []
+   },
+   "covers": {
+    "total": 1,
+    "satisfied": [],
+    "unsatisfiable": [
+     "proofs::passes.cover.1"
+    ],
+    "unreachable": [],
+    "undetermined": [],
+    "error": [],
+    "unknown": [],
+    "other": []
+   }
+  },
+  {
+   "name": "proofs::fails",
+   "crate_name": "lib",
+   "file": "src/lib.rs",
+   "line": 42,
+   "contract": null,
+   "is_automatically_generated": false,
+   "has_loop_contracts": false,
+   "is_bounded": false,
+   "attributes": {
+    "kind": "Proof",
+    "should_panic": false,
+    "solver": null,
+    "unwind_value": null,
+    "stubs": [],
+    "verified_stubs": []
+   },
+   "outcome": {
+    "kind": "COMPLETED",
+    "verdict": "FAILURE"
+   },
+   "resolved_solver": "cadical",
+   "resolved_unwind": null,
+   "generated_concrete_test": false,
+   "resources": {
+    "verification_time_s": 0.015204709
+   },
+   "n_properties": 2,
+   "n_failed": 1,
+   "failure_kind": "PANICS_ONLY",
+   "failed_properties": [
+    {
+     "id": "proofs::fails.assertion.1",
+     "description": "attempt to add with overflow",
+     "class": "assertion",
+     "file": "src/lib.rs",
+     "line": "44",
+     "trace_available": true,
+     "status": "FAILURE"
+    }
+   ],
+   "unsupported_constructs": [],
+   "warnings": [
+    {
+     "message": "The specified solver, 'cadical', is not available. The default solver will be used instead.",
+     "truncated": false,
+     "original_chars": null
+    }
+   ],
+   "warnings_truncated": 0,
+   "checks": {
+    "total": 2,
+    "success": 1,
+    "failure": [
+     "proofs::fails.assertion.1"
+    ],
+    "unreachable": [],
+    "undetermined": [],
+    "error": [],
+    "unknown": [],
+    "other": []
+   },
+   "covers": {
+    "total": 0,
+    "satisfied": [],
+    "unsatisfiable": [],
+    "unreachable": [],
+    "undetermined": [],
+    "error": [],
+    "unknown": [],
+    "other": []
+   }
+  },
+  {
+   "name": "proofs::check_checked_double",
+   "crate_name": "lib",
+   "file": "src/lib.rs",
+   "line": 48,
+   "contract": {
+    "contracted_function_name": "_RNCNCNvNtCslyoFghIStgp_3lib6proofs14checked_doubles0_0s_0B7_",
+    "recursion_tracker": null
+   },
+   "is_automatically_generated": false,
+   "has_loop_contracts": false,
+   "is_bounded": false,
+   "attributes": {
+    "kind": {
+     "ProofForContract": {
+      "target_fn": "checked_double"
+     }
+    },
+    "should_panic": false,
+    "solver": null,
+    "unwind_value": null,
+    "stubs": [],
+    "verified_stubs": []
+   },
+   "outcome": {
+    "kind": "COMPLETED",
+    "verdict": "SUCCESS"
+   },
+   "resolved_solver": "cadical",
+   "resolved_unwind": null,
+   "generated_concrete_test": false,
+   "resources": {
+    "verification_time_s": 0.07136775
+   },
+   "n_properties": 87,
+   "n_failed": 0,
+   "failure_kind": "NONE",
+   "failed_properties": [],
+   "unsupported_constructs": [],
+   "warnings": [
+    {
+     "message": "The specified solver, 'cadical', is not available. The default solver will be used instead.",
+     "truncated": false,
+     "original_chars": null
+    },
+    {
+     "message": "file library/kani_core/src/lib.rs line 833 column 45 function kani::internal::enter_contract_clause: call to '_RNvMs9_NtCsfagjefx941x_4core3numj14saturating_add': not enough arguments, inserting non-deterministic value",
+     "truncated": false,
+     "original_chars": null
+    },
+    {
+     "message": "file library/kani_core/src/lib.rs line 846 column 45 function kani::internal::exit_contract_clause: call to '_RNvMs9_NtCsfagjefx941x_4core3numj14saturating_sub': not enough arguments, inserting non-deterministic value",
+     "truncated": false,
+     "original_chars": null
+    },
+    {
+     "message": "file library/kani_core/src/lib.rs line 833 column 45 function kani::internal::enter_contract_clause: call to '_RNvMs9_NtCsfagjefx941x_4core3numj14saturating_add': not enough arguments, inserting non-deterministic value",
+     "truncated": false,
+     "original_chars": null
+    },
+    {
+     "message": "file library/kani_core/src/lib.rs line 846 column 45 function kani::internal::exit_contract_clause: call to '_RNvMs9_NtCsfagjefx941x_4core3numj14saturating_sub': not enough arguments, inserting non-deterministic value",
+     "truncated": false,
+     "original_chars": null
+    }
+   ],
+   "warnings_truncated": 0,
+   "checks": {
+    "total": 87,
+    "success": 86,
+    "failure": [],
+    "unreachable": [
+     "proofs::checked_double.assertion.1"
+    ],
+    "undetermined": [],
+    "error": [],
+    "unknown": [],
+    "other": []
+   },
+   "covers": {
+    "total": 0,
+    "satisfied": [],
+    "unsatisfiable": [],
+    "unreachable": [],
+    "undetermined": [],
+    "error": [],
+    "unknown": [],
+    "other": []
+   }
+  },
+  {
+   "name": "proofs::stubbed",
+   "crate_name": "lib",
+   "file": "src/lib.rs",
+   "line": 56,
+   "contract": null,
+   "is_automatically_generated": false,
+   "has_loop_contracts": false,
+   "is_bounded": false,
+   "attributes": {
+    "kind": "Proof",
+    "should_panic": false,
+    "solver": null,
+    "unwind_value": null,
+    "stubs": [
+     {
+      "original": "expensive",
+      "replacement": "stub_expensive"
+     }
+    ],
+    "verified_stubs": [
+     "lib::proofs::checked_double"
+    ]
+   },
+   "outcome": {
+    "kind": "COMPLETED",
+    "verdict": "SUCCESS"
+   },
+   "resolved_solver": "cadical",
+   "resolved_unwind": null,
+   "generated_concrete_test": false,
+   "resources": {
+    "verification_time_s": 0.0405315
+   },
+   "n_properties": 50,
+   "n_failed": 0,
+   "failure_kind": "NONE",
+   "failed_properties": [],
+   "unsupported_constructs": [],
+   "warnings": [
+    {
+     "message": "The specified solver, 'cadical', is not available. The default solver will be used instead.",
+     "truncated": false,
+     "original_chars": null
+    }
+   ],
+   "warnings_truncated": 0,
+   "checks": {
+    "total": 50,
+    "success": 49,
+    "failure": [],
+    "unreachable": [
+     "proofs::checked_double.assertion.1"
+    ],
+    "undetermined": [],
+    "error": [],
+    "unknown": [],
+    "other": []
+   },
+   "covers": {
+    "total": 0,
+    "satisfied": [],
+    "unsatisfiable": [],
+    "unreachable": [],
+    "undetermined": [],
+    "error": [],
+    "unknown": [],
+    "other": []
+   }
+  }
+ ],
+ "summary": {
+  "total": 4,
+  "successful": 3,
+  "failed": 1,
+  "checks_total": 141,
+  "checks_success": 137,
+  "covers_total": 1,
+  "covers_satisfied": 0
+ }
+}
