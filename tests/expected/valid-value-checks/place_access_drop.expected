@@ -1,0 +1,4 @@
+Failed Checks: Undefined Behavior: Invalid value of type `Droppable`
+
+Verification failed for - invalid_old_value_drop
+Complete - 0 successfully verified harnesses, 1 failures, 1 total.
