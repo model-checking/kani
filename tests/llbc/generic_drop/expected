@@ -1,0 +1,21 @@
+// Full name: core::ptr::drop_glue\
+pub fn drop_glue<'_0, T>(_1: &'_0 mut T)\
+where\
+    TypeOutlives0: T: '_0,\
+= <opaque>
+
+// Full name: test::first\
+pub fn first<T>(a: T, _b: T) -> T\
+{\
+    let _0: T; // return\
+    let a: T; // arg #1\
+    let _b: T; // arg #2\
+\
+    storage_live(_0)\
+    _0 = move a\
+    drop[drop_glue<'_, T>] _b\
+    ↳⚡ undefined_behavior\
+    storage_dead(_b)\
+    storage_dead(a)\
+    return\
+}

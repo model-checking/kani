@@ -71,6 +71,7 @@ pub fn main()\
     j = impl_T_for_B::get_val<'_>(move _6)\
     ↳⚡ undefined_behavior\
     storage_dead(_6)\
+    _0 = ()\
     storage_dead(j)\
     storage_dead(i)\
     storage_dead(k)\

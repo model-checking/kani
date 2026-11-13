@@ -238,6 +238,15 @@ impl KaniSession {
             }
         }
 
+        // The LLBC backend's consumers (Aeneas) need MIR where moves are still moves, and the
+        // backend translates the bodies of dependencies too, whose MIR comes from their metadata.
+        // So every crate of a Lean run is compiled at the MIR level the compiler sets for the
+        // local crate (see `KaniCompiler::config`); `--backend=llbc` only reaches the local crate.
+        if self.args.common_args.unstable_features.contains(UnstableFeature::Lean) {
+            flags.push("-Zmir-opt-level=0".into());
+            flags.push("-Zmir-preserve-ub".into());
+        }
+
         if self.args.coverage {
             flags.push("-Zmir-enable-passes=-SingleUseConsts".into());
         }

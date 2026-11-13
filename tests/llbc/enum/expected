@@ -35,14 +35,19 @@ pub fn main()\
     let _0: (); // return\
     let e: MyEnum; // local\
     let i: i32; // local\
+    let _3: MyEnum; // anonymous local\
 \
     storage_live(_0)\
     storage_live(e)\
     storage_live(i)\
+    storage_live(_3)\
     _0 = ()\
     e = MyEnum::A { _0: const 1i32 }\
-    i = enum_match(copy e)\
+    _3 = move e\
+    i = enum_match(move _3)\
     ↳⚡ undefined_behavior\
+    storage_dead(_3)\
+    _0 = ()\
     storage_dead(i)\
     storage_dead(e)\
     return\

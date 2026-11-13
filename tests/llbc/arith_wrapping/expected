@@ -4,9 +4,17 @@ pub fn sub(a: i16, b: i16) -> i16\
     let _0: i16; // return\
     let a: i16; // arg #1\
     let b: i16; // arg #2\
+    let _3: i16; // anonymous local\
+    let _4: i16; // anonymous local\
 \
     storage_live(_0)\
-    _0 = copy a wrap.- copy b\
+    storage_live(_3)\
+    storage_live(_4)\
+    _3 = copy a\
+    _4 = copy b\
+    _0 = move _3 wrap.- move _4\
+    storage_dead(_4)\
+    storage_dead(_3)\
     storage_dead(b)\
     storage_dead(a)\
     return\
@@ -18,9 +26,17 @@ pub fn add(a: u8, b: u8) -> u8\
     let _0: u8; // return\
     let a: u8; // arg #1\
     let b: u8; // arg #2\
+    let _3: u8; // anonymous local\
+    let _4: u8; // anonymous local\
 \
     storage_live(_0)\
-    _0 = copy a wrap.+ copy b\
+    storage_live(_3)\
+    storage_live(_4)\
+    _3 = copy a\
+    _4 = copy b\
+    _0 = move _3 wrap.+ move _4\
+    storage_dead(_4)\
+    storage_dead(_3)\
     storage_dead(b)\
     storage_dead(a)\
     return\
@@ -32,9 +48,17 @@ pub fn mul(a: u32, b: u32) -> u32\
     let _0: u32; // return\
     let a: u32; // arg #1\
     let b: u32; // arg #2\
+    let _3: u32; // anonymous local\
+    let _4: u32; // anonymous local\
 \
     storage_live(_0)\
-    _0 = copy a wrap.* copy b\
+    storage_live(_3)\
+    storage_live(_4)\
+    _3 = copy a\
+    _4 = copy b\
+    _0 = move _3 wrap.* move _4\
+    storage_dead(_4)\
+    storage_dead(_3)\
     storage_dead(b)\
     storage_dead(a)\
     return\
@@ -62,5 +86,6 @@ pub fn main()\
     _3 = mul(const 3u32, const 4u32)\
     ↳⚡ undefined_behavior\
     storage_dead(_3)\
+    _0 = ()\
     return\
 }

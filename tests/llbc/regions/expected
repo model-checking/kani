@@ -1,18 +1,90 @@
 // Full name: test::deref2\
-pub fn deref2<'_0, '_1>(x: &'_0 &'_1 u32) -> u32
+pub fn deref2<'_0, '_1>(x: &'_0 &'_1 u32) -> u32\
+where\
+    RegionOutlives0: '_1: '_0,\
+{\
+    let _0: u32; // return\
+    let x: &'_ &'_ u32; // arg #1\
+    let _2: &'_ u32; // anonymous local\
+\
+    storage_live(_0)\
+    storage_live(_2)\
+    _2 = copy (*x)\
+    _0 = copy (*_2)\
+    storage_dead(_2)\
+    storage_dead(x)\
+    return\
+}
 
 // Full name: test::early\
-pub fn early<'a, T>(x: &'a T) -> &'a T
-
-pub fn test::{Holder<'a>}::get<'a, '_1>(self: &'_1 Holder<'a>) -> u32
-
-pub fn test::get<'_0>(x: Option<&'_0 u32>) -> u32
+pub fn early<'a, T>(x: &'a T) -> &'a T\
+where\
+    TypeOutlives0: T: 'a,\
+{\
+    let _0: &'_ T; // return\
+    let x: &'_ T; // arg #1\
+\
+    storage_live(_0)\
+    _0 = copy x\
+    storage_dead(x)\
+    return\
+}
 
 // Full name: test::pick\
-pub fn pick<'a>(x: &'a u32, y: &'a u32, c: bool) -> &'a u32
+pub fn pick<'a>(x: &'a u32, y: &'a u32, c: bool) -> &'a u32\
+{\
+    let _0: &'_ u32; // return\
+    let x: &'_ u32; // arg #1\
+    let y: &'_ u32; // arg #2\
+    let c: bool; // arg #3\
+    let _4: bool; // anonymous local\
+\
+    storage_live(_0)\
+    storage_live(_4)\
+    _4 = copy c\
+    if move _4 {\
+    } else {\
+        _0 = copy y\
+        storage_dead(_4)\
+        storage_dead(c)\
+        storage_dead(y)\
+        storage_dead(x)\
+        return\
+    }\
+    _0 = copy x\
+    storage_dead(_4)\
+    storage_dead(c)\
+    storage_dead(y)\
+    storage_dead(x)\
+    return\
+}
 
 // Full name: test::read\
-pub fn read<'_0>(h: Holder<'_0>) -> u32
+pub fn read<'_0>(h: Holder<'_0>) -> u32\
+{\
+    let _0: u32; // return\
+    let h: Holder<'_>; // arg #1\
+    let _2: &'_ u32; // anonymous local\
+\
+    storage_live(_0)\
+    storage_live(_2)\
+    _2 = copy h.r\
+    _0 = copy (*_2)\
+    storage_dead(_2)\
+    storage_dead(h)\
+    return\
+}
 
 // Full name: test::take\
-pub fn take<'_0>(g: Option<fn<'_0_1>(&'_0_1 u32) -> &'_0_1 u32>, x: &'_0 u8) -> u8
+pub fn take<'_0>(g: Option<fn<'_0_1>(&'_0_1 u32) -> &'_0_1 u32>, x: &'_0 u8) -> u8\
+{\
+    let _0: u8; // return\
+    let g: Option<fn<'_0_1>(&'_0_1 u32) -> &'_0_1 u32>; // arg #1\
+    let x: &'_ u8; // arg #2\
+\
+    storage_live(_0)\
+    _0 = copy (*x)\
+    storage_dead(x)\
+    storage_dead(g)\
+    return\
+}

@@ -37,6 +37,7 @@ pub fn main()\
     s = tuple_add(move _2)\
     ↳⚡ undefined_behavior\
     storage_dead(_2)\
+    _0 = ()\
     storage_dead(s)\
     return\
 }
