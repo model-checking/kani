@@ -85,6 +85,27 @@ impl std::hash::Hash for MinedExpr {
 }
 
 impl MinedExpr {
+    /// Rebase a getter's field reads onto its receiver in the caller.
+    fn prepend_fields(self, prefix: &[(usize, Ty)]) -> Option<Self> {
+        if prefix.is_empty() {
+            return Some(self);
+        }
+        Some(match self {
+            MinedExpr::Field(path) => {
+                MinedExpr::Field(prefix.iter().copied().chain(path).collect())
+            }
+            // The AST can only represent a downcast at the root, not below a field.
+            MinedExpr::DowncastField(..) => return None,
+            constant @ MinedExpr::Const(..) => constant,
+            MinedExpr::BinOp(op, a, b) => MinedExpr::BinOp(
+                op,
+                Box::new(a.prepend_fields(prefix)?),
+                Box::new(b.prepend_fields(prefix)?),
+            ),
+            MinedExpr::UnOp(op, a) => MinedExpr::UnOp(op, Box::new(a.prepend_fields(prefix)?)),
+        })
+    }
+
     pub fn ty(&self) -> Option<Ty> {
         match self {
             MinedExpr::Field(path) => path.last().map(|(_, t)| *t),
@@ -169,13 +190,13 @@ fn postdominates(body: &Body, from: usize, bb: usize) -> bool {
 
 /// Extract a [MinedExpr] for `op` in `body`, where local `_1` is `&self` (or `self`).
 /// Returns None (bail) when the slice leaves the pure/call-free/single-assignment fragment.
-fn extract_expr(body: &Body, op: &Operand, depth: usize) -> Option<MinedExpr> {
+fn extract_expr(tcx: TyCtxt, body: &Body, op: &Operand, depth: usize) -> Option<MinedExpr> {
     if depth > 24 {
         return None;
     }
     match op {
         Operand::Constant(c) => extract_const(c),
-        Operand::Copy(place) | Operand::Move(place) => extract_place(body, place, depth),
+        Operand::Copy(place) | Operand::Move(place) => extract_place(tcx, body, place, depth),
         Operand::RuntimeChecks(_) => None,
     }
 }
@@ -188,7 +209,7 @@ fn extract_const(c: &ConstOperand) -> Option<MinedExpr> {
 
 /// `self` is local 1; a place rooted at it with Deref/Field projections is a field path
 /// (an optional leading Downcast records the enum variant, for variant-guarded conjuncts).
-fn extract_place(body: &Body, place: &Place, depth: usize) -> Option<MinedExpr> {
+fn extract_place(tcx: TyCtxt, body: &Body, place: &Place, depth: usize) -> Option<MinedExpr> {
     use rustc_public::mir::ProjectionElem;
     if place.local == 1 {
         let mut path = vec![];
@@ -216,7 +237,7 @@ fn extract_place(body: &Body, place: &Place, depth: usize) -> Option<MinedExpr> 
     if place.projection.len() == 1 && matches!(place.projection[0], ProjectionElem::Deref) {
         let base = Place { local: place.local, projection: vec![] };
         if let Some(inner) = unique_ref_def(body, &base) {
-            return extract_place(body, &inner, depth + 1);
+            return extract_place(tcx, body, &inner, depth + 1);
         }
         return None;
     }
@@ -253,27 +274,29 @@ fn extract_place(body: &Body, place: &Place, depth: usize) -> Option<MinedExpr> 
     if let Some(term) = call_def {
         // One-level getter inlining: a call to a pure accessor of `self` whose body is
         // itself extractable (e.g. `self.len()` where len returns a field expression).
-        return extract_getter_call(body, term, depth);
+        return extract_getter_call(tcx, body, term, depth);
     }
     match def? {
-        Rvalue::Use(inner, _) => extract_expr(body, inner, depth + 1),
+        Rvalue::Use(inner, _) => extract_expr(tcx, body, inner, depth + 1),
         Rvalue::BinaryOp(bop, a, b) => Some(MinedExpr::BinOp(
             *bop,
-            Box::new(extract_expr(body, a, depth + 1)?),
-            Box::new(extract_expr(body, b, depth + 1)?),
+            Box::new(extract_expr(tcx, body, a, depth + 1)?),
+            Box::new(extract_expr(tcx, body, b, depth + 1)?),
         )),
         Rvalue::UnaryOp(uop, a) => {
-            Some(MinedExpr::UnOp(*uop, Box::new(extract_expr(body, a, depth + 1)?)))
+            Some(MinedExpr::UnOp(*uop, Box::new(extract_expr(tcx, body, a, depth + 1)?)))
         }
-        Rvalue::CopyForDeref(p) => extract_place(body, p, depth + 1),
+        Rvalue::CopyForDeref(p) => extract_place(tcx, body, p, depth + 1),
         _ => None,
     }
 }
 
 /// Extract the expression computed by a getter call `self.m()`: the sole argument must be
-/// (a reference to) `self`, and the callee's return local must have a unique, extractable
-/// definition in terms of ITS `self` (which is the same value). Depth-limited.
+/// (a reference to) `self` or one of its fields, and the callee's return local must have a
+/// unique, extractable definition. Rebase that definition onto the caller's receiver.
+/// Depth-limited.
 fn extract_getter_call(
+    tcx: TyCtxt,
     body: &Body,
     term: &rustc_public::mir::Terminator,
     depth: usize,
@@ -282,21 +305,21 @@ fn extract_getter_call(
         return None;
     }
     let TerminatorKind::Call { func, args, .. } = &term.kind else { return None };
-    // Sole argument: self (possibly behind a fresh reference temp).
+    // Sole argument: self or a field of self (possibly behind a fresh reference temp).
     if args.len() != 1 {
         return None;
     }
-    let self_rooted = match &args[0] {
-        Operand::Copy(p) | Operand::Move(p) => p.local == 1 || place_is_ref_to_self(body, p),
-        _ => false,
+    let receiver = match &args[0] {
+        Operand::Copy(p) | Operand::Move(p) if p.local == 1 => p.clone(),
+        Operand::Copy(p) | Operand::Move(p) if p.projection.is_empty() => unique_ref_def(body, p)?,
+        _ => return None,
     };
-    if !self_rooted {
-        return None;
-    }
+    let receiver_path = getter_receiver_path(&receiver)?;
     let fn_ty = func.ty(body.locals()).ok()?;
     let TyKind::RigidTy(RigidTy::FnDef(def, fn_args)) = fn_ty.kind() else { return None };
     let inst = Instance::resolve(def, &fn_args).ok()?;
-    let callee = inst.body()?;
+    // Mining is a heuristic: ignore a getter whose body cannot be loaded.
+    let callee = crate::kani_middle::body_without_tail_calls(tcx, inst)?;
     // Unique assignment to the return local, extractable in the callee's own self frame.
     let mut ret_def: Option<MinedExpr> = None;
     for block in &callee.blocks {
@@ -308,14 +331,14 @@ fn extract_getter_call(
                     return None;
                 }
                 ret_def = Some(match rv {
-                    Rvalue::Use(inner, _) => extract_expr(&callee, inner, depth + 1)?,
+                    Rvalue::Use(inner, _) => extract_expr(tcx, &callee, inner, depth + 1)?,
                     Rvalue::BinaryOp(bop, a, b) => MinedExpr::BinOp(
                         *bop,
-                        Box::new(extract_expr(&callee, a, depth + 1)?),
-                        Box::new(extract_expr(&callee, b, depth + 1)?),
+                        Box::new(extract_expr(tcx, &callee, a, depth + 1)?),
+                        Box::new(extract_expr(tcx, &callee, b, depth + 1)?),
                     ),
                     Rvalue::UnaryOp(uop, a) => {
-                        MinedExpr::UnOp(*uop, Box::new(extract_expr(&callee, a, depth + 1)?))
+                        MinedExpr::UnOp(*uop, Box::new(extract_expr(tcx, &callee, a, depth + 1)?))
                     }
                     _ => return None,
                 });
@@ -327,7 +350,7 @@ fn extract_getter_call(
             return None;
         }
     }
-    ret_def
+    ret_def?.prepend_fields(&receiver_path)
 }
 
 /// If `p` (a projection-free temp) is uniquely defined as `&<place>`, return that place.
@@ -359,30 +382,32 @@ fn unique_ref_def(body: &Body, p: &Place) -> Option<Place> {
     found
 }
 
-/// Whether `p` is a temp holding `&self` (defined once as `Ref(.., self-place)`).
-fn place_is_ref_to_self(body: &Body, p: &Place) -> bool {
-    if !p.projection.is_empty() {
-        return false;
+/// Field path from the caller's self to the getter receiver. Only the leading dereference
+/// of `&self` can be elided; dereferencing a field would require a different expression AST.
+///
+/// A field whose type is a reference, raw pointer or `Box` ends the path at a pointer: the
+/// getter's fields live behind it, not in the caller's struct. Such paths are rejected here
+/// instead of relying on how rustc happens to lower the call today.
+fn getter_receiver_path(receiver: &Place) -> Option<Vec<(usize, Ty)>> {
+    use rustc_public::mir::ProjectionElem;
+    if receiver.local != 1 {
+        return None;
     }
-    let mut found = false;
-    for block in &body.blocks {
-        for stmt in &block.statements {
-            if let StatementKind::Assign(dest, rv) = &stmt.kind
-                && dest.local == p.local
-            {
-                match rv {
-                    Rvalue::Ref(_, _, inner) if inner.local == 1 => {
-                        if found {
-                            return false;
-                        }
-                        found = true;
-                    }
-                    _ => return false,
+    let mut path = vec![];
+    for (index, elem) in receiver.projection.iter().enumerate() {
+        match elem {
+            ProjectionElem::Deref if index == 0 => {}
+            ProjectionElem::Field(field, ty) => {
+                let kind = ty.kind();
+                if kind.is_box() || kind.is_raw_ptr() || kind.is_ref() {
+                    return None;
                 }
+                path.push((*field, *ty));
             }
+            _ => return None,
         }
     }
-    found
+    Some(path)
 }
 
 /// Mine the invariant conjuncts of `ty` (a struct ADT) from its inherent `&self` methods.
@@ -414,7 +439,10 @@ pub fn mine_self_assert_conjuncts(tcx: TyCtxt, ty: Ty, kani_assert: FnDef) -> Ve
             let Ok(inst) = Instance::resolve(fn_def, &rustc_public::ty::GenericArgs(vec![])) else {
                 continue;
             };
-            let Some(body) = inst.body() else { continue };
+            // Mining is a heuristic: ignore a method whose body cannot be loaded.
+            let Some(body) = crate::kani_middle::body_without_tail_calls(tcx, inst) else {
+                continue;
+            };
             // First parameter must be self by-ref or by-value of our type.
             let Some(self_decl) = body.arg_locals().first() else { continue };
             let self_ok = self_decl.ty == ty
@@ -477,7 +505,7 @@ pub fn mine_self_assert_conjuncts(tcx: TyCtxt, ty: Ty, kani_assert: FnDef) -> Ve
                 if !unconditional && !arm_guarded {
                     continue;
                 }
-                let Some(expr) = extract_expr(&body, &args[0], 0) else { continue };
+                let Some(expr) = extract_expr(tcx, &body, &args[0], 0) else { continue };
                 // Arm-guarded conjuncts must carry the variant via their downcast reads;
                 // unconditional conjuncts must not (a bare downcast read without its match
                 // would be under-guarded).

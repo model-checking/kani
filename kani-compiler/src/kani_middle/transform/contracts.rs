@@ -617,7 +617,7 @@ impl FunctionWithContractPass {
         let any_args = GenericArgs(vec![GenericArgKind::Type(ret_ty)]);
         let Ok(any_instance) = Instance::resolve(kani_any, &any_args) else { return };
 
-        let Some(path) = find_call_path(&any_instance, &instance, &mut HashSet::new()) else {
+        let Some(path) = find_call_path(tcx, &any_instance, &instance, &mut HashSet::new()) else {
             return;
         };
 
@@ -752,6 +752,7 @@ fn find_closure(tcx: TyCtxt, fn_def: FnDef, body: &Body, name: &str) -> ClosureD
 /// acceptable here: missing a detection reproduces today's behavior (the hang),
 /// while a false positive would reject a working proof.
 fn find_call_path(
+    tcx: TyCtxt,
     from: &Instance,
     target: &Instance,
     visited: &mut HashSet<Instance>,
@@ -759,7 +760,8 @@ fn find_call_path(
     if !visited.insert(*from) {
         return None;
     }
-    let body = from.body()?;
+    // Diagnostic-only: a body this check cannot load is reported, if reached, by codegen.
+    let body = crate::kani_middle::body_without_tail_calls(tcx, *from)?;
 
     for bb in body.blocks.iter() {
         let TerminatorKind::Call { func, .. } = &bb.terminator.kind else { continue };
@@ -773,7 +775,7 @@ fn find_call_path(
             return Some(vec![from.name()]);
         }
 
-        if let Some(mut path) = find_call_path(&callee, target, visited) {
+        if let Some(mut path) = find_call_path(tcx, &callee, target, visited) {
             path.insert(0, from.name());
             return Some(path);
         }
@@ -821,7 +823,9 @@ fn check_mutual_recursion(tcx: TyCtxt, fn_def: FnDef, body: &Body) {
 
         // Check if the callee calls back to us (one level deep).
         let Ok(callee_instance) = Instance::resolve(callee_def, &callee_args) else { continue };
-        let Some(callee_body) = callee_instance.body() else { continue };
+        let Some(callee_body) = crate::kani_middle::checked_body(tcx, callee_instance) else {
+            continue;
+        };
 
         for callee_bb in callee_body.blocks.iter() {
             let TerminatorKind::Call { func: callee_func, .. } = &callee_bb.terminator.kind else {

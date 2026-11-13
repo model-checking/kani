@@ -10,7 +10,7 @@ use rustc_data_structures::fx::FxHashMap;
 use rustc_hir::{def::DefKind, def_id::DefId as InternalDefId, def_id::LOCAL_CRATE};
 use rustc_middle::ty::TyCtxt;
 use rustc_public::mir::mono::{Instance, MonoItem};
-use rustc_public::mir::{Mutability, TerminatorKind};
+use rustc_public::mir::{Body, Mutability, TerminatorKind};
 use rustc_public::rustc_internal;
 use rustc_public::ty::{
     AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, PolyFnSig, RigidTy, Span as SpanStable,
@@ -125,6 +125,98 @@ pub fn check_crate_items(tcx: TyCtxt, ignore_asm: bool) {
         }
     }
 
+    tcx.dcx().abort_if_errors();
+}
+
+/// The body of `instance`, or `None` if it has none; aborts with a diagnostic if it contains an
+/// explicit tail call (`become`).
+///
+/// Stable `rustc_public::mir::TerminatorKind` has no `TailCall` variant, so converting a body that
+/// contains one hits `unimplemented!()` inside the toolchain and aborts the compilation, c.f.
+/// <https://github.com/model-checking/kani/issues/5131>. The feature is incomplete; report every
+/// such terminator and abort once. Leave the call unmodeled: an ordinary `Call` would keep the
+/// caller's frame live, which disagrees with `become`.
+///
+/// Use this instead of `instance.body()` wherever the body may belong to user code. Where an
+/// unsupported body should be ignored rather than reported (heuristics, eligibility checks), use
+/// [body_without_tail_calls] or [has_explicit_tail_call].
+pub fn checked_body(tcx: TyCtxt, instance: Instance) -> Option<Body> {
+    // `has_body` is about the item: compiler-generated shims have no item body, but
+    // `instance.body()` still builds one for them, and they never contain `become`.
+    if instance.has_body() {
+        report_tail_calls(tcx, tail_call_spans(tcx, internal_body_kind(tcx, instance)));
+    }
+    instance.body()
+}
+
+/// [checked_body] for a function definition, as loaded by `FnDef::body()`.
+pub fn checked_fn_def_body(tcx: TyCtxt, def: FnDef) -> Option<Body> {
+    if !def.has_body() {
+        return None;
+    }
+    let def_id = rustc_internal::internal(tcx, def.def_id());
+    report_tail_calls(tcx, tail_call_spans(tcx, rustc_middle::ty::InstanceKind::Item(def_id)));
+    def.body()
+}
+
+/// The body of `instance`, or `None` if it has none or contains an explicit tail call. Unlike
+/// [checked_body], this reports nothing.
+pub fn body_without_tail_calls(tcx: TyCtxt, instance: Instance) -> Option<Body> {
+    if has_explicit_tail_call(tcx, instance) {
+        return None;
+    }
+    instance.body()
+}
+
+/// Whether `instance` has a body containing an explicit tail call (`become`), which
+/// `instance.body()` cannot convert. See [checked_body].
+pub fn has_explicit_tail_call(tcx: TyCtxt, instance: Instance) -> bool {
+    instance.has_body() && !tail_call_spans(tcx, internal_body_kind(tcx, instance)).is_empty()
+}
+
+/// The internal instance whose MIR `rustc_public_bridge`'s `BodyBuilder` converts for `instance`.
+/// It loads an intrinsic's fallback body as the item, and `instance_mir` rejects
+/// `InstanceKind::Intrinsic`.
+fn internal_body_kind<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    instance: Instance,
+) -> rustc_middle::ty::InstanceKind<'tcx> {
+    use rustc_middle::ty::InstanceKind;
+    match rustc_internal::internal(tcx, instance).def {
+        InstanceKind::Intrinsic(def_id) => InstanceKind::Item(def_id),
+        InstanceKind::Item(def_id) => InstanceKind::Item(def_id),
+        InstanceKind::LlvmIntrinsic(def_id) => InstanceKind::LlvmIntrinsic(def_id),
+        InstanceKind::Shim(kind) => InstanceKind::Shim(kind),
+        InstanceKind::Virtual(def_id, idx) => InstanceKind::Virtual(def_id, idx),
+    }
+}
+
+/// Spans of the explicit tail calls in the internal MIR for `def`, the body that the conversion
+/// to `rustc_public` would panic on.
+fn tail_call_spans<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    def: rustc_middle::ty::InstanceKind<'tcx>,
+) -> Vec<rustc_span::Span> {
+    tcx.instance_mir(def)
+        .basic_blocks
+        .iter()
+        .filter_map(|bb| match &bb.terminator().kind {
+            rustc_middle::mir::TerminatorKind::TailCall { fn_span, .. } => Some(*fn_span),
+            _ => None,
+        })
+        .collect()
+}
+
+fn report_tail_calls(tcx: TyCtxt, spans: Vec<rustc_span::Span>) {
+    if spans.is_empty() {
+        return;
+    }
+    for span in spans {
+        tcx.dcx()
+            .struct_span_err(span, "explicit tail calls (`become`) are not supported by Kani")
+            .with_note("see https://github.com/model-checking/kani/issues/5131")
+            .emit();
+    }
     tcx.dcx().abort_if_errors();
 }
 
@@ -1185,6 +1277,18 @@ fn fmt_impl_self_ty(tcx: TyCtxt, instance: Instance) -> Option<(FmtTrait, Ty)> {
     let TyKind::RigidTy(RigidTy::Ref(_, self_ty, _)) = sig.inputs().first()?.kind() else {
         return None;
     };
+
+    // The `core::str::pattern` searcher types (`multi_char_eq_searcher_kind`) are supported in
+    // argument position only: their values are bounded and need storage that the harness owns,
+    // and they neither implement nor can derive `Arbitrary`, which the formatting models
+    // require of the self type. Bail out so that their `fmt` methods are handled as ordinary
+    // functions, with both arguments generated through the bounded argument path.
+    if let TyKind::RigidTy(RigidTy::Adt(def, _)) = self_ty.kind()
+        && multi_char_eq_searcher_kind(tcx, def).is_some()
+    {
+        return None;
+    }
+
     Some((fmt_trait, self_ty))
 }
 
@@ -1310,6 +1414,56 @@ fn can_derive_arbitrary(
     }
 }
 
+/// A `core::str::pattern` searcher type backed by a `MultiCharEqSearcher` (the associated
+/// searcher for the char patterns `[char; N]`, `&[char; N]` and `&[char]`), for which a
+/// dedicated generation model exists (`KaniModel::AnyCharArraySearcher`/`AnyCharArrayRefSearcher`/
+/// `AnyCharSliceSearcher`).
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum MultiCharEqSearcherKind {
+    Array,
+    ArrayRef,
+    Slice,
+}
+
+/// Whether `def` is one of
+/// `core::str::pattern::{CharArraySearcher, CharArrayRefSearcher, CharSliceSearcher}`.
+///
+/// Both the eligibility check (`autoharness_supported_arg_ty`) and the harness generation
+/// (`call_kani_any_for_ty`) use this, so that they cannot disagree.
+///
+/// This matches the definition's own path (crate name plus `DefPathData` segments) rather than
+/// `tcx.def_path_str`: `def_path_str` renders through whichever module re-exports the item
+/// (`std::str::pattern` vs `core::str::pattern`), and `strip_local_crate_prefix` in this file
+/// only special-cases that rendering for the *local* crate, so a printed-string comparison would
+/// disagree between the normal flow (`core` external) and the verify-std flow (`core` local).
+pub fn multi_char_eq_searcher_kind(tcx: TyCtxt, def: AdtDef) -> Option<MultiCharEqSearcherKind> {
+    use rustc_hir::definitions::DefPathData;
+
+    let def_id = rustc_internal::internal(tcx, def.def_id());
+    let path = tcx.def_path(def_id);
+    if tcx.crate_name(path.krate).as_str() != "core" {
+        return None;
+    }
+
+    // `core::str::pattern::<Name>`: two module segments, then the item's own name.
+    let [module1, module2, item] = path.data.as_slice() else { return None };
+    let DefPathData::TypeNs(module1) = &module1.data else { return None };
+    let DefPathData::TypeNs(module2) = &module2.data else { return None };
+    let DefPathData::TypeNs(item) = &item.data else { return None };
+    if module1.as_str() != "str" || module2.as_str() != "pattern" {
+        return None;
+    }
+
+    // Match the exact final segment: `CharArraySearcher` and `CharArrayRefSearcher` share a
+    // prefix, so a substring/`starts_with` check would conflate them.
+    match item.as_str() {
+        "CharArraySearcher" => Some(MultiCharEqSearcherKind::Array),
+        "CharArrayRefSearcher" => Some(MultiCharEqSearcherKind::ArrayRef),
+        "CharSliceSearcher" => Some(MultiCharEqSearcherKind::Slice),
+        _ => None,
+    }
+}
+
 /// How an automatic harness can generate a nondeterministic value of a given argument type,
 /// c.f. `autoharness_supported_arg_ty`.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -1408,10 +1562,27 @@ fn autoharness_supported_arg_ty(
             // A `Formatter` is built by `any_formatter` over a harness-local sink, with its width
             // and precision bounded; `fmt` methods take it mutably, so both mutabilities.
             TyKind::RigidTy(RigidTy::Adt(def, _)) if is_formatter(tcx, def) => ArgSupport::Bounded,
+            // A reference to a `core::str::pattern` searcher (`multi_char_eq_searcher_kind`) is
+            // supported for both `&T` and `&mut T`: the searcher's own by-value generation model
+            // already exists for all three kinds, and a reference to a type this function already
+            // knows how to generate is always fine.
+            TyKind::RigidTy(RigidTy::Adt(def, _))
+                if multi_char_eq_searcher_kind(tcx, def).is_some() =>
+            {
+                ArgSupport::Bounded
+            }
             _ => arbitrary_or_derive(ty, ty_arbitrary_cache),
         }
     } else {
-        if arbitrary_or_derive(ty, ty_arbitrary_cache) == ArgSupport::Arbitrary {
+        if let TyKind::RigidTy(RigidTy::Adt(def, _)) = ty.kind()
+            && multi_char_eq_searcher_kind(tcx, def).is_some()
+        {
+            // Checked before `arbitrary_or_derive`: that call reaches `can_derive_arbitrary`,
+            // which rejects any `Adt` whose generic args contain a lifetime, and all three of
+            // these searcher types have one. Their own by-value generation model already
+            // exists (`multi_char_eq_searcher_kind`'s doc comment lists it per kind).
+            ArgSupport::Bounded
+        } else if arbitrary_or_derive(ty, ty_arbitrary_cache) == ArgSupport::Arbitrary {
             ArgSupport::Arbitrary
         } else if smart_pointer_model_instance(tcx, ty, smart_pointer_models).is_some_and(
             |(_, pointee)| {

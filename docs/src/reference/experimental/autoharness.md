@@ -136,7 +136,7 @@ works in three phases; click a box to jump to its section:
 │ • one monomorphization only           │   │ codegen → CBMC → summary                 │
 │ • no aliasing between args (#4750)    │   │ (see the architecture diagram below)     │
 │ • bounded args only up to bound       │   └──────────────────────────────────────────┘
-│ • ctor may be vacuous (#4757)         │
+│ • ctor may reach only some inputs     │
 │ • mined-invariant heuristic (#4763)   │
 └───────────────────────────────────────┘
 </code></pre>
@@ -218,6 +218,7 @@ Autoharness records one skip reason per skipped function: the first failed check
 | `Generic Function: <detail>` | Kani could not find a supported instantiation satisfying the function's constraints. The detail provides the specific cause; see [Generic Functions](#generic-functions). |
 | `The function does not have a body` | There is no function body available to verify, as with a trait method without a default implementation. |
 | `Did not match provided filters` | The function was excluded by the include/exclude patterns. |
+| `Explicit tail calls are not supported` | The function's body contains an explicit tail call (`become`), which Kani does not support. |
 | `Unsupported variadic calling convention` | The function is a C-variadic function whose calling convention Kani cannot model (for example, `extern "sysv64"`). |
 | `Missing Arbitrary implementation for argument(s) x: T, y: U` | At least one argument cannot be generated using a supported argument model. The argument names and types depend on the function. |
 | `Requires --bounded-arguments for argument(s) x: T` | At least one argument requires opting into bounded generation. The argument names and types depend on the function. |
@@ -429,6 +430,26 @@ actually used.
 `any_formatter`: a `Formatter` over a sink that discards its output, with every formatting option
 nondeterministic and its width and precision bounded by the slice bound. The sink never fails, so
 paths that handle a write error are not reached.
+
+The `core::str::pattern` searchers `CharArraySearcher<'_, N>`, `CharArrayRefSearcher<'_, '_, N>`
+and `CharSliceSearcher<'_, '_>` (the searchers for `[char; N]`, `&[char; N]` and `&[char]`
+patterns) are also supported as arguments, by value or by reference (also requiring
+`--bounded-arguments`). The harness builds the searcher through the public `Pattern::into_searcher`
+API over a nondeterministic haystack (a `&str` bounded by the string bound), and then advances it
+a nondeterministic number of steps from each end, so that searchers in partially advanced states
+are also generated. Because the searcher is only ever constructed and advanced through the public
+API, it satisfies the library's internal invariants as long as its haystack is valid UTF-8. The
+haystack comes from the same generator as `&str` arguments, so it shares their current limitation:
+under verify-std it can be invalid UTF-8 and cause spurious failures (see
+[#5030](https://github.com/model-checking/kani/issues/5030)). The needle of a `CharArraySearcher` or
+`CharArrayRefSearcher` is a nondeterministic `[char; N]` whose length `N` is fixed by the type; the
+needle of a `CharSliceSearcher` is a nondeterministic `&[char]` of up to the slice bound. Since `N`
+is not bounded by any option, a function that takes such a searcher with a large `N` gets a large
+nondeterministic needle, which can make verification slow, just as for a `[T; N]` argument. (For a
+generic function, `N` is instantiated with the same small value as other `usize` const generic
+parameters.) The `Debug::fmt` methods of these searchers are verified as ordinary functions, with
+both the searcher and the `&mut Formatter` generated as bounded arguments, rather than through the
+approach described in [Formatting Trait Implementations](#formatting-trait-implementations).
 
 Additionally (also requiring `--bounded-arguments`), for arguments whose type implements
 [`BoundedArbitrary`](../bounded_arbitrary.md)
@@ -737,9 +758,17 @@ This applies to harnesses marked "(ctor)", i.e. runs with `--constructor-args` (
 [Constructor-based generation](#constructor-based-generation)). If the chosen
 constructor is *unsatisfiable* for the generated type — an assert-guarded constructor every
 argument of which trips an assertion, or a checked constructor that always returns
-`None`/`Err` — the generated body assumes `false` on all paths and the harness becomes
-**vacuous**, reporting `Success` without checking anything. Kani does not yet detect this case;
-see [#4757](https://github.com/model-checking/kani/issues/4757).
+`None`/`Err` — the generated body assumes `false` on all paths. Mined conditions that no
+generated value satisfies have the same effect. If no generated input then reaches the function
+under test, the harness is **vacuous**: none of its checks can fail. Kani covers the call to that
+function (`` autoharness: a generated input reaches `...` ``) and reports such a harness as a
+failure, with the line `` Vacuous harness: no generated input reaches `...` ``. For a function
+with a contract, its `requires` clause is assumed inside the call, after the cover, so a
+precondition that excludes every generated input is not reported as vacuous. A harness that
+reaches the function with only some of its inputs, for example with `None` for an `Option`
+argument whose payload cannot be generated, is reported as usual; the excluded inputs, such as
+the `Some` path, are never checked. `--constructor-args` cannot be combined with
+`--output-format=old`, which cannot detect a vacuous harness.
 
 ### Mined-invariant heuristic
 

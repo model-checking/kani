@@ -1,0 +1,5 @@
+invalid_capture.safety_check.\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Invalid value of type `bool`"
+Verification failed for - invalid_capture
+Complete - 1 successfully verified harnesses, 1 failures, 2 total.
