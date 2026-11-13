@@ -1,0 +1,7 @@
+assertion\
+- Status: FAILURE\
+- Description: "|result| *result == 0"
+
+Failed Checks: |result| *result == 0
+
+VERIFICATION:- FAILED
