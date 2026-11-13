@@ -457,7 +457,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                 if is_anon_static(self.tcx, def.def_id()) {
                     let alloc = def.eval_initializer().unwrap();
                     let name = format!("{}::{alloc_id:?}", self.full_crate_name());
-                    self.codegen_nested_static_allocation(&alloc, Some(name), loc)
+                    self.codegen_nested_static_allocation(&alloc, name, loc)
                 } else {
                     self.codegen_static_pointer(def)
                 }
@@ -573,6 +573,9 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                     has_interior_mutabity,
                     is_definitely_const,
                 );
+                // Only constant allocations may be shared. Statics have their own storage
+                // and must never be reused for a constant with the same bytes.
+                self.alloc_map.insert(alloc.clone(), alloc_name.clone());
                 alloc_name
             }
             Some(name) => name.clone(),
@@ -586,13 +589,15 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     fn codegen_nested_static_allocation(
         &mut self,
         alloc: &Allocation,
-        name: Option<String>,
+        name: String,
         loc: Location,
     ) -> Expr {
-        // The memory behind this allocation isn't constant, but codegen_alloc_in_memory (which codegen_const_allocation calls)
-        // uses alloc's mutability field to set the const-ness of the allocation in CBMC's symbol table,
-        // so we can reuse the code and without worrying that the allocation is set as immutable.
-        self.codegen_const_allocation(alloc, name, loc, false)
+        // The memory behind this allocation isn't constant. codegen_alloc_in_memory uses alloc's
+        // mutability field to set the const-ness of the allocation in CBMC's symbol table.
+        if self.symbol_table.lookup(&name).is_none() {
+            self.codegen_alloc_in_memory(alloc.clone(), name.clone(), loc, false, false);
+        }
+        self.symbol_table.lookup(name).unwrap().to_expr().address_of()
     }
 
     /// Insert an allocation into the goto symbol table, and generate an init value.
@@ -664,8 +669,6 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             loc,
             init_fn,
         );
-
-        self.alloc_map.insert(alloc, name);
     }
 
     /// This is an internal helper function for `codegen_alloc_in_memory`.
