@@ -1,0 +1,14 @@
+Status: SATISFIED\
+Description: "pointer call decremented"
+
+Failed Checks: "pointer call left x unchanged"
+
+Status: SATISFIED\
+Description: "direct call decremented"
+
+Failed Checks: "direct call left x unchanged"
+
+Summary:\
+Verification failed for - check_fn_ptr_call\
+Verification failed for - check_direct_call\
+Complete - 0 successfully verified harnesses, 2 failures, 2 total.
