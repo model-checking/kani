@@ -1338,7 +1338,12 @@ impl GotocCtx<'_, '_> {
                     let instance = Instance::resolve(def, &args).unwrap();
                     // We need to handle this case in a special way because `codegen_operand_stable` compiles FnDefs to dummy structs.
                     // (cf. the function documentation)
-                    self.codegen_func_expr(instance, loc).address_of()
+                    let fn_ptr = self.codegen_func_expr(instance, loc).address_of();
+                    // A C function returning `void` is declared with that return type under
+                    // `-Z c-ffi` (see `codegen_foreign_fn`), while the Rust function pointer
+                    // type returns `struct Unit`. Calls through the pointer do not use a unit
+                    // result, so CBMC accepts the function as a target of the cast pointer.
+                    fn_ptr.cast_to(self.codegen_ty_stable(t))
                 }
                 _ => unreachable!(),
             },
