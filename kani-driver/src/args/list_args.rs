@@ -16,6 +16,10 @@ pub struct CargoListArgs {
     /// Output format
     #[clap(long, default_value = "pretty")]
     pub format: Format,
+
+    /// Directory for all generated artifacts.
+    #[arg(long)]
+    pub target_dir: Option<PathBuf>,
 }
 
 /// List information relevant to verification
