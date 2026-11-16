@@ -713,7 +713,7 @@ impl GotocCtx<'_, '_> {
                 let assume_non_zero =
                     Stmt::assume(var.clone().neq(Expr::int_constant(0, var.typ().clone())), *loc);
                 let layout = self.layout_of_stable(place_ty);
-                let alignment = Expr::int_constant(layout.align.abi.bytes(), var.typ().clone());
+                let alignment = Expr::int_constant(layout.align.bytes(), var.typ().clone());
                 let assume_aligned = Stmt::assume(
                     var.clone().rem(alignment).eq(Expr::int_constant(0, var.typ().clone())),
                     *loc,
