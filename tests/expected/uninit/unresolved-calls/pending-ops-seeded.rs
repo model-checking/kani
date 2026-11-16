@@ -12,8 +12,7 @@ fn identity(value: u8) -> u8 {
     value
 }
 
-// The dereference is an operand of the Call terminator, so super_terminator
-// collects its Check before resolution fails. It must precede Unsupported.
+// Check the dereferenced call argument before reporting the unsupported function-pointer call.
 #[custom_mir(dialect = "runtime", phase = "optimized")]
 #[inline(never)]
 unsafe fn indirect(f: fn(u8) -> u8, pointer: *const u8) -> u8 {
@@ -23,7 +22,7 @@ unsafe fn indirect(f: fn(u8) -> u8, pointer: *const u8) -> u8 {
     }
 }
 
-// A copy intrinsic creates a delayed-UB analysis target without introducing UB.
+// The copy intrinsic initializes the destination and creates an analysis target.
 #[inline(never)]
 fn seed() {
     let source = 7u8;
@@ -35,7 +34,7 @@ fn seed() {
 #[kani::proof]
 fn check() {
     seed();
-    // Raw byte storage avoids the unsupported raw-pointer/union interaction.
+    // Allocate two bytes and initialize the first byte.
     let layout = std::alloc::Layout::new::<[u8; 2]>();
     let pointer = unsafe { std::alloc::alloc(layout) };
     if pointer.is_null() {

@@ -11,11 +11,11 @@ fn write() {
 
 #[inline(never)]
 fn indirect(f: fn()) {
-    // There is no pointer argument or return value to gate instrumentation on.
+    // The callee accesses memory through a global pointer.
     f();
 }
 
-// A copy intrinsic creates a delayed-UB analysis target without introducing UB.
+// The copy intrinsic initializes the destination and creates an analysis target.
 #[inline(never)]
 fn seed() {
     let source = 7u8;

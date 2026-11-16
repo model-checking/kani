@@ -11,8 +11,7 @@ fn identity(value: u8) -> u8 {
 
 #[inline(never)]
 fn indirect(f: fn(u8) -> u8) -> u8 {
-    // Fn-trait invocation of a function pointer reaches the FnPtr boundary.
-    // This is not coverage of a bodyless or direct-shadow Shim guard.
+    // Calling this function pointer through the Fn trait reaches an indirect call.
     std::ops::Fn::call(&f, (42,))
 }
 

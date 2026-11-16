@@ -15,8 +15,8 @@ fn identity(value: u32) -> u32 {
     value
 }
 
-// No statements in bb0: LoadArgument and the union-field Check share the
-// unresolved Call's target. The initialized control requires the load to survive.
+// The call is the first instruction in the entry block. Loading the initialized union
+// parameter's memory initialization state allows the argument check to succeed.
 #[custom_mir(dialect = "runtime", phase = "optimized")]
 #[inline(never)]
 unsafe fn indirect(value: Word, f: fn(u32) -> u32) -> u32 {
@@ -26,7 +26,7 @@ unsafe fn indirect(value: Word, f: fn(u32) -> u32) -> u32 {
     }
 }
 
-// A copy intrinsic creates a delayed-UB analysis target without introducing UB.
+// The copy intrinsic initializes the destination and creates an analysis target.
 #[inline(never)]
 fn seed() {
     let source = 7u8;

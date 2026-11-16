@@ -66,8 +66,8 @@ impl TargetFinder for CheckUninitVisitor<'_> {
                     .take(body.arg_count())
                     .filter(|(_, local)| local.ty.kind().is_union())
                     .collect();
-                // RustCall and other generated ABIs do not establish the legacy union
-                // slot pairing. Guard entry before any fallback LoadArgument can bless it.
+                // Guard shim entry when parameters or the return value may carry
+                // memory initialization state, before loading union arguments.
                 if self.instance.kind == InstanceKind::Shim
                     && body
                         .locals()
@@ -279,17 +279,17 @@ impl MirVisitor for CheckUninitVisitor<'_> {
         match &term.kind {
             TerminatorKind::Call { func, args, destination, .. } => 'call: {
                 self.super_terminator(term, location);
-                let instance = match try_resolve_instance(&self.locals, func) {
+                let instance = match try_resolve_instance(self.tcx, &self.locals, func) {
                     Ok(instance) => instance,
                     Err(reason) => {
                         self.push_target(MemoryInitOp::Unsupported { reason });
                         // Keep entry loads and operations collected while visiting the call.
-                        // The common terminator epilogue must publish this target, even on error.
+                        // The common terminator epilogue publishes the collected target.
                         break 'call;
                     }
                 };
-                // Inspect the source operands and destination before any StoreArgument.
-                // Tuple wrapping must not hide a union behind an unproved generated ABI.
+                // Check arguments and the destination for memory initialization state,
+                // including unions inside tuples, before storing argument state.
                 if instance.kind == InstanceKind::Shim
                     && (args.iter().any(|arg| {
                         shim_type_may_carry_shadow(self.tcx, arg.ty(&self.locals).unwrap())
@@ -406,8 +406,8 @@ impl MirVisitor for CheckUninitVisitor<'_> {
                         }
                     }
                     InstanceKind::Item | InstanceKind::Shim => {
-                        // The resolver checked actual instance body availability, with foreign
-                        // models retained. Non-shadow shims follow the ordinary MIR path.
+                        // The resolver accepts MIR bodies and foreign items. Foreign items use
+                        // the models below; other calls transfer union argument and return state.
                         if instance.is_foreign_item() {
                             match instance.name().as_str() {
                                 "alloc::alloc::__rust_alloc" | "alloc::alloc::__rust_realloc" => {
@@ -760,13 +760,17 @@ fn try_remove_topmost_deref(place: &Place) -> Option<Place> {
 }
 
 /// Try retrieving instance for the given function operand.
-fn try_resolve_instance(locals: &[LocalDecl], func: &Operand) -> Result<Instance, String> {
-    resolve_call(func.ty(locals).unwrap())
+fn try_resolve_instance(
+    tcx: TyCtxt,
+    locals: &[LocalDecl],
+    func: &Operand,
+) -> Result<Instance, String> {
+    resolve_call(tcx, func.ty(locals).unwrap())
 }
 
-/// Conservative admission guard for generated ABIs, not an expansion of the shadow model.
-/// Inspect only by-value storage: references and pointers do not transfer their pointee shadow.
-/// Unknown storage is rejected rather than treated as an empty tuple or ordinary bytes.
+/// Check whether a type may carry memory initialization state through a compiler-generated shim.
+/// Inspect unions and nested by-value storage; references and pointers carry addresses.
+/// Treat unknown types conservatively as carrying memory initialization state.
 fn shim_type_may_carry_shadow(tcx: TyCtxt<'_>, ty: Ty) -> bool {
     fn inspect<'tcx>(tcx: TyCtxt<'tcx>, ty: rustc_middle::ty::Ty<'tcx>) -> bool {
         use rustc_middle::ty::TyKind;
@@ -796,7 +800,7 @@ fn shim_type_may_carry_shadow(tcx: TyCtxt<'_>, ty: Ty) -> bool {
     inspect(tcx, rustc_internal::internal(tcx, ty))
 }
 
-/// Describe a call whose memory effects cannot be tracked by the uninitialized-memory passes.
+/// Describe an unsupported call encountered during memory initialization checks.
 fn unsupported_call_reason(kind: &str) -> String {
     format!(
         "Kani does not support memory initialization checks across {kind}. For more information about planned support, see https://github.com/model-checking/kani/issues/3300."

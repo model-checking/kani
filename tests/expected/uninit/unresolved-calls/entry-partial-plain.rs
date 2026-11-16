@@ -16,8 +16,8 @@ fn identity(value: u32) -> u32 {
     value
 }
 
-// No statements in bb0: preserve the entry LoadArgument and the Check
-// collected from the union field used as the call argument.
+// The call is the first instruction in the entry block. Loading the union parameter's
+// memory initialization state precedes checking the union field used as an argument.
 #[custom_mir(dialect = "runtime", phase = "optimized")]
 #[inline(never)]
 unsafe fn indirect(value: Word, f: fn(u32) -> u32) -> u32 {

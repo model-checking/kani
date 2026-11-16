@@ -192,9 +192,9 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
         location: Location,
     ) {
         if let TerminatorKind::Call { func, args, destination, .. } = &terminator.kind {
-            // Calls the analysis cannot follow add no edges here: the instrumentation guards each
-            // of them with an unsupported check, which stops execution before the call.
-            let Ok(instance) = resolve_call(rustc_internal::stable(func.ty(self.body, self.tcx)))
+            // Instrumentation stops execution at unsupported calls before their effects occur.
+            let Ok(instance) =
+                resolve_call(self.tcx, rustc_internal::stable(func.ty(self.body, self.tcx)))
             else {
                 return;
             };
@@ -345,9 +345,9 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
 }
 
 /// Resolve calls whose effects the uninitialized-memory passes can follow.
-/// The local visitor owns the diagnostic on every rejected path, even without delayed-UB seeds.
-/// MIR-backed shims may be analyzed; their shadow-transfer boundary is guarded locally.
-pub fn resolve_call(func_ty: StableTy) -> Result<StableInstance, String> {
+/// The local visitor emits unsupported-call checks and guards memory initialization state
+/// transfers through compiler-generated shims.
+pub fn resolve_call(tcx: TyCtxt, func_ty: StableTy) -> Result<StableInstance, String> {
     let StableTyKind::RigidTy(StableRigidTy::FnDef(def, args)) = func_ty.kind() else {
         return Err(unsupported_call_reason("calls through function pointers"));
     };
@@ -358,9 +358,9 @@ pub fn resolve_call(func_ty: StableTy) -> Result<StableInstance, String> {
         StableInstanceKind::Intrinsic => return Ok(instance),
         StableInstanceKind::Item if instance.is_foreign_item() => return Ok(instance),
         StableInstanceKind::Item | StableInstanceKind::Shim => {
-            // Query actual MIR availability, including empty compiler-generated shims.
-            // has_body alone describes the definition rather than the generated instance.
-            if instance.body().is_some() {
+            // Check MIR availability for the instance, including compiler-generated shims,
+            // and report explicit tail calls before converting user code to stable MIR.
+            if crate::kani_middle::checked_body(tcx, instance).is_some() {
                 return Ok(instance);
             }
             format!("calls to bodyless {:?} instances", instance.kind)
@@ -449,7 +449,7 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
         // Here we simply call another function, so need to retrieve internal body for it.
         let new_body = {
             let stable_instance = rustc_internal::stable(instance);
-            // Unsupported callees leave previously accumulated edges intact.
+            // Preserve accumulated edges when the callee's body is unavailable.
             let Some(stable_body) = crate::kani_middle::checked_body(self.tcx, stable_instance)
             else {
                 return;

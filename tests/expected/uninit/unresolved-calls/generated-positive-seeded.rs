@@ -9,8 +9,7 @@ fn identity(value: u8) -> u8 {
     value
 }
 
-// A non-shadow function-item Fn-trait call is a positive generated-body probe.
-// Actual instance kind/body and property reachability require pinned CI MIR binding.
+// The function item is passed through the generic Fn-trait call below.
 #[inline(never)]
 fn invoke<F: Fn(u8) -> u8>(function: F) -> u8 {
     std::ops::Fn::call(&function, (42,))
@@ -23,7 +22,7 @@ impl Drop for DropCounter<'_> {
     }
 }
 
-// A copy intrinsic creates a delayed-UB analysis target without introducing UB.
+// The copy intrinsic initializes the destination and creates an analysis target.
 #[inline(never)]
 fn seed() {
     let source = 7u8;

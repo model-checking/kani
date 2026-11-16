@@ -103,8 +103,8 @@ impl MirVisitor for InstrumentationVisitor<'_, '_> {
         } else {
             unreachable!()
         }
-        // The local uninitialized-memory visitor owns unsupported-call checks. It runs
-        // even without delayed-UB targets, and preserves checks on the call's operands.
+        // The local uninitialized-memory visitor checks call operands and emits unsupported-call
+        // checks independently of the analysis targets collected here.
         self.super_terminator(term, location);
         // Push the current target from the terminator onto the list.
         self.targets.push(self.current_target.clone());

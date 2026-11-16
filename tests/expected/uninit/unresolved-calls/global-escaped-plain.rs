@@ -11,7 +11,7 @@ fn write() {
 
 #[inline(never)]
 fn indirect(f: fn()) {
-    // There is no pointer argument or return value to gate instrumentation on.
+    // The callee accesses memory through a global pointer.
     f();
 }
 

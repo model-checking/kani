@@ -8,7 +8,7 @@ fn direct(value: u8) -> u8 {
     value
 }
 
-// A copy intrinsic creates a delayed-UB analysis target without introducing UB.
+// The copy intrinsic initializes the destination and creates an analysis target.
 #[inline(never)]
 fn seed() {
     let source = 7u8;
