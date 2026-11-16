@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// edition: 2021
+// compile-flags: --edition 2021
 // kani-flags: -Z ghost-state -Z uninit-checks
 
 //! Checks the diagnostic for recursion reached during delayed UB analysis.
