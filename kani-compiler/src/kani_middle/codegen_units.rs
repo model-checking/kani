@@ -559,7 +559,7 @@ const CONST_PRECONDITION_SEARCH_LIMIT: usize = 1024;
 
 /// Whether `args` mention a type or const generic parameter: one that autoharness substitutes.
 /// Lifetime parameters are erased and cannot decide whether a constant evaluates.
-fn args_mention_param(args: ty::GenericArgsRef<'_>) -> bool {
+fn args_mention_param(args: ty::GenericArgs<'_>) -> bool {
     use rustc_middle::ty::TypeVisitableExt;
     args.has_type_flags(ty::TypeFlags::HAS_TY_PARAM | ty::TypeFlags::HAS_CT_PARAM)
 }
@@ -574,7 +574,7 @@ fn args_mention_param(args: ty::GenericArgsRef<'_>) -> bool {
 fn body_has_generic_const_block<'tcx>(
     tcx: TyCtxt<'tcx>,
     body: &rustc_middle::mir::Body<'tcx>,
-    args: ty::GenericArgsRef<'tcx>,
+    args: ty::GenericArgs<'tcx>,
 ) -> bool {
     use rustc_middle::ty::TypeVisitableExt;
     body.required_consts().iter().any(|const_op| {
@@ -602,12 +602,12 @@ fn body_has_generic_const_block<'tcx>(
 /// `inner::<[u8; N]>`) is still visible once the walk reaches its body.
 struct GenericCalleeCollector<'a, 'tcx> {
     tcx: TyCtxt<'tcx>,
-    args: ty::GenericArgsRef<'tcx>,
-    callees: &'a mut Vec<(DefId, ty::GenericArgsRef<'tcx>)>,
+    args: ty::GenericArgs<'tcx>,
+    callees: &'a mut Vec<(DefId, ty::GenericArgs<'tcx>)>,
 }
 
 impl<'tcx> GenericCalleeCollector<'_, 'tcx> {
-    fn push(&mut self, def_id: DefId, callee_args: ty::GenericArgsRef<'tcx>) {
+    fn push(&mut self, def_id: DefId, callee_args: ty::GenericArgs<'tcx>) {
         let callee_args = ty::EarlyBinder::bind(self.tcx, callee_args)
             .instantiate(self.tcx, self.args)
             .skip_normalization();
@@ -943,7 +943,9 @@ fn resolve_deferred_fn_slots<'tcx>(
 /// it, which fails that harness instead of the run; see
 /// <https://github.com/model-checking/kani/issues/4926>.
 fn invalid_simd_instantiation(tcx: TyCtxt, instance: Instance) -> Option<String> {
-    let body = instance.body()?;
+    // Instantiation search runs before `automatic_harness_partition`'s eligibility check, which
+    // skips a function with an explicit tail call. Do not report it here.
+    let body = crate::kani_middle::body_without_tail_calls(tcx, instance)?;
     body.blocks.iter().find_map(|block| {
         let TerminatorKind::Call { func, .. } = &block.terminator.kind else {
             return None;
@@ -1245,7 +1247,12 @@ fn automatic_harness_partition(
             "{crate_name}::{}",
             crate::kani_middle::strip_local_crate_prefix(instance.name())
         );
-        let body = instance.body().unwrap();
+        // Autoharness loads every local body. Skip a function whose body `rustc_public` cannot
+        // convert, rather than aborting the run for every other function.
+        if crate::kani_middle::has_explicit_tail_call(tcx, instance) {
+            return Err(AutoHarnessSkipReason::UnsupportedTailCall);
+        }
+        let body = crate::kani_middle::checked_body(tcx, instance).unwrap();
 
         if is_proof_harness(tcx, instance)
             || name.contains("kani::Arbitrary")
@@ -1271,6 +1278,8 @@ fn automatic_harness_partition(
         // The self type is generated with `kani::any`, so it must implement (or be able to
         // derive) Arbitrary; argument-position-only support (raw/smart pointers, bounded types)
         // does not apply here, and these harnesses are therefore never bounded.
+        // The `core::str::pattern` searcher types are the exception: `fmt_impl_self_ty` does not
+        // report their `fmt` methods, which are checked as ordinary functions below.
         if let Some((_, self_ty)) = fmt_impl_self_ty(tcx, instance) {
             return if implements_arbitrary(self_ty, kani_any_def, &mut ty_arbitrary_cache)
                 || can_derive_arbitrary(self_ty, kani_any_def, &mut ty_arbitrary_cache)
@@ -1417,7 +1426,7 @@ fn automatic_harness_partition(
                 // Whether any generated value will come from a type's public constructor
                 // rather than raw field synthesis, which the summary reports as "(ctor)".
                 let is_ctor_based = args.autoharness_constructor_args
-                    && instance.body().is_some_and(|body| {
+                    && crate::kani_middle::checked_body(tcx, instance).is_some_and(|body| {
                         body.arg_locals().iter().any(|arg| {
                             crate::kani_middle::uses_ctor_generation(
                                 tcx,

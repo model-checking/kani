@@ -1,0 +1,3 @@
+Check invariant after step for loop chain_invariant_violated.0
+Check that k is assignable
+5 successfully verified harnesses, 2 failures, 7 total

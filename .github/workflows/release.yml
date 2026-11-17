@@ -47,7 +47,7 @@ jobs:
 
   build_bundle_macos_aarch64:
     name: BuildBundle-MacOs-aarch64
-    runs-on: macos-14
+    runs-on: macos-15
     outputs:
       version: ${{ steps.bundle.outputs.version }}
       bundle: ${{ steps.bundle.outputs.bundle }}
@@ -60,7 +60,7 @@ jobs:
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
         with:
-          os: macos-14
+          os: macos-15
 
       - name: Build bundle
         id: bundle
@@ -119,12 +119,12 @@ jobs:
     needs: [build_bundle_macos_x86_64, build_bundle_macos_aarch64, build_bundle_linux_x86_64, build_bundle_linux_aarch64]
     strategy:
       matrix:
-        os: [macos-15-intel, macos-14, ubuntu-22.04, ubuntu-24.04, ubuntu-24.04-arm]
+        os: [macos-15-intel, macos-15, ubuntu-22.04, ubuntu-24.04, ubuntu-24.04-arm]
         include:
         - os: macos-15-intel
           rust_target: x86_64-apple-darwin
           prev_job: ${{ needs.build_bundle_macos_x86_64.outputs }}
-        - os: macos-14
+        - os: macos-15
           rust_target: aarch64-apple-darwin
           prev_job: ${{ needs.build_bundle_macos_aarch64.outputs }}
         - os: ubuntu-22.04
@@ -225,13 +225,13 @@ jobs:
     needs: [build_bundle_macos_x86_64, build_bundle_macos_aarch64, build_bundle_linux_x86_64, build_bundle_linux_aarch64]
     strategy:
       matrix:
-        os: [macos-15-intel, macos-14, ubuntu-22.04, ubuntu-24.04, ubuntu-24.04-arm]
+        os: [macos-15-intel, macos-15, ubuntu-22.04, ubuntu-24.04, ubuntu-24.04-arm]
         include:
           # Stores the output of the previous job conditional to the OS
           - prev_job: ${{ needs.build_bundle_linux_x86_64.outputs }}
           - os: macos-15-intel
             prev_job: ${{ needs.build_bundle_macos_x86_64.outputs }}
-          - os: macos-14
+          - os: macos-15
             prev_job: ${{ needs.build_bundle_macos_aarch64.outputs }}
           - os: ubuntu-24.04-arm
             prev_job: ${{ needs.build_bundle_linux_aarch64.outputs }}

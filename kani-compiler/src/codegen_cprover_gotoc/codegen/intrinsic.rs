@@ -74,9 +74,14 @@ impl GotocCtx<'_, '_> {
         debug!("codegen_never_return_intrinsic:\n\tinstance {:?}\n\tspan {:?}", instance, span);
 
         match intrinsic.as_str() {
-            "abort" => {
-                self.codegen_fatal_error(PropertyClass::Assertion, "reached intrinsic::abort", span)
-            }
+            // `abort` was renamed to `abort_immediate`; the current pinned toolchain
+            // only emits the latter. The `"abort"` arm is kept so the match still
+            // handles a toolchain that predates the rename.
+            "abort" | "abort_immediate" => self.codegen_fatal_error(
+                PropertyClass::Assertion,
+                &format!("reached intrinsic::{intrinsic}"),
+                span,
+            ),
             // Transmuting to an uninhabited type is UB.
             "transmute" => self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,
@@ -280,7 +285,7 @@ impl GotocCtx<'_, '_> {
                 let tys = genarg.0.clone();
                 let t = tys.first().unwrap().ty().unwrap();
                 let layout = self.layout_of_stable(*t);
-                let expr = Expr::int_constant(layout.align.abi.bytes(), Type::size_t());
+                let expr = Expr::int_constant(layout.align.bytes(), Type::size_t());
                 self.codegen_expr_to_place_stable(place, expr, loc)
             }
             Intrinsic::ArithOffset => self.codegen_arith_offset(fargs, place, loc),
@@ -512,6 +517,17 @@ impl GotocCtx<'_, '_> {
                 }
                 self.codegen_expr_to_place_stable(place, acc.cast_to(cbmc_ret_ty), loc)
             }
+            Intrinsic::SimdReduceMax => {
+                self.codegen_simd_reduce_max_min(true, fargs, place, farg_types, intrinsic_str, loc)
+            }
+            Intrinsic::SimdReduceMin => self.codegen_simd_reduce_max_min(
+                false,
+                fargs,
+                place,
+                farg_types,
+                intrinsic_str,
+                loc,
+            ),
             Intrinsic::SimdExtract => {
                 self.codegen_intrinsic_simd_extract(fargs, place, farg_types, ret_ty, span)
             }
@@ -534,7 +550,7 @@ impl GotocCtx<'_, '_> {
                 loc,
             ),
             Intrinsic::SimdInsert => {
-                self.codegen_intrinsic_simd_insert(fargs, place, cbmc_ret_ty, farg_types, span, loc)
+                self.codegen_intrinsic_simd_insert(fargs, place, cbmc_ret_ty, farg_types, loc)
             }
             Intrinsic::SimdLe => self.codegen_simd_cmp(
                 Expr::vector_le,
@@ -576,7 +592,16 @@ impl GotocCtx<'_, '_> {
                 self.codegen_simd_shift_with_distance_check(fargs, intrinsic_str, place, loc)
             }
             Intrinsic::SimdShuffle(stripped) => {
-                let n: u64 = self.simd_shuffle_length(stripped.as_str(), farg_types, span);
+                let Some(n) = self.simd_shuffle_length(stripped.as_str(), farg_types, span) else {
+                    return self.codegen_unimplemented_stmt(
+                        &format!(
+                            "`{intrinsic_str}` with the index type `{}` (not a SIMD vector of `u32`)",
+                            farg_types[2]
+                        ),
+                        loc,
+                        "https://github.com/model-checking/kani/issues/new/choose",
+                    );
+                };
                 self.codegen_intrinsic_simd_shuffle(fargs, place, farg_types, ret_ty, n, span)
             }
             Intrinsic::SimdSplat => {
@@ -585,16 +610,20 @@ impl GotocCtx<'_, '_> {
                 let (size, ret_base_type) = self.simd_size_and_type(ret_ty);
                 // `simd_splat<T, U>(value: U) -> T` has independent generic parameters,
                 // so a monomorphization where `U` is not `T`'s element type can reach
-                // codegen. Emit an error like rustc's backends (and like `simd_extract`
-                // and `simd_insert` above) rather than silently casting the value.
+                // codegen. Report it as unsupported (like `simd_extract` and `simd_insert`
+                // above) rather than silently casting the value. An error here would abort
+                // the whole crate; as an unsupported construct it fails only the harnesses
+                // that reach it.
                 if farg_types[0] != ret_base_type {
-                    let err_msg = format!(
-                        "expected argument type `{ret_base_type}` (element of output `{ret_ty}`), found `{}`",
-                        farg_types[0]
+                    return self.codegen_unimplemented_stmt(
+                        &format!(
+                            "`{intrinsic_str}` with the argument type `{}` (the output `{ret_ty}` has `{ret_base_type}` lanes)",
+                            farg_types[0]
+                        ),
+                        loc,
+                        "https://github.com/model-checking/kani/issues/new/choose",
                     );
-                    utils::span_err(self.tcx, span, err_msg);
                 }
-                self.tcx.dcx().abort_if_errors();
                 let elem_ty = cbmc_ret_ty.base_type().unwrap().clone();
                 let elems = vec![val.cast_to(elem_ty); size as usize];
                 self.codegen_expr_to_place_stable(place, Expr::vector_expr(cbmc_ret_ty, elems), loc)
@@ -1039,16 +1068,9 @@ impl GotocCtx<'_, '_> {
         Stmt::atomic_block(vec![decl_stmt, success_decl, cond_update_stmt, res_stmt], loc)
     }
 
-    /// An atomic store updates the value referenced in
-    /// its primary argument and returns its previous value
-    /// -------------------------
-    /// var = atomic_store(var1, var2)
-    /// -------------------------
-    /// unsigned char tmp;
-    /// tmp = *var1;
-    /// *var1 = var2;
-    /// var = tmp;
-    /// -------------------------
+    /// Code generation shared by atomic stores and exchanges.
+    /// A store writes the new value without reading the old one.
+    /// An exchange also reads and returns the previous value.
     fn codegen_atomic_store(
         &mut self,
         intrinsic: &str,
@@ -1059,9 +1081,12 @@ impl GotocCtx<'_, '_> {
         self.store_concurrent_construct(intrinsic, loc);
         let var1_ref = fargs.remove(0);
         let var1 = var1_ref.dereference().with_location(loc);
+        let var2 = fargs.remove(0).with_location(loc);
+        if self.place_ty_stable(place).kind().is_unit() {
+            return Stmt::atomic_block(vec![var1.assign(var2, loc)], loc);
+        }
         let (tmp, decl_stmt) =
             self.decl_temp_variable(var1.typ().clone(), Some(var1.to_owned()), loc);
-        let var2 = fargs.remove(0).with_location(loc);
         let assign_stmt = var1.assign(var2, loc);
         let res_stmt = self.codegen_expr_to_place_stable(place, tmp, loc);
         Stmt::atomic_block(vec![decl_stmt, assign_stmt, res_stmt], loc)
@@ -1336,7 +1361,14 @@ impl GotocCtx<'_, '_> {
     ///     (e.g., `simd_shuffle4`).
     ///  2. `simd_shuffle`, where `N` isn't specified and must be computed from
     ///     the length of the indexes SIMD vector (the third argument).
-    fn simd_shuffle_length(&mut self, stripped: &str, farg_types: &[Ty], span: Span) -> u64 {
+    ///
+    /// Returns `None` if the indexes of a `simd_shuffle` are not a SIMD vector of `u32`.
+    fn simd_shuffle_length(
+        &mut self,
+        stripped: &str,
+        farg_types: &[Ty],
+        span: Span,
+    ) -> Option<u64> {
         let n = if stripped.is_empty() {
             // Make sure that this is an SIMD vector, since only the
             // length-suffixed version of `simd_shuffle` (e.g.,
@@ -1349,13 +1381,7 @@ impl GotocCtx<'_, '_> {
             {
                 self.simd_size_and_type(farg_types[2]).0
             } else {
-                let err_msg = format!(
-                    "simd_shuffle index must be a SIMD vector of `u32`, got `{}`",
-                    farg_types[2]
-                );
-                utils::span_err(self.tcx, span, err_msg);
-                // Return a dummy value
-                u64::MIN
+                return None;
             }
         } else {
             stripped.parse().unwrap_or_else(|_| {
@@ -1369,7 +1395,7 @@ impl GotocCtx<'_, '_> {
             })
         };
         self.tcx.dcx().abort_if_errors();
-        n
+        Some(n)
     }
 
     /// This function computes the size and alignment of a dynamically-sized type.
@@ -1381,7 +1407,7 @@ impl GotocCtx<'_, '_> {
         if !layout.is_unsized() {
             let size = Expr::int_constant(layout.size.bytes_usize(), Type::size_t())
                 .with_size_of_annotation(self.codegen_ty_stable(ty));
-            let align = Expr::int_constant(layout.align.abi.bytes(), usizet);
+            let align = Expr::int_constant(layout.align.bytes(), usizet);
             return SizeAlign { size, align };
         }
         match ty.kind() {
@@ -1391,6 +1417,14 @@ impl GotocCtx<'_, '_> {
                 SizeAlign {
                     size: vtable.clone().member("size", &self.symbol_table),
                     align: vtable.member("align", &self.symbol_table),
+                }
+            }
+            TyKind::RigidTy(RigidTy::Foreign(_)) => {
+                // An `extern type` has no known size; rustc lays it out with size 0 and align 1,
+                // so only the fields before it count, as in rustc's own `dereferenceable` bounds.
+                SizeAlign {
+                    size: Type::size_t().zero(),
+                    align: Expr::int_constant(layout.align.bytes(), usizet),
                 }
             }
             TyKind::RigidTy(RigidTy::Slice(_)) | TyKind::RigidTy(RigidTy::Str) => {
@@ -1405,7 +1439,7 @@ impl GotocCtx<'_, '_> {
                 let size = Expr::int_constant(unit.size.bytes_usize(), Type::size_t())
                     .with_size_of_annotation(self.codegen_ty_stable(unit_t))
                     .mul(arg.member("len", &self.symbol_table));
-                let align = Expr::int_constant(layout.align.abi.bytes(), usizet);
+                let align = Expr::int_constant(layout.align.bytes(), usizet);
                 SizeAlign { size, align }
             }
             _ => {
@@ -1428,7 +1462,7 @@ impl GotocCtx<'_, '_> {
                 let sized_size =
                     Expr::int_constant(layout.fields.offset(n).bytes(), Type::size_t())
                         .with_size_of_annotation(self.codegen_ty_stable(ty));
-                let sized_align = Expr::int_constant(layout.align.abi.bytes(), Type::size_t());
+                let sized_align = Expr::int_constant(layout.align.bytes(), Type::size_t());
 
                 // Call this function recursively to compute the size and align for the last field.
                 let field_ty = rustc_internal::stable(layout.field(self, n).ty);
@@ -1487,22 +1521,24 @@ impl GotocCtx<'_, '_> {
         let vec = fargs.remove(0);
         let index = fargs.remove(0);
 
+        let loc = self.codegen_span_stable(span);
         let (_, vector_base_type) = self.simd_size_and_type(rust_arg_types[0]);
         if rust_ret_type != vector_base_type {
-            let err_msg = format!(
-                "expected return type `{vector_base_type}` (element of input `{}`), found `{rust_ret_type}`",
-                rust_arg_types[0]
+            return self.codegen_unimplemented_stmt(
+                &format!(
+                    "`simd_extract` with the result type `{rust_ret_type}` (the input `{}` has `{vector_base_type}` lanes)",
+                    rust_arg_types[0]
+                ),
+                loc,
+                "https://github.com/model-checking/kani/issues/new/choose",
             );
-            utils::span_err(self.tcx, span, err_msg);
         }
-        self.tcx.dcx().abort_if_errors();
 
         // A pointer lane is modeled as an integer of the same width (see `codegen_vector`), so the
         // extracted lane has to be cast back to the return type. `simd_insert` and `simd_splat`
         // cast in the other direction for the same reason. This is a no-op for every other element
         // type, where the lane type already is the return type.
         let ret_typ = self.codegen_ty_stable(rust_ret_type);
-        let loc = self.codegen_span_stable(span);
         self.codegen_expr_to_place_stable(p, vec.index_array(index).cast_to(ret_typ), loc)
     }
 
@@ -1523,7 +1559,6 @@ impl GotocCtx<'_, '_> {
         p: &Place,
         cbmc_ret_ty: Type,
         rust_arg_types: &[Ty],
-        span: Span,
         loc: Location,
     ) -> Stmt {
         assert!(fargs.len() == 3, "`simd_insert` had unexpected arguments {fargs:?}");
@@ -1533,13 +1568,15 @@ impl GotocCtx<'_, '_> {
 
         let (_, vector_base_type) = self.simd_size_and_type(rust_arg_types[0]);
         if vector_base_type != rust_arg_types[2] {
-            let err_msg = format!(
-                "expected inserted type `{vector_base_type}` (element of input `{}`), found `{}`",
-                rust_arg_types[0], rust_arg_types[2],
+            return self.codegen_unimplemented_stmt(
+                &format!(
+                    "`simd_insert` with the inserted type `{}` (the input `{}` has `{vector_base_type}` lanes)",
+                    rust_arg_types[2], rust_arg_types[0],
+                ),
+                loc,
+                "https://github.com/model-checking/kani/issues/new/choose",
             );
-            utils::span_err(self.tcx, span, err_msg);
         }
-        self.tcx.dcx().abort_if_errors();
 
         // Type checker should have ensured it's a vector type
         let elem_ty = cbmc_ret_ty.base_type().unwrap().clone();
@@ -1552,6 +1589,53 @@ impl GotocCtx<'_, '_> {
             ],
             loc,
         )
+    }
+
+    /// `simd_reduce_max` (`is_max`) or `simd_reduce_min`. Both take integer vectors only (portable
+    /// SIMD's float `reduce_max`/`reduce_min` fold with `max`/`min` instead), so any other lane type
+    /// is reported as unsupported.
+    fn codegen_simd_reduce_max_min(
+        &mut self,
+        is_max: bool,
+        mut fargs: Vec<Expr>,
+        place: &Place,
+        farg_types: &[Ty],
+        intrinsic_str: &str,
+        loc: Location,
+    ) -> Stmt {
+        let (size, lane_ty) = self.simd_size_and_type(farg_types[0]);
+        if !lane_ty.kind().is_integral() {
+            return self.codegen_unimplemented_stmt(
+                &format!("`{intrinsic_str}` on non-integer lane type `{lane_ty}`"),
+                loc,
+                "https://github.com/model-checking/kani/issues/new/choose",
+            );
+        }
+        // rustc rejects any other result type with `E0511`; see `codegen_simd_cmp` for why the
+        // check is ours and why it is an unsupported construct.
+        let ret_ty = self.place_ty_stable(place);
+        if ret_ty != lane_ty {
+            return self.codegen_unimplemented_stmt(
+                &format!(
+                    "`{intrinsic_str}` with the result type `{ret_ty}` (lane type `{lane_ty}`)"
+                ),
+                loc,
+                "https://github.com/model-checking/kani/issues/new/choose",
+            );
+        }
+        let arg = fargs.remove(0);
+        let (simd, simd_decl) = self.decl_temp_variable(arg.typ().clone(), Some(arg), loc);
+        let lane = |i: u64| simd.clone().index_array(Expr::int_constant(i, Type::size_t()));
+        // Folding into a variable keeps the expression linear in the number of lanes.
+        let (acc, acc_decl) = self.decl_temp_variable(lane(0).typ().clone(), Some(lane(0)), loc);
+        let mut stmts = vec![simd_decl, acc_decl];
+        for i in 1..size {
+            let keep = if is_max { acc.clone().ge(lane(i)) } else { acc.clone().le(lane(i)) };
+            stmts.push(acc.clone().assign(keep.ternary(acc.clone(), lane(i)), loc));
+        }
+        let ret_typ = self.codegen_ty_stable(ret_ty);
+        stmts.push(self.codegen_expr_to_place_stable(place, acc.cast_to(ret_typ), loc));
+        Stmt::block(stmts, loc)
     }
 
     /// Generates code for a SIMD vector comparison intrinsic, after checking that the result type
@@ -1765,21 +1849,27 @@ impl GotocCtx<'_, '_> {
         // [u32; n]: translated wrapped in a struct
         let indexes = fargs.remove(0);
 
+        let loc = self.codegen_span_stable(span);
         let (_, vec_subtype) = self.simd_size_and_type(rust_arg_types[0]);
         let (ret_type_len, ret_type_subtype) = self.simd_size_and_type(rust_ret_type);
         if ret_type_len != n {
-            let err_msg = format!(
-                "expected return type of length {n}, found `{rust_ret_type}` with length {ret_type_len}"
+            return self.codegen_unimplemented_stmt(
+                &format!(
+                    "`simd_shuffle` with the result type `{rust_ret_type}` ({ret_type_len} lanes for a {n}-lane shuffle)"
+                ),
+                loc,
+                "https://github.com/model-checking/kani/issues/new/choose",
             );
-            utils::span_err(self.tcx, span, err_msg);
         }
         if vec_subtype != ret_type_subtype {
-            let err_msg = format!(
-                "expected return element type `{vec_subtype}` (element of input `{}`), \
-                 found `{rust_ret_type}` with element type `{ret_type_subtype}`",
-                rust_arg_types[0]
+            return self.codegen_unimplemented_stmt(
+                &format!(
+                    "`simd_shuffle` with the result type `{rust_ret_type}` (the input `{}` has `{vec_subtype}` lanes)",
+                    rust_arg_types[0]
+                ),
+                loc,
+                "https://github.com/model-checking/kani/issues/new/choose",
             );
-            utils::span_err(self.tcx, span, err_msg);
         }
 
         // An unsigned type here causes an invariant violation in CBMC.
@@ -1793,9 +1883,7 @@ impl GotocCtx<'_, '_> {
                 self.codegen_idx_array(indexes.clone(), idx).cast_to(st_rep.clone())
             })
             .collect();
-        self.tcx.dcx().abort_if_errors();
         let cbmc_ret_ty = self.codegen_ty_stable(rust_ret_type);
-        let loc = self.codegen_span_stable(span);
         let shuffle_vector = Expr::shuffle_vector(vec1, vec2, elems);
         assert_eq!(*shuffle_vector.typ(), cbmc_ret_ty);
         self.codegen_expr_to_place_stable(p, shuffle_vector, loc)
@@ -1947,7 +2035,7 @@ impl GotocCtx<'_, '_> {
         let pointee_type = pointee_type_stable(ty).unwrap();
         // Obtain the alignment for the pointee type `T`
         let layout = self.layout_of_stable(pointee_type);
-        let align = Expr::int_constant(layout.align.abi.bytes(), Type::size_t());
+        let align = Expr::int_constant(layout.align.bytes(), Type::size_t());
         // Cast the pointer to `usize` and return the alignment expression
         let cast_ptr = ptr.cast_to(Type::size_t());
         let zero = Type::size_t().zero();

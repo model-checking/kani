@@ -1,0 +1,5 @@
+decreases_with_modifies_harness.loop_decreases.1\
+	 - Status: SUCCESS\
+	 - Description: "Check variant decreases after step for loop decreases_with_modifies_harness.0"
+
+VERIFICATION:- SUCCESSFUL

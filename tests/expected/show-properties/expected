@@ -1,0 +1,4 @@
+PROPERTIES:\
+Check 1: main.reachability_check.1
+Check 2: main.assertion.1\
+assertion failed: x.wrapping_add(0) == x"

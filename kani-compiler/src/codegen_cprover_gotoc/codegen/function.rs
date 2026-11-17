@@ -4,20 +4,42 @@
 //! This file contains functions related to codegenning MIR functions into gotoc
 
 use crate::codegen_cprover_gotoc::GotocCtx;
-use crate::codegen_cprover_gotoc::codegen::block::reverse_postorder;
+use crate::codegen_cprover_gotoc::codegen::block::{loop_heads, reverse_postorder};
+use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::readable_name;
 use cbmc::InternString;
 use cbmc::InternedString;
 use cbmc::goto_program::{Expr, Stmt, Symbol};
 use rustc_public::CrateDef;
 use rustc_public::mir::mono::Instance;
-use rustc_public::mir::{Body, Local};
+use rustc_public::mir::{BasicBlockIdx, Body, Local, TerminatorKind};
 use rustc_public::ty::{RigidTy, TyKind};
 use std::collections::BTreeMap;
 use tracing::{debug, debug_span};
 
 /// Codegen MIR functions into gotoc
 impl GotocCtx<'_, '_> {
+    /// The heads of the loops of `body` with a loop invariant, i.e. the targets of the calls to
+    /// the functions that register loop contracts (see `LoopInvariantRegister`).
+    fn loop_contract_heads(&self, body: &Body) -> Vec<BasicBlockIdx> {
+        body.blocks
+            .iter()
+            .filter_map(|block| match &block.terminator.kind {
+                TerminatorKind::Call { func, target: Some(target), .. } => {
+                    let TyKind::RigidTy(RigidTy::FnDef(def, _)) =
+                        func.ty(body.locals()).ok()?.kind()
+                    else {
+                        return None;
+                    };
+                    (KaniAttributes::for_def_id(self.tcx, def.def_id()).fn_marker()
+                        == Some(rustc_span::Symbol::intern("kani_register_loop_contract")))
+                    .then_some(*target)
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
     /// Declare variables according to their index.
     /// - Index 0 represents the return value.
     /// - Indices [1, N] represent the function parameters where N is the number of parameters.
@@ -92,7 +114,23 @@ impl GotocCtx<'_, '_> {
             self.codegen_declare_variables(&body, name.clone().into());
 
             // Get the order from internal body for now.
-            reverse_postorder(&body).for_each(|bb| self.codegen_block(bb, &body.blocks[bb]));
+            let blocks: Vec<_> = reverse_postorder(&body).collect();
+            if self.queries.args().unstable_features.contains(&"loop-contracts".to_string())
+                && body.var_debug_info.iter().any(|info| info.name == "kani_loop_decreases")
+            {
+                // Used to attach decreases clauses to their loops. The head of a loop with a loop
+                // invariant has no back edge if the body of the loop always exits.
+                let mut heads = loop_heads(&body, &blocks);
+                heads.extend(self.loop_contract_heads(&body));
+                self.current_fn_mut().loop_decreases_mut().loop_heads = heads;
+            }
+            blocks.into_iter().for_each(|bb| self.codegen_block(bb, &body.blocks[bb]));
+            // Report the decreases clauses that were not attached to a loop, e.g. the clause of a
+            // loop without a loop invariant.
+            let clauses = std::mem::take(self.current_fn_mut().loop_decreases_mut());
+            for decreases in clauses.pending.into_iter().chain(clauses.by_head.into_values()) {
+                self.report_ignored_loop_decreases(decreases.span);
+            }
 
             let loc = self.codegen_span_stable(instance.def.span());
             let stmts = self.current_fn_mut().extract_block();

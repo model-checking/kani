@@ -4,6 +4,12 @@
 // Check that `copy` works as expected: Copies a number `n` of elements from
 // pointer `src` to pointer `dst`, even if their regions overlap.
 
+// These call the intrinsics themselves, which `core::ptr` wraps with extra debug assertions,
+// so opt in to `core_intrinsics` instead of importing them through the accidentally stabilized
+// `core::intrinsics` path (denied since rust-lang/rust#163160).
+#![feature(core_intrinsics)]
+#![allow(internal_features)]
+
 #[kani::proof]
 fn test_copy_simple() {
     let mut expected_val = 42;
@@ -18,11 +24,14 @@ fn test_copy_simple() {
 
 #[kani::proof]
 fn test_copy_with_overlap() {
-    let arr: [i32; 3] = [0, 1, 0];
-    let src: *const i32 = arr.as_ptr();
+    let mut arr: [i32; 3] = [0, 1, 0];
+    // Both pointers come from `as_mut_ptr`: a pointer derived from `arr.as_ptr()` (a shared
+    // reference) may not be written through.
+    let base: *mut i32 = arr.as_mut_ptr();
 
     unsafe {
-        let dst = src.add(1) as *mut i32;
+        let src = base as *const i32;
+        let dst = base.add(1);
         core::intrinsics::copy(src, dst, 2);
         // The first value does not change
         assert!(arr[0] == 0);

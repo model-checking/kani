@@ -110,11 +110,18 @@ pub fn parse_config(args: Vec<String>) -> Config {
     ;
 
     let (argv0, args_) = args.split_first().unwrap();
-    if args.len() == 1 || args[1] == "-h" || args[1] == "--help" {
+    if args.len() == 1 {
         let message = format!("Usage: {argv0} [OPTIONS] [TESTNAME...]");
         println!("{}", opts.usage(&message));
         println!();
-        panic!()
+        std::process::exit(1);
+    }
+
+    if args[1] == "-h" || args[1] == "--help" {
+        let message = format!("Usage: {argv0} [OPTIONS] [TESTNAME...]");
+        println!("{}", opts.usage(&message));
+        println!();
+        std::process::exit(0);
     }
 
     let matches = &match opts.parse(args_) {
@@ -126,7 +133,7 @@ pub fn parse_config(args: Vec<String>) -> Config {
         let message = format!("Usage: {argv0} [OPTIONS]  [TESTNAME...]");
         println!("{}", opts.usage(&message));
         println!();
-        panic!()
+        std::process::exit(0);
     }
 
     fn opt_path(m: &getopts::Matches, nm: &str, default: &[&str]) -> PathBuf {

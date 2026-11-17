@@ -33,6 +33,9 @@ exceptions = [
     { name = "foldhash", allow=["Zlib"] },
     # Transitive dependencies via charon (LLBC backend)
     { name = "ustr", allow=["BSD-2-Clause-Patent"] },
+    # Transitive dependency of serde-saphyr in compiletest, our test runner, which is not part of
+    # Kani releases.
+    { name = "encoding_rs", allow=["BSD-3-Clause"] },
 ]
 
 [licenses.private]

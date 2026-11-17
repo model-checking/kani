@@ -3,3 +3,6 @@ CBMC_MINOR="11"
 CBMC_VERSION="6.11.0"
 
 KISSAT_VERSION="4.0.1"
+
+# Only the macOS setup installs this release; Ubuntu uses the distribution's z3 package.
+Z3_VERSION="5.3.1"

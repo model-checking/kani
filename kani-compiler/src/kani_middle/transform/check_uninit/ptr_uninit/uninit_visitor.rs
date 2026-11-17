@@ -25,7 +25,7 @@ use rustc_public::{
         mono::{Instance, InstanceKind},
         visit::{Location, PlaceContext},
     },
-    ty::{AdtKind, ConstantKind, RigidTy, Ty, TyKind},
+    ty::{AdtKind, ConstantKind, RigidTy, Ty, TyConstKind, TyKind},
 };
 
 pub struct CheckUninitVisitor {
@@ -284,7 +284,6 @@ impl MirVisitor for CheckUninitVisitor {
                             | Intrinsic::AtomicMin
                             | Intrinsic::AtomicNand
                             | Intrinsic::AtomicOr
-                            | Intrinsic::AtomicStore
                             | Intrinsic::AtomicUmax
                             | Intrinsic::AtomicUmin
                             | Intrinsic::AtomicXadd
@@ -292,6 +291,25 @@ impl MirVisitor for CheckUninitVisitor {
                             | Intrinsic::AtomicXor
                             | Intrinsic::AtomicXsub => {
                                 self.push_target(MemoryInitOp::Check { operand: args[0].clone() });
+                            }
+                            Intrinsic::AtomicStore => {
+                                let is_volatile = matches!(
+                                    instance.args().0[2].expect_const().kind(),
+                                    TyConstKind::Value(_, allocation)
+                                        if allocation.read_bool().is_ok_and(|value| value)
+                                );
+                                // Preserve the existing check for non-volatile stores, which are
+                                // specified in terms of creating a reference with `from_ptr`.
+                                if !is_volatile {
+                                    self.push_target(MemoryInitOp::Check {
+                                        operand: args[0].clone(),
+                                    });
+                                }
+                                self.push_target(MemoryInitOp::Set {
+                                    operand: args[0].clone(),
+                                    value: true,
+                                    position: InsertPosition::After,
+                                });
                             }
                             Intrinsic::CompareBytes => {
                                 self.push_target(MemoryInitOp::CheckSliceChunk {
@@ -543,15 +561,17 @@ impl MirVisitor for CheckUninitVisitor {
                             });
                         }
                     } else if let (
-                        TyKind::RigidTy(RigidTy::RawPtr(from_ty, _)),
+                        TyKind::RigidTy(RigidTy::RawPtr(..)),
                         TyKind::RigidTy(RigidTy::Ref(_, to_ty, _)),
                     ) = (operand_ty.kind(), ty.kind())
                     {
-                        // Assert that we can only cast this way if types are the same.
-                        assert!(from_ty == to_ty);
                         // When transmuting from a raw pointer to a reference, need to check that
-                        // the value pointed by the raw pointer is initialized.
-                        self.push_target(MemoryInitOp::Check { operand: operand.clone() });
+                        // the value the reference points to is initialized. That is a `to_ty`,
+                        // whatever the pointer pointed to before.
+                        self.push_target(MemoryInitOp::CheckAs {
+                            operand: operand.clone(),
+                            pointee_ty: to_ty,
+                        });
                     }
                 }
                 _ => {}
@@ -660,6 +680,8 @@ fn can_skip_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::SimdDiv
         | Intrinsic::SimdRem
         | Intrinsic::SimdReduceAll
+        | Intrinsic::SimdReduceMax
+        | Intrinsic::SimdReduceMin
         | Intrinsic::SimdEq
         | Intrinsic::SimdExtract
         | Intrinsic::SimdGe
