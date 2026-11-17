@@ -195,7 +195,7 @@ pub mod tests {
             is_automatically_generated: false,
             is_bounded: false,
             is_ctor_based: false,
-            is_refcount_bounded: false,
+            has_refcount_caveat: false,
         }
     }
 

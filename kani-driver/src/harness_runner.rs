@@ -97,13 +97,12 @@ fn run_until_abort<I: Sync, T: Send>(
     Ok((payloads, aborted.load(Ordering::Relaxed)))
 }
 
-/// Identify the worker on every line of a rendered verification result.
 /// What an automatic harness checks its function against, for the "Autoharness: Checking
 /// function ..." message. A harness with a caveat does not check *all* possible inputs, so
 /// qualify the message accordingly so it does not masquerade as exhaustive (c.f. the
 /// "(bounded)" and "(refcount)" markers in the summary).
 fn autoharness_inputs_description(harness: &HarnessMetadata) -> &'static str {
-    match (harness.is_bounded, harness.is_refcount_bounded) {
+    match (harness.is_bounded, harness.has_refcount_caveat) {
         (false, false) => "all possible inputs",
         (true, false) => "all possible inputs (bounded for some arguments)",
         (false, true) => "all possible inputs (with finitely modeled Rc/Arc reference counts)",
@@ -113,6 +112,7 @@ fn autoharness_inputs_description(harness: &HarnessMetadata) -> &'static str {
     }
 }
 
+/// Identify the worker on every line of a rendered verification result.
 fn prefix_thread_lines(output: &str, thread_index: usize) -> String {
     let mut prefixed = output
         .lines()
@@ -423,7 +423,7 @@ mod tests {
     fn autoharness_inputs_description_qualifies_every_caveat() {
         let mut h = mock_proof_harness("f", None, None, None);
         assert_eq!(autoharness_inputs_description(&h), "all possible inputs");
-        h.is_refcount_bounded = true;
+        h.has_refcount_caveat = true;
         assert_eq!(
             autoharness_inputs_description(&h),
             "all possible inputs (with finitely modeled Rc/Arc reference counts)"
@@ -431,7 +431,7 @@ mod tests {
         h.is_bounded = true;
         let both = autoharness_inputs_description(&h);
         assert!(both.contains("bounded for some arguments") && both.contains("Rc/Arc"), "{both}");
-        h.is_refcount_bounded = false;
+        h.has_refcount_caveat = false;
         assert_eq!(
             autoharness_inputs_description(&h),
             "all possible inputs (bounded for some arguments)"

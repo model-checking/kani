@@ -459,10 +459,10 @@ struct HarnessExport {
     has_loop_contracts: bool,
     is_bounded: bool,
     /// Whether some generated value contains an `Rc`/`Arc` whose reference counts Kani models
-    /// with only finitely many states, c.f. `HarnessMetadata::is_refcount_bounded`. Independent
+    /// with only finitely many states, c.f. `HarnessMetadata::has_refcount_caveat`. Independent
     /// of `is_bounded`: a harness can report `is_bounded == false` and still not cover every
     /// reference count.
-    is_refcount_bounded: bool,
+    has_refcount_caveat: bool,
     attributes: HarnessAttributes,
     outcome: Outcome,
     resolved_solver: Option<String>,
@@ -814,7 +814,7 @@ impl HarnessExport {
             is_automatically_generated: harness.is_automatically_generated,
             has_loop_contracts: harness.has_loop_contracts,
             is_bounded: harness.is_bounded,
-            is_refcount_bounded: harness.is_refcount_bounded,
+            has_refcount_caveat: harness.has_refcount_caveat,
             attributes: harness.attributes.clone(),
             outcome,
             resolved_solver,
@@ -860,7 +860,7 @@ mod tests {
             is_automatically_generated: false,
             is_bounded: false,
             is_ctor_based: false,
-            is_refcount_bounded: false,
+            has_refcount_caveat: false,
         }
     }
 
@@ -1256,7 +1256,7 @@ mod tests {
         assert!(hj["is_automatically_generated"].is_boolean(), "is_automatically_generated: {hj}");
         assert!(hj["has_loop_contracts"].is_boolean(), "has_loop_contracts: {hj}");
         assert!(hj["is_bounded"].is_boolean(), "is_bounded: {hj}");
-        assert!(hj["is_refcount_bounded"].is_boolean(), "is_refcount_bounded: {hj}");
+        assert!(hj["has_refcount_caveat"].is_boolean(), "has_refcount_caveat: {hj}");
         assert!(hj["attributes"].is_object(), "attributes: {hj}");
         assert!(hj.get("resolved_solver").is_some(), "resolved_solver: {hj}");
         assert!(hj.get("resolved_unwind").is_some(), "resolved_unwind: {hj}");
@@ -1835,7 +1835,7 @@ mod tests {
             is_automatically_generated: false,
             has_loop_contracts: false,
             is_bounded: false,
-            is_refcount_bounded: false,
+            has_refcount_caveat: false,
             attributes: h2.attributes.clone(),
             outcome: Outcome::Timeout,
             resolved_solver: None,
@@ -2465,32 +2465,32 @@ mod tests {
         assert_eq!(v_unbounded["harnesses"][0]["is_bounded"], false);
     }
 
-    /// `is_refcount_bounded` is exported as its own field, independent of `is_bounded`: an
+    /// `has_refcount_caveat` is exported as its own field, independent of `is_bounded`: an
     /// autoharness with an `Rc`/`Arc` argument needs no `--bounded-arguments` (so it is not
     /// `is_bounded`), yet does not cover every reference count (#4752).
     #[test]
-    fn export_is_refcount_bounded_independent_of_is_bounded() {
+    fn export_has_refcount_caveat_independent_of_is_bounded() {
         let mut h_rc = harness("rc_autoharness");
         h_rc.is_automatically_generated = true;
-        h_rc.is_refcount_bounded = true;
+        h_rc.has_refcount_caveat = true;
         let v_rc = serde_json::to_value(export_one(HarnessResult {
             harness: &h_rc,
             result: success_result(vec![]),
         }))
         .unwrap();
-        assert_eq!(v_rc["harnesses"][0]["is_refcount_bounded"], true);
+        assert_eq!(v_rc["harnesses"][0]["has_refcount_caveat"], true);
         assert_eq!(v_rc["harnesses"][0]["is_bounded"], false);
 
         let mut h_both = harness("bounded_rc_autoharness");
         h_both.is_automatically_generated = true;
         h_both.is_bounded = true;
-        h_both.is_refcount_bounded = true;
+        h_both.has_refcount_caveat = true;
         let v_both = serde_json::to_value(export_one(HarnessResult {
             harness: &h_both,
             result: success_result(vec![]),
         }))
         .unwrap();
-        assert_eq!(v_both["harnesses"][0]["is_refcount_bounded"], true);
+        assert_eq!(v_both["harnesses"][0]["has_refcount_caveat"], true);
         assert_eq!(v_both["harnesses"][0]["is_bounded"], true);
 
         let h_manual = harness("manual_harness");
@@ -2499,17 +2499,17 @@ mod tests {
             result: success_result(vec![]),
         }))
         .unwrap();
-        assert_eq!(v_manual["harnesses"][0]["is_refcount_bounded"], false);
+        assert_eq!(v_manual["harnesses"][0]["has_refcount_caveat"], false);
     }
 
-    /// Metadata written before `is_refcount_bounded` existed (e.g. by an older compiler)
+    /// Metadata written before `has_refcount_caveat` existed (e.g. by an older compiler)
     /// deserializes with the caveat unset rather than failing.
     #[test]
-    fn harness_metadata_without_is_refcount_bounded_deserializes() {
+    fn harness_metadata_without_has_refcount_caveat_deserializes() {
         let mut v = serde_json::to_value(harness("legacy")).unwrap();
-        v.as_object_mut().unwrap().remove("is_refcount_bounded");
+        v.as_object_mut().unwrap().remove("has_refcount_caveat");
         let h: HarnessMetadata = serde_json::from_value(v).unwrap();
-        assert!(!h.is_refcount_bounded);
+        assert!(!h.has_refcount_caveat);
     }
 
     #[test]

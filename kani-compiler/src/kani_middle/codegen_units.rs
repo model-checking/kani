@@ -421,7 +421,7 @@ fn get_all_automatic_harnesses(
                 harness.mangled_name(),
                 caveats.is_bounded,
                 caveats.is_ctor_based,
-                caveats.is_refcount_bounded,
+                caveats.has_refcount_caveat,
             );
             (harness, metadata)
         })
@@ -1172,7 +1172,7 @@ struct AutoHarnessCaveats {
     /// Some generated value contains an `Rc`/`Arc`, whose reference counts are modeled with
     /// finitely many states, c.f. `contains_refcounted_ptr`. Unlike `is_bounded`, this does not
     /// require (or depend on) `--bounded-arguments`.
-    is_refcount_bounded: bool,
+    has_refcount_caveat: bool,
 }
 
 /// Partition every function in the crate into (chosen, skipped), where `chosen` is a vector of the Instances for which we'll generate automatic harnesses,
@@ -1422,7 +1422,7 @@ fn automatic_harness_partition(
                 // Formatting trait harnesses generate a value of the impl's self type rather
                 // than of the function's arguments (`&self`, `&mut Formatter`), c.f.
                 // `fmt_impl_self_ty`.
-                let is_refcount_bounded = match fmt_impl_self_ty(tcx, instance) {
+                let has_refcount_caveat = match fmt_impl_self_ty(tcx, instance) {
                     Some((_, self_ty)) => crate::kani_middle::contains_refcounted_ptr(
                         tcx,
                         self_ty,
@@ -1440,7 +1440,7 @@ fn automatic_harness_partition(
                 };
                 chosen.push((
                     instance,
-                    AutoHarnessCaveats { is_bounded, is_ctor_based, is_refcount_bounded },
+                    AutoHarnessCaveats { is_bounded, is_ctor_based, has_refcount_caveat },
                 ));
             }
         }

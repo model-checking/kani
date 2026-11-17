@@ -60,7 +60,7 @@ pub struct HarnessMetadata {
     /// `--bounded-arguments` and do not set `is_bounded`
     /// (<https://github.com/model-checking/kani/issues/4752>).
     #[serde(default)]
-    pub is_refcount_bounded: bool,
+    pub has_refcount_caveat: bool,
 }
 
 /// The attributes added by the user to control how a harness is executed.

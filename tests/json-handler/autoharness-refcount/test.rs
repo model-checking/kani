@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 //! Functions for `kani autoharness`, checked by test.sh: harnesses whose generated values
-//! contain an `Rc`/`Arc` (directly or nested) are marked "(refcount)" / `is_refcount_bounded`,
+//! contain an `Rc`/`Arc` (directly or nested) are marked "(refcount)" / `has_refcount_caveat`,
 //! since Kani models reference counts with finitely many states
 //! (https://github.com/model-checking/kani/issues/4752); all others are not.
 //! Every function verifies successfully, and every cover must be SATISFIED (test.sh checks

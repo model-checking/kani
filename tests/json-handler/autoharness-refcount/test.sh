@@ -4,7 +4,7 @@
 
 # Autoharness harnesses whose generated values contain an `Rc`/`Arc` must be reported as
 # bounded in their reference counts (#4752), without --bounded-arguments:
-#   - export: `is_refcount_bounded` true exactly for those harnesses, `is_bounded` false;
+#   - export: `has_refcount_caveat` true exactly for those harnesses, `is_bounded` false;
 #   - summary table: "(refcount)" exactly on those rows, plus the explanatory note;
 #   - per-harness message: "all possible inputs" qualified exactly for those harnesses.
 # Every cover in test.rs must be SATISFIED: an unsatisfiable cover alone does not fail
@@ -76,8 +76,8 @@ for name in MARKED + UNMARKED:
     if h is None:
         continue
     check(h["is_automatically_generated"], f"{name}: not automatically generated")
-    check(h["is_refcount_bounded"] is marked,
-          f"{name}: is_refcount_bounded is {h['is_refcount_bounded']}, expected {marked}")
+    check(h["has_refcount_caveat"] is marked,
+          f"{name}: has_refcount_caveat is {h['has_refcount_caveat']}, expected {marked}")
     check(h["is_bounded"] is False, f"{name}: is_bounded must not be set by Rc/Arc arguments")
     check(h["outcome"].get("verdict") == "SUCCESS", f"{name}: verdict {h['outcome']}")
 

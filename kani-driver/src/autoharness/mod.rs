@@ -25,7 +25,7 @@ const AUTOHARNESS_TIMEOUT: &str = "60s";
 const LOOP_UNWIND_DEFAULT: u32 = 20;
 
 /// Printed after the summary table if some harness is marked "(refcount)", c.f.
-/// `HarnessMetadata::is_refcount_bounded`. Deliberately states only that the modeled counts are
+/// `HarnessMetadata::has_refcount_caveat`. Deliberately states only that the modeled counts are
 /// finite, not which ones: the representatives are an implementation detail of the `Rc`/`Arc`
 /// generators (<https://github.com/model-checking/kani/issues/4752>).
 const REFCOUNT_NOTE: &str = "Note: harnesses marked \"(refcount)\" generate Rc/Arc values whose reference counts are modeled with only finitely many states\n\
@@ -42,7 +42,7 @@ fn harness_kind_label(harness: &HarnessMetadata) -> String {
     if harness.is_ctor_based {
         kind.push_str(" (ctor)");
     }
-    if harness.is_refcount_bounded {
+    if harness.has_refcount_caveat {
         kind.push_str(" (refcount)");
     }
     kind
@@ -308,7 +308,7 @@ impl KaniSession {
         for success in successes {
             any_bounded |= success.harness.is_bounded;
             any_ctor |= success.harness.is_ctor_based;
-            any_refcount |= success.harness.is_refcount_bounded;
+            any_refcount |= success.harness.has_refcount_caveat;
             verified_fns.add_row(vec![
                 success.harness.crate_name.clone(),
                 success.harness.pretty_name.clone(),
@@ -320,7 +320,7 @@ impl KaniSession {
         for failure in failures {
             any_bounded |= failure.harness.is_bounded;
             any_ctor |= failure.harness.is_ctor_based;
-            any_refcount |= failure.harness.is_refcount_bounded;
+            any_refcount |= failure.harness.has_refcount_caveat;
             verified_fns.add_row(vec![
                 failure.harness.crate_name.clone(),
                 failure.harness.pretty_name.clone(),
@@ -383,7 +383,7 @@ mod tests {
     fn harness_kind_label_marks_each_caveat() {
         let mut h = mock_proof_harness("f", None, None, None);
         assert_eq!(harness_kind_label(&h), "#[kani::proof]");
-        h.is_refcount_bounded = true;
+        h.has_refcount_caveat = true;
         assert_eq!(harness_kind_label(&h), "#[kani::proof] (refcount)");
         h.is_bounded = true;
         h.is_ctor_based = true;
@@ -395,7 +395,7 @@ mod tests {
     #[test]
     fn refcount_label_fits_kind_column_header() {
         let mut h = mock_proof_harness("f", None, None, None);
-        h.is_refcount_bounded = true;
+        h.has_refcount_caveat = true;
         assert!(harness_kind_label(&h).len() <= "Kind of Automatic Harness".len());
     }
 
