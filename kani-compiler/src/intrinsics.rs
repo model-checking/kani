@@ -745,8 +745,20 @@ fn try_match_simd(intrinsic_instance: &Instance) -> Option<Intrinsic> {
 /// Each now has a fallback body that calls a per-width libm function. Some of those have no CBMC
 /// model (e.g. `__powisf2` for `powi`), so Kani keeps its own model for the widths it has one for;
 /// see [`uses_kani_model`].
-pub const GENERIC_FLOAT_INTRINSICS: &[&str] =
-    &["ceil", "floor", "fma", "powf", "powi", "round", "round_ties_even", "sqrt", "trunc"];
+pub const GENERIC_FLOAT_INTRINSICS: &[&str] = &[
+    "ceil",
+    "copysign",
+    "floor",
+    "fma",
+    "maximum_number_nsz",
+    "minimum_number_nsz",
+    "powf",
+    "powi",
+    "round",
+    "round_ties_even",
+    "sqrt",
+    "trunc",
+];
 
 /// The Kani model of the generic float intrinsic `name` for the float type of its first argument,
 /// if Kani has one for that width (f32 and f64).
@@ -766,6 +778,27 @@ fn generic_float_intrinsic(name: &str, sig: &FnSig) -> Option<Intrinsic> {
                 CeilF32
             } else {
                 CeilF64
+            }
+        }
+        "copysign" => {
+            if f32 {
+                CopySignF32
+            } else {
+                CopySignF64
+            }
+        }
+        "maximum_number_nsz" => {
+            if f32 {
+                MaxNumF32
+            } else {
+                MaxNumF64
+            }
+        }
+        "minimum_number_nsz" => {
+            if f32 {
+                MinNumF32
+            } else {
+                MinNumF64
             }
         }
         "floor" => {
