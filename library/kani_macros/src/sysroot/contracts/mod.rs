@@ -516,7 +516,9 @@ use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 use quote::quote;
 use strum_macros::Display;
-use syn::{Error, Expr, ExprClosure, ItemFn, TraitItemFn, parse_macro_input, parse_quote};
+use syn::{
+    Error, Expr, ExprClosure, ImplItemFn, ItemFn, TraitItemFn, parse_macro_input, parse_quote,
+};
 
 mod assert;
 mod bootstrap;
@@ -600,7 +602,7 @@ struct ContractConditionsHandler<'a> {
     /// Information specific to the type of contract attribute we're expanding.
     condition_type: ContractConditionsData,
     /// Body of the function this attribute was found on.
-    annotated_fn: &'a ItemFn,
+    annotated_fn: &'a ImplItemFn,
     /// An unparsed, unmodified copy of `attr`, used in the error messages.
     attr_copy: TokenStream2,
     /// The stream to which we should write the generated code.
@@ -687,10 +689,9 @@ fn contract_main(
         return Error::new(Span::call_site(), error_msg).into_compile_error().into();
     }
     let attr_copy = TokenStream2::from(attr.clone());
-    let mut item_fn = parse_macro_input!(item as ItemFn);
+    let item_fn = parse_macro_input!(item as ImplItemFn);
     let function_state = ContractFunctionState::from_attributes(&item_fn.attrs);
-    let handler = match ContractConditionsHandler::new(contract_typ, attr, &mut item_fn, attr_copy)
-    {
+    let handler = match ContractConditionsHandler::new(contract_typ, attr, &item_fn, attr_copy) {
         Ok(handler) => handler,
         Err(e) => return e.into_compile_error().into(),
     };

@@ -43,6 +43,7 @@ pub fn main()\
     e = MyEnum::A { _0: const 1i32 }\
     i = enum_match(copy e)\
     ↳⚡ undefined_behavior\
+    _0 = ()\
     storage_dead(i)\
     storage_dead(e)\
     return\

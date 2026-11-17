@@ -558,7 +558,7 @@ fn args_satisfy_predicates(tcx: TyCtxt, def: FnDef, args: &GenericArgs) -> bool 
 const CONST_PRECONDITION_SEARCH_LIMIT: usize = 1024;
 
 /// Whether any generic argument in `args` mentions a const generic parameter.
-fn args_mention_const_param(args: ty::GenericArgsRef<'_>) -> bool {
+fn args_mention_const_param(args: ty::GenericArgs<'_>) -> bool {
     use rustc_middle::ty::TypeVisitableExt;
     args.iter().any(|arg| match arg.kind() {
         ty::GenericArgKind::Const(ct) => ct.has_param(),
