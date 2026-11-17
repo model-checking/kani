@@ -770,15 +770,13 @@ only finitely many states: currently every generated `Rc`/`Arc` is uniquely owne
 tracks generating shared states. What such a result does and does not cover:
 
 - **Exact counts.** A real caller can pass an `Rc` with any number of other strong and weak
-  references, but only the modeled states are checked. A model that covers the unique and the
-  shared case (one representative each) reaches both outcomes of the uniqueness checks in
-  `get_mut`, `try_unwrap`, `into_inner` and `make_mut`, but code that compares counts against
-  other values (e.g. `Rc::strong_count(&x) > 2`) is not fully verified.
-- **Counts near overflow** are not generated: there, `clone` aborts, which Kani reports as a
-  failure, so generating them would make every clone of a generated value fail.
-- **Other holders are passive.** Nothing models what the holders of the other references could
-  do, e.g. keep a `RefCell` borrow active, upgrade a `Weak`, or access the value from another
-  thread.
+  references, but only the uniquely owned state is checked. In particular, the shared outcomes
+  of the uniqueness checks in `get_mut`, `try_unwrap`, `into_inner` and `make_mut` are never
+  reached, and code that reads `strong_count` or `weak_count` (e.g. `Rc::strong_count(&x) > 1`)
+  is only verified for the counts 1 and 0.
+- **No other holders.** Since no other strong or weak reference exists, nothing that another
+  holder could do is covered, e.g. keep a `RefCell` borrow active, upgrade a `Weak`, or access
+  the value from another thread.
 - **No aliasing between arguments.** Distinct `Rc`/`Arc` arguments never share an allocation
   (`Rc::ptr_eq(&a, &b)` is never true).
 - **Detection** follows the argument types, including references, tuples, arrays, slices, `Box`,
