@@ -187,6 +187,9 @@ fn function_info_from_node(node: Node, source: &[u8]) -> FunctionInfo {
 }
 
 /// Extract the coverage results associated to a function
+///
+/// Returns `None` if there are no coverage results for the function, which is
+/// also the case for every function in a file without coverage results.
 pub fn function_coverage_results(
     info: &FunctionInfo,
     file: &Path,
@@ -196,10 +199,11 @@ pub fn function_coverage_results(
     // them with the ones we have in the aggregated results (i.e., the filenames
     // in the "kanimap" files).
     let filename = file.to_str()?;
-    let right_filename = results.data.keys().find(|p| filename.ends_with(*p)).unwrap();
+    // Files without instrumented regions (e.g., source files of dependencies)
+    // appear in "kanimap" files but not in the aggregated results.
     // TODO: The filenames in kaniraw files should be absolute, just like in metadata.
     // Otherwise the key for `results` just fails... <https://github.com/model-checking/kani/issues/3542>
-    let file_results = results.data.get(right_filename).unwrap();
+    let (_, file_results) = results.data.iter().find(|(p, _)| filename.ends_with(p.as_str()))?;
     let function = &info.name;
     let fun_results = file_results.iter().find(|(f, _)| *f == *function);
     fun_results.cloned()
@@ -210,4 +214,42 @@ pub fn function_coverage_results(
 pub enum MarkerInfo {
     FullLine,
     Markers(Vec<CovResult>),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Aggregated results with one covered region in `function`, from `file`.
+    fn combined_results(file: &str, function: &str) -> CombinedCoverageResults {
+        let region = CoverageRegion { file: file.to_string(), start: (2, 5), end: (2, 14) };
+        let result =
+            CovResult { function: function.to_string(), region, times_covered: 1, total_times: 1 };
+        CombinedCoverageResults {
+            data: HashMap::from([(file.to_string(), vec![(function.to_string(), vec![result])])]),
+        }
+    }
+
+    fn function_info(name: &str) -> FunctionInfo {
+        FunctionInfo { name: name.to_string(), start: (1, 1), end: (3, 2) }
+    }
+
+    #[test]
+    fn function_in_file_with_results() {
+        let results = combined_results("src/vmm/src/dumbo/pdu/bytes.rs", "read_u16");
+        let file = Path::new("/firecracker/src/vmm/src/dumbo/pdu/bytes.rs");
+        let (function, cov_results) =
+            function_coverage_results(&function_info("read_u16"), file, &results).unwrap();
+        assert_eq!(function, "read_u16");
+        assert_eq!(cov_results.len(), 1);
+        assert!(function_coverage_results(&function_info("write_u16"), file, &results).is_none());
+    }
+
+    /// Regression test for <https://github.com/model-checking/kani/issues/5102>
+    #[test]
+    fn function_in_file_without_results() {
+        let results = combined_results("src/vmm/src/dumbo/pdu/bytes.rs", "read_u16");
+        let file = Path::new("/home/user/.cargo/registry/src/aho-corasick-1.1.5/src/lib.rs");
+        assert!(function_coverage_results(&function_info("new"), file, &results).is_none());
+    }
 }

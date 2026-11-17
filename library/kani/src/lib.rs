@@ -27,6 +27,9 @@
 #![feature(f128)]
 #![feature(convert_float_to_int)]
 #![feature(sized_hierarchy)]
+// Used by the `core::str::pattern` searcher models (`any_char_array_searcher`,
+// `any_char_array_ref_searcher`, `any_char_slice_searcher`).
+#![feature(pattern)]
 
 // Allow us to use `kani::` to access crate features.
 extern crate self as kani;
@@ -41,6 +44,9 @@ pub mod shadow;
 pub mod vec;
 
 mod models;
+
+#[cfg(test)]
+mod fmt_model_tests;
 
 #[cfg(feature = "concrete_playback")]
 pub use concrete_playback::concrete_playback_run;

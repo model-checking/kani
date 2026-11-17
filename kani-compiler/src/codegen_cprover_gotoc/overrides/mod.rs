@@ -9,3 +9,5 @@
 mod hooks;
 
 pub use hooks::{GotocHooks, fn_hooks};
+
+pub(crate) use hooks::{QUANTIFIER_SAFETY_CHECK_ERROR, has_quantifier_safety_check};

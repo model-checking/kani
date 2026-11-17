@@ -30,6 +30,7 @@ pub fn main()\
     s = MyStruct { a: const 1i32, b: const true }\
     a = struct_project(copy s)\
     ↳⚡ undefined_behavior\
+    _0 = ()\
     storage_dead(a)\
     storage_dead(s)\
     return\

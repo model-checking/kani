@@ -16,6 +16,8 @@ Validates a terminal `--export-json` document (RFC 0015) in two steps:
 
 Unknown fields are ignored, as the RFC requires of consumers.
 
+The functions at the end are the RFC's reading rules, for tests that import this file.
+
 Template syntax:
     "string" | "integer" | "number" | "boolean"   a scalar of that type
     "<type>?"                                     the same, or null
@@ -308,6 +310,27 @@ def validate_field_path(json_file, field_path, schema=None):
 
     print(f"Field validation passed for {field_path}")
     return True
+
+
+def _all_unreachable(bucket):
+    return bool(bucket["total"]) and len(bucket["unreachable"]) == bucket["total"]
+
+
+def vacuous_pass(harness, configuration):
+    """
+    RFC "Reading the results": a SUCCESS in which every check is unreachable.
+    None when `assertion_reach_checks` is off, because the checks then cannot say.
+    """
+    if not configuration["checks"]["assertion_reach_checks"]:
+        return None
+    return harness["outcome"].get("verdict") == "SUCCESS" and _all_unreachable(harness["checks"])
+
+
+def vacuity_suspect(harness, configuration):
+    """Advisory: a SUCCESS with any unreachable check. None when `assertion_reach_checks` is off."""
+    if not configuration["checks"]["assertion_reach_checks"]:
+        return None
+    return harness["outcome"].get("verdict") == "SUCCESS" and bool(harness["checks"]["unreachable"])
 
 
 def main():

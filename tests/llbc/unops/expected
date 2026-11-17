@@ -56,5 +56,6 @@ pub fn main()\
     _3 = lnot(const true)\
     ↳⚡ undefined_behavior\
     storage_dead(_3)\
+    _0 = ()\
     return\
 }

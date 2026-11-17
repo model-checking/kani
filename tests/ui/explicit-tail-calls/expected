@@ -1,0 +1,1 @@
+error: explicit tail calls (`become`) are not supported by Kani
