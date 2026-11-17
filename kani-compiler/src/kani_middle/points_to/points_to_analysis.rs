@@ -455,7 +455,7 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
         // Here we simply call another function, so need to retrieve internal body for it.
         let new_body = {
             let stable_instance = rustc_internal::stable(instance);
-            let stable_body = stable_instance.body().unwrap();
+            let stable_body = crate::kani_middle::checked_body(self.tcx, stable_instance).unwrap();
             stable_body.internal_mir(self.tcx)
         };
 

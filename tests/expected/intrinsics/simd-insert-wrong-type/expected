@@ -1,2 +1,3 @@
-expected inserted type `i64` (element of input `i64x2`), found `i32`
-error: aborting due to 1 previous error
+Status: FAILURE\
+Description: "`simd_insert` with the inserted type `i32` (the input `i64x2` has `i64` lanes) is not currently supported by Kani
+VERIFICATION:- FAILED

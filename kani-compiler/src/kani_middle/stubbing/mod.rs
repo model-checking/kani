@@ -78,8 +78,12 @@ pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Resul
     // TODO: Validate stubs that do not have body.
     // We could potentially look at the function signature to see if they match.
     // However, they will include region information which can make types different.
-    let Some(old_body) = old_def.body() else { return Ok(()) };
-    let Some(new_body) = new_def.body() else { return Ok(()) };
+    let Some(old_body) = crate::kani_middle::checked_fn_def_body(tcx, old_def) else {
+        return Ok(());
+    };
+    let Some(new_body) = crate::kani_middle::checked_fn_def_body(tcx, new_def) else {
+        return Ok(());
+    };
     // Check whether the arities match.
     if old_body.arg_locals().len() != new_body.arg_locals().len() {
         let msg = format!(

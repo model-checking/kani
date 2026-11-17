@@ -97,6 +97,16 @@ pub enum KaniModel {
     AnyByteStrRef,
     #[strum(serialize = "AnyCStrRefModel")]
     AnyCStrRef,
+    #[strum(serialize = "AnyCharArrayRefSearcherModel")]
+    AnyCharArrayRefSearcher,
+    #[strum(serialize = "AnyCharArraySearcherModel")]
+    AnyCharArraySearcher,
+    #[strum(serialize = "DebugCLikeEnumWriteStrModel")]
+    DebugCLikeEnumWriteStr,
+    #[strum(serialize = "DebugStructFieldsFinishModel")]
+    DebugStructFieldsFinish,
+    #[strum(serialize = "AnyCharSliceSearcherModel")]
+    AnyCharSliceSearcher,
     #[strum(serialize = "AnyFormatterModel")]
     AnyFormatter,
     #[strum(serialize = "AnyPtrModel")]
