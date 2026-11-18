@@ -5,7 +5,7 @@
 // Autoharness generates values for pattern-type fields by producing the base integer, assuming
 // the layout niche that `scalar_niche` computes, and transmuting to the pattern type.
 #![feature(pattern_types)]
-#![feature(pattern_type_macro)]
+// `pattern_type!` is gated by `pattern_types` (the `pattern_type_macro` feature was removed).
 
 // A ranged scalar newtype, as the deranged crate (and std's NonZero) define them: the layout
 // niche IS the validity invariant.
