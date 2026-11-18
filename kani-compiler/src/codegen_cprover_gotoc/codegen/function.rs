@@ -115,7 +115,7 @@ impl GotocCtx<'_, '_> {
 
             // Get the order from internal body for now.
             let blocks: Vec<_> = reverse_postorder(&body).collect();
-            if self.queries.args().unstable_features.contains(&"loop-contracts".to_string())
+            if self.queries.args().unstable_features.iter().any(|arg| arg == "loop-contracts")
                 && body.var_debug_info.iter().any(|info| info.name == "kani_loop_decreases")
             {
                 // Used to attach decreases clauses to their loops. The head of a loop with a loop

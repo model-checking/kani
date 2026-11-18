@@ -1,0 +1,78 @@
+[without --bounded-arguments]
+| cargo_autoharness_multichareq_searcher | char_array_mut                | Requires --bounded-arguments for argument(s) s: &mut std::str::pattern::CharArraySearcher<'_, 2>        |
+[with --bounded-arguments]
+Status: SATISFIED\
+Description: "char_array_value: empty haystack"
+Status: SATISFIED\
+Description: "char_array_value: non-empty haystack"
+Status: SATISFIED\
+Description: "char_array_value: haystack starting with a multi-byte char"
+Status: SATISFIED\
+Description: "char_array_value: next is Match"
+Status: SATISFIED\
+Description: "char_array_value: next is Reject"
+Status: SATISFIED\
+Description: "char_array_value: next is Done"
+Status: SATISFIED\
+Description: "char_array_value: exhausted non-empty haystack"
+Status: SATISFIED\
+Description: "char_array_value: advanced from the front"
+Status: SATISFIED\
+Description: "char_array_value: advanced from the back"
+Status: SATISFIED\
+Description: "char_array_value: advanced from both ends"
+Status: SATISFIED\
+Description: "char_array_mut: non-empty haystack"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_value: empty haystack"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_value: non-empty haystack"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_value: haystack starting with a multi-byte char"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_value: next is Match"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_value: next is Reject"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_value: next is Done"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_value: exhausted non-empty haystack"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_value: advanced from the front"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_value: advanced from the back"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_value: advanced from both ends"
+Status: SATISFIED\
+Description: "char_array_ref_searcher_mut: non-empty haystack"
+Status: SATISFIED\
+Description: "char_slice_value: empty haystack"
+Status: SATISFIED\
+Description: "char_slice_value: non-empty haystack"
+Status: SATISFIED\
+Description: "char_slice_value: haystack starting with a multi-byte char"
+Status: SATISFIED\
+Description: "char_slice_value: next is Match"
+Status: SATISFIED\
+Description: "char_slice_value: next is Reject"
+Status: SATISFIED\
+Description: "char_slice_value: next is Done"
+Status: SATISFIED\
+Description: "char_slice_value: exhausted non-empty haystack"
+Status: SATISFIED\
+Description: "char_slice_value: advanced from the front"
+Status: SATISFIED\
+Description: "char_slice_value: advanced from the back"
+Status: SATISFIED\
+Description: "char_slice_value: advanced from both ends"
+Status: SATISFIED\
+Description: "char_slice_mut: non-empty haystack"
+Failed Checks: assertion failed: s.haystack().len() != 3
+| cargo_autoharness_multichareq_searcher | char_array_mut                | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_multichareq_searcher | char_array_ref_searcher_mut   | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_multichareq_searcher | char_array_ref_searcher_value | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_multichareq_searcher | char_array_value              | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_multichareq_searcher | char_slice_mut                | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_multichareq_searcher | char_slice_value              | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_multichareq_searcher | haystack_len_is_not_three     | #[kani::proof] (bounded)  | Failure             |
+Complete - 6 successfully verified functions, 1 failures, 7 total.
