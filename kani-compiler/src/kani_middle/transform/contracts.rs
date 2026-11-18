@@ -319,6 +319,17 @@ impl TransformPass for FunctionWithContractPass {
         true
     }
 
+    fn transform_instance(&self, instance: Instance, body_source: Instance) -> Instance {
+        if let RigidTy::FnDef(def, _) = instance.ty().kind().rigid().unwrap()
+            && (self.check_fn == Some(*def) || self.replace_fns.contains(def))
+        {
+            // Explicit contract checks and verified stubs retain their selected target.
+            instance
+        } else {
+            body_source
+        }
+    }
+
     /// Transform the function body by replacing it with the stub body.
     fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "FunctionWithContractPass::transform");

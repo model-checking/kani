@@ -1,0 +1,32 @@
+assertion\
+- Status: FAILURE\
+- Description: "attempt to add with overflow"
+
+assertion\
+- Status: FAILURE\
+- Description: "x < 8"
+
+assertion\
+- Status: FAILURE\
+- Description: "|result| *result == x + 2"
+
+assertion\
+- Status: FAILURE\
+- Description: "|result| *result == 0"
+
+assertion\
+- Status: FAILURE\
+- Description: "x < 4"
+
+Verification failed for - replacement_overflow
+Verification failed for - verified_precondition
+Verification failed for - verified_postcondition
+Verification failed for - provider_postcondition
+Verification failed for - unstubbed_postcondition
+Verification failed for - unstubbed_precondition
+Verification failed for - replacement_postcondition
+Verification failed for - replacement_provider_postcondition
+Verification failed for - replacement_precondition
+Verification failed for - requires_only_verified_precondition
+Verification failed for - requires_only_verified_result
+Complete - 2 successfully verified harnesses, 11 failures, 13 total.
