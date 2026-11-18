@@ -690,6 +690,9 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             ty::UnsafeBinder(_) => todo!(
                 "Implement support for UnsafeBinder https://github.com/rust-lang/rust/issues/130516"
             ),
+            // View types (a view over a subset of an ADT's fields) are an incomplete rustc
+            // feature that rustc's own codegen backends do not support yet.
+            ty::View(..) => unimplemented!("view types are not supported by Kani"),
         }
     }
 
@@ -1115,6 +1118,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             ty::UnsafeBinder(_) => todo!(
                 "Implement support for UnsafeBinder https://github.com/rust-lang/rust/issues/130516"
             ),
+            ty::View(..) => unimplemented!("view types are not supported by Kani"),
         }
     }
 
