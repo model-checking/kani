@@ -85,6 +85,10 @@ const SKIPPED_ITEMS: &[KaniFunction] = &[
     KANI_EXIT_CONTRACT_CLAUSE,
     KANI_IN_CONTRACT_CLAUSE,
     KANI_RESET_CONTRACT_CLAUSE_DEPTH,
+    // The state of `-Z valid-value-checks`, which `ValidValuePass` instruments the program with.
+    KaniFunction::Model(KaniModel::InitializeUntypedWriteState),
+    KaniFunction::Model(KaniModel::IsUntypedWrite),
+    KaniFunction::Model(KaniModel::SetUntypedWrite),
 ];
 
 /// Instruments the code with checks for uninitialized memory, agnostic to the source of targets.

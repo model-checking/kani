@@ -26,8 +26,11 @@ These checks are on by default but can be individually disabled with `--no-XXX-c
 ### Opt-in (unstable)
 - **Valid value invariants** (`-Z valid-value-checks`): Checks that values meet
   their type's validity requirements (e.g., `bool` is 0 or 1, `char` is a valid
-  Unicode scalar value, enum discriminants are in range). This is an unstable
-  feature that may change.
+  Unicode scalar value, enum discriminants are in range). Writing bytes that are
+  invalid for a type (with `write_bytes`, a copy, or through a pointer to a type
+  without validity requirements) is not reported by itself; reading them as that
+  type is. Like `-Z uninit-checks`, this tracks one byte chosen
+  nondeterministically per harness. This is an unstable feature that may change.
 - **Uninitialized memory** (`-Z uninit-checks`): Checks that memory is
   initialized before being read through pointers. This is an unstable feature
   that may change.

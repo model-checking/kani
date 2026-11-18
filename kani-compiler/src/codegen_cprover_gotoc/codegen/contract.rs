@@ -139,10 +139,11 @@ impl GotocCtx<'_, '_> {
             .typ
             .clone();
 
-        // Find the memory-initialization shadow-memory static. It is tagged with the
-        // `KaniMemoryInitializationState` `fn_marker` (a `#[rustc_diagnostic_item]`
-        // can no longer be applied to statics). Its goto symbol is named after the
-        // static's mangled name, matching `codegen_static`.
+        // Find the statics Kani's instrumentation writes: the memory-initialization state
+        // (`KaniMemoryInitializationState`) and the state of the validity checks
+        // (`KaniUntypedWriteState`). They are tagged with `fn_marker`s (a
+        // `#[rustc_diagnostic_item]` can no longer be applied to statics). Their goto symbols are
+        // named after the statics' mangled names, matching `codegen_static`.
         let shadow_memory_assign = {
             let mut crates = rustc_public::find_crates("kani");
             if crates.is_empty() {
@@ -152,22 +153,24 @@ impl GotocCtx<'_, '_> {
             crates
                 .into_iter()
                 .flat_map(|krate| krate.statics())
-                .find(|static_def| {
-                    crate::kani_middle::attributes::fn_marker(*static_def).as_deref()
-                        == Some("KaniMemoryInitializationState")
+                .filter(|static_def| {
+                    matches!(
+                        crate::kani_middle::attributes::fn_marker(*static_def).as_deref(),
+                        Some("KaniMemoryInitializationState" | "KaniUntypedWriteState")
+                    )
                 })
                 .map(|static_def| Instance::from(static_def).mangled_name())
-                .and_then(|shadow_memory_table| {
+                .filter_map(|shadow_memory_table| {
                     self.symbol_table.lookup(&shadow_memory_table).cloned()
                 })
                 .map(|shadow_memory_symbol| {
-                    vec![Lambda::as_contract_for(
+                    Lambda::as_contract_for(
                         &goto_annotated_fn_typ,
                         None,
                         shadow_memory_symbol.to_expr(),
-                    )]
+                    )
                 })
-                .unwrap_or_default()
+                .collect::<Vec<_>>()
         };
 
         // The last argument is a tuple with addresses that can be modified.
