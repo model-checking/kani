@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::codegen_cprover_gotoc::GotocCtx;
+use cbmc::goto_program::Location;
 use rustc_public::mir::{BasicBlock, BasicBlockIdx, Body};
 use std::collections::{HashMap, HashSet};
 use tracing::debug;
@@ -51,6 +52,8 @@ impl GotocCtx<'_, '_> {
                 self.current_fn_mut().push_onto_block(tcode);
             }
         }
+        // Statements set this, so code generated outside one cannot pick up a stale location.
+        self.current_stmt_loc = Location::none();
     }
 }
 

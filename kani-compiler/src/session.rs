@@ -56,7 +56,7 @@ static JSON_PANIC_HOOK: LazyLock<Box<dyn Fn(&panic::PanicHookInfo<'_>) + Sync + 
                 #[allow(clippy::arc_with_non_send_sync)]
                 Some(Arc::new(SourceMap::new(FilePathMapping::empty()))),
                 false,
-                HumanReadableErrorType { short: false, unicode: false },
+                HumanReadableErrorType { no_graphics: false, short: false, unicode: false },
                 ColorConfig::Never,
             );
             let diagnostic = DiagInner::new(rustc_errors::Level::Bug, msg);

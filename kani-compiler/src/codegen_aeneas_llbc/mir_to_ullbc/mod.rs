@@ -1859,12 +1859,34 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         CharonConstantExpr::new(value, self.translate_ty(constant.ty()))
     }
 
+    /// The value of a zero-sized tuple or struct whose fields are themselves such values (e.g.
+    /// `()`, or `struct Z { unit: () }`), as Charon represents it: an aggregate constant with a
+    /// constant for each field. `None` for other zero-sized types.
+    fn zero_sized_constant(&mut self, ty: Ty) -> Option<CharonRawConstantExpr> {
+        let field_tys: Vec<Ty> = match ty.kind() {
+            TyKind::RigidTy(RigidTy::Tuple(fields)) => fields,
+            TyKind::RigidTy(RigidTy::Adt(def, args)) if def.kind() == AdtKind::Struct => {
+                def.variants()[0].fields().iter().map(|field| field.ty_with_args(&args)).collect()
+            }
+            _ => return None,
+        };
+        let mut fields = CharonVector::new();
+        for field_ty in field_tys {
+            let value = self.zero_sized_constant(field_ty)?;
+            fields.push(CharonConstantExpr::new(value, self.translate_ty(field_ty)));
+        }
+        Some(CharonRawConstantExpr::Adt(None, fields))
+    }
+
     fn translate_constant_value(&mut self, constant: &MirConst) -> CharonRawConstantExpr {
         trace!("translate_constant_value: {constant:?}");
         match constant.kind() {
             ConstantKind::Allocated(alloc) => self.translate_allocation(alloc, constant.ty()),
             ConstantKind::Ty(_) => todo!(),
-            ConstantKind::ZeroSized => todo!(),
+            // E.g. `()`, which MIR keeps as a constant operand as of nightly-2026-11-11.
+            ConstantKind::ZeroSized => self
+                .zero_sized_constant(constant.ty())
+                .unwrap_or_else(|| todo!("zero-sized constant of type {}", constant.ty())),
             ConstantKind::Unevaluated(uc) => {
                 let defid = uc.def.def_id();
                 let c_defid = self.register_global_decl_id(defid);
