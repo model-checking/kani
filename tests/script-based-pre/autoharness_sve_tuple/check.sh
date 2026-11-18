@@ -21,7 +21,8 @@ grep -qE '^\| sve_tuple +\| pass_x4 +\| #\[kani::proof\] +\| Success' out.log
 grep -q 'sve_tuple_get is not currently supported by Kani' out.log
 grep -qE '^\| sve_tuple +\| first +\| #\[kani::proof\] +\| Failure' out.log
 # The load reaches no further than its predicate, the first LLVM intrinsic it calls.
-grep -q 'call to LLVM intrinsic `llvm.aarch64.sve.ld4.sret.nxv4i32` (1)' out.log
+# The intrinsic's name gained a `.p0` suffix after nightly-2026-11-12.
+grep -qE 'call to LLVM intrinsic `llvm\.aarch64\.sve\.ld4\.sret\.nxv4i32(\.p0)?` \(1\)' out.log
 grep -q 'call to LLVM intrinsic `llvm.aarch64.sve.ptrue.nxv4i1` is not currently supported' out.log
 grep -qE '^\| sve_tuple +\| load +\| #\[kani::proof\] +\| Failure' out.log
 if grep -qE 'panicked|internal compiler error' out.log; then

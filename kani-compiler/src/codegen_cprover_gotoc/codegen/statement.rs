@@ -278,7 +278,8 @@ impl GotocCtx<'_, '_> {
                         .queries
                         .args()
                         .unstable_features
-                        .contains(&"loop-contracts".to_string())
+                        .iter()
+                        .any(|arg| arg == "loop-contracts")
                     {
                         self.report_loop_decreases_without_loop_contracts(stmt.source_info.span);
                         return Stmt::skip(location);
@@ -520,7 +521,12 @@ impl GotocCtx<'_, '_> {
             TerminatorKind::Call { func, args, destination, target, .. } => {
                 if self.is_loop_decreases_binding(destination.local) {
                     let span = term.source_info.span;
-                    if self.queries.args().unstable_features.contains(&"loop-contracts".to_string())
+                    if self
+                        .queries
+                        .args()
+                        .unstable_features
+                        .iter()
+                        .any(|arg| arg == "loop-contracts")
                     {
                         // The measure of a decreases clause is the result of a call, which is
                         // only computed before the loop. Use the value of the binding as the

@@ -247,8 +247,16 @@ mod test {
     }
 
     #[repr(simd)]
-    #[derive(Copy, Clone, Debug)]
+    #[derive(Copy)]
     struct CustomMask<T, const LANES: usize>([T; LANES]);
+
+    // Derived `Clone` and `Debug` would project into the SIMD field, which MIR no longer allows
+    // (MCP#838, nightly-2026-11-17), so copy the whole value instead.
+    impl<T: Copy, const LANES: usize> Clone for CustomMask<T, LANES> {
+        fn clone(&self) -> Self {
+            *self
+        }
+    }
 
     /// Check that the bitmask model can handle odd size SIMD arrays.
     /// Since the portable_simd restricts the number of lanes, we have to use our own custom SIMD.
