@@ -1646,7 +1646,9 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             _ => unreachable!("MIR has no checked {bin_op:?}"),
         };
         let ty = lhs.ty(self.instance.body().unwrap().locals()).unwrap();
-        let path = format!("core::intrinsics::{name}");
+        // A leading `::` resolves `core` as the external crate, so a crate that defines its own
+        // `mod core` cannot shadow the intrinsic.
+        let path = format!("::core::intrinsics::{name}");
         let def_id = resolve_item(self.tcx, CRATE_DEF_ID, &path)
             .unwrap_or_else(|_| panic!("failed to resolve `{path}`"));
         let fn_def = stable_fn_def(self.tcx, def_id).expect("an intrinsic is a function");
@@ -1664,19 +1666,32 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     /// Declare the intrinsic `instance` named `name`, as Charon declares intrinsics
     /// (`Body::Intrinsic`), unless it is declared already.
     fn declare_intrinsic(&mut self, instance: Instance, name: &str) {
+        self.declare_fn(instance, |signature| CharonBody::Intrinsic {
+            name: name.to_owned(),
+            arg_names: vec![None; signature.inputs.len()],
+            fallback: None,
+            fallback_is_spec: false,
+        });
+    }
+
+    /// Declare `instance` with an opaque body, unless it is declared already. This is for
+    /// functions that a body refers to but that reachability does not collect, such as the panic
+    /// function an `Assert` calls when its check fails: `translate_fn_ptr` only reserves the
+    /// function's id, and without a declaration the LLBC would refer to an undeclared function.
+    fn declare_opaque_fn(&mut self, instance: Instance) {
+        self.declare_fn(instance, |_| CharonBody::Opaque);
+    }
+
+    /// Declare `instance`, with the body `body` builds from its signature, unless it is declared
+    /// already.
+    fn declare_fn(&mut self, instance: Instance, body: impl FnOnce(&CharonFunSig) -> CharonBody) {
         let fid = self.register_fun_decl_id(instance.def.def_id());
         if self.translated.fun_decls.get(fid).is_some() {
             return;
         }
         let Ok(item_meta) = self.translate_item_meta_from_rid(instance) else { return };
         let (generics, signature) = self.translate_function_signature(instance);
-        let arg_names = vec![None; signature.inputs.len()];
-        let body = CharonBody::Intrinsic {
-            name: name.to_owned(),
-            arg_names,
-            fallback: None,
-            fallback_is_spec: false,
-        };
+        let body = body(&signature);
         let fun_decl = CharonFunDecl {
             def_id: fid,
             item_meta,
@@ -1897,6 +1912,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         };
         let def_id = self.tcx.require_lang_item(lang_item, rustc_span::DUMMY_SP);
         let instance = rustc_internal::stable(rustc_middle::ty::Instance::mono(self.tcx, def_id));
+        // Reachability does not collect the panic function an `Assert` calls, so declare it here.
+        self.declare_opaque_fn(instance);
         Box::new(CharonCall {
             func: CharonFnOperand::Regular(self.translate_fn_ptr(instance)),
             args,
