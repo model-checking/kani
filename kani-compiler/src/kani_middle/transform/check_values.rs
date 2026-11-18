@@ -87,8 +87,10 @@ impl TransformPass for ValidValuePass {
         let mut new_body = MutableBody::from(body);
         let orig_len = new_body.blocks().len();
         let address_taken = address_taken_locals(&new_body);
-        // Do not cache body.blocks().len() since it will change as we add new checks.
-        for bb_idx in 0..new_body.blocks().len() {
+        // The checks split blocks, and the instructions after an instrumented one end up in a new
+        // block at the end, so the number of blocks is read on every iteration.
+        let mut bb_idx = 0;
+        while bb_idx < new_body.blocks().len() {
             let Some(candidate) = CheckValueVisitor::find_next(
                 tcx,
                 &new_body,
@@ -96,9 +98,11 @@ impl TransformPass for ValidValuePass {
                 bb_idx >= orig_len,
                 &address_taken,
             ) else {
+                bb_idx += 1;
                 continue;
             };
             self.build_check(&mut new_body, candidate);
+            bb_idx += 1;
         }
         if harness {
             self.initialize_untyped_write_state(&mut new_body);
