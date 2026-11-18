@@ -5,7 +5,8 @@
 //! A store through a pointer to a type without validity requirements writes bytes, not a value of
 //! the memory's type: reading them back as that type is checked, c.f.
 //! <https://github.com/model-checking/kani/issues/5021>. The write and the read are in the same
-//! basic block, which the checks used to instrument only up to its first check.
+//! basic block, which the checks used to instrument only up to its first check, c.f.
+//! <https://github.com/model-checking/kani/issues/5194>.
 
 #[kani::proof]
 fn via_const_ptr() {
