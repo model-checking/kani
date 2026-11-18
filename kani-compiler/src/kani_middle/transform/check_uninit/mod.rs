@@ -203,6 +203,8 @@ impl<'a> UninitInstrumenter<'a> {
             MemoryInitOp::SetSliceChunk { .. }
             | MemoryInitOp::Set { .. }
             | MemoryInitOp::SetRef { .. }
+            | MemoryInitOp::SetVtable { .. }
+            | MemoryInitOp::SetAs { .. }
             | MemoryInitOp::CreateUnion { .. } => {
                 self.build_set(body, source, operation, pointee_info)
             }
@@ -311,8 +313,12 @@ impl<'a> UninitInstrumenter<'a> {
                 }
             }
             PointeeLayout::TraitObject => {
-                let reason = "Kani does not support reasoning about memory initialization of pointers to trait objects.";
-                self.inject_unsupported_check(body, source, operation.position(), reason);
+                // Nothing is read at type `dyn Trait`: a trait object is unsized, so it cannot be
+                // loaded, copied or stored by value. A place `*ptr` of such a type is only ever
+                // borrowed, re-pointed or used for its metadata (`size_of_val`, `align_of_val`).
+                // The bytes behind it are read by the concrete type's code, which the vtable
+                // dispatches to, and those accesses are checked with the concrete type's layout.
+                // So there is nothing to check here.
                 return;
             }
             PointeeLayout::Union { .. } => {
@@ -373,7 +379,10 @@ impl<'a> UninitInstrumenter<'a> {
                 // Depending on whether writing to the known number of elements in the slice, need to
                 // pass is as an argument.
                 let (diagnostic, args) = match &operation {
-                    MemoryInitOp::Set { .. } | MemoryInitOp::SetRef { .. } => {
+                    MemoryInitOp::Set { .. }
+                    | MemoryInitOp::SetRef { .. }
+                    | MemoryInitOp::SetVtable { .. }
+                    | MemoryInitOp::SetAs { .. } => {
                         let diagnostic = KANI_SET_PTR_INITIALIZED;
                         let args = vec![
                             ptr_operand,
@@ -464,11 +473,24 @@ impl<'a> UninitInstrumenter<'a> {
                 }
             }
             PointeeLayout::TraitObject => {
-                // The layout, and so the padding, depends on the concrete type behind the vtable.
-                // As for reads (see `build_get_and_check`), report it rather than skip the update:
-                // a skipped update could leave uninitialized memory marked as initialized.
-                let reason = "Kani does not support reasoning about memory initialization of pointers to trait objects.";
-                self.inject_unsupported_check(body, source, operation.position(), reason);
+                // The layout, and so the padding, depends on the concrete type behind the vtable,
+                // so the update cannot be applied here.
+                //
+                // Marking the pointee initialized can be skipped soundly. For a trait object it only
+                // happens where a pointer to an existing, valid value is created: from a reference
+                // (`&raw const *r`) or for the place a `Drop` terminator drops. An unsized value
+                // cannot be assigned through a pointer. Creating a pointer does not change which
+                // bytes are initialized, so skipping the update leaves the tracked state as it was.
+                // At worst Kani then treats bytes that were not tracked yet as uninitialized: a
+                // false alarm rather than a missed one.
+                //
+                // Marking it uninitialized cannot be skipped: that would leave memory that is no
+                // longer initialized marked as initialized.
+                if !value {
+                    let reason = "Kani does not support marking the memory behind a pointer to a \
+                                  trait object as uninitialized.";
+                    self.inject_unsupported_check(body, source, operation.position(), reason);
+                }
                 return;
             }
             PointeeLayout::Union { field_layouts } => {

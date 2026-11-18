@@ -114,6 +114,19 @@ impl MirVisitor for CheckUninitVisitor {
                 // First check rvalue.
                 self.visit_rvalue(rvalue, location);
 
+                // Reading the metadata of a pointer to a trait object gives access to its vtable,
+                // e.g. to read its size and alignment. The vtable is constant data that the code
+                // generator emits, so mark its header initialized.
+                if let Rvalue::UnaryOp(rustc_public::mir::UnOp::PtrMetadata, operand) = rvalue
+                    && let Some(pointee) =
+                        operand.ty(&self.locals).unwrap().kind().builtin_deref(true)
+                    && pointee.ty.kind().is_trait()
+                {
+                    self.push_target(MemoryInitOp::SetVtable {
+                        metadata: Operand::Copy(place.clone()),
+                    });
+                }
+
                 // Preemptively check if we do not support computing the layout of a type because of
                 // inner union fields. This allows to inject `assert!(false)` early.
                 if let Err(reason @ LayoutComputationError::UnionAsField(_)) =
@@ -535,12 +548,23 @@ impl MirVisitor for CheckUninitVisitor {
         if let Rvalue::Cast(cast_kind, operand, ty) = rvalue {
             match cast_kind {
                 CastKind::PointerCoercion(PointerCoercion::Unsize) => {
+                    // Unsizing a pointer to a sized value into a raw pointer to a trait object
+                    // creates a raw pointer to that value, whose type is still known here. Mark it
+                    // initialized with that type's layout, as for any raw pointer created from a
+                    // reference. Unsizing an already unsized pointer (e.g. trait upcasting)
+                    // creates no new pointee and changes nothing.
                     if let TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) = ty.kind()
                         && pointee_ty.kind().is_trait()
+                        && let Some(source) =
+                            operand.ty(&self.locals).unwrap().kind().builtin_deref(true)
+                        && !source.ty.kind().is_trait()
                     {
-                        self.push_target(MemoryInitOp::Unsupported {
-                                reason: "Kani does not support reasoning about memory initialization of unsized pointers.".to_string(),
-                            });
+                        self.push_target(MemoryInitOp::SetAs {
+                            operand: operand.clone(),
+                            pointee_ty: source.ty,
+                            value: true,
+                            position: InsertPosition::After,
+                        });
                     }
                 }
                 CastKind::Transmute => {
