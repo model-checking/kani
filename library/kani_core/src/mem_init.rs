@@ -18,11 +18,6 @@ macro_rules! kani_mem_init {
         #[kanitool::fn_marker = "KaniMemoryInitializationState"]
         static mut MEM_INIT_STATE: MemoryInitializationState = MemoryInitializationState::new();
 
-        /// Global object for tracking union initialization state across function boundaries.
-        // Identified like `MEM_INIT_STATE`, so that contracts may modify it.
-        #[kanitool::fn_marker = "KaniMemoryInitializationArgumentBuffer"]
-        static mut ARGUMENT_BUFFER: Option<ArgumentBuffer> = None;
-
         /// Bytewise mask, representing which bytes of a type are data and which are padding.
         /// For example, for a type like this:
         /// ```
@@ -40,13 +35,22 @@ macro_rules! kani_mem_init {
             pub tracked_object_id: usize,
             pub tracked_offset: usize,
             pub value: bool,
+            /// Passes the state of unions across function boundaries. It is part of this static,
+            /// rather than a static of its own, because every contract's write set includes this
+            /// static: a second one made the write-set checks far more expensive.
+            argument_buffer: ArgumentBuffer,
         }
 
         impl MemoryInitializationState {
             /// This is a dummy initialization function -- the values will be eventually overwritten by a
             /// call to `initialize_memory_initialization_state`.
             pub const fn new() -> Self {
-                Self { tracked_object_id: 0, tracked_offset: 0, value: false }
+                Self {
+                    tracked_object_id: 0,
+                    tracked_offset: 0,
+                    value: false,
+                    argument_buffer: ArgumentBuffer::EMPTY,
+                }
             }
 
             /// Return currently tracked memory initialization state if `ptr` points to the currently
@@ -107,7 +111,18 @@ macro_rules! kani_mem_init {
             ) {
                 let from_obj = super::mem::pointer_object(from_ptr);
                 let from_offset = super::mem::pointer_offset(from_ptr);
+                self.copy_from_location::<LAYOUT_SIZE>(from_obj, from_offset, to_ptr, num_elts);
+            }
 
+            /// As [Self::copy], from the location `from_offset` in the object `from_obj`.
+            #[kanitool::disable_checks(pointer)]
+            pub fn copy_from_location<const LAYOUT_SIZE: usize>(
+                &mut self,
+                from_obj: usize,
+                from_offset: usize,
+                to_ptr: *const u8,
+                num_elts: usize,
+            ) {
                 let to_obj = super::mem::pointer_object(to_ptr);
                 let to_offset = super::mem::pointer_offset(to_ptr);
 
@@ -235,7 +250,7 @@ macro_rules! kani_mem_init {
                 MEM_INIT_STATE.tracked_offset = super::any();
                 MEM_INIT_STATE.value = false;
                 // Statics may start with arbitrary values, e.g. in a harness for a contract.
-                ARGUMENT_BUFFER = None;
+                MEM_INIT_STATE.argument_buffer = ArgumentBuffer::EMPTY;
             }
         }
 
@@ -457,10 +472,25 @@ macro_rules! kani_mem_init {
         /// state across function boundaries. This struct is written to by the caller and read from
         /// by the callee.
         #[derive(Clone, Copy)]
+        ///
+        /// The saved location is an object and an offset rather than a pointer, like the tracked
+        /// byte in [MemoryInitializationState].
         struct ArgumentBuffer {
+            is_set: bool,
             selected_argument: usize,
-            saved_address: *const (),
+            saved_object: usize,
+            saved_offset: usize,
             layout_size: usize,
+        }
+
+        impl ArgumentBuffer {
+            const EMPTY: ArgumentBuffer = ArgumentBuffer {
+                is_set: false,
+                selected_argument: 0,
+                saved_object: 0,
+                saved_offset: 0,
+                layout_size: 0,
+            };
         }
 
         /// Non-deterministically store information about currently tracked argument in the argument
@@ -472,11 +502,13 @@ macro_rules! kani_mem_init {
             let should_store: bool = super::any();
             if should_store {
                 unsafe {
-                    ARGUMENT_BUFFER = Some(ArgumentBuffer {
+                    MEM_INIT_STATE.argument_buffer = ArgumentBuffer {
+                        is_set: true,
                         selected_argument,
-                        saved_address: from_ptr,
+                        saved_object: super::mem::pointer_object(from_ptr),
+                        saved_offset: super::mem::pointer_offset(from_ptr),
                         layout_size: LAYOUT_SIZE,
-                    })
+                    }
                 }
             }
         }
@@ -489,15 +521,28 @@ macro_rules! kani_mem_init {
         #[kanitool::fn_marker = "LoadArgumentModel"]
         fn load_argument<const LAYOUT_SIZE: usize, T>(to: *const T, selected_argument: usize) {
             let (to_ptr, _) = to.to_raw_parts();
-            if let Some(buffer) = unsafe { ARGUMENT_BUFFER } {
-                if buffer.selected_argument == selected_argument {
-                    assert!(buffer.layout_size == LAYOUT_SIZE);
-                    copy_init_state_single::<LAYOUT_SIZE, ()>(buffer.saved_address, to_ptr);
+            let buffer = unsafe { MEM_INIT_STATE.argument_buffer };
+            if buffer.is_set && buffer.selected_argument == selected_argument {
+                // `super::assert` rather than `assert!`, like the other models: no panic or
+                // formatting code is needed for an internal check.
+                super::assert(
+                    buffer.layout_size == LAYOUT_SIZE,
+                    "the argument buffer holds an argument of another size",
+                );
+                if LAYOUT_SIZE != 0 {
                     unsafe {
-                        ARGUMENT_BUFFER = None;
+                        MEM_INIT_STATE.copy_from_location::<LAYOUT_SIZE>(
+                            buffer.saved_object,
+                            buffer.saved_offset,
+                            to_ptr as *const u8,
+                            1,
+                        );
                     }
-                    return;
                 }
+                unsafe {
+                    MEM_INIT_STATE.argument_buffer = ArgumentBuffer::EMPTY;
+                }
+                return;
             }
             unsafe {
                 MEM_INIT_STATE.bless::<LAYOUT_SIZE>(to_ptr as *const u8, 1);

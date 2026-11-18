@@ -4,6 +4,9 @@
 
 //! Unions passed to and returned from a function under contract: the buffer that carries
 //! their state across calls starts empty and is part of every contract's write set.
+//!
+//! FIXME: each harness needs 10–25 GB, more than a CI runner has
+//! (https://github.com/model-checking/kani/issues/5199). The expected results are correct.
 
 use std::mem::MaybeUninit;
 
