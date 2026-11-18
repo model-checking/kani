@@ -313,12 +313,16 @@ impl<'a> UninitInstrumenter<'a> {
                 }
             }
             PointeeLayout::TraitObject => {
-                // Nothing is read at type `dyn Trait`: a trait object is unsized, so it cannot be
-                // loaded, copied or stored by value. A place `*ptr` of such a type is only ever
-                // borrowed, re-pointed or used for its metadata (`size_of_val`, `align_of_val`).
-                // The bytes behind it are read by the concrete type's code, which the vtable
-                // dispatches to, and those accesses are checked with the concrete type's layout.
-                // So there is nothing to check here.
+                // The layout of the value behind the pointer, and so which of its bytes must be
+                // initialized, is only known from the vtable at run time. Places `*ptr` of a trait
+                // object type are not checked (see `CheckUninitVisitor::visit_place`), so this is
+                // a check that a reference to a trait object points to a valid value, e.g. for a
+                // transmute from a raw pointer to a reference: report it as unsupported.
+                let reason = format!(
+                    "Kani does not support checking the initialization of the value behind a `{}`.",
+                    operation.operand_ty(body)
+                );
+                self.inject_unsupported_check(body, source, operation.position(), &reason);
                 return;
             }
             PointeeLayout::Union { .. } => {

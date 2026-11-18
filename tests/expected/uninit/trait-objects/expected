@@ -1,5 +1,6 @@
 Checking harness padding_read_through_dyn_pointer...
 Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `u8`
 VERIFICATION:- FAILED
 
 Checking harness read_back_through_raw_dyn_pointer...
@@ -7,6 +8,15 @@ VERIFICATION:- SUCCESSFUL
 
 Checking harness vtable_header_is_initialized...
 VERIFICATION:- SUCCESSFUL
+
+Checking harness unsize_raw_pointer_keeps_state_ub...
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const u32`
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `u32`
+VERIFICATION:- FAILED
+
+Checking harness borrow_raw_dyn_pointer_unsupported...
+Failed Checks: Kani does not support checking the initialization of a reference to a trait object created from a raw pointer.
+VERIFICATION:- FAILED
 
 Checking harness boxed_trait_object...
 VERIFICATION:- SUCCESSFUL
@@ -18,4 +28,6 @@ Checking harness size_of_val_dyn...
 VERIFICATION:- SUCCESSFUL
 
 Verification failed for - padding_read_through_dyn_pointer
-Complete - 5 successfully verified harnesses, 1 failures, 6 total.
+Verification failed for - unsize_raw_pointer_keeps_state_ub
+Verification failed for - borrow_raw_dyn_pointer_unsupported
+Complete - 5 successfully verified harnesses, 3 failures, 8 total.

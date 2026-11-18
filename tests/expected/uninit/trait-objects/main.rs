@@ -5,7 +5,9 @@
 //! Pointers to trait objects under `-Z uninit-checks`
 //! (https://github.com/model-checking/kani/issues/5166). Nothing is read at type `dyn Trait`, so
 //! creating, reborrowing and querying such pointers is not reported. Bytes reached through a
-//! pointer derived from one are still checked with the concrete type's layout.
+//! pointer derived from one are still checked with the concrete type's layout. Creating a
+//! reference from a raw pointer to a trait object is reported as unsupported: the value behind it
+//! must be valid, which Kani cannot check without its concrete type.
 
 #![feature(ptr_metadata)]
 
@@ -41,20 +43,52 @@ fn size_of_val_dyn() {
 #[kani::proof]
 fn raw_dyn_pointer_metadata() {
     let x: u64 = kani::any();
-    let p: *const dyn Debug = &x as &dyn Debug;
-    let r: &dyn Debug = unsafe { &*p };
+    let r: &dyn Debug = &x;
+    let p: *const dyn Debug = r;
     let meta = std::ptr::metadata(p);
     assert_eq!(meta.size_of(), 8);
     assert_eq!(meta.align_of(), 8);
     assert_eq!(std::mem::size_of_val(r), 8);
 }
 
-/// Boxed trait objects: creating the pointer and dropping the box.
+/// Boxed trait objects: borrowing the box's contents, creating a pointer and dropping the box. A
+/// `Box`, like a reference, points to a valid value. (Calling a method through the box is
+/// reported by the delayed UB checks, https://github.com/model-checking/kani/issues/3300.)
 #[kani::proof]
 fn boxed_trait_object() {
     let b: Box<dyn Tr> = Box::new(Padded { a: 1, b: kani::any() });
+    assert_eq!(std::mem::size_of_val(&*b), 8);
     let p: *const dyn Tr = &*b;
-    assert_eq!(std::mem::size_of_val(unsafe { &*p }), 8);
+    assert_eq!(std::ptr::metadata(p).size_of(), 8);
+}
+
+/// A reference created from a raw pointer to a trait object must point to a valid value, here an
+/// uninitialized one. Kani reports this as unsupported rather than missing it.
+#[kani::proof]
+fn borrow_raw_dyn_pointer_unsupported() {
+    use std::alloc::{Layout, alloc, dealloc};
+    let layout = Layout::new::<Padded>();
+    unsafe {
+        let mem = alloc(layout);
+        let valid: &dyn Tr = &Padded { a: 0, b: 0 };
+        let meta = std::ptr::metadata(valid as *const dyn Tr);
+        let p: *const dyn Tr = std::ptr::from_raw_parts(mem.cast_const(), meta);
+        let _ = (&*p).get();
+        dealloc(mem, layout);
+    }
+}
+
+/// Unsizing a raw pointer does not initialize what it points to.
+#[kani::proof]
+fn unsize_raw_pointer_keeps_state_ub() {
+    use std::alloc::{Layout, alloc, dealloc};
+    let layout = Layout::new::<u32>();
+    unsafe {
+        let mem = alloc(layout) as *const u32;
+        let _p = mem as *const dyn Debug;
+        let _ = mem.read();
+        dealloc(mem as *mut u8, layout);
+    }
 }
 
 /// A vtable is constant data emitted by the code generator. Reading its header (size, alignment
