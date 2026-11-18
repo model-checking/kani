@@ -147,7 +147,7 @@ impl<'pr> HarnessRunner<'_, 'pr> {
                     self.sess.synthesize_loop_contracts(goto_file, goto_file, harness)?;
                 }
 
-                let result = self.sess.check_harness(goto_file, harness)?;
+                let result = self.sess.check_harness(goto_file, self.project, harness)?;
 
                 // Update progress indicator if active
                 if progress_indicator.is_active() {
@@ -243,6 +243,7 @@ impl KaniSession {
     pub(crate) fn check_harness(
         &self,
         binary: &Path,
+        project: &Project,
         harness: &HarnessMetadata,
     ) -> Result<VerificationResult> {
         let thread_index = rayon::current_thread_index().unwrap_or_default();
@@ -299,7 +300,7 @@ impl KaniSession {
         let mut result = self.with_timer(|| self.run_cbmc(binary, harness), "run_cbmc")?;
 
         self.process_output(&result, harness, thread_index);
-        self.gen_and_add_concrete_playback(harness, &mut result)?;
+        self.gen_and_add_concrete_playback(project, harness, &mut result)?;
         Ok(result)
     }
 

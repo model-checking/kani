@@ -48,6 +48,10 @@ pub const AUTOHARNESS_STR_BOUND: u64 = 4;
 /// makes simple `String` harnesses exceed Kani's default 60s harness timeout.
 pub const AUTOHARNESS_BOUNDED_ARBITRARY_BOUND: u64 = 4;
 
+/// The start of the description of the cover that automatic harnesses place before the call to
+/// the function under test. kani-driver reports a harness whose cover no input reaches as vacuous.
+pub const AUTOHARNESS_VACUITY_COVER_PREFIX: &str = "autoharness: a generated input reaches ";
+
 /// The structure of `.kani-metadata.json` files, which are emitted for each crate
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KaniMetadata {
@@ -104,6 +108,10 @@ pub enum AutoHarnessSkipReason {
     /// (The Vec<(String, String)> contains the list of (name, type) tuples for each such argument.)
     #[strum(serialize = "Requires --bounded-arguments for argument(s)")]
     RequiresBoundedArguments(Vec<(String, String)>),
+    /// The function's body contains an explicit tail call (`become`), which Kani does not support
+    /// (c.f. https://github.com/model-checking/kani/issues/5131).
+    #[strum(serialize = "Explicit tail calls are not supported")]
+    UnsupportedTailCall,
     /// The function is a C-variadic whose calling convention Kani cannot model, e.g.
     /// `unsafe extern "sysv64" fn(_: ...)`.
     #[strum(serialize = "Unsupported variadic calling convention")]

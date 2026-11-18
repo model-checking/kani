@@ -5,6 +5,7 @@
 //! uninitialized memory via raw pointers.
 
 use crate::args::ExtraChecks;
+use crate::kani_middle::attributes::attrs_by_path;
 use crate::kani_middle::kani_functions::{KaniFunction, KaniModel};
 use crate::kani_middle::transform::{
     TransformPass, TransformationType,
@@ -90,7 +91,7 @@ fn is_harness(instance: Instance, tcx: TyCtxt) -> bool {
         ],
     ];
     harness_identifiers.iter().any(|attr_path| {
-        tcx.get_attrs_by_path(rustc_internal::internal(tcx, instance.def.def_id()), attr_path)
+        attrs_by_path(tcx, rustc_internal::internal(tcx, instance.def.def_id()), attr_path)
             .next()
             .is_some()
     })

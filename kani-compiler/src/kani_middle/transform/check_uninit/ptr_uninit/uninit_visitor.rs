@@ -25,7 +25,7 @@ use rustc_public::{
         mono::{Instance, InstanceKind},
         visit::{Location, PlaceContext},
     },
-    ty::{AdtKind, ConstantKind, RigidTy, Ty, TyKind},
+    ty::{AdtKind, ConstantKind, RigidTy, Ty, TyConstKind, TyKind},
 };
 
 pub struct CheckUninitVisitor {
@@ -284,7 +284,6 @@ impl MirVisitor for CheckUninitVisitor {
                             | Intrinsic::AtomicMin
                             | Intrinsic::AtomicNand
                             | Intrinsic::AtomicOr
-                            | Intrinsic::AtomicStore
                             | Intrinsic::AtomicUmax
                             | Intrinsic::AtomicUmin
                             | Intrinsic::AtomicXadd
@@ -292,6 +291,25 @@ impl MirVisitor for CheckUninitVisitor {
                             | Intrinsic::AtomicXor
                             | Intrinsic::AtomicXsub => {
                                 self.push_target(MemoryInitOp::Check { operand: args[0].clone() });
+                            }
+                            Intrinsic::AtomicStore => {
+                                let is_volatile = matches!(
+                                    instance.args().0[2].expect_const().kind(),
+                                    TyConstKind::Value(_, allocation)
+                                        if allocation.read_bool().is_ok_and(|value| value)
+                                );
+                                // Preserve the existing check for non-volatile stores, which are
+                                // specified in terms of creating a reference with `from_ptr`.
+                                if !is_volatile {
+                                    self.push_target(MemoryInitOp::Check {
+                                        operand: args[0].clone(),
+                                    });
+                                }
+                                self.push_target(MemoryInitOp::Set {
+                                    operand: args[0].clone(),
+                                    value: true,
+                                    position: InsertPosition::After,
+                                });
                             }
                             Intrinsic::CompareBytes => {
                                 self.push_target(MemoryInitOp::CheckSliceChunk {
@@ -347,6 +365,11 @@ impl MirVisitor for CheckUninitVisitor {
                                     value: true,
                                     position: InsertPosition::After,
                                 }),
+                            // An intrinsic that Kani does not know, but whose fallback body it uses
+                            // (e.g. `integer_max`, new in nightly-2026-11-17), runs ordinary MIR,
+                            // which is instrumented like any other function: an ordinary call.
+                            Intrinsic::Unimplemented { .. }
+                                if !crate::intrinsics::uses_kani_model(&instance) => {}
                             intrinsic => {
                                 self.push_target(MemoryInitOp::Unsupported {
                                     reason: format!("Kani does not support reasoning about memory initialization of intrinsic `{intrinsic:?}`."),

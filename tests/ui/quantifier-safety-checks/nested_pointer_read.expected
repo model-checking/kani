@@ -1,0 +1,3 @@
+error: nested quantifier predicates containing checks or function calls are not supported
+nested_pointer_read.rs:10:13
+error: aborting due to 1 previous error

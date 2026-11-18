@@ -711,7 +711,7 @@ impl GotocCtx<'_, '_> {
                         let meta = self.codegen_operand_stable(&operands[1]);
                         slice_fat_ptr(typ, data_cast, meta, &self.symbol_table)
                     }
-                    TyKind::RigidTy(RigidTy::Adt(..)) => {
+                    TyKind::RigidTy(RigidTy::Adt(..)) | TyKind::RigidTy(RigidTy::Tuple(..)) => {
                         let layout = LayoutOf::new(pointee_ty);
                         let pointee_goto_typ = self.codegen_ty_stable(pointee_ty);
                         let data_cast =
@@ -1019,8 +1019,7 @@ impl GotocCtx<'_, '_> {
                     let discr_mir_ty = self.codegen_enum_discr_typ_stable(ty);
                     let discr_type = self.codegen_ty_stable(discr_mir_ty);
                     let niche_val = self.codegen_get_niche(e, offset.bytes() as usize, discr_type);
-                    let relative_discr =
-                        wrapping_sub(&niche_val, u64::try_from(*niche_start).unwrap());
+                    let relative_discr = wrapping_sub(&niche_val, *niche_start);
                     let relative_max = niche_variants.last.as_u32() - niche_variants.start.as_u32();
                     let is_niche = if relative_max == 0 {
                         relative_discr.clone().is_zero()
@@ -1589,7 +1588,7 @@ impl GotocCtx<'_, '_> {
         assert!(!vtable_layout.is_unsized(), "Can't create a vtable for an unsized type");
         let vt_size = Expr::int_constant(vtable_layout.size.bytes(), Type::size_t())
             .with_size_of_annotation(self.codegen_ty_stable(operand_type));
-        let vt_align = Expr::int_constant(vtable_layout.align.abi.bytes(), Type::size_t());
+        let vt_align = Expr::int_constant(vtable_layout.align.bytes(), Type::size_t());
 
         (vt_size, vt_align)
     }
@@ -1885,7 +1884,7 @@ impl GotocCtx<'_, '_> {
 /// Perform a wrapping subtraction of an Expr with a constant "expr - constant"
 /// where "-" is wrapping subtraction, i.e., the result should be interpreted as
 /// an unsigned value (2's complement).
-fn wrapping_sub(expr: &Expr, constant: u64) -> Expr {
+fn wrapping_sub(expr: &Expr, constant: u128) -> Expr {
     let unsigned_expr = if expr.typ().is_pointer() {
         expr.clone()
     } else {

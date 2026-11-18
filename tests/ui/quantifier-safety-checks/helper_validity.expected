@@ -1,0 +1,3 @@
+error: quantifier predicates containing safety checks are not supported with -Z valid-value-checks or -Z uninit-checks
+helper_validity.rs:13:13
+error: aborting due to 1 previous error
