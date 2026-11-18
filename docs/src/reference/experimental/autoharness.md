@@ -218,6 +218,7 @@ Autoharness records one skip reason per skipped function: the first failed check
 | `Generic Function: <detail>` | Kani could not find a supported instantiation satisfying the function's constraints. The detail provides the specific cause; see [Generic Functions](#generic-functions). |
 | `The function does not have a body` | There is no function body available to verify, as with a trait method without a default implementation. |
 | `Did not match provided filters` | The function was excluded by the include/exclude patterns. |
+| `Explicit tail calls are not supported` | The function's body contains an explicit tail call (`become`), which Kani does not support. |
 | `Unsupported variadic calling convention` | The function is a C-variadic function whose calling convention Kani cannot model (for example, `extern "sysv64"`). |
 | `Missing Arbitrary implementation for argument(s) x: T, y: U` | At least one argument cannot be generated using a supported argument model. The argument names and types depend on the function. |
 | `Requires --bounded-arguments for argument(s) x: T` | At least one argument requires opting into bounded generation. The argument names and types depend on the function. |

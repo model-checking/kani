@@ -144,7 +144,7 @@ impl BodyTransformation {
         );
         transformer.add_pass(queries, IntrinsicGeneratorPass::new(unsupported_check_type, queries));
         transformer.add_pass(queries, LoopContractPass::new(tcx, queries, unit));
-        transformer.add_pass(queries, RustcIntrinsicsPass::new(queries));
+        transformer.add_pass(queries, RustcIntrinsicsPass::new(queries, &unit.stubs));
         transformer
     }
 
@@ -155,7 +155,8 @@ impl BodyTransformation {
             .entry(instance)
             .or_insert_with(|| {
                 // Transform and add to the cache if there's no existing entry.
-                let mut body = instance.body().unwrap_or_else(|| build_missing_body(tcx, instance));
+                let mut body = crate::kani_middle::checked_body(tcx, instance)
+                    .unwrap_or_else(|| build_missing_body(tcx, instance));
 
                 let mut modified = false;
                 for pass in self.stub_passes.iter_mut().chain(self.inst_passes.iter_mut()) {
