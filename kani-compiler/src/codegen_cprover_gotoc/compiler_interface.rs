@@ -404,9 +404,7 @@ impl CodegenBackend for GotocCodegenBackend {
 
                     // Cross-crate collecting of all items that are reachable from the crate harnesses.
                     for unit in units.iter() {
-                        // Generate a new transformer that will be shared for all harnesses within the codegen unit.
-                        // We reset the body cache between units for now because each codegen unit has different
-                        // configurations that affect how we transform the instance body.
+                        // Cache local transformations for the codegen unit's contract and stub configuration.
                         let mut shared_unit_transformer =
                             BodyTransformation::new(&queries, tcx, unit);
 
@@ -414,7 +412,7 @@ impl CodegenBackend for GotocCodegenBackend {
                         // (slow) goto-file export runs on a worker thread while the main thread
                         // keeps codegening the rest, rather than stalling on them at the end of
                         // compilation. Reachability run here to rate the harnesses also warms the
-                        // shared transformer's body cache reused during codegen. See
+                        // body cache copied into each harness's transformer for codegen. See
                         // `kani_middle::codegen_order`.
                         //
                         // Only worth the extra reachability pass when there are export workers to
@@ -432,6 +430,9 @@ impl CodegenBackend for GotocCodegenBackend {
 
                         for harness in ordered_harnesses {
                             clear_codegen_cache();
+                            // Global passes use analysis targets specific to this harness. Keep their
+                            // transformed bodies in a harness-local copy of the warmed body cache.
+                            let mut transformer = shared_unit_transformer.clone();
 
                             let model_path = units.harness_model_path(*harness).unwrap();
                             let is_automatic_harness = units.is_automatic_harness(harness);
@@ -445,7 +446,7 @@ impl CodegenBackend for GotocCodegenBackend {
                                 contract_metadata
                                     .map(|def| rustc_internal::internal(tcx, def.def_id())),
                                 template_passes.clone(),
-                                &mut shared_unit_transformer,
+                                &mut transformer,
                                 &export_thread_pool,
                             );
                             if min_gcx.has_loop_contracts {
