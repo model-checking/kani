@@ -1514,12 +1514,21 @@ pub fn ty_validity_per_offset(
                             for idx in layout.fields.fields_by_offset_order() {
                                 let field_offset = offsets[idx].bytes();
                                 let field_ty = fields[idx].ty_with_args(args);
-                                struct_validity.append(&mut ty_validity_per_offset(
+                                for req in ty_validity_per_offset(
                                     tcx,
                                     machine_info,
                                     field_ty,
                                     field_offset + current_offset,
-                                )?);
+                                )? {
+                                    // A struct whose layout is a single scalar (e.g. the
+                                    // `#[repr(packed)]` `Unaligned<bool>`) has the requirement of
+                                    // its scalar field already; repeating it changes nothing, but
+                                    // would make the struct's validity compare unequal to the
+                                    // field's.
+                                    if !struct_validity.contains(&req) {
+                                        struct_validity.push(req);
+                                    }
+                                }
                             }
                             Ok(struct_validity)
                         }
