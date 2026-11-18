@@ -6,7 +6,7 @@
 // type, `Duration`'s nanoseconds, wtf8 code points, ...). Autoharness must derive
 // Arbitrary for integer-based pattern types -- both as struct fields and as top-level
 // arguments -- and constrain the generated values to the pattern's range.
-#![feature(pattern_types, pattern_type_macro)]
+#![feature(pattern_types)]
 #![allow(internal_features)]
 use std::pat::pattern_type;
 
