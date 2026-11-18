@@ -24,8 +24,11 @@ mod x86_64 {
         // The same transmute `core` performs between `MaybeUninit<x87_f80>` and `x87_f80`.
         let v: x87_f80 =
             unsafe { transmute_neo::<MaybeUninit<[u8; 16]>, x87_f80>(MaybeUninit::new(bytes)) };
-        let back: [u8; 16] = unsafe { transmute_neo::<x87_f80, [u8; 16]>(v) };
-        assert_eq!(back, bytes);
+        // Only the first 10 bytes are the float; a typed copy need not preserve the padding.
+        let back = unsafe { transmute_neo::<x87_f80, [MaybeUninit<u8>; 16]>(v) };
+        for i in 0..10 {
+            assert_eq!(unsafe { back[i].assume_init() }, bytes[i]);
+        }
         let m: MaybeUninit<x87_f80> = MaybeUninit::new(v);
         let _: x87_f80 = unsafe { transmute_neo::<MaybeUninit<x87_f80>, x87_f80>(m) };
     }
