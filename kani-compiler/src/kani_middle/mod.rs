@@ -10,7 +10,7 @@ use rustc_data_structures::fx::FxHashMap;
 use rustc_hir::{def::DefKind, def_id::DefId as InternalDefId, def_id::LOCAL_CRATE};
 use rustc_middle::ty::TyCtxt;
 use rustc_public::mir::mono::{Instance, MonoItem};
-use rustc_public::mir::{Mutability, TerminatorKind};
+use rustc_public::mir::{Body, Mutability, TerminatorKind};
 use rustc_public::rustc_internal;
 use rustc_public::ty::{
     AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, PolyFnSig, RigidTy, Span as SpanStable,
@@ -125,6 +125,98 @@ pub fn check_crate_items(tcx: TyCtxt, ignore_asm: bool) {
         }
     }
 
+    tcx.dcx().abort_if_errors();
+}
+
+/// The body of `instance`, or `None` if it has none; aborts with a diagnostic if it contains an
+/// explicit tail call (`become`).
+///
+/// Stable `rustc_public::mir::TerminatorKind` has no `TailCall` variant, so converting a body that
+/// contains one hits `unimplemented!()` inside the toolchain and aborts the compilation, c.f.
+/// <https://github.com/model-checking/kani/issues/5131>. The feature is incomplete; report every
+/// such terminator and abort once. Leave the call unmodeled: an ordinary `Call` would keep the
+/// caller's frame live, which disagrees with `become`.
+///
+/// Use this instead of `instance.body()` wherever the body may belong to user code. Where an
+/// unsupported body should be ignored rather than reported (heuristics, eligibility checks), use
+/// [body_without_tail_calls] or [has_explicit_tail_call].
+pub fn checked_body(tcx: TyCtxt, instance: Instance) -> Option<Body> {
+    // `has_body` is about the item: compiler-generated shims have no item body, but
+    // `instance.body()` still builds one for them, and they never contain `become`.
+    if instance.has_body() {
+        report_tail_calls(tcx, tail_call_spans(tcx, internal_body_kind(tcx, instance)));
+    }
+    instance.body()
+}
+
+/// [checked_body] for a function definition, as loaded by `FnDef::body()`.
+pub fn checked_fn_def_body(tcx: TyCtxt, def: FnDef) -> Option<Body> {
+    if !def.has_body() {
+        return None;
+    }
+    let def_id = rustc_internal::internal(tcx, def.def_id());
+    report_tail_calls(tcx, tail_call_spans(tcx, rustc_middle::ty::InstanceKind::Item(def_id)));
+    def.body()
+}
+
+/// The body of `instance`, or `None` if it has none or contains an explicit tail call. Unlike
+/// [checked_body], this reports nothing.
+pub fn body_without_tail_calls(tcx: TyCtxt, instance: Instance) -> Option<Body> {
+    if has_explicit_tail_call(tcx, instance) {
+        return None;
+    }
+    instance.body()
+}
+
+/// Whether `instance` has a body containing an explicit tail call (`become`), which
+/// `instance.body()` cannot convert. See [checked_body].
+pub fn has_explicit_tail_call(tcx: TyCtxt, instance: Instance) -> bool {
+    instance.has_body() && !tail_call_spans(tcx, internal_body_kind(tcx, instance)).is_empty()
+}
+
+/// The internal instance whose MIR `rustc_public_bridge`'s `BodyBuilder` converts for `instance`.
+/// It loads an intrinsic's fallback body as the item, and `instance_mir` rejects
+/// `InstanceKind::Intrinsic`.
+fn internal_body_kind<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    instance: Instance,
+) -> rustc_middle::ty::InstanceKind<'tcx> {
+    use rustc_middle::ty::InstanceKind;
+    match rustc_internal::internal(tcx, instance).def {
+        InstanceKind::Intrinsic(def_id) => InstanceKind::Item(def_id),
+        InstanceKind::Item(def_id) => InstanceKind::Item(def_id),
+        InstanceKind::LlvmIntrinsic(def_id) => InstanceKind::LlvmIntrinsic(def_id),
+        InstanceKind::Shim(kind) => InstanceKind::Shim(kind),
+        InstanceKind::Virtual(def_id, idx) => InstanceKind::Virtual(def_id, idx),
+    }
+}
+
+/// Spans of the explicit tail calls in the internal MIR for `def`, the body that the conversion
+/// to `rustc_public` would panic on.
+fn tail_call_spans<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    def: rustc_middle::ty::InstanceKind<'tcx>,
+) -> Vec<rustc_span::Span> {
+    tcx.instance_mir(def)
+        .basic_blocks
+        .iter()
+        .filter_map(|bb| match &bb.terminator().kind {
+            rustc_middle::mir::TerminatorKind::TailCall { fn_span, .. } => Some(*fn_span),
+            _ => None,
+        })
+        .collect()
+}
+
+fn report_tail_calls(tcx: TyCtxt, spans: Vec<rustc_span::Span>) {
+    if spans.is_empty() {
+        return;
+    }
+    for span in spans {
+        tcx.dcx()
+            .struct_span_err(span, "explicit tail calls (`become`) are not supported by Kani")
+            .with_note("see https://github.com/model-checking/kani/issues/5131")
+            .emit();
+    }
     tcx.dcx().abort_if_errors();
 }
 
