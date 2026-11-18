@@ -27,10 +27,9 @@ std::ptr::read::<u8>.safety_check.\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u8`"
 
 Summary:
-Verification failed for - check_typed_swap_nonoverlapping_safe
 Verification failed for - check_typed_swap_nonoverlapping
 Verification failed for - check_volatile_load
 Verification failed for - check_compare_bytes
 Verification failed for - check_copy_read
 Verification failed for - check_copy_nonoverlapping_read
-Complete - 7 successfully verified harnesses, 6 failures, 13 total.
+Complete - 8 successfully verified harnesses, 5 failures, 13 total.

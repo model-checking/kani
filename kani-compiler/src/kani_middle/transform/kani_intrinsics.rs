@@ -247,7 +247,7 @@ impl IntrinsicGeneratorPass {
         match pointee_info {
             Ok(pointee_info) => {
                 match pointee_info.layout() {
-                    PointeeLayout::Sized { layout } => {
+                    PointeeLayout::Sized { layout, .. } => {
                         if layout.is_empty() {
                             // Encountered a ZST, so we can short-circut here.
                             // Initialize return variable with True.
@@ -302,7 +302,7 @@ impl IntrinsicGeneratorPass {
                             InsertPosition::Before,
                         );
                     }
-                    PointeeLayout::Slice { element_layout } => {
+                    PointeeLayout::Slice { element_layout, .. } => {
                         // Since `str`` is a separate type, need to differentiate between [T] and str.
                         let (slicee_ty, intrinsic) = match pointee_info.ty().kind() {
                             TyKind::RigidTy(RigidTy::Slice(slicee_ty)) => {

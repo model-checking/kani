@@ -19,6 +19,8 @@ macro_rules! kani_mem_init {
         static mut MEM_INIT_STATE: MemoryInitializationState = MemoryInitializationState::new();
 
         /// Global object for tracking union initialization state across function boundaries.
+        // Identified like `MEM_INIT_STATE`, so that contracts may modify it.
+        #[kanitool::fn_marker = "KaniMemoryInitializationArgumentBuffer"]
         static mut ARGUMENT_BUFFER: Option<ArgumentBuffer> = None;
 
         /// Bytewise mask, representing which bytes of a type are data and which are padding.
@@ -116,11 +118,20 @@ macro_rules! kani_mem_init {
                     let should_reset: bool = super::any();
                     if should_reset {
                         self.tracked_object_id = to_obj;
-                        self.tracked_offset += to_offset - from_offset;
+                        // `tracked_offset >= from_offset` here; subtract first so that a copy to a
+                        // lower offset does not underflow.
+                        self.tracked_offset = self.tracked_offset - from_offset + to_offset;
                         // Note that this preserves the value.
+                    } else {
+                        // The tracked byte stays where it is. If the copy overlaps it (`copy`
+                        // may overlap), it now holds another, untracked, source byte, which is
+                        // initialized here; the branch above tracks that byte precisely.
+                        self.bless::<LAYOUT_SIZE>(to_ptr, num_elts);
                     }
                 } else {
-                    self.bless::<LAYOUT_SIZE>(to_ptr, 1);
+                    // The source is not tracked, so it is initialized: so is the whole
+                    // destination, all `num_elts` elements of it.
+                    self.bless::<LAYOUT_SIZE>(to_ptr, num_elts);
                 }
             }
 
@@ -137,6 +148,30 @@ macro_rules! kani_mem_init {
                     && self.tracked_offset < offset + num_elts * LAYOUT_SIZE
                 {
                     self.value = true;
+                }
+            }
+
+            /// As [Self::set_slice], but leave the state of the bytes that `keep` marks unchanged:
+            /// the bytes of unions nested in the type, whose state does not follow from the type.
+            #[kanitool::disable_checks(pointer)]
+            pub fn set_slice_keep<const LAYOUT_SIZE: usize>(
+                &mut self,
+                ptr: *const u8,
+                layout: Layout<LAYOUT_SIZE>,
+                keep: Layout<LAYOUT_SIZE>,
+                num_elts: usize,
+                value: bool,
+            ) {
+                let obj = super::mem::pointer_object(ptr);
+                let offset = super::mem::pointer_offset(ptr);
+                if self.tracked_object_id == obj
+                    && self.tracked_offset >= offset
+                    && self.tracked_offset < offset + num_elts * LAYOUT_SIZE
+                {
+                    let idx = (self.tracked_offset - offset) % LAYOUT_SIZE;
+                    if !keep[idx] {
+                        self.value = layout[idx] && value;
+                    }
                 }
             }
 
@@ -190,7 +225,8 @@ macro_rules! kani_mem_init {
             }
         }
 
-        /// Set tracked object and tracked offset to a non-deterministic value.
+        /// Set tracked object and tracked offset to a non-deterministic value, and empty the argument
+        /// buffer.
         #[kanitool::disable_checks(pointer)]
         #[kanitool::fn_marker = "InitializeMemoryInitializationStateModel"]
         fn initialize_memory_initialization_state() {
@@ -198,6 +234,8 @@ macro_rules! kani_mem_init {
                 MEM_INIT_STATE.tracked_object_id = super::any();
                 MEM_INIT_STATE.tracked_offset = super::any();
                 MEM_INIT_STATE.value = false;
+                // Statics may start with arbitrary values, e.g. in a harness for a contract.
+                ARGUMENT_BUFFER = None;
             }
         }
 
@@ -293,6 +331,63 @@ macro_rules! kani_mem_init {
             let (ptr, num_elts) = ptr.to_raw_parts();
             unsafe {
                 MEM_INIT_STATE.set_slice(ptr as *const u8, layout, num_elts, value);
+            }
+        }
+
+        /// As [set_ptr_initialized], but leave the bytes that `keep` marks (nested unions) unchanged.
+        #[kanitool::disable_checks(pointer)]
+        #[kanitool::fn_marker = "SetPtrInitializedKeepModel"]
+        fn set_ptr_initialized_keep<const LAYOUT_SIZE: usize, T>(
+            ptr: *const T,
+            layout: Layout<LAYOUT_SIZE>,
+            keep: Layout<LAYOUT_SIZE>,
+            value: bool,
+        ) {
+            if LAYOUT_SIZE == 0 {
+                return;
+            }
+            let (ptr, _) = ptr.to_raw_parts();
+            unsafe {
+                MEM_INIT_STATE.set_slice_keep(ptr as *const u8, layout, keep, 1, value);
+            }
+        }
+
+        /// As [set_slice_chunk_ptr_initialized], but leave the bytes that `keep` marks (nested
+        /// unions) unchanged.
+        #[kanitool::disable_checks(pointer)]
+        #[kanitool::fn_marker = "SetSliceChunkPtrInitializedKeepModel"]
+        fn set_slice_chunk_ptr_initialized_keep<const LAYOUT_SIZE: usize, T>(
+            ptr: *const T,
+            layout: Layout<LAYOUT_SIZE>,
+            keep: Layout<LAYOUT_SIZE>,
+            num_elts: usize,
+            value: bool,
+        ) {
+            if LAYOUT_SIZE == 0 {
+                return;
+            }
+            let (ptr, _) = ptr.to_raw_parts();
+            unsafe {
+                MEM_INIT_STATE.set_slice_keep(ptr as *const u8, layout, keep, num_elts, value);
+            }
+        }
+
+        /// As [set_slice_ptr_initialized], but leave the bytes that `keep` marks (nested unions)
+        /// unchanged.
+        #[kanitool::disable_checks(pointer)]
+        #[kanitool::fn_marker = "SetSlicePtrInitializedKeepModel"]
+        fn set_slice_ptr_initialized_keep<const LAYOUT_SIZE: usize, T>(
+            ptr: *const [T],
+            layout: Layout<LAYOUT_SIZE>,
+            keep: Layout<LAYOUT_SIZE>,
+            value: bool,
+        ) {
+            if LAYOUT_SIZE == 0 {
+                return;
+            }
+            let (ptr, num_elts) = ptr.to_raw_parts();
+            unsafe {
+                MEM_INIT_STATE.set_slice_keep(ptr as *const u8, layout, keep, num_elts, value);
             }
         }
 
