@@ -1,7 +1,7 @@
 // Full name: test::select\
 pub fn select(s: bool, x: i32, y: i32) -> i32\
 {\
-    let _0: i32; // return\
+    let mut _0: i32; // return\
     let s: bool; // arg #1\
     let x: i32; // arg #2\
     let y: i32; // arg #3\
@@ -25,8 +25,8 @@ pub fn select(s: bool, x: i32, y: i32) -> i32\
 // Full name: test::main\
 pub fn main()\
 {\
-    let _0: (); // return\
-    let _1: i32; // anonymous local\
+    let mut _0: (); // return\
+    let mut _1: i32; // anonymous local\
 \
     storage_live(_0)\
     storage_live(_1)\
