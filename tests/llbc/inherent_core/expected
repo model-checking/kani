@@ -29,5 +29,6 @@ pub fn main()\
     _1 = wrap(const 200u8, const 100u8)\
     ↳⚡ undefined_behavior\
     storage_dead(_1)\
+    _0 = ()\
     return\
 }

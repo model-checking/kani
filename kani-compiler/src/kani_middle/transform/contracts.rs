@@ -61,7 +61,7 @@ impl TransformPass for AnyModifiesPass {
         Self: Sized,
     {
         // TODO: Check if the harness has proof_for_contract
-        query_db.args().unstable_features.contains(&"function-contracts".to_string())
+        query_db.args().unstable_features.iter().any(|arg| arg == "function-contracts")
             && self.kani_any.is_some()
     }
 

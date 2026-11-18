@@ -59,6 +59,7 @@ pub fn main()\
     b = Option::Some { _0: const 2i32 }\
     i = both_none<u32, i32>(copy a, copy b)\
     ↳⚡ undefined_behavior\
+    _0 = ()\
     storage_dead(i)\
     storage_dead(b)\
     storage_dead(a)\

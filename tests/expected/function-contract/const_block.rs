@@ -8,7 +8,8 @@
 #![feature(ptr_alignment_type)]
 
 use std::mem;
-use std::ptr::{Alignment, NonNull};
+use std::mem::Alignment;
+use std::ptr::NonNull;
 
 #[derive(PartialEq)]
 enum Enum {
