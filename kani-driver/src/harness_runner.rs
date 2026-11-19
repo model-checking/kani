@@ -97,6 +97,21 @@ fn run_until_abort<I: Sync, T: Send>(
     Ok((payloads, aborted.load(Ordering::Relaxed)))
 }
 
+/// What an automatic harness checks its function against, for the "Autoharness: Checking
+/// function ..." message. A harness with a caveat does not check *all* possible inputs, so
+/// qualify the message accordingly so it does not masquerade as exhaustive (c.f. the
+/// "(bounded)" and "(refcount)" markers in the summary).
+fn autoharness_inputs_description(harness: &HarnessMetadata) -> &'static str {
+    match (harness.is_bounded, harness.has_refcount_caveat) {
+        (false, false) => "all possible inputs",
+        (true, false) => "all possible inputs (bounded for some arguments)",
+        (false, true) => "all possible inputs (with finitely modeled Rc/Arc reference counts)",
+        (true, true) => {
+            "all possible inputs (bounded for some arguments, with finitely modeled Rc/Arc reference counts)"
+        }
+    }
+}
+
 /// Identify the worker on every line of a rendered verification result.
 fn prefix_thread_lines(output: &str, thread_index: usize) -> String {
     let mut prefixed = output
@@ -250,14 +265,7 @@ impl KaniSession {
         if !self.args.common_args.quiet {
             // If the harness is automatically generated, pretty_name refers to the function under verification.
             let mut msg = if harness.is_automatically_generated {
-                // A bounded harness only explores some arguments up to a bound, so it does not
-                // check *all* possible inputs; qualify the message accordingly so a bounded run
-                // does not masquerade as exhaustive (c.f. the "(bounded)" marker in the summary).
-                let inputs = if harness.is_bounded {
-                    "all possible inputs (bounded for some arguments)"
-                } else {
-                    "all possible inputs"
-                };
+                let inputs = autoharness_inputs_description(harness);
                 if matches!(harness.attributes.kind, HarnessKind::Proof) {
                     format!(
                         "Autoharness: Checking function {} against {inputs}...",
@@ -399,11 +407,36 @@ impl KaniSession {
 
 #[cfg(test)]
 mod tests {
-    use super::{Completed, in_input_order, prefix_thread_lines, run_until_abort};
+    use super::{
+        Completed, autoharness_inputs_description, in_input_order, prefix_thread_lines,
+        run_until_abort,
+    };
+    use crate::metadata::tests::mock_proof_harness;
     use anyhow::{Result, anyhow};
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::time::Duration;
+
+    /// Only a harness without caveats may claim to check "all possible inputs" unqualified;
+    /// an `Rc`/`Arc` harness is qualified even though it is not `is_bounded` (#4752).
+    #[test]
+    fn autoharness_inputs_description_qualifies_every_caveat() {
+        let mut h = mock_proof_harness("f", None, None, None);
+        assert_eq!(autoharness_inputs_description(&h), "all possible inputs");
+        h.has_refcount_caveat = true;
+        assert_eq!(
+            autoharness_inputs_description(&h),
+            "all possible inputs (with finitely modeled Rc/Arc reference counts)"
+        );
+        h.is_bounded = true;
+        let both = autoharness_inputs_description(&h);
+        assert!(both.contains("bounded for some arguments") && both.contains("Rc/Arc"), "{both}");
+        h.has_refcount_caveat = false;
+        assert_eq!(
+            autoharness_inputs_description(&h),
+            "all possible inputs (bounded for some arguments)"
+        );
+    }
 
     #[test]
     fn thread_prefixes_preserve_trailing_newlines() {
