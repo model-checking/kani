@@ -170,6 +170,33 @@ impl ValidValuePass {
                         Ty::new_tuple(&[]),
                     );
                 }
+                SourceOp::UntypedLoad { ptr, dest, ty, ranges } => {
+                    let span = source.span(body.blocks());
+                    let ptr = body.insert_assignment(
+                        Rvalue::Use(ptr, WithRetag::No),
+                        &mut source,
+                        InsertPosition::Before,
+                    );
+                    let size = ty.layout().unwrap().shape().size.bytes() as u128;
+                    let size = body.new_uint_operand(size, UintTy::Usize, span);
+                    let untyped = self.call_model(
+                        body,
+                        &mut source,
+                        KaniModel::IsUntypedWrite,
+                        ty,
+                        vec![Operand::Copy(Place::from(ptr)), size],
+                        Ty::bool_ty(),
+                    );
+                    // Continue after the call, where `dest` holds the loaded value.
+                    let dest_ptr = body.insert_assignment(
+                        Rvalue::AddressOf(RawPtrKind::Const, dest),
+                        &mut source,
+                        InsertPosition::After,
+                    );
+                    // Insert the checks after that assignment, before the new block's `goto`.
+                    source = SourceInstruction::Terminator { bb: source.bb() };
+                    self.check_untyped_value(body, &mut source, dest_ptr, untyped, ty, ranges);
+                }
                 SourceOp::UntypedRead { place, ty, ranges } => {
                     let span = source.span(body.blocks());
                     let ptr = body.insert_assignment(
@@ -187,47 +214,60 @@ impl ValidValuePass {
                         vec![Operand::Copy(Place::from(ptr)), size],
                         Ty::bool_ty(),
                     );
-                    let typed = body.insert_assignment(
-                        Rvalue::UnaryOp(UnOp::Not, Operand::Copy(Place::from(untyped))),
-                        &mut source,
+                    self.check_untyped_value(body, &mut source, ptr, untyped, ty, ranges);
+                }
+            }
+        }
+    }
+
+    /// Check that the `ty` at `ptr` is valid if `untyped` holds, or report `ty` as unsupported if
+    /// Kani can't express its validity (`ranges` is `Err`).
+    fn check_untyped_value(
+        &self,
+        body: &mut MutableBody,
+        source: &mut SourceInstruction,
+        ptr: Local,
+        untyped: Local,
+        ty: Ty,
+        ranges: Result<Vec<ValidValueReq>, String>,
+    ) {
+        let typed = body.insert_assignment(
+            Rvalue::UnaryOp(UnOp::Not, Operand::Copy(Place::from(untyped))),
+            source,
+            InsertPosition::Before,
+        );
+        match ranges {
+            Ok(ranges) => {
+                for range in ranges {
+                    let valid = build_limits(
+                        body,
+                        &range,
+                        Rvalue::Use(Operand::Copy(Place::from(ptr)), WithRetag::No),
+                        source,
+                    );
+                    let result = body.insert_binary_op(
+                        BinOp::BitOr,
+                        Operand::Copy(Place::from(typed)),
+                        Operand::Copy(Place::from(valid)),
+                        source,
                         InsertPosition::Before,
                     );
-                    match ranges {
-                        Ok(ranges) => {
-                            for range in ranges {
-                                let valid = build_limits(
-                                    body,
-                                    &range,
-                                    Rvalue::Use(Operand::Copy(Place::from(ptr)), WithRetag::No),
-                                    &mut source,
-                                );
-                                let result = body.insert_binary_op(
-                                    BinOp::BitOr,
-                                    Operand::Copy(Place::from(typed)),
-                                    Operand::Copy(Place::from(valid)),
-                                    &mut source,
-                                    InsertPosition::Before,
-                                );
-                                let msg =
-                                    format!("Undefined Behavior: Invalid value of type `{ty}`");
-                                body.insert_check(
-                                    &self.safety_check_type,
-                                    &mut source,
-                                    InsertPosition::Before,
-                                    Some(result),
-                                    &msg,
-                                );
-                            }
-                        }
-                        Err(_) => {
-                            let reason = format!(
-                                "Kani currently doesn't support checking validity of `read of bytes \
-                                 written without a type check` for `{ty}`"
-                            );
-                            self.unsupported_check_if(body, &mut source, untyped, &reason);
-                        }
-                    }
+                    let msg = format!("Undefined Behavior: Invalid value of type `{ty}`");
+                    body.insert_check(
+                        &self.safety_check_type,
+                        source,
+                        InsertPosition::Before,
+                        Some(result),
+                        &msg,
+                    );
                 }
+            }
+            Err(_) => {
+                let reason = format!(
+                    "Kani currently doesn't support checking validity of `read of bytes \
+                                 written without a type check` for `{ty}`"
+                );
+                self.unsupported_check_if(body, source, untyped, &reason);
             }
         }
     }
@@ -513,6 +553,10 @@ enum SourceOp {
     /// validity of `ty`, which is then reported as unsupported, but only if the read covers bytes
     /// written untyped.
     UntypedRead { place: Place, ty: Ty, ranges: Result<Vec<ValidValueReq>, String> },
+    /// The call this instruction is, an unaligned load of a `ty` at the pointer `ptr` into
+    /// `dest`: check the value it loads, after the call, if one of the bytes at `ptr` was written
+    /// untyped. The bytes at `ptr` can't be read as `ty` in place, as they may be misaligned.
+    UntypedLoad { ptr: Operand, dest: Place, ty: Ty, ranges: Result<Vec<ValidValueReq>, String> },
 }
 
 /// The unsafe instructions that may generate invalid values.
@@ -636,6 +680,16 @@ impl<'a, 'b> CheckValueVisitor<'a, 'b> {
             },
             _ => false,
         }
+    }
+
+    /// Whether `place` dereferences a raw pointer.
+    fn derefs_raw_pointer(&self, place: &Place) -> bool {
+        place.projection.iter().enumerate().any(|(idx, elem)| {
+            matches!(elem, ProjectionElem::Deref)
+                && PlaceRef { local: place.local, projection: &place.projection[..idx] }
+                    .ty(self.locals)
+                    .is_ok_and(|ty| ty.kind().is_raw_ptr())
+        })
     }
 
     /// A typed read of `place`: check it if it reads bytes written untyped.
@@ -834,7 +888,7 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
             self.current = SourceInstruction::Terminator { bb: self.bb };
             // Leave it as an exhaustive match to be notified when a new kind is added.
             match &term.kind {
-                TerminatorKind::Call { func, args, .. } => {
+                TerminatorKind::Call { func, args, destination, .. } => {
                     // Note: For transmute, both Src and Dst must be valid type.
                     // In this case, we need to save the Dst, and invoke super_terminator.
                     // The return destination is a store; argument operands are reads.
@@ -858,15 +912,32 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                         }
                         // Volatile accesses read and write through the pointer without a MIR
                         // place: treat them as a typed read and a store through the pointer.
-                        Some("volatile_load") | Some("unaligned_volatile_load") => {
+                        Some("volatile_load") => {
                             if let Some(place) = deref_place(&args[0]) {
                                 self.check_untyped_read(&place);
                             }
                         }
-                        Some("volatile_store") | Some("unaligned_volatile_store") => {
+                        Some("unaligned_volatile_load") => {
+                            let ty = destination.ty(self.locals).unwrap();
+                            match ty_validity_per_offset(self.tcx, &self.machine, ty, 0) {
+                                Ok(ranges) if ranges.is_empty() => {}
+                                ranges => self.push_target(SourceOp::UntypedLoad {
+                                    ptr: args[0].clone(),
+                                    dest: destination.clone(),
+                                    ty,
+                                    ranges,
+                                }),
+                            }
+                        }
+                        Some("volatile_store") => {
                             if let Some(place) = deref_place(&args[0]) {
                                 self.record_store(&place);
                             }
+                        }
+                        // The pointer may be misaligned, so it's not a place: record the bytes
+                        // it writes as untyped, as for any store through a pointer.
+                        Some("unaligned_volatile_store") => {
+                            self.record_untyped_write(&args[0], None);
                         }
                         // Atomic operations other than loads and fences write an integer or a
                         // pointer, types without validity requirements, through the pointer.
@@ -1136,12 +1207,15 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
             // Reading a discriminant, or a place to dereference it, is a typed read.
             // So is forming a reference: Kani requires the target of a reference to be valid, as
             // it does for `&*ptr`. Dropping a value borrows it, and its drop glue reads it.
-            Rvalue::CopyForDeref(place)
-            | Rvalue::Discriminant(place)
-            | Rvalue::Ref(_, _, place) => {
+            Rvalue::CopyForDeref(place) | Rvalue::Discriminant(place) => {
                 self.check_untyped_read(place);
             }
-            Rvalue::AddressOf(_, _)
+            // A borrow through a raw pointer is checked unconditionally (`DerefValidity`).
+            Rvalue::Ref(_, _, place) if !self.derefs_raw_pointer(place) => {
+                self.check_untyped_read(place);
+            }
+            Rvalue::Ref(..)
+            | Rvalue::AddressOf(_, _)
             | Rvalue::BinaryOp(_, _, _)
             | Rvalue::CheckedBinaryOp(_, _, _)
             | Rvalue::Len(_)

@@ -3,6 +3,8 @@
 // kani-flags: -Z valid-value-checks
 
 //! Paths by which untyped bytes reach a typed read. Each `ub_*` harness is UB under Miri.
+#![feature(core_intrinsics)]
+#![allow(internal_features)]
 
 use std::num::NonZeroU8;
 use std::ptr;
@@ -91,4 +93,24 @@ fn call_result_overwrites() {
     unsafe { ptr::write_bytes(&raw mut x as *mut u8, 0xff, 2) };
     x = make_ok();
     assert!(x.is_ok());
+}
+
+/// An unaligned volatile load of untyped bytes.
+#[kani::proof]
+fn ub_unaligned_volatile_load() {
+    let mut buf = [0u8; 8];
+    let p = unsafe { buf.as_mut_ptr().add(1) } as *mut char;
+    unsafe { ptr::write_bytes(p as *mut u8, 0xff, 4) };
+    let c = unsafe { std::intrinsics::unaligned_volatile_load(p) };
+    std::hint::black_box(c);
+}
+
+/// An unaligned volatile load and store of a valid `char`.
+#[kani::proof]
+fn unaligned_volatile_valid() {
+    let mut buf = [0u8; 8];
+    let p = unsafe { buf.as_mut_ptr().add(1) } as *mut char;
+    let c: char = kani::any();
+    unsafe { std::intrinsics::unaligned_volatile_store(p, c) };
+    assert_eq!(unsafe { std::intrinsics::unaligned_volatile_load(p) }, c);
 }
