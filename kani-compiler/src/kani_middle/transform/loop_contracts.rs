@@ -67,7 +67,7 @@ impl TransformPass for LoopContractPass {
     where
         Self: Sized,
     {
-        query_db.args().unstable_features.contains(&"loop-contracts".to_string())
+        query_db.args().unstable_features.iter().any(|arg| arg == "loop-contracts")
     }
 
     /// Run a transformation pass on the whole codegen unit.

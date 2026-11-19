@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // kani-flags: -Z valid-value-checks
 //! Raw addresses and reads of pattern fields have different validity requirements.
-#![feature(pattern_types, pattern_type_macro)]
+#![feature(pattern_types)]
 
 // This is the same pattern kind used by NonNull's private pointer field.
 type NotNull = std::pat::pattern_type!(*const u8 is !null);
