@@ -284,8 +284,7 @@ impl MirVisitor for CheckUninitVisitor<'_> {
                     Ok(instance) => instance,
                     Err(reason) => {
                         self.push_target(MemoryInitOp::Unsupported { reason });
-                        // Keep entry loads and operations collected while visiting the call.
-                        // The common terminator epilogue publishes the collected target.
+                        // Publish entry loads and operand checks through the terminator epilogue.
                         break 'call;
                     }
                 };
@@ -412,8 +411,8 @@ impl MirVisitor for CheckUninitVisitor<'_> {
                         }
                     }
                     InstanceKind::Item | InstanceKind::Shim => {
-                        // The resolver accepts MIR bodies and foreign items. Foreign items use
-                        // the models below; other calls transfer union argument and return state.
+                        // Model foreign allocation calls here. Calls with MIR bodies store
+                        // initialization state for union arguments.
                         if instance.is_foreign_item() {
                             match instance.name().as_str() {
                                 "alloc::alloc::__rust_alloc" | "alloc::alloc::__rust_realloc" => {
@@ -765,7 +764,7 @@ fn try_remove_topmost_deref(place: &Place) -> Option<Place> {
     }
 }
 
-/// Try retrieving instance for the given function operand.
+/// Resolve a call operand and discard the checked body.
 fn try_resolve_instance(
     tcx: TyCtxt,
     locals: &[LocalDecl],
@@ -774,9 +773,8 @@ fn try_resolve_instance(
     resolve_call(tcx, func.ty(locals).unwrap()).map(|(instance, _)| instance)
 }
 
-/// Check whether a type may carry memory initialization state through a compiler-generated shim.
-/// Inspect unions and nested by-value storage; references and pointers carry addresses.
-/// Treat unknown types conservatively as carrying memory initialization state.
+/// Check for unions or unclassified types in a shim's by-value storage.
+/// Follow aggregate fields and captures; stop at pointers and references.
 fn shim_type_may_carry_shadow(tcx: TyCtxt<'_>, ty: Ty) -> bool {
     fn inspect<'tcx>(
         tcx: TyCtxt<'tcx>,
@@ -813,7 +811,6 @@ fn shim_type_may_carry_shadow(tcx: TyCtxt<'_>, ty: Ty) -> bool {
     inspect(tcx, rustc_internal::internal(tcx, ty), &mut HashSet::new())
 }
 
-/// Describe an unsupported call encountered during memory initialization checks.
 fn unsupported_call_reason(kind: &str) -> String {
     format!(
         "Kani does not support memory initialization checks across {kind}. For more information about planned support, see https://github.com/model-checking/kani/issues/3300."

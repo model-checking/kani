@@ -345,10 +345,8 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
     }
 }
 
-/// Resolve calls whose effects the uninitialized-memory passes can follow.
-/// The local visitor emits unsupported-call checks and guards memory initialization state
-/// transfers through compiler-generated shims.
-/// Returns the checked body for reuse, except for intrinsics and foreign items.
+/// Resolve a supported direct callee and return its checked MIR body.
+/// Intrinsics and foreign items return no body.
 pub fn resolve_call(
     tcx: TyCtxt,
     func_ty: StableTy,
