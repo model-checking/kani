@@ -546,6 +546,9 @@ impl RustcInternalMir for TerminatorKind {
         match self {
             TerminatorKind::Goto { target } => rustc_middle::mir::TerminatorKind::Goto {
                 target: rustc_middle::mir::BasicBlock::from_usize(*target),
+                // Loop hint attributes (`#[unroll]`) have no equivalent in the stable
+                // representation, and Kani-synthesized gotos carry none.
+                loop_hint_attrs: Default::default(),
             },
             TerminatorKind::SwitchInt { discr, targets } => {
                 rustc_middle::mir::TerminatorKind::SwitchInt {
@@ -607,9 +610,6 @@ impl RustcInternalMir for Terminator {
                 self.source_info.span,
             )),
             kind: self.kind.internal_mir(tcx),
-            // Terminators gained MIR-level attributes; the stable representation has no
-            // equivalent, and Kani-synthesized terminators carry none.
-            attributes: Default::default(),
         }
     }
 }
@@ -643,7 +643,7 @@ impl RustcInternalMir for Body {
                         .iter()
                         .map(|statement| statement.internal_mir(tcx))
                         .collect();
-                    let terminator = Some(stable_basic_block.terminator.internal_mir(tcx));
+                    let terminator = stable_basic_block.terminator.internal_mir(tcx);
                     let is_cleanup = false;
                     rustc_middle::mir::BasicBlockData::new_stmts(statements, terminator, is_cleanup)
                 })

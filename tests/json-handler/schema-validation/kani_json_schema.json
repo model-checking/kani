@@ -1,154 +1,190 @@
 {
-  "_comment": "All fields are required unless listed in _optional. Metadata fields (starting with _) are not validated.",
-  "metadata": {
-    "version": "1.0",
-    "timestamp": "2025-10-30T12:00:00.000000Z",
-    "kani_version": "0.65.0",
-    "target": "x86_64-unknown-linux-gnu",
-    "build_mode": "debug"
-  },
-  "project": {
-    "crate_name": [
-      "example_crate"
-    ],
-    "workspace_root": "/path/to/workspace",
-    "output_dir": "/path/to/workspace/target/x86_64-unknown-linux-gnu/debug/deps"
-  },
-  "tools": {
-    "_optional": [
-      "goto_synthesizer"
-    ],
-    "kani": "0.67.0",
-    "rustc": "rustc 1.95.0-nightly (838709580 2026-02-17)",
-    "cbmc": "6.10.0 (cbmc-6.10.0)",
-    "goto_cc": "clang version 21.0.0 (goto-cc 6.10.0 (cbmc-6.10.0))",
-    "goto_instrument": "6.10.0 (cbmc-6.10.0)",
-    "goto_synthesizer": null,
-    "solvers": [
-      {
-        "name": "cadical",
-        "version": null
-      }
-    ]
-  },
-  "harness_metadata": [
-    {
-      "pretty_name": "example_harness",
-      "mangled_name": "_RNvCs_example_mangled_name",
-      "crate_name": "example_crate",
-      "source": {
-        "file": "src/lib.rs",
-        "start_line": 10,
-        "end_line": 15
-      },
-      "goto_file": "/path/to/goto/file.out",
-      "attributes": {
-        "kind": "Proof",
-        "should_panic": false
-      },
-      "contract": {
-        "contracted_function_name": null,
-        "recursion_tracker": null
-      },
-      "has_loop_contracts": false,
-      "is_automatically_generated": false
-    }
-  ],
-  "verification_results": {
-    "summary": {
-      "total_harnesses": 1,
-      "executed": 1,
-      "status": "completed",
-      "successful": 1,
-      "failed": 0,
-      "duration_ms": 500
+  "_comment": "RFC 0015 document template. See scripts/validate_json_export.py for the syntax and the presence rules.",
+  "_defs": {
+    "status": "enum:COVERED|ERROR|FAILURE|SATISFIED|SUCCESS|UNCOVERED|UNDETERMINED|UNKNOWN|UNREACHABLE|UNSATISFIABLE",
+    "property": {
+      "id": "string",
+      "description": "string",
+      "class": "string",
+      "file": "string?",
+      "line": "string?",
+      "trace_available": "boolean",
+      "status": "ref:status"
     },
-    "results": [
-      {
-        "harness_id": "example_harness",
-        "status": "Success",
-        "duration_ms": 500,
-        "checks": [
-          {
-            "id": 1,
-            "function": "example_function",
-            "status": "Success",
-            "description": "assertion failed: x > 0",
-            "location": {
-              "file": "src/lib.rs",
-              "line": "20",
-              "column": "13"
-            },
-            "category": "assertion"
-          }
-        ]
-      }
-    ]
+    "other_entry": {
+      "id": "string",
+      "status": "ref:status"
+    }
   },
-  "error_details": [
+  "schema_version": "enum:0.1.0",
+  "kani_commit": "string?",
+  "kani_commit_dirty": "boolean?",
+  "tools": {
+    "kani": "string",
+    "rustc": "string?",
+    "cbmc": "string?"
+  },
+  "enabled_unstable_features": [
+    "string"
+  ],
+  "harness_selection": {
+    "requested_filters": [
+      "string"
+    ],
+    "exact": "boolean",
+    "unmatched_filters": [
+      "string"
+    ],
+    "matched_count": "integer"
+  },
+  "harness_timeout_s": "number?",
+  "configuration": {
+    "checks": {
+      "memory_safety": "boolean",
+      "overflow": "boolean",
+      "unwinding": "boolean",
+      "undefined_function": "boolean",
+      "assertion_reach_checks": "boolean",
+      "ignore_global_asm": "boolean",
+      "extra_pointer_checks": "boolean",
+      "assert_contracts": "boolean",
+      "prove_safety_only": "boolean"
+    },
+    "cbmc_args": [
+      "string"
+    ],
+    "coverage_enabled": "boolean"
+  },
+  "outcome": {
+    "kind": "enum:COMPLETED"
+  },
+  "run_state": "enum:COMPLETE|NO_HARNESSES_SELECTED|PARTIAL",
+  "target": "string",
+  "started_at": "pattern:[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z",
+  "wall_time_s": "number",
+  "harnesses": [
     {
       "_optional": [
-        "error_type",
-        "failed_properties_type",
-        "exit_status"
+        "failure_kind"
       ],
-      "harness_id": "example_harness",
-      "has_errors": false,
-      "error_type": null,
-      "failed_properties_type": null,
-      "exit_status": "success"
-    }
-  ],
-  "property_details": [
-    {
-      "harness_id": "example_harness",
-      "property_details": {
-        "_optional": [
-          "error"
-        ],
-        "total_properties": 1,
-        "passed": 1,
-        "failed": 0,
-        "unreachable": 0,
-        "undetermined": 0,
-        "solver_error": 0,
-        "satisfied": 0,
-        "unsatisfiable": 0,
-        "covered": 0,
-        "uncovered": 0,
-        "error": null
-      }
-    }
-  ],
-  "cbmc": [
-    {
       "_nullable": [
-        "cbmc_stats"
+        "contract"
       ],
-      "harness_id": "example_harness",
-      "cbmc_metadata": {
-        "version": "6.7.1",
-        "os_info": "x86_64 linux unix"
+      "name": "string",
+      "crate_name": "string",
+      "file": "string",
+      "line": "integer",
+      "contract": {
+        "contracted_function_name": "string",
+        "recursion_tracker": "string?"
       },
-      "configuration": {
-        "object_bits": 16,
-        "solver": "Cadical"
+      "is_automatically_generated": "boolean",
+      "has_loop_contracts": "boolean",
+      "is_bounded": "boolean",
+      "attributes": {
+        "kind": "named:attribute_kind",
+        "should_panic": "boolean",
+        "solver": "named:solver?",
+        "unwind_value": "integer?",
+        "stubs": [
+          {
+            "original": "string",
+            "replacement": "string"
+          }
+        ],
+        "verified_stubs": [
+          "string"
+        ]
       },
-      "cbmc_stats": {
-        "runtime_symex_s": 0.005,
-        "size_program_expression": 150,
-        "slicing_removed_assignments": 80,
-        "vccs_generated": 1,
-        "vccs_remaining": 1,
-        "runtime_postprocess_equation_s": 2e-05,
-        "runtime_convert_ssa_s": 0.002,
-        "runtime_post_process_s": 5e-06,
-        "runtime_solver_s": 0.0003,
-        "runtime_decision_procedure_s": 0.003
+      "outcome": {
+        "_optional": [
+          "verdict",
+          "code",
+          "message"
+        ],
+        "kind": "enum:COMPLETED|CRASHED|OUT_OF_MEMORY|TIMEOUT",
+        "verdict": "enum:FAILURE|SUCCESS",
+        "code": "integer?",
+        "message": "string?"
+      },
+      "resolved_solver": "string?",
+      "resolved_unwind": "integer?",
+      "generated_concrete_test": "boolean",
+      "resources": {
+        "verification_time_s": "number"
+      },
+      "n_properties": "integer?",
+      "n_failed": "integer?",
+      "failure_kind": "enum:ERROR|NONE|OTHER|PANICS_ONLY",
+      "failed_properties": [
+        "ref:property"
+      ],
+      "unsupported_constructs": [
+        "ref:property"
+      ],
+      "warnings": [
+        {
+          "message": "string",
+          "truncated": "boolean",
+          "original_chars": "integer?"
+        }
+      ],
+      "warnings_truncated": "integer",
+      "checks": {
+        "total": "integer?",
+        "success": "integer?",
+        "failure": [
+          "string"
+        ],
+        "unreachable": [
+          "string"
+        ],
+        "undetermined": [
+          "string"
+        ],
+        "error": [
+          "string"
+        ],
+        "unknown": [
+          "string"
+        ],
+        "other": [
+          "ref:other_entry"
+        ]
+      },
+      "covers": {
+        "total": "integer?",
+        "satisfied": [
+          "string"
+        ],
+        "unsatisfiable": [
+          "string"
+        ],
+        "unreachable": [
+          "string"
+        ],
+        "undetermined": [
+          "string"
+        ],
+        "error": [
+          "string"
+        ],
+        "unknown": [
+          "string"
+        ],
+        "other": [
+          "ref:other_entry"
+        ]
       }
     }
   ],
-  "coverage": {
-    "enabled": false
+  "summary": {
+    "total": "integer",
+    "successful": "integer",
+    "failed": "integer",
+    "checks_total": "integer",
+    "checks_success": "integer",
+    "covers_total": "integer",
+    "covers_satisfied": "integer"
   }
 }

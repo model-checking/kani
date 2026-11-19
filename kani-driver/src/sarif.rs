@@ -3,9 +3,11 @@
 
 use crate::call_cbmc::ExitStatus;
 use crate::cbmc_output_parser::{CheckStatus, Property, SourceLocation, TraceItem};
+use crate::cbmc_property_renderer::vacuity_message;
 use crate::harness_runner::HarnessResult;
 use crate::session::KaniSession;
 use anyhow::{Context, Result};
+use kani_metadata::HarnessMetadata;
 use pathdiff::diff_paths;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -180,6 +182,15 @@ impl SarifLog {
                             },
                         });
                     }
+                    for text in properties.iter().filter_map(vacuity_message) {
+                        let rule_id = "kani.autoharness.vacuous";
+                        let desc = "No generated input reaches the function under test";
+                        rules.entry(rule_id.to_string()).or_insert_with(|| ReportingDescriptor {
+                            id: rule_id.to_string(),
+                            short_description: Message { text: desc.to_string() },
+                        });
+                        sarif_results.push(harness_level_result(harness, rule_id, &text));
+                    }
                 }
                 Err(exit_status) => {
                     let (rule_id, desc) = exit_status_rule(exit_status);
@@ -188,26 +199,7 @@ impl SarifLog {
                         short_description: Message { text: desc.to_string() },
                     });
 
-                    sarif_results.push(SarifResult {
-                        rule_id: rule_id.to_string(),
-                        level: "error",
-                        message: Message { text: format!("[{}] {desc}", harness.pretty_name) },
-                        locations: vec![Location {
-                            physical_location: PhysicalLocation {
-                                artifact_location: ArtifactLocation {
-                                    uri: relativize_path(&harness.original_file),
-                                },
-                                region: Region {
-                                    start_line: harness.original_start_line as u32,
-                                    start_column: None,
-                                },
-                            },
-                        }],
-                        properties: ResultProperties {
-                            harness: harness.pretty_name.clone(),
-                            property_name: None,
-                        },
-                    });
+                    sarif_results.push(harness_level_result(harness, rule_id, desc));
                 }
             }
         }
@@ -230,6 +222,27 @@ impl SarifLog {
     }
 }
 
+/// An error result about `harness` as a whole, located at the harness's own source.
+fn harness_level_result(harness: &HarnessMetadata, rule_id: &str, text: &str) -> SarifResult {
+    SarifResult {
+        rule_id: rule_id.to_string(),
+        level: "error",
+        message: Message { text: format!("[{}] {text}", harness.pretty_name) },
+        locations: vec![Location {
+            physical_location: PhysicalLocation {
+                artifact_location: ArtifactLocation {
+                    uri: relativize_path(&harness.original_file),
+                },
+                region: Region {
+                    start_line: harness.original_start_line as u32,
+                    start_column: None,
+                },
+            },
+        }],
+        properties: ResultProperties { harness: harness.pretty_name.clone(), property_name: None },
+    }
+}
+
 fn sarif_level(status: &CheckStatus) -> Option<&'static str> {
     match status {
         CheckStatus::Failure => Some("error"),
@@ -242,6 +255,9 @@ fn exit_status_rule(exit_status: &ExitStatus) -> (&'static str, &'static str) {
     match exit_status {
         ExitStatus::Timeout => ("kani.cbmc.timeout", "CBMC timed out"),
         ExitStatus::OutOfMemory => ("kani.cbmc.oom", "CBMC ran out of memory"),
+        ExitStatus::IncompleteResults(_) => {
+            ("kani.cbmc.incomplete", "CBMC did not finish reporting its results")
+        }
         ExitStatus::Other(_) => ("kani.cbmc.failed", "CBMC failed"),
     }
 }
@@ -266,7 +282,7 @@ fn location_from_source_location(loc: &SourceLocation) -> Option<(String, u32, O
     Some((relativize_path(file), line, column))
 }
 
-fn relativize_path(file: &str) -> String {
+pub(crate) fn relativize_path(file: &str) -> String {
     let file_path = PathBuf::from(file);
     let Ok(cur_dir) = env::current_dir() else { return file.to_string() };
 
@@ -330,7 +346,8 @@ mod tests {
             generated_concrete_test: false,
             ignored_quantifiers: 0,
             coverage_results: None,
-            cbmc_stats: None,
+            warnings: Vec::new(),
+            warnings_truncated: 0,
         }
     }
 
@@ -345,7 +362,8 @@ mod tests {
             generated_concrete_test: false,
             ignored_quantifiers: 0,
             coverage_results: None,
-            cbmc_stats: None,
+            warnings: Vec::new(),
+            warnings_truncated: 0,
         };
         let harness_result = HarnessResult { harness: &harness, result };
 

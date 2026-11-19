@@ -423,7 +423,7 @@ impl TestCx<'_> {
         // Open the `config.yml` file and extract its values
         let path_yml = self.testpaths.file.join("config.yml");
         let config_file = std::fs::File::open(path_yml).expect("couldn't open `config.yml`");
-        let exec_config_res = serde_yaml::from_reader(config_file);
+        let exec_config_res = serde_saphyr::from_reader(config_file);
         if let Err(error) = &exec_config_res {
             let err_msg = format!("couldn't parse `config.yml` file: {error}");
             fatal_error(&err_msg);
@@ -494,6 +494,9 @@ impl TestCx<'_> {
             self.testpaths.file.parent().unwrap().join("expected")
         };
         self.verify_output(&proc_res, &expected_path);
+        if self.config.require_success && !proc_res.status.success() {
+            self.fatal_proc_rec("test failed: Kani exited unsuccessfully", &proc_res);
+        }
     }
 
     /// Runs Kani in coverage mode on the test file specified by `self.testpaths.file`.

@@ -38,6 +38,8 @@ cargo test -p cprover_bindings
 cargo test -p kani-compiler
 cargo test -p kani-driver
 cargo test -p kani_metadata
+cargo test -p compiletest
+cargo test -p kani-cov
 # Use concrete playback to enable assertions failure
 cargo test -p kani --features concrete_playback
 # Test the actual macros, skipping doc tests and enabling extra traits for "syn"
@@ -119,11 +121,8 @@ cargo clean --manifest-path "$FEATURES_MANIFEST_PATH"
 # Setting RUSTFLAGS like this always resets cargo's build cache resulting in
 # all tests to be re-run. I.e., cannot keep re-runing the regression from where
 # we stopped.
-# Only run with the `cprover` feature to avoid compiling the `charon` library
-# which is not our code and may have warnings. The downside is that we wouldn't
-# detect any warnings in the charon code path. TODO: Remove
-# `--no-default-features --features cprover` when the warnings in charon are
-# fixed and we advance the charon pin to that version
+# Only the `cprover` feature is built here; the LLBC backend (`llbc`, which pulls in Charon) is
+# built with warnings denied, and linted, by `kani-llbc-regression.sh`.
 RUSTFLAGS="-D warnings" cargo build --target-dir /tmp/kani_build_warnings --no-default-features --features cprover
 
 echo

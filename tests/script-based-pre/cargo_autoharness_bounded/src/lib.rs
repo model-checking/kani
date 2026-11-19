@@ -4,9 +4,9 @@
 // Test that the autoharness subcommand supports arguments whose types implement
 // `BoundedArbitrary` (rather than `Arbitrary`), e.g. `Vec<T>`, `String`, or user types
 // deriving it. The generated harness produces a bounded nondeterministic value via
-// `kani::bounded_any` with bound AUTOHARNESS_BOUNDED_ANY_BOUND (4); verification results
-// only hold up to that bound. The "TEST NOTE" comments explain the expected result per
-// function.
+// `kani::bounded_any` with the default bound AUTOHARNESS_BOUNDED_ARBITRARY_BOUND (4);
+// verification results only hold up to that bound. The "TEST NOTE" comments explain the
+// expected result per function.
 
 // TEST NOTE: should PASS: summing at most 4 u8s cannot overflow u64.
 pub fn vec_sum(xs: Vec<u8>) -> u64 {

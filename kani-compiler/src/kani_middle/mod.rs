@@ -10,17 +10,19 @@ use rustc_data_structures::fx::FxHashMap;
 use rustc_hir::{def::DefKind, def_id::DefId as InternalDefId, def_id::LOCAL_CRATE};
 use rustc_middle::ty::TyCtxt;
 use rustc_public::mir::mono::{Instance, MonoItem};
-use rustc_public::mir::{Mutability, TerminatorKind};
+use rustc_public::mir::{Body, Mutability, TerminatorKind};
 use rustc_public::rustc_internal;
 use rustc_public::ty::{
-    AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, RigidTy, Span as SpanStable, Ty, TyConst,
-    TyKind,
+    AdtDef, AdtKind, FnDef, GenericArgKind, GenericArgs, PolyFnSig, RigidTy, Span as SpanStable,
+    Ty, TyConst, TyKind,
 };
 use rustc_public::visitor::{Visitable, Visitor as TyVisitor};
 use rustc_public::{CrateDef, CrateDefType, DefId, local_crate};
 use std::ops::ControlFlow;
 
 use self::attributes::KaniAttributes;
+use self::kani_functions::KaniModel;
+use strum_macros::EnumIter;
 
 /// Return an item's name for user-facing output and CBMC symbol pretty-names.
 ///
@@ -54,48 +56,11 @@ pub fn nonnull_pointee(ty: Ty) -> Option<Ty> {
     })
 }
 
-/// Strip the local crate name from an absolute item path, restoring the
-/// crate-relative form Kani used before rust-lang/rust#149401. That change made
-/// `def_path_str` prefix the local crate name at *every* local path component,
-/// so it appears not just at the start (`my_crate::f`) but also inside
-/// qualifiers and generic args (`<my_crate::T as my_crate::Tr>::m`,
-/// `f::<my_crate::T>`). Remove `<crate>::` at each path-component boundary
-/// (start of string or after a non-identifier char) so these become `f`,
-/// `<T as Tr>::m`, `f::<T>`. Non-local paths (which begin with a different
-/// crate name) are unaffected.
+/// Strip the local crate name from an absolute item path; see
+/// [`kani_metadata::strip_crate_prefix`] for the rules. `tools/scanner` uses the
+/// same function, so its CSVs and `kani list` agree on names.
 pub fn strip_local_crate_prefix(name: String) -> String {
-    let needle = format!("{}::", local_crate().name);
-    if !name.contains(&needle) {
-        return name;
-    }
-    let mut out = String::with_capacity(name.len());
-    let mut rest = name.as_str();
-    // The previous char in the input, used to decide whether a `<crate>::` here
-    // is a crate-root *qualifier* (droppable) or a path *continuation* segment
-    // (a module/item that happens to share the crate's name, which must be
-    // kept). A qualifier appears at the start or after a type/path delimiter
-    // (`<`, `,`, ` `, `&`, `*`, `(`, `[`, ...); a continuation appears after
-    // `::`. So drop `<crate>::` only when the previous char is neither part of
-    // an identifier nor `:`. After dropping, pretend the previous char is `:`
-    // so an immediately following same-named segment is treated as a
-    // continuation (e.g. `main::main::{closure#0}` -> `main::{closure#0}`).
-    let mut prev: Option<char> = None;
-    loop {
-        let at_qualifier = match prev {
-            None => true,
-            Some(c) => !c.is_alphanumeric() && c != '_' && c != ':',
-        };
-        if at_qualifier && rest.starts_with(&needle) {
-            rest = &rest[needle.len()..];
-            prev = Some(':');
-            continue;
-        }
-        let Some(ch) = rest.chars().next() else { break };
-        out.push(ch);
-        prev = Some(ch);
-        rest = &rest[ch.len_utf8()..];
-    }
-    out
+    kani_metadata::strip_crate_prefix(&name, &local_crate().name)
 }
 
 pub mod abi;
@@ -161,6 +126,155 @@ pub fn check_crate_items(tcx: TyCtxt, ignore_asm: bool) {
     }
 
     tcx.dcx().abort_if_errors();
+}
+
+/// The body of `instance`, or `None` if it has none; aborts with a diagnostic if it contains an
+/// explicit tail call (`become`).
+///
+/// Stable `rustc_public::mir::TerminatorKind` has no `TailCall` variant, so converting a body that
+/// contains one hits `unimplemented!()` inside the toolchain and aborts the compilation, c.f.
+/// <https://github.com/model-checking/kani/issues/5131>. The feature is incomplete; report every
+/// such terminator and abort once. Leave the call unmodeled: an ordinary `Call` would keep the
+/// caller's frame live, which disagrees with `become`.
+///
+/// Use this instead of `instance.body()` wherever the body may belong to user code. Where an
+/// unsupported body should be ignored rather than reported (heuristics, eligibility checks), use
+/// [body_without_tail_calls] or [has_explicit_tail_call].
+pub fn checked_body(tcx: TyCtxt, instance: Instance) -> Option<Body> {
+    // `has_body` is about the item: compiler-generated shims have no item body, but
+    // `instance.body()` still builds one for them, and they never contain `become`.
+    if instance.has_body() {
+        report_tail_calls(tcx, tail_call_spans(tcx, internal_body_kind(tcx, instance)));
+    }
+    instance.body()
+}
+
+/// [checked_body] for a function definition, as loaded by `FnDef::body()`.
+pub fn checked_fn_def_body(tcx: TyCtxt, def: FnDef) -> Option<Body> {
+    if !def.has_body() {
+        return None;
+    }
+    let def_id = rustc_internal::internal(tcx, def.def_id());
+    report_tail_calls(tcx, tail_call_spans(tcx, rustc_middle::ty::InstanceKind::Item(def_id)));
+    def.body()
+}
+
+/// The body of `instance`, or `None` if it has none or contains an explicit tail call. Unlike
+/// [checked_body], this reports nothing.
+pub fn body_without_tail_calls(tcx: TyCtxt, instance: Instance) -> Option<Body> {
+    if has_explicit_tail_call(tcx, instance) {
+        return None;
+    }
+    instance.body()
+}
+
+/// Whether `instance` has a body containing an explicit tail call (`become`), which
+/// `instance.body()` cannot convert. See [checked_body].
+pub fn has_explicit_tail_call(tcx: TyCtxt, instance: Instance) -> bool {
+    instance.has_body() && !tail_call_spans(tcx, internal_body_kind(tcx, instance)).is_empty()
+}
+
+/// The internal instance whose MIR `rustc_public_bridge`'s `BodyBuilder` converts for `instance`.
+/// It loads an intrinsic's fallback body as the item, and `instance_mir` rejects
+/// `InstanceKind::Intrinsic`.
+fn internal_body_kind<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    instance: Instance,
+) -> rustc_middle::ty::InstanceKind<'tcx> {
+    use rustc_middle::ty::InstanceKind;
+    match rustc_internal::internal(tcx, instance).def {
+        InstanceKind::Intrinsic(def_id) => InstanceKind::Item(def_id),
+        InstanceKind::Item(def_id) => InstanceKind::Item(def_id),
+        InstanceKind::LlvmIntrinsic(def_id) => InstanceKind::LlvmIntrinsic(def_id),
+        InstanceKind::Shim(kind) => InstanceKind::Shim(kind),
+        InstanceKind::Virtual(def_id, idx) => InstanceKind::Virtual(def_id, idx),
+    }
+}
+
+/// Spans of the explicit tail calls in the internal MIR for `def`, the body that the conversion
+/// to `rustc_public` would panic on.
+fn tail_call_spans<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    def: rustc_middle::ty::InstanceKind<'tcx>,
+) -> Vec<rustc_span::Span> {
+    tcx.instance_mir(def)
+        .basic_blocks
+        .iter()
+        .filter_map(|bb| match &bb.terminator().kind {
+            rustc_middle::mir::TerminatorKind::TailCall { fn_span, .. } => Some(*fn_span),
+            _ => None,
+        })
+        .collect()
+}
+
+fn report_tail_calls(tcx: TyCtxt, spans: Vec<rustc_span::Span>) {
+    if spans.is_empty() {
+        return;
+    }
+    for span in spans {
+        tcx.dcx()
+            .struct_span_err(span, "explicit tail calls (`become`) are not supported by Kani")
+            .with_note("see https://github.com/model-checking/kani/issues/5131")
+            .emit();
+    }
+    tcx.dcx().abort_if_errors();
+}
+
+/// Whether `instance` is a C-variadic function whose calling convention is not the C one, e.g.
+/// `unsafe extern "sysv64" fn(_: ...)`.
+///
+/// `rustc_public` only models C-variadics under `CanonAbi::C`: asking such an instance for its
+/// stable ABI trips an assertion inside the conversion and aborts the compilation, c.f.
+/// <https://github.com/model-checking/kani/issues/4817>. Callers use this to report the function as
+/// unsupported instead.
+///
+/// The check reads the *internal* ABI because that is exact about the calling convention: the
+/// `extern` string is not, since `extern "system"` and `extern "cdecl"` canonicalize differently
+/// per target (`rustc_target::spec::abi_map`).
+pub fn is_unsupported_variadic(tcx: TyCtxt, instance: Instance) -> bool {
+    use rustc_middle::ty::TypingEnv;
+    // Almost no instance is variadic, so check the (stable) signature before the ABI query.
+    if !instance.ty().kind().fn_sig().is_some_and(|sig| sig.value.c_variadic) {
+        return false;
+    }
+    let internal_instance = rustc_internal::internal(tcx, instance);
+    let Ok(fn_abi) = tcx.fn_abi_of_instance(
+        TypingEnv::fully_monomorphized()
+            .as_query_input((internal_instance, rustc_middle::ty::List::empty())),
+    ) else {
+        return false;
+    };
+    abi_is_unsupported_variadic(fn_abi)
+}
+
+/// The same check for a call through a function pointer, which has a signature but no instance.
+pub fn is_unsupported_variadic_fn_ptr(tcx: TyCtxt, fn_sig: PolyFnSig) -> bool {
+    use rustc_middle::ty::TypingEnv;
+    if !fn_sig.value.c_variadic {
+        return false;
+    }
+    let internal_sig = rustc_internal::internal(tcx, fn_sig);
+    let Ok(fn_abi) = tcx.fn_abi_of_fn_ptr(
+        TypingEnv::fully_monomorphized()
+            .as_query_input((internal_sig, rustc_middle::ty::List::empty())),
+    ) else {
+        return false;
+    };
+    abi_is_unsupported_variadic(fn_abi)
+}
+
+fn abi_is_unsupported_variadic(
+    fn_abi: &rustc_target::callconv::FnAbi<'_, rustc_middle::ty::Ty<'_>>,
+) -> bool {
+    fn_abi.c_variadic && !matches!(fn_abi.conv, rustc_abi::CanonAbi::C)
+}
+
+/// Whether `def` is `core::fmt::Formatter`.
+///
+/// Shared by the eligibility check and the harness generation, so they cannot disagree.
+pub fn is_formatter(tcx: TyCtxt, def: AdtDef) -> bool {
+    tcx.get_diagnostic_item(rustc_span::Symbol::intern("Formatter"))
+        == Some(rustc_internal::internal(tcx, def.def_id()))
 }
 
 /// Traverse the type definition to see if the type contains interior mutability.
@@ -793,8 +907,9 @@ pub fn scalar_width_bits(tcx: TyCtxt, ty: Ty) -> Option<u64> {
 
 /// The niche constraint of a scalar-ABI type: the width of the scalar in bits, and the
 /// (possibly wrapping) inclusive range of valid bit patterns.
-/// Returns None for non-scalar ABIs, pointer/float scalars, and scalars whose valid range
-/// covers every bit pattern.
+/// Returns None for non-scalar ABIs, float scalars, and scalars whose valid range covers every
+/// bit pattern. Pointer scalars are supported (their width is the target's pointer size), which
+/// is what lets `!null` pattern types such as `NonNull<T>`'s field report their niche.
 ///
 /// Rationale: a layout niche is a language-level validity invariant (rustc packs enum
 /// variants into the invalid patterns), so a synthesized `kani::any` body must not produce
@@ -817,8 +932,11 @@ pub fn scalar_niche(tcx: TyCtxt, ty: Ty) -> Option<ScalarNiche> {
         .ok()?;
     let BackendRepr::Scalar(scalar) = layout.backend_repr else { return None };
     let Scalar::Initialized { value, valid_range } = scalar else { return None };
-    let Primitive::Int(int, _signed) = value else { return None };
-    let bits = int.size().bits();
+    let bits = match value {
+        Primitive::Int(int, _) => int.size().bits(),
+        Primitive::Pointer(_) => tcx.data_layout.pointer_size().bits(),
+        Primitive::Float(_) => return None,
+    };
     let full = if bits == 128 { u128::MAX } else { (1u128 << bits) - 1 };
     if valid_range.start == 0 && valid_range.end == full {
         return None;
@@ -1024,15 +1142,111 @@ fn implements_bounded_arbitrary(tcx: TyCtxt, ty: Ty, kani_bounded_any_def: FnDef
     false
 }
 
-/// The formatting traits whose implementations automatic harnesses can verify via dedicated
-/// models (c.f. `KaniModel::CheckDebugFmt`/`CheckDisplayFmt`).
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum FmtTrait {
-    Debug,
-    Display,
+/// Whether `def` is `core::ffi::CStr`.
+///
+/// Both the eligibility check (`autoharness_supported_arg_ty`) and the harness generation
+/// (`call_kani_any_for_ty`) use this, so that they cannot disagree on a `&CStr` argument.
+pub fn is_c_str(tcx: TyCtxt, def: AdtDef) -> bool {
+    Some(rustc_internal::internal(tcx, def.def_id()))
+        == tcx.get_diagnostic_item(rustc_span::sym::cstr_type)
 }
 
-/// If `instance` is the `fmt` method of a `Debug` or `Display` implementation, return the
+/// Whether `def` is `core::byte_str::ByteStr` (`core::bstr` before rust-lang/rust#160912), which
+/// has no diagnostic item.
+///
+/// Shared by the eligibility check and the harness generation, as `is_c_str` is.
+///
+/// Matching by name means a rename in `core` would silently return these functions to the
+/// skipped list; `cargo_autoharness_byte_str` pins a `&ByteStr` function as selected, so the test
+/// fails instead.
+pub fn is_byte_str(tcx: TyCtxt, def: AdtDef) -> bool {
+    let def_id = rustc_internal::internal(tcx, def.def_id());
+    tcx.crate_name(def_id.krate) == rustc_span::sym::core
+        && tcx
+            .opt_parent(def_id)
+            .and_then(|module| tcx.opt_item_name(module))
+            .is_some_and(|name| name.as_str() == "byte_str")
+        && tcx.item_name(def_id).as_str() == "ByteStr"
+}
+
+/// Whether `def` is `core::wtf8::Wtf8`, which has no diagnostic item.
+///
+/// Shared by the eligibility check and the harness generation, as `is_c_str` is.
+pub fn is_wtf8(tcx: TyCtxt, def: AdtDef) -> bool {
+    let def_id = rustc_internal::internal(tcx, def.def_id());
+    tcx.crate_name(def_id.krate) == rustc_span::sym::core
+        && tcx
+            .opt_parent(def_id)
+            .and_then(|module| tcx.opt_item_name(module))
+            .is_some_and(|name| name.as_str() == "wtf8")
+        && tcx.item_name(def_id).as_str() == "Wtf8"
+}
+
+/// The formatting traits whose implementations automatic harnesses can verify via dedicated
+/// models, one per trait (c.f. `KaniModel::CheckDebugFmt` and [`FmtTrait::model`]).
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, EnumIter)]
+pub enum FmtTrait {
+    Binary,
+    Debug,
+    Display,
+    LowerExp,
+    LowerHex,
+    Octal,
+    Pointer,
+    UpperExp,
+    UpperHex,
+}
+
+impl FmtTrait {
+    /// The model that formats a nondeterministic value through this trait.
+    pub fn model(self) -> KaniModel {
+        match self {
+            FmtTrait::Binary => KaniModel::CheckBinaryFmt,
+            FmtTrait::Debug => KaniModel::CheckDebugFmt,
+            FmtTrait::Display => KaniModel::CheckDisplayFmt,
+            FmtTrait::LowerExp => KaniModel::CheckLowerExpFmt,
+            FmtTrait::LowerHex => KaniModel::CheckLowerHexFmt,
+            FmtTrait::Octal => KaniModel::CheckOctalFmt,
+            FmtTrait::Pointer => KaniModel::CheckPointerFmt,
+            FmtTrait::UpperExp => KaniModel::CheckUpperExpFmt,
+            FmtTrait::UpperHex => KaniModel::CheckUpperHexFmt,
+        }
+    }
+
+    /// The formatting trait `trait_def_id` is, if any.
+    ///
+    /// Only `Debug`, `Display` and `Pointer` carry a diagnostic item; the other traits are
+    /// matched by name inside `core::fmt`.
+    fn of_trait(tcx: TyCtxt, trait_def_id: InternalDefId) -> Option<FmtTrait> {
+        let diagnostic = |sym| Some(trait_def_id) == tcx.get_diagnostic_item(sym);
+        if diagnostic(rustc_span::sym::Debug) {
+            return Some(FmtTrait::Debug);
+        }
+        if diagnostic(rustc_span::sym::Display) {
+            return Some(FmtTrait::Display);
+        }
+        if diagnostic(rustc_span::sym::Pointer) {
+            return Some(FmtTrait::Pointer);
+        }
+        let in_core_fmt = tcx.crate_name(trait_def_id.krate) == rustc_span::sym::core
+            && tcx.opt_parent(trait_def_id).and_then(|module| tcx.opt_item_name(module))
+                == Some(rustc_span::sym::fmt);
+        if !in_core_fmt {
+            return None;
+        }
+        Some(match tcx.item_name(trait_def_id).as_str() {
+            "Binary" => FmtTrait::Binary,
+            "Octal" => FmtTrait::Octal,
+            "LowerHex" => FmtTrait::LowerHex,
+            "UpperHex" => FmtTrait::UpperHex,
+            "LowerExp" => FmtTrait::LowerExp,
+            "UpperExp" => FmtTrait::UpperExp,
+            _ => return None,
+        })
+    }
+}
+
+/// If `instance` is the `fmt` method of a formatting trait implementation, return the
 /// trait and the implementing (self) type. Such methods take a `&mut Formatter` argument that
 /// cannot be generated nondeterministically; instead, the generated harness formats a
 /// nondeterministic value of the self type into a discarding sink, which exercises `fmt`
@@ -1055,14 +1269,7 @@ fn fmt_impl_self_ty(tcx: TyCtxt, instance: Instance) -> Option<(FmtTrait, Ty)> {
 
     let impl_def_id = tcx.trait_impl_of_assoc(def_id)?;
     let trait_def_id = tcx.impl_trait_ref(impl_def_id).skip_binder().def_id;
-
-    let fmt_trait = if Some(trait_def_id) == tcx.get_diagnostic_item(rustc_span::sym::Debug) {
-        FmtTrait::Debug
-    } else if Some(trait_def_id) == tcx.get_diagnostic_item(rustc_span::sym::Display) {
-        FmtTrait::Display
-    } else {
-        return None;
-    };
+    let fmt_trait = FmtTrait::of_trait(tcx, trait_def_id)?;
 
     // The `fmt` method's first input is `&Self`; peel the reference to obtain the
     // (monomorphic) self type.
@@ -1070,7 +1277,62 @@ fn fmt_impl_self_ty(tcx: TyCtxt, instance: Instance) -> Option<(FmtTrait, Ty)> {
     let TyKind::RigidTy(RigidTy::Ref(_, self_ty, _)) = sig.inputs().first()?.kind() else {
         return None;
     };
+
+    // The `core::str::pattern` searcher types (`multi_char_eq_searcher_kind`) are supported in
+    // argument position only: their values are bounded and need storage that the harness owns,
+    // and they neither implement nor can derive `Arbitrary`, which the formatting models
+    // require of the self type. Bail out so that their `fmt` methods are handled as ordinary
+    // functions, with both arguments generated through the bounded argument path.
+    if let TyKind::RigidTy(RigidTy::Adt(def, _)) = self_ty.kind()
+        && multi_char_eq_searcher_kind(tcx, def).is_some()
+    {
+        return None;
+    }
+
     Some((fmt_trait, self_ty))
+}
+
+/// Whether a pattern type's base can be generated by `call_kani_any_for_ty`: the base
+/// (an integer, bool, etc.) must implement or derive Arbitrary.
+///
+/// Raw-pointer bases (`*const T is !null`, as in `NonNull<T>`'s field) are not supported: the
+/// pointee storage the raw-pointer codegen allocates is a local of whatever body generates the
+/// value, and for a struct field that is a synthesized `any()` body -- the pointer would dangle
+/// once it returns (the same reason reference fields are rejected in `can_derive_arbitrary`).
+fn pat_base_is_derivable(
+    base_ty: Ty,
+    kani_any_def: FnDef,
+    ty_arbitrary_cache: &mut FxHashMap<Ty, bool>,
+) -> bool {
+    if matches!(base_ty.kind(), TyKind::RigidTy(RigidTy::RawPtr(..))) {
+        return false;
+    }
+    implements_arbitrary(base_ty, kani_any_def, ty_arbitrary_cache)
+        || can_derive_arbitrary(base_ty, kani_any_def, ty_arbitrary_cache)
+}
+
+/// Whether `ty` is `NonNull<T>`, matched by crate and name: the path match in `nonnull_pointee`
+/// misses it while `core` itself is compiled, which is the `verify-std` case that matters here.
+fn is_nonnull(ty: Ty) -> bool {
+    let TyKind::RigidTy(RigidTy::Adt(def, _)) = ty.kind() else { return false };
+    def.krate().name == "core" && def.trimmed_name() == "NonNull"
+}
+
+/// Whether `ty` is `NonNull<T>` or holds one through a type argument, tuple element or array
+/// element. A field of such a type (e.g. `Option<NonNull<T>>`) is built by its own `Arbitrary`
+/// impl, which builds the `NonNull` through the same `NonNull` impl.
+fn contains_nonnull(ty: Ty) -> bool {
+    if is_nonnull(ty) {
+        return true;
+    }
+    match ty.kind() {
+        TyKind::RigidTy(RigidTy::Adt(_, args)) => {
+            args.0.iter().any(|arg| matches!(arg, GenericArgKind::Type(t) if contains_nonnull(*t)))
+        }
+        TyKind::RigidTy(RigidTy::Tuple(tys)) => tys.iter().any(|t| contains_nonnull(*t)),
+        TyKind::RigidTy(RigidTy::Array(t, _) | RigidTy::Slice(t)) => contains_nonnull(t),
+        _ => false,
+    }
 }
 
 /// Is `ty` a struct or enum whose fields/variants implement Arbitrary, or a reference to such a
@@ -1085,7 +1347,14 @@ fn can_derive_arbitrary(
             let fields = variant.fields();
             let mut fields_impl_arbitrary = true;
             for ty in fields.iter().map(|field| field.ty_with_args(&args)) {
-                if let TyKind::RigidTy(RigidTy::Adt(..)) = ty.kind() {
+                if contains_nonnull(ty) {
+                    // A `NonNull` field, or one holding a `NonNull` (see `contains_nonnull`), is
+                    // not synthesized, even where `NonNull` implements `Arbitrary`
+                    // (verify-rust-std's impl casts an arbitrary integer): the derived value would
+                    // point to no allocation, as with the raw-pointer pattern bases refused in
+                    // `pat_base_is_derivable`.
+                    fields_impl_arbitrary = false;
+                } else if let TyKind::RigidTy(RigidTy::Adt(..)) = ty.kind() {
                     // Prefer the field type's own `Arbitrary` implementation: a hand-written
                     // impl can exist even for a type that itself contains references (and so is
                     // not compiler-derivable), and the synthesized `any()` would call it via
@@ -1103,6 +1372,9 @@ fn can_derive_arbitrary(
                     // Note that this differs from *top-level argument* references, for which
                     // the harness itself owns the storage.
                     fields_impl_arbitrary = false;
+                } else if let TyKind::RigidTy(RigidTy::Pat(base_ty, _)) = ty.kind() {
+                    fields_impl_arbitrary &=
+                        pat_base_is_derivable(base_ty, kani_any_def, ty_arbitrary_cache);
                 } else {
                     fields_impl_arbitrary &=
                         implements_arbitrary(ty, kani_any_def, ty_arbitrary_cache);
@@ -1135,8 +1407,60 @@ fn can_derive_arbitrary(
         }
     } else if let TyKind::RigidTy(RigidTy::Ref(_, inner_ty, _)) = ty.kind() {
         can_derive_arbitrary(inner_ty, kani_any_def, ty_arbitrary_cache)
+    } else if let TyKind::RigidTy(RigidTy::Pat(base_ty, _)) = ty.kind() {
+        pat_base_is_derivable(base_ty, kani_any_def, ty_arbitrary_cache)
     } else {
         false
+    }
+}
+
+/// A `core::str::pattern` searcher type backed by a `MultiCharEqSearcher` (the associated
+/// searcher for the char patterns `[char; N]`, `&[char; N]` and `&[char]`), for which a
+/// dedicated generation model exists (`KaniModel::AnyCharArraySearcher`/`AnyCharArrayRefSearcher`/
+/// `AnyCharSliceSearcher`).
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum MultiCharEqSearcherKind {
+    Array,
+    ArrayRef,
+    Slice,
+}
+
+/// Whether `def` is one of
+/// `core::str::pattern::{CharArraySearcher, CharArrayRefSearcher, CharSliceSearcher}`.
+///
+/// Both the eligibility check (`autoharness_supported_arg_ty`) and the harness generation
+/// (`call_kani_any_for_ty`) use this, so that they cannot disagree.
+///
+/// This matches the definition's own path (crate name plus `DefPathData` segments) rather than
+/// `tcx.def_path_str`: `def_path_str` renders through whichever module re-exports the item
+/// (`std::str::pattern` vs `core::str::pattern`), and `strip_local_crate_prefix` in this file
+/// only special-cases that rendering for the *local* crate, so a printed-string comparison would
+/// disagree between the normal flow (`core` external) and the verify-std flow (`core` local).
+pub fn multi_char_eq_searcher_kind(tcx: TyCtxt, def: AdtDef) -> Option<MultiCharEqSearcherKind> {
+    use rustc_hir::definitions::DefPathData;
+
+    let def_id = rustc_internal::internal(tcx, def.def_id());
+    let path = tcx.def_path(def_id);
+    if tcx.crate_name(path.krate).as_str() != "core" {
+        return None;
+    }
+
+    // `core::str::pattern::<Name>`: two module segments, then the item's own name.
+    let [module1, module2, item] = path.data.as_slice() else { return None };
+    let DefPathData::TypeNs(module1) = &module1.data else { return None };
+    let DefPathData::TypeNs(module2) = &module2.data else { return None };
+    let DefPathData::TypeNs(item) = &item.data else { return None };
+    if module1.as_str() != "str" || module2.as_str() != "pattern" {
+        return None;
+    }
+
+    // Match the exact final segment: `CharArraySearcher` and `CharArrayRefSearcher` share a
+    // prefix, so a substring/`starts_with` check would conflate them.
+    match item.as_str() {
+        "CharArraySearcher" => Some(MultiCharEqSearcherKind::Array),
+        "CharArrayRefSearcher" => Some(MultiCharEqSearcherKind::ArrayRef),
+        "CharSliceSearcher" => Some(MultiCharEqSearcherKind::Slice),
+        _ => None,
     }
 }
 
@@ -1222,10 +1546,43 @@ fn autoharness_supported_arg_ty(
                     ArgSupport::Unsupported
                 }
             }
+            // A `&CStr` is the bytes of nondeterministic storage up to its first NUL, a
+            // `&ByteStr` a prefix of it and a `&Wtf8` its longest valid WTF-8 prefix, c.f.
+            // `any_c_str_ref`, `any_byte_str_ref` and `any_wtf8_ref`. Immutable only, as for
+            // `&str`.
+            TyKind::RigidTy(RigidTy::Adt(def, _))
+                if is_c_str(tcx, def) || is_byte_str(tcx, def) || is_wtf8(tcx, def) =>
+            {
+                if inner_mutability == Mutability::Not {
+                    ArgSupport::Bounded
+                } else {
+                    ArgSupport::Unsupported
+                }
+            }
+            // A `Formatter` is built by `any_formatter` over a harness-local sink, with its width
+            // and precision bounded; `fmt` methods take it mutably, so both mutabilities.
+            TyKind::RigidTy(RigidTy::Adt(def, _)) if is_formatter(tcx, def) => ArgSupport::Bounded,
+            // A reference to a `core::str::pattern` searcher (`multi_char_eq_searcher_kind`) is
+            // supported for both `&T` and `&mut T`: the searcher's own by-value generation model
+            // already exists for all three kinds, and a reference to a type this function already
+            // knows how to generate is always fine.
+            TyKind::RigidTy(RigidTy::Adt(def, _))
+                if multi_char_eq_searcher_kind(tcx, def).is_some() =>
+            {
+                ArgSupport::Bounded
+            }
             _ => arbitrary_or_derive(ty, ty_arbitrary_cache),
         }
     } else {
-        if arbitrary_or_derive(ty, ty_arbitrary_cache) == ArgSupport::Arbitrary {
+        if let TyKind::RigidTy(RigidTy::Adt(def, _)) = ty.kind()
+            && multi_char_eq_searcher_kind(tcx, def).is_some()
+        {
+            // Checked before `arbitrary_or_derive`: that call reaches `can_derive_arbitrary`,
+            // which rejects any `Adt` whose generic args contain a lifetime, and all three of
+            // these searcher types have one. Their own by-value generation model already
+            // exists (`multi_char_eq_searcher_kind`'s doc comment lists it per kind).
+            ArgSupport::Bounded
+        } else if arbitrary_or_derive(ty, ty_arbitrary_cache) == ArgSupport::Arbitrary {
             ArgSupport::Arbitrary
         } else if smart_pointer_model_instance(tcx, ty, smart_pointer_models).is_some_and(
             |(_, pointee)| {

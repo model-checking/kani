@@ -6,8 +6,8 @@ use cbmc::utils::aggr_tag;
 use cbmc::{InternString, InternedString};
 use kani_metadata::UnstableFeature;
 use rustc_abi::{
-    BackendRepr::SimdVector, FieldIdx, FieldsShape, Float, Integer, LayoutData, Primitive, Size,
-    TagEncoding, TyAndLayout, VariantIdx, VariantLayout, Variants,
+    BackendRepr, BackendRepr::SimdVector, FieldIdx, FieldsShape, Float, Integer, LayoutData,
+    Primitive, Size, TagEncoding, TyAndLayout, VariantIdx, VariantLayout, Variants,
 };
 use rustc_ast::ast::Mutability;
 use rustc_index::IndexVec;
@@ -19,7 +19,7 @@ use rustc_middle::ty::{
     self, AdtDef, Const, CoroutineArgs, CoroutineArgsExt, FloatTy, Instance, IntTy, PolyFnSig,
     TraitRef, Ty, TyCtxt, TyKind, UintTy, VariantDef, VtblEntry,
 };
-use rustc_middle::ty::{ExistentialTraitRef, GenericArgsRef};
+use rustc_middle::ty::{ExistentialTraitRef, GenericArgs};
 use rustc_middle::ty::{List, TypeFoldable};
 use rustc_public::abi::{ArgAbi, FnAbi, PassMode};
 use rustc_public::mir::Body;
@@ -614,11 +614,11 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             ty::Adt(def, subst) => {
                 debug!("variants are: {:?}", def.variants());
                 if def.is_struct() {
-                    self.codegen_struct(ty, def, subst)
+                    self.codegen_struct(ty, def, *subst)
                 } else if def.is_union() {
-                    self.codegen_union(ty, def, subst)
+                    self.codegen_union(ty, def, *subst)
                 } else {
-                    self.codegen_enum(ty, def, subst)
+                    self.codegen_enum(ty, def, *subst)
                 }
             }
             ty::Foreign(defid) => self.codegen_foreign(ty, *defid),
@@ -650,7 +650,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                 let sig = sig_tys.with(*hdr);
                 self.codegen_function_sig(sig).to_pointer()
             }
-            ty::Closure(_, subst) => self.codegen_ty_closure(ty, subst),
+            ty::Closure(_, subst) => self.codegen_ty_closure(ty, *subst),
             ty::Coroutine(..) => self.codegen_ty_coroutine(ty),
             ty::CoroutineClosure(..) => unimplemented!(
                 "Kani does not yet support coroutine closures. Please post your example at https://github.com/model-checking/kani/issues/3783"
@@ -690,6 +690,9 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             ty::UnsafeBinder(_) => todo!(
                 "Implement support for UnsafeBinder https://github.com/rust-lang/rust/issues/130516"
             ),
+            // View types (a view over a subset of an ADT's fields) are an incomplete rustc
+            // feature that rustc's own codegen backends do not support yet.
+            ty::View(..) => unimplemented!("view types are not supported by Kani"),
         }
     }
 
@@ -792,11 +795,17 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                     // we compute the overall offset of the end of the current struct
                     offset = fld_offset + layout.size;
                 }
-                final_fields.extend(self.codegen_alignment_padding(
-                    offset,
-                    align,
-                    final_fields.len(),
-                ));
+                // A slice or `str` tail is a flexible array. It has to stay the last component
+                // of the struct, and its size is only known at run time, so the struct gets no
+                // trailing padding after it. `size_and_align_of_dst` rounds the dynamic size up
+                // to the alignment instead.
+                if !final_fields.last().is_some_and(|fld| fld.typ().is_flexible_array()) {
+                    final_fields.extend(self.codegen_alignment_padding(
+                        offset,
+                        align,
+                        final_fields.len(),
+                    ));
+                }
                 final_fields
             }
             // Primitives, such as NEVER, have no fields
@@ -813,7 +822,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
         self.codegen_struct_fields(
             flds,
             &layout.layout.fields,
-            Size::from_bits(layout.layout.align.abi.bits()),
+            Size::from_bits(layout.layout.align.bits()),
             Size::ZERO,
         )
     }
@@ -821,7 +830,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     /// A closure is a struct of all its environments. That is, a closure is
     /// just a tuple with a unique type identifier, so that Fn related traits
     /// can find its impl.
-    fn codegen_ty_closure(&mut self, t: Ty<'tcx>, args: ty::GenericArgsRef<'tcx>) -> Type {
+    fn codegen_ty_closure(&mut self, t: Ty<'tcx>, args: GenericArgs<'tcx>) -> Type {
         self.ensure_struct(self.ty_mangled_name(t), self.ty_pretty_name(t), |ctx, _| {
             ctx.codegen_ty_tuple_like(t, args.as_closure().upvar_tys().to_vec())
         })
@@ -987,7 +996,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             }
             fields.extend(ctx.codegen_alignment_padding(
                 offset,
-                Size::from_bits(type_and_layout.layout.align.abi.bits()),
+                Size::from_bits(type_and_layout.layout.align.bits()),
                 fields.len(),
             ));
             fields
@@ -1007,8 +1016,8 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     /// There are three kinds of fat pointers:
     /// 1. references to slices (`matches!(pointee_type.kind(), ty::Slice(..) | ty::Str)`).
     /// 2. references to trait objects (`matches!(pointee_type.kind(), ty::Dynamic)`).
-    /// 3. references to structs whose last field is a unsized object (slice / trait)
-    ///    - `matches!(pointee_type.kind(), ty::Adt(..) if self.is_unsized(t))
+    /// 3. references to structs and tuples whose last field is a unsized object (slice / trait)
+    ///    - `matches!(pointee_type.kind(), ty::Adt(..) | ty::Tuple(..) if self.is_unsized(t))
     ///
     fn codegen_fat_ptr(&mut self, pointee_type: Ty<'tcx>) -> Type {
         assert!(
@@ -1020,7 +1029,9 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             let pointer_name = match pointee_type.kind() {
                 ty::Slice(..) => self.ty_mangled_name(pointee_type),
                 ty::Str => "refstr".intern(),
-                ty::Adt(..) => format!("&{}", self.ty_mangled_name(pointee_type)).intern(),
+                ty::Adt(..) | ty::Tuple(..) => {
+                    format!("&{}", self.ty_mangled_name(pointee_type)).intern()
+                }
                 kind => unreachable!("Generating a slice fat pointer to {:?}", kind),
             };
             let pretty_name = format!("&{}", self.ty_pretty_name(pointee_type));
@@ -1028,7 +1039,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                 ty::Slice(elt_type) => self.codegen_ty(*elt_type),
                 ty::Str => Type::unsigned_int(8),
                 // For adt, see https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp
-                ty::Adt(..) => self.codegen_ty(pointee_type),
+                ty::Adt(..) | ty::Tuple(..) => self.codegen_ty(pointee_type),
                 kind => unreachable!("Generating a slice fat pointer to {:?}", kind),
             };
             self.ensure_struct(pointer_name, pretty_name, |_, _| {
@@ -1107,6 +1118,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             ty::UnsafeBinder(_) => todo!(
                 "Implement support for UnsafeBinder https://github.com/rust-lang/rust/issues/130516"
             ),
+            ty::View(..) => unimplemented!("view types are not supported by Kani"),
         }
     }
 
@@ -1179,19 +1191,49 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
         &mut self,
         ty: Ty<'tcx>,
         def: &'tcx AdtDef,
-        subst: &'tcx GenericArgsRef<'tcx>,
+        subst: GenericArgs<'tcx>,
     ) -> Type {
         self.ensure_struct(self.ty_mangled_name(ty), self.ty_pretty_name(ty), |ctx, _| {
             let variant = &def.variants().raw[0];
             let layout = ctx.layout_of(ty);
+            let align = Size::from_bits(layout.layout.align.bits());
+            if def.repr().scalable() && variant.fields.len() > 1 {
+                return ctx.codegen_scalable_vector_tuple_fields(variant, subst, align);
+            }
             ctx.codegen_variant_struct_fields(
                 variant,
                 subst,
                 &layout.layout.fields,
-                Size::from_bits(layout.layout.align.abi.bits()),
+                align,
                 Size::ZERO,
             )
         })
+    }
+
+    /// The fields of a tuple of scalable vectors, such as `svint32x4_t(svint32_t, svint32_t,
+    /// svint32_t, svint32_t)` in `core::arch::aarch64`.
+    ///
+    /// rustc lays such a tuple out as a single `SimdScalableVector` whose `FieldsShape` holds one
+    /// offset however many vectors the tuple has, so `codegen_struct_fields` cannot place its
+    /// fields, c.f. <https://github.com/model-checking/kani/issues/4963>. A scalable vector has no
+    /// size fixed at compile time; rustc sizes it at its minimum (a 128-bit vector) and so does
+    /// Kani. The members are all the same vector type, so they are placed back to back, which
+    /// adds up to the size rustc reports for the tuple.
+    fn codegen_scalable_vector_tuple_fields(
+        &mut self,
+        variant: &VariantDef,
+        subst: GenericArgs<'tcx>,
+        align: Size,
+    ) -> Vec<DatatypeComponent> {
+        let mut fields = Vec::with_capacity(variant.fields.len());
+        let mut offset = Size::ZERO;
+        for field in &variant.fields {
+            let fld_ty = field.ty(self.tcx, subst).skip_normalization();
+            fields.push(DatatypeComponent::field(field.name.to_string(), self.codegen_ty(fld_ty)));
+            offset += self.layout_of(fld_ty).size;
+        }
+        fields.extend(self.codegen_alignment_padding(offset, align, fields.len()));
+        fields
     }
 
     /// generate a struct representing the layout of the variant
@@ -1206,7 +1248,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     fn codegen_variant_struct_fields(
         &mut self,
         variant: &VariantDef,
-        subst: &'tcx GenericArgsRef<'tcx>,
+        subst: GenericArgs<'tcx>,
         fields_shape: &FieldsShape<FieldIdx>,
         align: Size,
         initial_offset: Size,
@@ -1227,7 +1269,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     fn variant_align(
         &mut self,
         variant: &VariantDef,
-        subst: &'tcx GenericArgsRef<'tcx>,
+        subst: GenericArgs<'tcx>,
         enum_layout: &LayoutData<FieldIdx, VariantIdx>,
     ) -> Size {
         let fields_align = variant
@@ -1235,7 +1277,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             .iter()
             .map(|f| {
                 let fld_ty = f.ty(self.tcx, subst).skip_normalization();
-                Size::from_bits(self.layout_of(fld_ty).align.abi.bits())
+                Size::from_bits(self.layout_of(fld_ty).align.bits())
             })
             .max()
             .unwrap_or(Size::from_bytes(1));
@@ -1246,12 +1288,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     }
 
     /// codegen unions
-    fn codegen_union(
-        &mut self,
-        ty: Ty<'tcx>,
-        def: &'tcx AdtDef,
-        subst: &'tcx GenericArgsRef<'tcx>,
-    ) -> Type {
+    fn codegen_union(&mut self, ty: Ty<'tcx>, def: &'tcx AdtDef, subst: GenericArgs<'tcx>) -> Type {
         let union_size = rustc_internal::stable(ty).layout().unwrap().shape().size.bits();
         let union_name = self.ty_mangled_name(ty);
         let union_pretty_name = self.ty_pretty_name(ty);
@@ -1323,7 +1360,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
         &mut self,
         ty: Ty<'tcx>,
         adtdef: &'tcx AdtDef,
-        subst: &'tcx GenericArgsRef<'tcx>,
+        subst: GenericArgs<'tcx>,
     ) -> Type {
         let pretty_name = self.ty_pretty_name(ty);
         // variants appearing in source code (in source code order)
@@ -1350,7 +1387,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                                 variant,
                                 subst,
                                 &layout.fields,
-                                Size::from_bits(layout.align.abi.bits()),
+                                Size::from_bits(layout.align.bits()),
                                 Size::ZERO,
                             )
                         }
@@ -1414,7 +1451,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                             let max_variant_size = std::cmp::max(max_variant_size, discr_offset);
                             if let Some(padding) = gcx.codegen_alignment_padding(
                                 max_variant_size,
-                                Size::from_bits(layout.align.abi.bits()),
+                                Size::from_bits(layout.align.bits()),
                                 fields.len(),
                             ) {
                                 fields.push(padding);
@@ -1454,7 +1491,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
         &mut self,
         ty: Ty<'tcx>,
         adtdef: &'tcx AdtDef,
-        subst: &'tcx GenericArgsRef<'tcx>,
+        subst: GenericArgs<'tcx>,
         variants: &IndexVec<VariantIdx, VariantLayout<FieldIdx>>,
     ) -> Type {
         let non_zst_count = variants.iter().filter(|layout| layout.size.bytes() > 0).count();
@@ -1554,6 +1591,20 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             Float::F32 => self.tcx.types.f32,
             Float::F64 => self.tcx.types.f64,
             Float::F128 => self.tcx.types.f128,
+            // `f16b` (bfloat16) is a library type rather than a primitive, so there is no
+            // `tcx.types` entry for it, and CBMC has no bfloat16 type either. rustc itself
+            // declines to map this primitive back to a Rust type (`rustc_abi::layout::ty`).
+            Float::F16B => unimplemented!("bfloat16 (`f16b`) is not supported by Kani"),
+            // PowerPC's double-double `long double`, which only exists on PowerPC targets. Kani
+            // supports none of them, and CBMC has no double-double type.
+            Float::PpcF128 => {
+                unimplemented!("PowerPC double-double (`ppcf128`) is not supported by Kani")
+            }
+            // x87's 80-bit extended precision float (`core::arch::x86::x87_f80`), a library type
+            // with no `tcx.types` entry, like `f16b`. CBMC has no 80-bit float type.
+            Float::X87F80 => {
+                unimplemented!("x87 80-bit floats (`x87_f80`) are not supported by Kani")
+            }
         }
     }
 
@@ -1573,7 +1624,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
         name: InternedString,
         pretty_name: InternedString,
         def: &'tcx AdtDef,
-        subst: &'tcx GenericArgsRef<'tcx>,
+        subst: GenericArgs<'tcx>,
         ty: Ty<'tcx>,
         initial_offset: Size,
     ) -> Vec<DatatypeComponent> {
@@ -1611,7 +1662,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
         name: InternedString,
         pretty_name: InternedString,
         case: &VariantDef,
-        subst: &'tcx GenericArgsRef<'tcx>,
+        subst: GenericArgs<'tcx>,
         variant: &LayoutData<FieldIdx, VariantIdx>,
         align: Size,
         initial_offset: Size,
@@ -1629,21 +1680,57 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
         debug! {"handling simd with layout {:?}", layout};
 
         let (element, size) = match layout {
-            SimdVector { element, count } => (element, count),
-            _ => unreachable!(),
+            // As of nightly-2026-08-21 the lane count is a `BackendLaneCount` (a `NonZero<u16>`)
+            // rather than a bare `u64`.
+            SimdVector { element, count } => (*element, count.as_u64()),
+            // `core::simd::Simd` is `#[repr(simd, packed)]`, and rustc lays out a packed vector
+            // whose lane count is not a power of two, such as `Simd<i16, 12>`, as memory with no
+            // padding instead of as a vector. The lanes are taken from the type instead. CBMC
+            // aligns a vector to 1 and Kani pads structs itself, so a vector of that many lanes has
+            // the size and field offsets rustc gives the packed type.
+            BackendRepr::Memory { sized: true } => {
+                let (count, lane_ty) = ty.simd_size_and_type(self.tcx);
+                let BackendRepr::Scalar(element) = self.layout_of(lane_ty).backend_repr else {
+                    unreachable!("SIMD lane `{lane_ty}` is not a scalar")
+                };
+                (element, count)
+            }
+            _ => unreachable!("unexpected layout for SIMD type `{ty}`: {layout:?}"),
         };
 
+        // CBMC requires a numeric vector element type, so a pointer lane is modeled as an unsigned
+        // integer of the same width -- `Type::vector` asserts otherwise and took the compiler down
+        // for every `Simd<*const T, N>`, c.f.
+        // <https://github.com/model-checking/kani/issues/4867>. Rust's SIMD types are array-based,
+        // so a value is usually built and read through a byte-level reinterpretation of the whole
+        // vector (`codegen_rvalue_aggregate` and `codegen_simd_field`). The lane-wise intrinsics
+        // that do reach a single lane convert at the boundary instead: `simd_insert` and
+        // `simd_splat` cast the incoming pointer to the lane type, and `simd_extract` casts the lane
+        // back to the pointer type. The integer lane holds CBMC's pointer encoding (object and
+        // offset), so these casts keep provenance, as `ptr as usize as *const T` does. The
+        // multi-field arm of `codegen_simd_field` indexes a lane without a cast; it is unreachable
+        // because rustc rejects `#[repr(simd)]` structs whose only field is not an array (E0076).
         let prim_type = element.primitive();
-        let rust_type = self.codegen_prim_typ(prim_type);
-        let cbmc_type = self.codegen_ty(rust_type);
+        let cbmc_type = if matches!(prim_type, Primitive::Pointer(_)) {
+            Type::unsigned_int(self.symbol_table.machine_model().pointer_width)
+        } else {
+            let rust_type = self.codegen_prim_typ(prim_type);
+            self.codegen_ty(rust_type)
+        };
 
-        // As of nightly-2026-08-21 the lane count is a `BackendLaneCount` (a `NonZero<u16>`)
-        // rather than a bare `u64`.
-        Type::vector(cbmc_type, size.as_u64())
+        Type::vector(cbmc_type, size)
     }
 
     /// the function type of the current instance
     pub fn fn_typ(&mut self, instance: InstanceStable, body: &Body) -> Type {
+        if self.is_unsupported_variadic(instance) {
+            // Asking for the ABI of such a function aborts compilation (c.f.
+            // `is_unsupported_variadic`), so derive the declaration from the signature.
+            // `codegen_function` leaves it a declaration: Kani cannot model the body, and calls to
+            // it are replaced by an unsupported-construct stub.
+            let sig = instance.ty().kind().fn_sig().unwrap().value;
+            return self.codegen_function_sig_stable(sig);
+        }
         let fn_abi = instance.fn_abi().unwrap();
         let params: Vec<Parameter> = self
             .codegen_args(instance, &fn_abi)
@@ -1723,7 +1810,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                         .map(|idx| {
                             let fidx = FieldIdx::from(idx);
                             let name = fields[fidx].name.to_string().intern();
-                            let field_ty = fields[fidx].ty(ctx.tcx, adt_args).skip_normalization();
+                            let field_ty = fields[fidx].ty(ctx.tcx, *adt_args).skip_normalization();
                             let typ = if !ctx.is_zst(field_ty) {
                                 last_type.clone()
                             } else {
@@ -1819,12 +1906,12 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                     let mut non_zsts = fields
                         .iter()
                         .filter(|field| {
-                            !ctx.is_zst(field.ty(ctx.tcx, adt_args).skip_normalization())
+                            !ctx.is_zst(field.ty(ctx.tcx, *adt_args).skip_normalization())
                         })
                         .map(|non_zst| {
                             (
                                 non_zst.name.to_string(),
-                                non_zst.ty(ctx.tcx, adt_args).skip_normalization(),
+                                non_zst.ty(ctx.tcx, *adt_args).skip_normalization(),
                             )
                         });
                     let (name, next) = non_zsts.next().expect("Expected one non-zst field.");
@@ -1902,22 +1989,46 @@ pub fn std_pointee_type(mir_type: Ty) -> Option<Ty> {
     mir_type.builtin_deref(true)
 }
 
-/// This is a place holder function that should normalize the given type.
-///
-/// TODO: We should normalize the type projection here. For more details, see
-/// <https://github.com/model-checking/kani/issues/752>
-fn normalize_type<'tcx>(ty: Unnormalized<'tcx, Ty<'tcx>>) -> Ty<'tcx> {
-    ty.skip_normalization()
-}
-
 impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
+    /// Resolve a type projection met while computing pointer metadata, e.g. the tail of a struct
+    /// whose last field is an associated type (`struct Wrap<S: Storage> { _b: S::Buffer }`).
+    /// Leaving it unresolved classifies such a reference as a thin pointer, and the unsized cast
+    /// then tries to build a slice fat pointer out of it, c.f.
+    /// <https://github.com/model-checking/kani/issues/4812>.
+    ///
+    /// This instantiates the current instance's arguments *and* normalizes, as
+    /// [`Self::monomorphize`] and therefore [`Self::is_unsized`] do. Normalizing alone would leave
+    /// the two halves of the thin/fat decision disagreeing about a type that still carries generic
+    /// parameters -- `is_unsized` resolving it, the metadata computation not -- which is #4812's
+    /// shape again: unsized, metadata unavailable, thin pointer.
+    ///
+    /// Falling back to the unresolved type keeps `ptr_metadata_ty_or_tail` returning the tail as
+    /// `Err` rather than panicking. Note that `ptr_metadata_ty` `bug!`s on that `Err` instead, so
+    /// the fallback only ever helps `use_thin_pointer`.
+    fn resolve_metadata_ty(&self, unnormalized: Unnormalized<'tcx, Ty<'tcx>>) -> Ty<'tcx> {
+        let ty = unnormalized.skip_normalization();
+        let typing_env = ty::TypingEnv::fully_monomorphized();
+        if let Some(current_fn) = &self.current_fn
+            && let Ok(resolved) =
+                current_fn.instance().try_instantiate_mir_and_normalize_erasing_regions(
+                    self.tcx,
+                    typing_env,
+                    ty::EarlyBinder::bind(self.tcx, ty),
+                )
+        {
+            return resolved;
+        }
+        self.tcx.try_normalize_erasing_regions(typing_env, unnormalized).unwrap_or(ty)
+    }
+
     /// A pointer to the mir type should be a thin pointer.
     /// Use thin pointer if the type is sized or if the resulting pointer has no metadata.
     /// Note: Foreign items are unsized but it codegen as a thin pointer since there is no
     /// metadata associated with it.
     pub fn use_thin_pointer(&self, mir_type: Ty<'tcx>) -> bool {
         // ptr_metadata_ty is not defined on all types, the projection of an associated type
-        let metadata = mir_type.ptr_metadata_ty_or_tail(self.tcx, normalize_type);
+        let metadata =
+            mir_type.ptr_metadata_ty_or_tail(self.tcx, |ty| self.resolve_metadata_ty(ty));
         !self.is_unsized(mir_type)
             || metadata.is_err()
             || (metadata.unwrap() == self.tcx.types.unit)
@@ -1931,14 +2042,14 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     /// A pointer to the mir type should be a slice fat pointer.
     /// We use a slice fat pointer if the metadata is the slice length (type usize).
     pub fn use_slice_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
-        let metadata = mir_type.ptr_metadata_ty(self.tcx, normalize_type);
+        let metadata = mir_type.ptr_metadata_ty(self.tcx, |ty| self.resolve_metadata_ty(ty));
         metadata == self.tcx.types.usize
     }
     /// A pointer to the mir type should be a vtable fat pointer.
     /// We use a vtable fat pointer if this is a fat pointer to anything that is not a slice ptr.
     /// I.e.: The metadata is not length (type usize).
     pub fn use_vtable_fat_pointer(&self, mir_type: Ty<'tcx>) -> bool {
-        let metadata = mir_type.ptr_metadata_ty(self.tcx, normalize_type);
+        let metadata = mir_type.ptr_metadata_ty(self.tcx, |ty| self.resolve_metadata_ty(ty));
         metadata != self.tcx.types.unit && metadata != self.tcx.types.usize
     }
 

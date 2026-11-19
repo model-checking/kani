@@ -1,27 +1,26 @@
-Kani generated automatic harnesses for 9 function(s):
-+----------------------------+----------------------------------------------------------------------+
-| Crate                      | Selected Function                                                    |
-+===================================================================================================+
-| autoderive_arbitrary_enums | <should_derive::AlignmentEnum as std::cmp::Eq>::assert_fields_are_eq |
-|----------------------------+----------------------------------------------------------------------|
-| autoderive_arbitrary_enums | <should_derive::AlignmentEnum as std::cmp::PartialEq>::eq            |
-|----------------------------+----------------------------------------------------------------------|
-| autoderive_arbitrary_enums | should_derive::alignment_fail                                        |
-|----------------------------+----------------------------------------------------------------------|
-| autoderive_arbitrary_enums | should_derive::alignment_pass                                        |
-|----------------------------+----------------------------------------------------------------------|
-| autoderive_arbitrary_enums | should_derive::foo                                                   |
-|----------------------------+----------------------------------------------------------------------|
-| autoderive_arbitrary_enums | should_derive::generic_recursively_eligible                          |
-|----------------------------+----------------------------------------------------------------------|
-| autoderive_arbitrary_enums | should_derive::multiple_generics_test                                |
-|----------------------------+----------------------------------------------------------------------|
-| autoderive_arbitrary_enums | should_derive::partially_used_generics_test                          |
-|----------------------------+----------------------------------------------------------------------|
-| autoderive_arbitrary_enums | should_derive::recursively_eligible                                  |
-+----------------------------+----------------------------------------------------------------------+
+Kani generated automatic harnesses for 8 function(s):
++----------------------------+-----------------------------------------------------------+
+| Crate                      | Selected Function                                         |
++========================================================================================+
+| autoderive_arbitrary_enums | <should_derive::AlignmentEnum as std::cmp::PartialEq>::eq |
+|----------------------------+-----------------------------------------------------------|
+| autoderive_arbitrary_enums | should_derive::alignment_fail                             |
+|----------------------------+-----------------------------------------------------------|
+| autoderive_arbitrary_enums | should_derive::alignment_pass                             |
+|----------------------------+-----------------------------------------------------------|
+| autoderive_arbitrary_enums | should_derive::foo                                        |
+|----------------------------+-----------------------------------------------------------|
+| autoderive_arbitrary_enums | should_derive::generic_recursively_eligible               |
+|----------------------------+-----------------------------------------------------------|
+| autoderive_arbitrary_enums | should_derive::multiple_generics_test                     |
+|----------------------------+-----------------------------------------------------------|
+| autoderive_arbitrary_enums | should_derive::partially_used_generics_test               |
+|----------------------------+-----------------------------------------------------------|
+| autoderive_arbitrary_enums | should_derive::recursively_eligible                       |
++----------------------------+-----------------------------------------------------------+
 
 Kani did not generate automatic harnesses for 5 function(s).
+If you believe that the provided reason is incorrect and Kani should have generated an automatic harness, please comment on this issue: https://github.com/model-checking/kani/issues/3832
 +----------------------------+----------------------------------------------+----------------------------------------------------------------------------------------------------------------+
 | Crate                      | Skipped Function                             | Reason for Skipping                                                                                            |
 +============================================================================================================================================================================================+
@@ -65,24 +64,25 @@ multiple_generics_test.assertion\
 	 - Description: "assertion failed: n % 2 > 0"
 
 Autoharness Summary:
-+----------------------------+----------------------------------------------------------------------+-----------------------------+---------------------+
-| Crate                      | Selected Function                                                    | Kind of Automatic Harness   | Verification Result |
-+=======================================================================================================================================================+
-| autoderive_arbitrary_enums | <should_derive::AlignmentEnum as std::cmp::Eq>::assert_fields_are_eq | #[kani::proof]              | Success             |
-|----------------------------+----------------------------------------------------------------------+-----------------------------+---------------------|
-| autoderive_arbitrary_enums | <should_derive::AlignmentEnum as std::cmp::PartialEq>::eq            | #[kani::proof]              | Success             |
-|----------------------------+----------------------------------------------------------------------+-----------------------------+---------------------|
-| autoderive_arbitrary_enums | should_derive::alignment_pass                                        | #[kani::proof_for_contract] | Success             |
-|----------------------------+----------------------------------------------------------------------+-----------------------------+---------------------|
-| autoderive_arbitrary_enums | should_derive::generic_recursively_eligible                          | #[kani::proof]              | Success             |
-|----------------------------+----------------------------------------------------------------------+-----------------------------+---------------------|
-| autoderive_arbitrary_enums | should_derive::partially_used_generics_test                          | #[kani::proof]              | Success             |
-|----------------------------+----------------------------------------------------------------------+-----------------------------+---------------------|
-| autoderive_arbitrary_enums | should_derive::recursively_eligible                                  | #[kani::proof]              | Success             |
-|----------------------------+----------------------------------------------------------------------+-----------------------------+---------------------|
-| autoderive_arbitrary_enums | should_derive::alignment_fail                                        | #[kani::proof]              | Failure             |
-|----------------------------+----------------------------------------------------------------------+-----------------------------+---------------------|
-| autoderive_arbitrary_enums | should_derive::foo                                                   | #[kani::proof]              | Failure             |
-|----------------------------+----------------------------------------------------------------------+-----------------------------+---------------------|
-| autoderive_arbitrary_enums | should_derive::multiple_generics_test                                | #[kani::proof]              | Failure             |
-+----------------------------+----------------------------------------------------------------------+-----------------------------+---------------------+
++----------------------------+-----------------------------------------------------------+-----------------------------+---------------------+
+| Crate                      | Selected Function                                         | Kind of Automatic Harness   | Verification Result |
++============================================================================================================================================+
+| autoderive_arbitrary_enums | <should_derive::AlignmentEnum as std::cmp::PartialEq>::eq | #[kani::proof]              | Success             |
+|----------------------------+-----------------------------------------------------------+-----------------------------+---------------------|
+| autoderive_arbitrary_enums | should_derive::alignment_pass                             | #[kani::proof_for_contract] | Success             |
+|----------------------------+-----------------------------------------------------------+-----------------------------+---------------------|
+| autoderive_arbitrary_enums | should_derive::generic_recursively_eligible               | #[kani::proof]              | Success             |
+|----------------------------+-----------------------------------------------------------+-----------------------------+---------------------|
+| autoderive_arbitrary_enums | should_derive::partially_used_generics_test               | #[kani::proof]              | Success             |
+|----------------------------+-----------------------------------------------------------+-----------------------------+---------------------|
+| autoderive_arbitrary_enums | should_derive::recursively_eligible                       | #[kani::proof]              | Success             |
+|----------------------------+-----------------------------------------------------------+-----------------------------+---------------------|
+| autoderive_arbitrary_enums | should_derive::alignment_fail                             | #[kani::proof]              | Failure             |
+|----------------------------+-----------------------------------------------------------+-----------------------------+---------------------|
+| autoderive_arbitrary_enums | should_derive::foo                                        | #[kani::proof]              | Failure             |
+|----------------------------+-----------------------------------------------------------+-----------------------------+---------------------|
+| autoderive_arbitrary_enums | should_derive::multiple_generics_test                     | #[kani::proof]              | Failure             |
++----------------------------+-----------------------------------------------------------+-----------------------------+---------------------+
+Note that `kani autoharness` sets default --harness-timeout of 60s and --default-unwind of 20.
+If verification failed because of timing out or too low of an unwinding bound, try passing larger values for these arguments (or, if possible, writing a loop contract).
+Complete - 5 successfully verified functions, 3 failures, 8 total.

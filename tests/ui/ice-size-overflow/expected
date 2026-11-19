@@ -1,6 +1,8 @@
 error[E0080]: values of the type `[u8; usize::MAX]` are too big for the target architecture\
 lib/rustlib/src/rust/library/core/src/mem/mod.rs\
 |\
+pub trait SizedTypeProperties: Sized {\
+...\
 const SIZE: usize = intrinsics::size_of::<Self>();\
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `<S<u8> as std::mem::SizedTypeProperties>::SIZE` failed here\
 

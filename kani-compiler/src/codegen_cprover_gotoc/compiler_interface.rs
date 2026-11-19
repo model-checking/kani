@@ -40,10 +40,11 @@ use rustc_public::CrateDef;
 use rustc_public::mir::mono::{Instance, MonoItem};
 use rustc_public::rustc_internal;
 use rustc_public::ty::FnDef;
-use rustc_session::config::{CrateType, OutputFilenames, OutputType};
+use rustc_session::config::{OutputFilenames, OutputType};
 use rustc_session::output::out_filename;
-use rustc_session::{IncrCompSession, Session};
+use rustc_session::{EarlySession, IncrCompSession, Session};
 use rustc_span::{Symbol, sym};
+use rustc_structures::CrateType;
 use rustc_target::spec::{Arch, Os, PanicStrategy};
 use std::any::Any;
 use std::cmp::min;
@@ -293,7 +294,7 @@ impl CodegenBackend for GotocCodegenBackend {
         "kani-cprover"
     }
 
-    fn target_config(&self, sess: &Session) -> TargetConfig {
+    fn target_config(&self, sess: &EarlySession) -> TargetConfig {
         // This code is adapted from the cranelift backend:
         // https://github.com/rust-lang/rust/blob/a124fb3cb7291d75872934f411d81fe298379ace/compiler/rustc_codegen_cranelift/src/lib.rs#L184
         let target_features = if sess.target.arch == Arch::X86_64 && sess.target.os != Os::None {
@@ -320,6 +321,8 @@ impl CodegenBackend for GotocCodegenBackend {
             internal_target_features: UnordSet::from_iter(target_features),
             has_reliable_f16,
             has_reliable_f16_math: has_reliable_f16,
+            // CBMC has no bfloat16 type, so `f16b` is not supported.
+            has_reliable_f16b: false,
             has_reliable_f128,
             has_reliable_f128_math: has_reliable_f128,
         }

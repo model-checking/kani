@@ -56,7 +56,9 @@ then
 
   cd ..
   rm -rf rust.git
-  if ! ./scripts/kani-regression.sh ; then
+  # `kani-regression.sh` does not build the LLBC backend (and with it Charon), so a toolchain that
+  # only breaks the LLBC backend would otherwise go unnoticed until the PR's LLBC job.
+  if ! ./scripts/kani-regression.sh || ! ./scripts/kani-llbc-regression.sh ; then
     echo "next_step=create_issue" >> $GITHUB_ENV
   fi
 else

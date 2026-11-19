@@ -18,7 +18,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 VALIDATOR="$PROJECT_ROOT/scripts/validate_json_export.py"
 
 # Run Kani with JSON export
-kani -Z unstable-options test.rs --export-json "$OUTPUT_FILE"
+kani -Z export-json test.rs --export-json "$OUTPUT_FILE"
 
 # Check that JSON file was created
 if [ ! -f "$OUTPUT_FILE" ]; then
@@ -76,3 +76,27 @@ fi
 echo ""
 echo "All validations passed"
 
+
+python3 - "$OUTPUT_FILE" << 'PYEOF'
+import json
+import re
+import sys
+
+with open(sys.argv[1]) as f:
+    tools = json.load(f)["tools"]
+problems = []
+if not re.match(r"\d+\.\d+\.\d+\S* \(", tools["rustc"] or ""):
+    problems.append(f"tools.rustc is not a toolchain release: {tools['rustc']!r}")
+if not re.match(r"\d+\.\d+\.\d+ \(cbmc-", tools["cbmc"] or ""):
+    problems.append(f"tools.cbmc is not CBMC's --version output: {tools['cbmc']!r}")
+for problem in problems:
+    print(f"ERROR: {problem}")
+sys.exit(1 if problems else 0)
+PYEOF
+
+echo ""
+echo "Fixtures: valid ones accepted, malformed ones rejected"
+python3 "$SCRIPT_DIR/check_fixtures.py" "$VALIDATOR"
+
+echo ""
+echo "All fixtures behaved as expected"

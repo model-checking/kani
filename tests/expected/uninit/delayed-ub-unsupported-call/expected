@@ -1,0 +1,7 @@
+Checking harness check_fn_ptr_call...
+Failed Checks: Kani does not support memory initialization checks across calls through function pointers.
+VERIFICATION:- FAILED
+Checking harness check_dyn_call...
+Failed Checks: Kani does not support memory initialization checks across trait object method calls.
+VERIFICATION:- FAILED
+Complete - 0 successfully verified harnesses, 2 failures, 2 total.

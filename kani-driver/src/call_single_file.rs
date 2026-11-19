@@ -273,6 +273,14 @@ pub fn base_rustc_flags(lib_config: LibConfig) -> Vec<RustcArg> {
         "crate-attr=feature(register_tool)",
         "-Z",
         "crate-attr=register_tool(kanitool)",
+        // nightly-2026-09-22 turns the next-generation trait solver on by default
+        // (rust-lang/rust#160619), and that solver cannot handle `generic_const_exprs`
+        // (rust-lang/rust#160895). rustc reverts to this setting automatically for a crate that
+        // enables the feature itself, but Kani's library exposes such a signature
+        // (`kani::pointer_generator`, whose return type computes its buffer length), so every
+        // crate Kani compiles needs the same setting to be able to call it. Tracked for removal in
+        // https://github.com/model-checking/kani/issues/4832.
+        "-Znext-solver=coherence",
         // Kani injects unstable features (`register_tool` above) into every crate it compiles,
         // so crates that `forbid(unstable_features)` (e.g. rustls) would fail to build through
         // no fault of their own. Downgrade that lint to a warning; `--force-warn` overrides
@@ -288,7 +296,11 @@ pub fn base_rustc_flags(lib_config: LibConfig) -> Vec<RustcArg> {
     // e.g. compiletest will set 'compile-flags' here and we should pass those down to rustc
     // and we fail in `tests/kani/Match/match_bool.rs`
     if let Ok(str) = std::env::var("RUSTFLAGS") {
-        flags.extend(str.split(' ').map(RustcArg::from));
+        // Split on whitespace rather than on a single space: `RUSTFLAGS=""` would otherwise
+        // contribute one empty argument, which rustc reads as a second input filename
+        // ("multiple input filenames provided"), and repeated or trailing spaces would do the
+        // same. This is close to how cargo parses the variable (split on ' ', trim, drop empties).
+        flags.extend(str.split_whitespace().map(RustcArg::from));
     }
 
     flags

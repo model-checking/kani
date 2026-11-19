@@ -279,13 +279,8 @@ impl MonoItemsFnCollector<'_, '_> {
             InstanceKind::Intrinsic => {
                 // Intrinsics may have a fallback body.
                 assert!(is_direct_call, "Expected direct call {instance:?}");
-                let TyKind::RigidTy(RigidTy::FnDef(def, _)) = instance.ty().kind() else {
-                    unreachable!("Expected function type for intrinsic: {instance:?}")
-                };
-                // The compiler is currently transitioning how to handle intrinsic fallback body.
-                // Until https://github.com/rust-lang/project-stable-mir/issues/79 is implemented
-                // we have to check `must_be_overridden` and `has_body`.
-                !def.as_intrinsic().unwrap().must_be_overridden() && instance.has_body()
+                // Collect the fallback body only if codegen uses it.
+                !crate::intrinsics::uses_kani_model(&instance)
             }
             InstanceKind::Shim | InstanceKind::Item => true,
         };
@@ -399,7 +394,17 @@ impl MirVisitor for MonoItemsFnCollector<'_, '_> {
         let allocation = match constant.const_.kind() {
             ConstantKind::Allocated(allocation) => allocation,
             ConstantKind::Unevaluated(_) => {
-                unreachable!("Instance with polymorphic constant: `{constant:?}`")
+                // Instance bodies are monomorphic, so their constants are evaluated when the
+                // body is built. A constant is only left unevaluated if its evaluation failed,
+                // e.g., a type too big for the target architecture, in which case the error
+                // has already been reported. Skip the constant and let
+                // `collect_reachable_items` abort compilation once collection finishes.
+                // See <https://github.com/model-checking/kani/issues/4814>.
+                assert!(
+                    self.tcx.dcx().has_errors().is_some(),
+                    "Instance with polymorphic constant: `{constant:?}`"
+                );
+                return;
             }
             ConstantKind::Param(_) => unreachable!("Unexpected parameter constant: {constant:?}"),
             ConstantKind::ZeroSized => {

@@ -8,6 +8,7 @@
 //! according to their stub configuration.
 
 use crate::args::{Arguments, ReachabilityType};
+use crate::intrinsics::{Intrinsic, simd_mask_problem};
 use crate::kani_middle::attributes::{KaniAttributes, is_proof_harness};
 use crate::kani_middle::kani_functions::{KaniHook, KaniIntrinsic, KaniModel};
 use crate::kani_middle::metadata::{
@@ -29,6 +30,7 @@ use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_hir::def_id::DefId;
 use rustc_infer::infer::TyCtxtInferExt;
 use rustc_middle::ty::{self, TyCtxt, TypingMode};
+use rustc_public::mir::TerminatorKind;
 use rustc_public::mir::mono::Instance;
 use rustc_public::rustc_internal;
 use rustc_public::ty::{
@@ -551,6 +553,158 @@ fn args_satisfy_predicates(tcx: TyCtxt, def: FnDef, args: &GenericArgs) -> bool 
     ocx.evaluate_obligations_error_on_ambiguity().no_errors()
 }
 
+/// Bound on the number of MIR bodies [has_generic_const_precondition] inspects. Reaching it means
+/// we could not finish ruling out a const-block violation, so the candidate is rejected.
+const CONST_PRECONDITION_SEARCH_LIMIT: usize = 1024;
+
+/// Whether `args` mention a type or const generic parameter: one that autoharness substitutes.
+/// Lifetime parameters are erased and cannot decide whether a constant evaluates.
+fn args_mention_param(args: ty::GenericArgs<'_>) -> bool {
+    use rustc_middle::ty::TypeVisitableExt;
+    args.has_type_flags(ty::TypeFlags::HAS_TY_PARAM | ty::TypeFlags::HAS_CT_PARAM)
+}
+
+/// Whether `body`, instantiated with `args`, requires a constant whose evaluation may depend on
+/// the generic parameters autoharness substitutes: an anonymous `const {}` block that mentions a
+/// type or const parameter, or any other unevaluated constant that mentions a const parameter.
+///
+/// Type parameters are only considered for `const {}` blocks. A generic associated constant such
+/// as `<T as SizedTypeProperties>::IS_ZST` is required by most functions that touch a slice or a
+/// collection, so treating every such constant as a possible precondition would skip them all.
+fn body_has_generic_const_block<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &rustc_middle::mir::Body<'tcx>,
+    args: ty::GenericArgs<'tcx>,
+) -> bool {
+    use rustc_middle::ty::TypeVisitableExt;
+    body.required_consts().iter().any(|const_op| {
+        // Array lengths and other already-resolved constants come through as
+        // `Const::Ty`/`Const::Val` and cannot fail.
+        let rustc_middle::mir::Const::Unevaluated(uneval, _) = const_op.const_ else {
+            return false;
+        };
+        let uneval_args = ty::EarlyBinder::bind(tcx, uneval.args).instantiate(tcx, args);
+        let is_const_block = tcx.def_kind(uneval.def) == rustc_hir::def::DefKind::AnonConst
+            && tcx.anon_const_kind(uneval.def) == ty::AnonConstKind::NonTypeSystemInline;
+        if is_const_block {
+            args_mention_param(uneval_args.skip_normalization())
+        } else {
+            uneval_args.skip_normalization().has_type_flags(ty::TypeFlags::HAS_CT_PARAM)
+        }
+    })
+}
+
+/// Collects the bodies that `body`, instantiated with `args`, instantiates with arguments that
+/// still mention a type or const parameter: called functions, function items reified into
+/// pointers, and nested closures and coroutines (which inherit their parent's generics, so their
+/// arguments mention the parameters whenever the parent has any). Each callee is recorded with
+/// its instantiated arguments, so that a parameter reaching it through a type argument (e.g.
+/// `inner::<[u8; N]>`) is still visible once the walk reaches its body.
+struct GenericCalleeCollector<'a, 'tcx> {
+    tcx: TyCtxt<'tcx>,
+    args: ty::GenericArgs<'tcx>,
+    callees: &'a mut Vec<(DefId, ty::GenericArgs<'tcx>)>,
+}
+
+impl<'tcx> GenericCalleeCollector<'_, 'tcx> {
+    fn push(&mut self, def_id: DefId, callee_args: ty::GenericArgs<'tcx>) {
+        let callee_args = ty::EarlyBinder::bind(self.tcx, callee_args)
+            .instantiate(self.tcx, self.args)
+            .skip_normalization();
+        if args_mention_param(callee_args) {
+            self.callees.push((def_id, callee_args));
+        }
+    }
+}
+
+impl<'tcx> rustc_middle::mir::visit::Visitor<'tcx> for GenericCalleeCollector<'_, 'tcx> {
+    fn visit_const_operand(
+        &mut self,
+        const_op: &rustc_middle::mir::ConstOperand<'tcx>,
+        _: rustc_middle::mir::Location,
+    ) {
+        if let ty::FnDef(def_id, args) = *const_op.const_.ty().kind() {
+            self.push(def_id, args.skip_binder());
+        }
+    }
+
+    fn visit_ty(&mut self, ty: ty::Ty<'tcx>, _: rustc_middle::mir::visit::TyContext) {
+        match *ty.kind() {
+            ty::Closure(def_id, args)
+            | ty::Coroutine(def_id, args)
+            | ty::CoroutineClosure(def_id, args) => self.push(def_id, args),
+            _ => {}
+        }
+    }
+}
+
+/// Whether generating a harness for `def` could reach an anonymous `const {}` block whose
+/// evaluation depends on the generic arguments autoharness substitutes. Such a block can encode a
+/// precondition on a const parameter, as `core::escape` does with `const { assert!(N >= 4) }`, or
+/// on a type parameter, as in `const { assert!(size_of::<T>() >= 4) }`.
+///
+/// These blocks are listed in rustc's `required_consts`: rustc evaluates every entry when
+/// monomorphizing and rejects the instantiation if any fails. `args_satisfy_predicates` does not
+/// cover them, since they are not trait bounds, so autoharness would otherwise substitute its
+/// chosen arguments regardless and the violation would surface as an unrecoverable `E0080` that
+/// aborts the whole run.
+///
+/// The search is transitive, because the offending block need not be in `def`'s own body: a
+/// harness for `wrapper<const N: usize>() { guarded::<N>() }` monomorphizes `guarded::<2>` too,
+/// and that instantiation aborts the run just the same. So walk outwards from `def` through the
+/// bodies it instantiates with arguments derived from its type or const parameters — the values
+/// that autoharness' substitution decides. The walk carries each body's arguments expressed in
+/// terms of `def`'s parameters, so a parameter forwarded inside a type argument, as in
+/// `inner::<[u8; N]>`, is still recognized in `inner`'s blocks. Instantiations with *concrete*
+/// arguments are not followed: whatever they evaluate to does not depend on our choice, so a
+/// failure there is a pre-existing bug in the crate under verification that any harness over
+/// `def` would hit.
+///
+/// This deliberately does *not* evaluate the block to find out whether the chosen arguments
+/// actually violate it, because a failing evaluation reports `E0080` from inside the const-eval
+/// query itself: merely asking the question emits the error we are trying to avoid. The check is
+/// therefore conservative in two ways. It rejects a block the chosen arguments would satisfy, and,
+/// since an anonymous const inherits its parent's generics, it rejects a block that does not read
+/// the parameters at all. A block in a function with no type or const parameter is untouched.
+///
+/// Nothing in `rustc_public` exposes `required_consts`, so query rustc directly.
+/// See <https://github.com/model-checking/kani/issues/4794> and
+/// <https://github.com/model-checking/kani/issues/4826>.
+fn has_generic_const_precondition(tcx: TyCtxt, def: FnDef) -> bool {
+    use rustc_middle::mir::visit::Visitor;
+    let def_id = rustc_internal::internal(tcx, def.def_id());
+    let mut worklist = vec![(def_id, ty::GenericArgs::identity_for_item(tcx, def_id))];
+    let mut visited = FxHashSet::default();
+    let mut budget = CONST_PRECONDITION_SEARCH_LIMIT;
+    while let Some((def_id, args)) = worklist.pop() {
+        if !visited.insert((def_id, args)) {
+            continue;
+        }
+        // Without MIR there is nothing to inspect. For `def` itself, `skip_reason` reports
+        // body-less functions; for a callee, we cannot see whether it is guarded, so assume it
+        // is not rather than skipping every candidate that calls into an opaque dependency.
+        if !tcx.is_mir_available(def_id) {
+            continue;
+        }
+        let Some(remaining) = budget.checked_sub(1) else {
+            // Budget exhausted: we can no longer rule a violation out.
+            return true;
+        };
+        budget = remaining;
+        // Not `optimized_mir`: rustc's provider refuses a def whose body is a const context, and
+        // a `#[rustc_comptime]` intrinsic is one while still reporting `is_mir_available`
+        // (`core::intrinsics::size_of` and eight others), which aborted the whole run.
+        // `instance_mir` is rustc's own dispatcher between `optimized_mir` and `mir_for_ctfe`.
+        // See <https://github.com/model-checking/kani/issues/4839>.
+        let body = tcx.instance_mir(rustc_middle::ty::InstanceKind::Item(def_id));
+        if body_has_generic_const_block(tcx, body, args) {
+            return true;
+        }
+        GenericCalleeCollector { tcx, args, callees: &mut worklist }.visit_body(body);
+    }
+    false
+}
+
 /// The nondet closure-model FnDefs, keyed by input shape. By-value models fix their
 /// input regions early-bound; the ref-taking variants carry late-bound regions so their
 /// fn items satisfy HRTB bounds like `for<'a> Fn(&'a T)`.
@@ -772,6 +926,60 @@ fn resolve_deferred_fn_slots<'tcx>(
     true
 }
 
+/// Why this instantiation makes a SIMD intrinsic call in `instance`'s body invalid, if it does: a
+/// vector operand turned into a non-SIMD type, or a comparison whose result is not a valid mask
+/// (see [simd_mask_problem]).
+///
+/// rustc's codegen backends reject such a monomorphization with `E0511`, so the call site cannot
+/// appear in a program that `cargo build` accepts: nothing bounds the parameter of a helper like
+/// `fn imin<T: Copy>(a: T, b: T) -> T { simd_lt(a, b) }` to the SIMD types, but every real caller
+/// passes one. Autoharness picks its own instantiation, though, so it has to make that check
+/// itself, or the harness it generates is one rustc would not accept. `core` has exactly this
+/// shape in `core_arch::simd::simd_imin`, which is what blocked autoharness over the standard
+/// library: <https://github.com/model-checking/kani/issues/4919>.
+///
+/// Only `instance`'s own body is inspected. An invalid instantiation a level down (a generic
+/// function calling a generic SIMD helper) is reported by codegen against the harness that reached
+/// it, which fails that harness instead of the run; see
+/// <https://github.com/model-checking/kani/issues/4926>.
+fn invalid_simd_instantiation(tcx: TyCtxt, instance: Instance) -> Option<String> {
+    // Instantiation search runs before `automatic_harness_partition`'s eligibility check, which
+    // skips a function with an explicit tail call. Do not report it here.
+    let body = crate::kani_middle::body_without_tail_calls(tcx, instance)?;
+    body.blocks.iter().find_map(|block| {
+        let TerminatorKind::Call { func, .. } = &block.terminator.kind else {
+            return None;
+        };
+        let TyKind::RigidTy(RigidTy::FnDef(def, args)) = func.ty(body.locals()).ok()?.kind() else {
+            return None;
+        };
+        let callee = Instance::resolve(def, &args).ok()?;
+        // `try_match_simd` recognizes exactly the intrinsics named `simd_*`, so do not ask about
+        // any other: the `Intrinsic` conversion asserts on the signatures it knows, and selecting
+        // a harness should not be able to trip an assertion that codegen would not.
+        let name = callee.intrinsic_name().filter(|name| name.starts_with("simd_"))?;
+        let sig = callee.ty().kind().fn_sig()?.skip_binder();
+        let intrinsic = Intrinsic::from_instance(&callee);
+        let operand_ty = intrinsic.simd_vector_operand(sig.inputs(), sig.output())?;
+        if !operand_ty.kind().is_simd() {
+            return Some(format!(
+                "the body calls the SIMD intrinsic `{name}`, which rustc rejects for the \
+                 non-SIMD type `{operand_ty}` this instantiation gives it"
+            ));
+        }
+        if intrinsic.is_simd_comparison()
+            && let Some(problem) = simd_mask_problem(tcx, operand_ty, sig.output())
+        {
+            return Some(format!(
+                "the body calls the SIMD comparison `{name}`, which rustc rejects for the result \
+                 type `{}` ({problem})",
+                sig.output()
+            ));
+        }
+        None
+    })
+}
+
 /// Try to find a monomorphic instantiation of the generic function `fn_item` for which we can
 /// generate an automatic harness. Substitute each type parameter with the first candidate from
 /// `generic_instantiation_candidates` such that all of the function's trait bounds are satisfied
@@ -798,6 +1006,16 @@ fn choose_generic_instantiation(
             && tcx.type_of(param.def_id).skip_binder() != tcx.types.usize
     }) {
         return Err("non-usize const generic parameters are not supported yet".to_string());
+    }
+
+    // A `const {}` block parameterized by a type or const generic can encode a precondition that
+    // the arguments we substitute violate, which rustc reports as an unrecoverable E0080. We
+    // cannot check whether they actually do without emitting that error, so skip.
+    if has_generic_const_precondition(tcx, def) {
+        return Err("the function has a `const {}` block that may constrain its generic \
+                    parameter(s), and the arguments autoharness substitutes are not guaranteed \
+                    to satisfy it"
+            .to_string());
     }
 
     // Positions of the type parameters among the identity arguments, and the candidate list
@@ -861,6 +1079,9 @@ fn choose_generic_instantiation(
     };
 
     let attempts = std::cell::Cell::new(0usize);
+    // The first candidate rejected for making a SIMD intrinsic call invalid, so that the skip
+    // reason names that instead of the trait bounds, which such a candidate does satisfy.
+    let simd_rejection: std::cell::Cell<Option<String>> = std::cell::Cell::new(None);
     let try_choice = |choice: &[Ty]| -> Option<Instance> {
         attempts.set(attempts.get() + 1);
         let args = build_args(choice);
@@ -871,7 +1092,14 @@ fn choose_generic_instantiation(
         // instance (e.g. a generic trait method without a default) is then reported accurately
         // as `NoBody` by `skip_reason`, rather than falling through to a generic-function skip
         // reason here.
-        Instance::resolve(def, &args).ok()
+        let instance = Instance::resolve(def, &args).ok()?;
+        if let Some(reason) = invalid_simd_instantiation(tcx, instance) {
+            // Keep the first rejection: it is the one for the most common candidate.
+            let reason = simd_rejection.take().unwrap_or(reason);
+            simd_rejection.set(Some(reason));
+            return None;
+        }
+        Some(instance)
     };
 
     // First pass: the same primitive candidate for every type parameter (the common case,
@@ -921,8 +1149,29 @@ fn choose_generic_instantiation(
             }
         }
     }
+    // Keep the original candidate order and search budget intact. Only after
+    // that search fails, try one additional choice with every type set to unit.
+    // This supports the tuple Extend methods without displacing existing results.
+    let search_limited = attempts.get() >= GENERIC_INSTANTIATION_ATTEMPT_LIMIT;
+    if !type_slots.is_empty()
+        && let Some(instance) = try_choice(&vec![Ty::new_tuple(&[]); type_slots.len()])
+    {
+        return Ok(instance);
+    }
+    // A candidate that satisfied the bounds but would make a SIMD intrinsic call invalid is the
+    // more specific reason, so report it ahead of the generic ones below.
+    if let Some(reason) = simd_rejection.take() {
+        return Err(reason);
+    }
+    if search_limited {
+        return Err(format!(
+            "generic instantiation search reached the limit of \
+             {GENERIC_INSTANTIATION_ATTEMPT_LIMIT} attempts{}",
+            if type_slots.is_empty() { "" } else { "; the uniform unit fallback also failed" }
+        ));
+    }
     Err(format!(
-        "no candidate type ({}{}) satisfies the function's trait bounds",
+        "no candidate type ({}{}{}) satisfies the function's trait bounds",
         generic_instantiation_candidates()
             .iter()
             .map(|ty| ty.to_string())
@@ -932,7 +1181,8 @@ fn choose_generic_instantiation(
             format!(" and {n_impl_derived} types implementing the required traits")
         } else {
             String::new()
-        }
+        },
+        if type_slots.is_empty() { "" } else { ", or () for every parameter" }
     ))
 }
 
@@ -997,7 +1247,12 @@ fn automatic_harness_partition(
             "{crate_name}::{}",
             crate::kani_middle::strip_local_crate_prefix(instance.name())
         );
-        let body = instance.body().unwrap();
+        // Autoharness loads every local body. Skip a function whose body `rustc_public` cannot
+        // convert, rather than aborting the run for every other function.
+        if crate::kani_middle::has_explicit_tail_call(tcx, instance) {
+            return Err(AutoHarnessSkipReason::UnsupportedTailCall);
+        }
+        let body = crate::kani_middle::checked_body(tcx, instance).unwrap();
 
         if is_proof_harness(tcx, instance)
             || name.contains("kani::Arbitrary")
@@ -1011,12 +1266,20 @@ fn automatic_harness_partition(
             return Err(AutoHarnessSkipReason::UserFilter);
         }
 
-        // Debug/Display fmt implementations are handled specially: their `&mut Formatter`
+        // Report the calling convention rather than the `VaList` argument: for these functions
+        // Kani cannot model the call at all, so an `Arbitrary` implementation would not help.
+        if crate::kani_middle::is_unsupported_variadic(tcx, instance) {
+            return Err(AutoHarnessSkipReason::UnsupportedVariadic);
+        }
+
+        // Formatting trait implementations are handled specially: their `&mut Formatter`
         // argument cannot be generated, but the generated harness formats a nondeterministic
         // value of the self type into a discarding sink instead, c.f. `fmt_impl_self_ty`.
         // The self type is generated with `kani::any`, so it must implement (or be able to
         // derive) Arbitrary; argument-position-only support (raw/smart pointers, bounded types)
         // does not apply here, and these harnesses are therefore never bounded.
+        // The `core::str::pattern` searcher types are the exception: `fmt_impl_self_ty` does not
+        // report their `fmt` methods, which are checked as ordinary functions below.
         if let Some((_, self_ty)) = fmt_impl_self_ty(tcx, instance) {
             return if implements_arbitrary(self_ty, kani_any_def, &mut ty_arbitrary_cache)
                 || can_derive_arbitrary(self_ty, kani_any_def, &mut ty_arbitrary_cache)
@@ -1122,6 +1385,21 @@ fn automatic_harness_partition(
             continue;
         }
 
+        // A `#[rustc_comptime]` function can only be called at compile time: rustc rejects any
+        // other call (`enforce_context_effects`), so a harness calling it is not a program rustc
+        // accepts. Check before instantiating, so that generic ones are skipped for this reason
+        // too, and none reaches the const-block precondition search (#4839).
+        if matches!(
+            tcx.constness(rustc_internal::internal(tcx, func.def_id())),
+            rustc_hir::Constness::Const { always: true }
+        ) {
+            skipped.insert(
+                crate::kani_middle::strip_local_crate_prefix(func.name()),
+                AutoHarnessSkipReason::Comptime,
+            );
+            continue;
+        }
+
         // For generic functions, try to find a monomorphic instantiation whose bounds are
         // satisfied; the generated harness verifies the function for that instantiation only,
         // and its name (e.g. `foo::<i32>`) reflects that.
@@ -1148,7 +1426,7 @@ fn automatic_harness_partition(
                 // Whether any generated value will come from a type's public constructor
                 // rather than raw field synthesis, which the summary reports as "(ctor)".
                 let is_ctor_based = args.autoharness_constructor_args
-                    && instance.body().is_some_and(|body| {
+                    && crate::kani_middle::checked_body(tcx, instance).is_some_and(|body| {
                         body.arg_locals().iter().any(|arg| {
                             crate::kani_middle::uses_ctor_generation(
                                 tcx,

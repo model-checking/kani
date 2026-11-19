@@ -3,7 +3,7 @@
 
 //! This module defines all compiler extensions that form the Kani compiler.
 //!
-//! The [KaniCompiler] can be used across multiple rustc driver runs ([`rustc_driver::run_compiler`]),
+//! The [KaniCompiler] can be used across multiple rustc driver runs ([`rustc_driver::compiler_entrypoint`]),
 //! which is used to implement stubs.
 //!
 //! In the first run, [KaniCompiler::config] will implement the compiler configuration and it will
@@ -26,7 +26,7 @@ use crate::session::init_session;
 use clap::Parser;
 use rustc_ast::{ast, attr};
 use rustc_codegen_ssa::traits::CodegenBackend;
-use rustc_driver::{Callbacks, Compilation, run_compiler};
+use rustc_driver::{Callbacks, Compilation, compiler_entrypoint};
 use rustc_interface::Config;
 use rustc_interface::interface::Compiler;
 use rustc_middle::ty::TyCtxt;
@@ -106,7 +106,7 @@ const KANI_REQUIRED_RUSTC_ARGS: &[&str] = &[
 ];
 
 /// Run the Kani flavour of the compiler.
-/// This may require multiple runs of the rustc driver ([`rustc_driver::run_compiler`]).
+/// This may require multiple runs of the rustc driver ([`rustc_driver::compiler_entrypoint`]).
 pub fn run(mut args: Vec<String>) {
     args.extend(KANI_REQUIRED_RUSTC_ARGS.iter().map(|s| s.to_string()));
     let mut kani_compiler = KaniCompiler::new();
@@ -180,7 +180,7 @@ impl KaniCompiler {
     /// actually invoke the rust compiler multiple times.
     pub fn run(&mut self, args: Vec<String>) {
         debug!(?args, "run_compilation_session");
-        run_compiler(&args, self);
+        compiler_entrypoint(&args, self);
     }
 }
 

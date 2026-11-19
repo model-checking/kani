@@ -1,0 +1,4 @@
+--- C variadics are unaffected
+Missing Arbitrary implementation for argument(s) _: std::ffi::VaList<'_>
+| c_variadic | double            | #[kani::proof]            | Success             |
+Complete - 1 successfully verified functions, 0 failures, 1 total.

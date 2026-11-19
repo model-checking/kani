@@ -566,7 +566,13 @@ impl ToIrep for StmtBody {
                         assigns.iter().map(|assign| assign.to_irep(mm)).collect(),
                     )])
                 });
-                let decreases = loop_decreases.clone().map(|dec| dec.to_irep(mm));
+                // CBMC takes the operands of the `#spec_decreases` irep as the components of the
+                // (lexicographic) measure, like the C front end does for `__CPROVER_decreases`.
+                // Make the measure the only operand, as otherwise a measure without operands
+                // (e.g. a variable) would be ignored, and the operands of other measures (e.g. the
+                // operand of a cast) would be used as the measure instead.
+                let decreases =
+                    loop_decreases.clone().map(|dec| Irep::just_sub(vec![dec.to_irep(mm)]));
                 code_irep(IrepId::Goto, vec![])
                     .with_named_sub(IrepId::Destination, Irep::just_string_id(dest.to_string()))
                     .with_named_sub_option(IrepId::CSpecLoopInvariant, inv)

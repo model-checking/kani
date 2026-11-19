@@ -1,0 +1,2 @@
+error: existential quantifier predicates requiring fallback are not supported with extra UB checks
+error: aborting due to 1 previous error

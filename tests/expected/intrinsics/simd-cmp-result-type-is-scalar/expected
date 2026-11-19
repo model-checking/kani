@@ -1,0 +1,3 @@
+Status: FAILURE\
+Description: "`simd_eq` with the result type `u64` (not a SIMD type) is not currently supported by Kani
+VERIFICATION:- FAILED

@@ -1,7 +1,7 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! This test checks that we emit an error when the return type for
+//! This test checks that we report an unsupported construct when the return type for
 //! `simd_extract` has a type different to the first argument's (i.e., the
 //! vector) base type.
 #![feature(repr_simd, core_intrinsics)]

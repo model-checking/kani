@@ -3,6 +3,7 @@
 
 use crate::args::Timeout;
 use crate::args::VerificationArgs;
+use crate::args::autoharness_args::AutoharnessBounds;
 use crate::args::common::Verbosity;
 use crate::util::render_command;
 use anyhow::{Context, Result, bail};
@@ -39,6 +40,10 @@ pub struct KaniSession {
     /// Invariant: this field is_some() iff the autoharness subcommand is enabled.
     pub autoharness_compiler_flags: Option<Vec<String>>,
 
+    /// The bounds automatic harnesses generate bounded arguments with, reported in the
+    /// autoharness summary. Only meaningful if the autoharness subcommand is enabled.
+    pub autoharness_bounds: AutoharnessBounds,
+
     /// The location we found the 'kani_rustc' command
     pub kani_compiler: PathBuf,
     /// The location we found 'kani_lib.c'
@@ -69,6 +74,7 @@ impl KaniSession {
         Ok(KaniSession {
             args,
             autoharness_compiler_flags: None,
+            autoharness_bounds: AutoharnessBounds::default(),
             kani_compiler: install.kani_compiler()?,
             kani_lib_c: install.kani_lib_c()?,
             temporaries: Mutex::new(vec![]),
@@ -417,6 +423,30 @@ pub fn setup_cargo_command() -> Result<Command> {
     setup_cargo_command_inner(None)
 }
 
+/// `time` as a UTC timestamp, `YYYY-MM-DDTHH:MM:SSZ`, e.g. for file names.
+///
+/// This uses only `std` (the date conversion is Howard Hinnant's `civil_from_days`), so the driver
+/// does not need a date-time crate for this one use.
+fn utc_timestamp(time: std::time::SystemTime) -> String {
+    let secs = time.duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs()) as i64;
+    let (days, rem) = (secs.div_euclid(86_400), secs.rem_euclid(86_400));
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        rem / 3_600,
+        rem % 3_600 / 60,
+        rem % 60
+    )
+}
+
 // Setup the default version of cargo being run, based on the type/mode of installation for kani.
 // Optionally takes a path to output compiler profiling info to.
 // If kani is being run in developer mode, then we use the one provided by rustup as we can assume that the developer will have rustup installed.
@@ -425,7 +455,7 @@ pub fn setup_cargo_command() -> Result<Command> {
 pub fn setup_cargo_command_inner(profiling_out_path: Option<String>) -> Result<Command> {
     let install_type = InstallType::new()?;
 
-    let cmd = match install_type {
+    let mut cmd = match install_type {
         InstallType::DevRepo(_) => {
             // check if we should instrument the compiler for a flamegraph
             let instrument_compiler = matches!(
@@ -438,7 +468,7 @@ pub fn setup_cargo_command_inner(profiling_out_path: Option<String>) -> Result<C
             {
                 // create temporary flamegraph directory
                 std::fs::create_dir_all(FLAMEGRAPH_DIR)?;
-                let time_postfix = chrono::Local::now().format("%Y-%m-%dT%H:%M:%S");
+                let time_postfix = utc_timestamp(std::time::SystemTime::now());
 
                 let mut cmd = Command::new("samply");
                 cmd.arg("record");
@@ -465,7 +495,48 @@ pub fn setup_cargo_command_inner(profiling_out_path: Option<String>) -> Result<C
         }
     };
 
+    drop_rustc_wrappers(&mut cmd);
+
     Ok(cmd)
+}
+
+/// Keep a `rustc` wrapper (`sccache` and friends) out of Kani's build.
+///
+/// We point `RUSTC` at `kani-compiler`, which is not a `rustc` a wrapper can serve: it takes
+/// Kani-specific arguments, and its output is a goto program rather than the object files a
+/// compilation cache expects. With `RUSTC_WRAPPER=sccache` exported, `cargo kani` fails before it
+/// compiles anything with `sccache: caused by: Compiler not supported`, c.f.
+/// <https://github.com/model-checking/kani/issues/2233>. Caching would not have helped us anyway,
+/// so drop the wrapper and say so rather than failing.
+///
+/// A wrapper can also come from `build.rustc-wrapper` / `build.rustc-workspace-wrapper` in a
+/// `.cargo/config.toml` (the setup sccache recommends) or their `CARGO_BUILD_*` environment
+/// forms. Setting `RUSTC_WRAPPER` and `RUSTC_WORKSPACE_WRAPPER` to the empty string, rather than
+/// removing them, overrides all of those: cargo documents that the empty string "overwrites the
+/// config and resets cargo to not use a wrapper".
+fn drop_rustc_wrappers(cmd: &mut Command) {
+    // This runs once per verification target; warn only once per Kani run.
+    static WARNED: std::sync::Once = std::sync::Once::new();
+    WARNED.call_once(|| {
+        for var in [
+            "RUSTC_WRAPPER",
+            "RUSTC_WORKSPACE_WRAPPER",
+            "CARGO_BUILD_RUSTC_WRAPPER",
+            "CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER",
+        ] {
+            if let Ok(wrapper) = std::env::var(var)
+                && !wrapper.is_empty()
+            {
+                crate::util::warning(&format!(
+                    "ignoring `{var}={wrapper}` for this run: Kani compiles with \
+                     `kani-compiler`, which a `rustc` wrapper cannot handle"
+                ));
+            }
+        }
+    });
+    for var in ["RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER"] {
+        cmd.env(var, "");
+    }
 }
 
 // Get the cargo path corresponding to the toolchain version in rust-toolchain.toml.
@@ -480,4 +551,23 @@ pub fn get_cargo_path() -> Result<PathBuf> {
     };
 
     Ok(cargo_path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::utc_timestamp;
+    use std::time::{Duration, UNIX_EPOCH};
+
+    #[test]
+    fn utc_timestamp_matches_known_dates() {
+        let cases = [
+            (0, "1970-01-01T00:00:00Z"),
+            (951_782_400, "2000-02-29T00:00:00Z"), // leap day in a year divisible by 400
+            (4_107_542_399, "2100-02-28T23:59:59Z"), // 2100 is not a leap year
+            (1_795_000_000, "2026-11-18T11:06:40Z"),
+        ];
+        for (secs, expected) in cases {
+            assert_eq!(utc_timestamp(UNIX_EPOCH + Duration::from_secs(secs)), expected);
+        }
+    }
 }

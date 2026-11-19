@@ -6,6 +6,12 @@
 //! Writing invalid bytes is not UB as long as the incorrect value is not read.
 //! However, we over-approximate for sake of simplicity and performance.
 
+// These call the intrinsics themselves, which `core::ptr` wraps with extra debug assertions,
+// so opt in to `core_intrinsics` instead of importing them through the accidentally stabilized
+// `core::intrinsics` path (denied since rust-lang/rust#163160).
+#![feature(core_intrinsics)]
+#![allow(internal_features)]
+
 use std::num::NonZeroU8;
 
 #[kani::proof]

@@ -8,7 +8,6 @@
 //! rustc_private feature and a specific version of rustc.
 #![feature(extern_types)]
 #![recursion_limit = "256"]
-#![feature(box_patterns)]
 #![feature(rustc_private)]
 #![feature(iter_intersperse)]
 #![feature(f128)]
@@ -22,6 +21,7 @@
 extern crate rustc_abi;
 extern crate rustc_ast;
 extern crate rustc_ast_pretty;
+extern crate rustc_attr_ir;
 extern crate rustc_codegen_ssa;
 extern crate rustc_data_structures;
 extern crate rustc_driver;
@@ -39,6 +39,7 @@ extern crate rustc_public;
 extern crate rustc_public_bridge;
 extern crate rustc_session;
 extern crate rustc_span;
+extern crate rustc_structures;
 extern crate rustc_target;
 extern crate rustc_trait_selection;
 // We can't add this directly as a dependency because we need the version to match rustc
@@ -55,7 +56,7 @@ mod kani_middle;
 mod kani_queries;
 mod session;
 
-use rustc_driver::{TimePassesCallbacks, run_compiler};
+use rustc_driver::{TimePassesCallbacks, compiler_entrypoint};
 use std::env;
 
 /// Main function. Configure arguments and run the compiler.
@@ -74,7 +75,7 @@ fn main() {
         kani_compiler::run(rustc_args);
     } else {
         let mut callbacks = TimePassesCallbacks::default();
-        run_compiler(&rustc_args, &mut callbacks);
+        compiler_entrypoint(&rustc_args, &mut callbacks);
     }
 }
 

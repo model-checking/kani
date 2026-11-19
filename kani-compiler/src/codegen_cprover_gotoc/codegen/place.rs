@@ -10,7 +10,6 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::codegen_cprover_gotoc::codegen::ty_stable::pointee_type;
 use crate::codegen_cprover_gotoc::codegen::typ::std_pointee_type;
 use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
-use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{Expr, ExprValue, Location, Stmt, Type};
 use rustc_abi::{TagEncoding, Variants};
 use rustc_middle::ty::layout::LayoutOf;
@@ -18,6 +17,10 @@ use rustc_public::mir::{FieldIdx, Local, Mutability, Place, ProjectionElem};
 use rustc_public::rustc_internal;
 use rustc_public::ty::{RigidTy, Ty, TyKind, VariantDef, VariantIdx};
 use tracing::{debug, trace, warn};
+
+/// Tracking issue for downcasts into variants of uninhabited enums.
+const UNINHABITED_ENUM_DOWNCAST_ISSUE_URL: &str =
+    "https://github.com/model-checking/kani/issues/3596";
 
 /// A projection in Kani can either be to a type (the normal case),
 /// or a variant in the case of a downcast.
@@ -363,34 +366,17 @@ impl GotocCtx<'_, '_> {
         }
     }
 
-    /// If a local is a function definition, ignore the local variable name and
-    /// generate a function call based on the def id.
+    /// If a local is a function definition, use the function item's singleton instead of the
+    /// named variable.
     ///
-    /// Note that this is finicky. A local might be a function definition, a
-    /// pointer to one, or a boxed pointer to one. For example, the
-    /// auto-generated code for Fn::call_once uses a local FnDef to call the
-    /// wrapped function, while the auto-generated code for Fn::call and
-    /// Fn::call_mut both use pointers to a FnDef. In these cases, we need to
-    /// generate an expression that references the existing FnDef rather than
-    /// a named variable.
+    /// For example, the auto-generated code for Fn::call_once uses a local FnDef to call the
+    /// wrapped function. A function item is zero-sized, so every value of it is the same.
     ///
-    /// Recursively finds the actual FnDef from a pointer or box.
+    /// A pointer to a function item, or a `Box` of one, is not zero-sized: it is an ordinary
+    /// variable that holds whatever address was assigned to it.
     fn codegen_local_fndef(&mut self, ty: Ty, loc: Location) -> Option<Expr> {
         match ty.kind() {
-            // A local that is itself a FnDef, like Fn::call_once
             TyKind::RigidTy(RigidTy::FnDef(def, args)) => Some(self.codegen_fndef(def, &args, loc)),
-            // A local can be pointer to a FnDef, like Fn::call and Fn::call_mut
-            TyKind::RigidTy(RigidTy::RawPtr(inner, _)) => self
-                .codegen_local_fndef(inner, loc)
-                .map(|f| if f.can_take_address_of() { f.address_of() } else { f }),
-            // A local can be a boxed function pointer
-            TyKind::RigidTy(RigidTy::Adt(def, args)) if def.is_box() => {
-                let boxed_ty = self.codegen_ty_stable(ty);
-                // The type of `T` for `Box<T>` can be derived from the first definition args.
-                let inner_ty = args.0[0].ty().unwrap();
-                self.codegen_local_fndef(*inner_ty, loc)
-                    .map(|f| self.box_value(f.address_of(), boxed_ty))
-            }
             _ => None,
         }
     }
@@ -444,11 +430,12 @@ impl GotocCtx<'_, '_> {
         match proj {
             ProjectionElem::Deref => {
                 let base_type = before.mir_typ();
-                let inner_goto_expr = if base_type.kind().is_box() {
-                    self.deref_box(before.goto_expr)
-                } else {
-                    before.goto_expr
-                };
+                // rustc's `ElaborateBoxDerefs` pass replaces every deref of a `Box` with a deref
+                // of its raw pointer. Shims skip that pass, but the ones that touch a `Box` reach
+                // its contents through the raw pointer themselves; drop elaboration does so
+                // explicitly.
+                assert!(!base_type.kind().is_box(), "Unexpected deref of {base_type:?}");
+                let inner_goto_expr = before.goto_expr;
 
                 let inner_mir_typ_internal =
                     std_pointee_type(rustc_internal::internal(self.tcx, base_type)).unwrap();
@@ -487,8 +474,10 @@ impl GotocCtx<'_, '_> {
                     | TyKind::RigidTy(RigidTy::Dynamic(..)) => {
                         inner_goto_expr.member("data", &self.symbol_table)
                     }
+                    // Not every unsized ADT is behind a fat pointer: one whose tail is an
+                    // `extern type` has no metadata, so it is dereferenced like a sized one.
                     TyKind::RigidTy(RigidTy::Adt(..)) | TyKind::RigidTy(RigidTy::Tuple(..))
-                        if self.is_unsized(inner_mir_typ_internal) =>
+                        if self.use_fat_pointer(inner_mir_typ_internal) =>
                     {
                         // in tests/kani/Strings/os_str_reduced.rs, we see
                         // ```
@@ -551,15 +540,14 @@ impl GotocCtx<'_, '_> {
                     self,
                 )
             }
-            ProjectionElem::ConstantIndex { offset, min_length, from_end } => {
-                self.codegen_constant_index(before, *offset, *min_length, *from_end)
+            ProjectionElem::ConstantIndex { offset, from_end, .. } => {
+                self.codegen_constant_index(before, *offset, *from_end)
             }
-            // Best effort to codegen subslice projection.
-            // Full support to be added in
-            // https://github.com/model-checking/kani/issues/707
             ProjectionElem::Subslice { from, to, from_end } => {
                 // https://rust-lang.github.io/rfcs/2359-subslice-pattern-syntax.html
                 match before.mir_typ().kind() {
+                    // Sub-array binding is not supported yet; full support to be added in
+                    // https://github.com/model-checking/kani/issues/707
                     TyKind::RigidTy(RigidTy::Array(ty, len)) => {
                         let len = len.eval_target_usize().unwrap();
                         let subarray_len = if *from_end {
@@ -597,10 +585,13 @@ impl GotocCtx<'_, '_> {
                         let index = Expr::int_constant(*from, Type::ssize_t());
                         let from_elem = before.goto_expr.index(index);
                         let data = from_elem.address_of();
-                        let fat_ptr = slice_fat_ptr(goto_type, data, len, &self.symbol_table);
+                        let fat_ptr =
+                            slice_fat_ptr(goto_type, data.clone(), len, &self.symbol_table);
+                        // As after a `Deref` of a slice fat pointer, the place is the slice itself
+                        // (its data pointer), since runtime MIR can project further into it.
                         ProjectedPlace::try_new(
-                            fat_ptr.clone(),
-                            TypeOrVariant::Type(ptr_typ),
+                            data,
+                            TypeOrVariant::Type(typ),
                             Some(fat_ptr),
                             Some(ptr_typ),
                             self,
@@ -632,7 +623,18 @@ impl GotocCtx<'_, '_> {
                 };
                 let layout = self.layout_of(rustc_internal::internal(self.tcx, ty));
                 let expr = match &layout.variants {
-                    Variants::Empty | Variants::Single { .. } => before.goto_expr,
+                    // `Variants::Empty` is the layout rustc gives to some uninhabited types,
+                    // e.g. `enum E { A(!) }`. Its goto struct has no fields, so a following
+                    // field projection has nothing to project into.
+                    Variants::Empty => {
+                        return Err(Box::new(UnimplementedData::new(
+                            "Downcast into a variant of an uninhabited enum",
+                            UNINHABITED_ENUM_DOWNCAST_ISSUE_URL,
+                            self.codegen_ty_stable(ty),
+                            *before.goto_expr.location(),
+                        )));
+                    }
+                    Variants::Single { .. } => before.goto_expr,
                     Variants::Multiple { tag_encoding, .. } => match tag_encoding {
                         TagEncoding::Direct => {
                             let cases = if ty_kind.is_coroutine() {
@@ -681,8 +683,22 @@ impl GotocCtx<'_, '_> {
     ///   and we need to take it's address and build the fat pointer.
     pub fn codegen_place_ref_stable(&mut self, place: &Place, loc: Location) -> Expr {
         let place_ty = self.place_ty_stable(place);
-        let projection =
-            unwrap_or_return_codegen_unimplemented!(self, self.codegen_place_stable(place, loc));
+        let projection = match self.codegen_place_stable(place, loc) {
+            Ok(projection) => projection,
+            Err(err) => {
+                // This function yields a *reference* to the place, so the stub that replaces an
+                // unsupported projection has to have the reference's type (thin or fat), not the
+                // place's own. `unwrap_or_return_codegen_unimplemented!` would return the latter
+                // and the caller would then assign a value to a pointer-typed local.
+                let ref_ty = self.codegen_ty_ref_stable(place_ty);
+                return self.codegen_unimplemented_expr(
+                    err.operation.as_str(),
+                    ref_ty,
+                    err.loc,
+                    err.bug_url.as_str(),
+                );
+            }
+        };
         if self.use_thin_pointer_stable(place_ty) {
             // For ZST objects rustc does not necessarily generate any actual objects.
             let need_not_be_an_object = self.is_zst_object(&projection.goto_expr);
@@ -697,7 +713,7 @@ impl GotocCtx<'_, '_> {
                 let assume_non_zero =
                     Stmt::assume(var.clone().neq(Expr::int_constant(0, var.typ().clone())), *loc);
                 let layout = self.layout_of_stable(place_ty);
-                let alignment = Expr::int_constant(layout.align.abi.bytes(), var.typ().clone());
+                let alignment = Expr::int_constant(layout.align.bytes(), var.typ().clone());
                 let assume_aligned = Stmt::assume(
                     var.clone().rem(alignment).eq(Expr::int_constant(0, var.typ().clone())),
                     *loc,
@@ -802,15 +818,16 @@ impl GotocCtx<'_, '_> {
         &mut self,
         before: ProjectedPlace,
         offset: u64,
-        min_length: u64,
         from_end: bool,
     ) -> Result<ProjectedPlace, Box<UnimplementedData>> {
         match before.mir_typ().kind() {
             //TODO, ask on zulip if we can ever have from_end here?
             TyKind::RigidTy(RigidTy::Array(elemt, length)) => {
                 let length = length.eval_target_usize().unwrap();
-                assert!(length >= min_length);
-                let idx = if from_end { length - offset } else { offset };
+                // Like rustc's codegen, ignore `min_length`: it can exceed `length` after a bounds
+                // check that always fails, where GVN turns `a[i]` into `a[i of i+1]`. An
+                // out-of-bounds index that is reached fails CBMC's array bounds check.
+                let idx = if from_end { length.wrapping_sub(offset) } else { offset };
                 let idxe = Expr::int_constant(idx, Type::ssize_t());
                 let expr = self.codegen_idx_array(before.goto_expr, idxe);
                 let typ = TypeOrVariant::Type(elemt);
@@ -824,7 +841,6 @@ impl GotocCtx<'_, '_> {
             }
             TyKind::RigidTy(RigidTy::Slice(elemt)) => {
                 let offset_e = Expr::int_constant(offset, Type::size_t());
-                //TODO, should we assert min_length? Or is that already handled by the typechecker?
                 let idxe = if from_end {
                     let length =
                         before.fat_ptr_goto_expr.clone().unwrap().member("len", &self.symbol_table);

@@ -5,7 +5,7 @@
 //! UB. In practice, that means collecting all instructions where the place is featured.
 
 use crate::kani_middle::{
-    points_to::{MemLoc, PointsToGraph},
+    points_to::{MemLoc, PointsToGraph, unsupported_call},
     transform::{
         body::{InsertPosition, MutableBody, SourceInstruction},
         check_uninit::{
@@ -16,7 +16,7 @@ use crate::kani_middle::{
 };
 use rustc_middle::ty::TyCtxt;
 use rustc_public::mir::{
-    MirVisitor, Operand, Place, Rvalue, Statement, Terminator,
+    LocalDecl, MirVisitor, Operand, Place, Rvalue, Statement, Terminator, TerminatorKind,
     mono::Instance,
     visit::{Location, PlaceContext},
 };
@@ -32,11 +32,14 @@ pub struct InstrumentationVisitor<'a, 'tcx> {
     /// The list of places we should be looking for, ignoring others
     analysis_targets: &'a HashSet<MemLoc<'tcx>>,
     current_instance: Instance,
+    /// The locals of the body being visited, to type call operands.
+    locals: Vec<LocalDecl>,
     tcx: TyCtxt<'tcx>,
 }
 
 impl TargetFinder for InstrumentationVisitor<'_, '_> {
     fn find_all(mut self, body: &MutableBody) -> Vec<InitRelevantInstruction> {
+        self.locals = body.locals().to_vec();
         for (bb_idx, bb) in body.blocks().iter().enumerate() {
             self.current_target = InitRelevantInstruction {
                 source: SourceInstruction::Statement { idx: 0, bb: bb_idx },
@@ -66,6 +69,7 @@ impl<'a, 'tcx> InstrumentationVisitor<'a, 'tcx> {
             points_to,
             analysis_targets,
             current_instance,
+            locals: vec![],
             tcx,
         }
     }
@@ -102,6 +106,13 @@ impl MirVisitor for InstrumentationVisitor<'_, '_> {
             };
         } else {
             unreachable!()
+        }
+        // The points-to analysis does not follow these calls, so the aliasing it computed is only
+        // valid on paths that do not reach them.
+        if let TerminatorKind::Call { func, .. } = &term.kind
+            && let Some(reason) = unsupported_call(func.ty(&self.locals).unwrap())
+        {
+            self.push_target(MemoryInitOp::Unsupported { reason });
         }
         self.super_terminator(term, location);
         // Push the current target from the terminator onto the list.
@@ -160,13 +171,25 @@ impl MirVisitor for InstrumentationVisitor<'_, '_> {
                 self.points_to.resolve_place_stable(place.clone(), self.current_instance, self.tcx);
             let mut target_ancestors = self.analysis_targets.clone();
 
+            // The points-to graph can contain cycles (the analysis is field- and
+            // context-insensitive, so e.g. a `Vec` can end up "pointing to" itself), in which
+            // case the ancestor sets never become empty and this walk used to loop forever. Each
+            // iteration is a deterministic function of the current pair of sets, so once a pair
+            // repeats, no new intersection can be found: stop and report no common ancestor,
+            // which is the answer the walk gives on every graph where it terminates.
+            let mut visited_pairs = Vec::new();
             while !self_ancestors.is_empty() || !target_ancestors.is_empty() {
                 if self_ancestors.intersection(&target_ancestors).next().is_some() {
                     has_common_ancestor = true;
                     break;
                 }
-                self_ancestors = self.points_to.ancestors(&self_ancestors);
-                target_ancestors = self.points_to.ancestors(&target_ancestors);
+                let state = (self_ancestors, target_ancestors);
+                if visited_pairs.contains(&state) {
+                    break;
+                }
+                self_ancestors = self.points_to.ancestors(&state.0);
+                target_ancestors = self.points_to.ancestors(&state.1);
+                visited_pairs.push(state);
             }
 
             has_common_ancestor

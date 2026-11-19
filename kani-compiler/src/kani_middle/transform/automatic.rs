@@ -18,7 +18,7 @@ use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_middle::{
     CtorReturn, FmtTrait, SmartPointerModels, adt_has_private_field_check, can_derive_arbitrary,
     find_arbitrary_constructor, fmt_impl_self_ty, implements_arbitrary, implements_invariant,
-    scalar_niche, smart_pointer_model_instance,
+    is_byte_str, is_c_str, is_formatter, is_wtf8, scalar_niche, smart_pointer_model_instance,
 };
 use crate::kani_queries::QueryDb;
 use rustc_data_structures::fx::FxHashMap;
@@ -36,6 +36,7 @@ use rustc_public::ty::{
 };
 use rustc_public::{CrateDef, CrateDefType};
 use rustc_public_bridge::IndexedVal;
+use strum::IntoEnumIterator;
 use tracing::debug;
 
 /// The Kani model functions used to construct nondeterministic values.
@@ -51,6 +52,20 @@ struct AnyModels {
     kani_any_slice_ref: FnDef,
     /// The FnDef of KaniModel::AnyStrRef
     kani_any_str_ref: FnDef,
+    /// The FnDef of KaniModel::AnyCStrRef
+    kani_any_c_str_ref: FnDef,
+    /// The FnDef of KaniModel::AnyByteStrRef
+    kani_any_byte_str_ref: FnDef,
+    /// The FnDef of KaniModel::AnyFormatter
+    kani_any_formatter: FnDef,
+    /// The FnDef of KaniModel::AnyWtf8Ref
+    kani_any_wtf8_ref: FnDef,
+    /// The FnDef of KaniModel::AnyCharArraySearcher
+    kani_any_char_array_searcher: FnDef,
+    /// The FnDef of KaniModel::AnyCharArrayRefSearcher
+    kani_any_char_array_ref_searcher: FnDef,
+    /// The FnDef of KaniModel::AnyCharSliceSearcher
+    kani_any_char_slice_searcher: FnDef,
     /// The FnDef of KaniHook::Assume (used for layout-niche assumptions and constructor
     /// success).
     kani_assume: FnDef,
@@ -68,6 +83,14 @@ struct AnyModels {
     /// Whether --constructor-args is enabled: under this heuristic-filter umbrella, generated
     /// ADT values additionally assume the type's mined invariant conjuncts.
     constructor_args: bool,
+    /// The maximum length for nondeterministic `&[T]`/`&mut [T]` values, and for the needle of a
+    /// `core::str::pattern::CharSliceSearcher` value.
+    slice_bound: u64,
+    /// The maximum length, in bytes, for nondeterministic `&str` values, and for the haystack of a
+    /// `core::str::pattern` searcher value.
+    string_bound: u64,
+    /// The bound for nondeterministic values of types implementing `BoundedArbitrary`.
+    bounded_arbitrary_bound: u64,
 }
 
 impl AnyModels {
@@ -78,6 +101,19 @@ impl AnyModels {
             kani_any_ptr: *kani_fns.get(&KaniModel::AnyPtr.into()).unwrap(),
             kani_any_slice_ref: *kani_fns.get(&KaniModel::AnySliceRef.into()).unwrap(),
             kani_any_str_ref: *kani_fns.get(&KaniModel::AnyStrRef.into()).unwrap(),
+            kani_any_c_str_ref: *kani_fns.get(&KaniModel::AnyCStrRef.into()).unwrap(),
+            kani_any_byte_str_ref: *kani_fns.get(&KaniModel::AnyByteStrRef.into()).unwrap(),
+            kani_any_formatter: *kani_fns.get(&KaniModel::AnyFormatter.into()).unwrap(),
+            kani_any_wtf8_ref: *kani_fns.get(&KaniModel::AnyWtf8Ref.into()).unwrap(),
+            kani_any_char_array_searcher: *kani_fns
+                .get(&KaniModel::AnyCharArraySearcher.into())
+                .unwrap(),
+            kani_any_char_array_ref_searcher: *kani_fns
+                .get(&KaniModel::AnyCharArrayRefSearcher.into())
+                .unwrap(),
+            kani_any_char_slice_searcher: *kani_fns
+                .get(&KaniModel::AnyCharSliceSearcher.into())
+                .unwrap(),
             kani_assume: *kani_fns.get(&KaniHook::Assume.into()).unwrap(),
             kani_assert: *kani_fns.get(&KaniHook::Assert.into()).unwrap(),
             kani_assume_safe: *kani_fns.get(&KaniModel::AssumeSafe.into()).unwrap(),
@@ -85,6 +121,9 @@ impl AnyModels {
             smart_pointer_models: SmartPointerModels::from_kani_functions(kani_fns),
             unbounded_models: UnboundedModels::from_kani_functions(kani_fns),
             constructor_args: query_db.args().autoharness_constructor_args,
+            slice_bound: query_db.args().autoharness_slice_bound,
+            string_bound: query_db.args().autoharness_string_bound,
+            bounded_arbitrary_bound: query_db.args().autoharness_bounded_arbitrary_bound,
         }
     }
 }
@@ -224,31 +263,6 @@ impl TransformPass for AutomaticArbitraryPass {
     }
 }
 
-/// The maximum length for nondeterministic slices that automatic harnesses generate.
-/// Verification results for functions taking `&[T]`/`&mut [T]` arguments are only valid up to
-/// this bound. The value must stay below Kani's default unwinding bound (20), so that loops
-/// iterating over such a slice can be fully unwound by default.
-const AUTOHARNESS_SLICE_BOUND: u64 = 16;
-
-/// The maximum length (in bytes) for nondeterministic strings that automatic harnesses
-/// generate. Strings use a much smaller bound than slices: the generated string is the longest
-/// valid-UTF-8 prefix of nondeterministic bytes, and reasoning about UTF-8 validity is
-/// expensive. On top of that, a harness that decodes every `char` (e.g. `s.chars().count()`)
-/// unwinds the decoding loop up to the default bound (20) over symbolic bytes, so the cost grows
-/// steeply with the number of bytes: on a typical machine 8 bytes already exceed Kani's default
-/// 60s harness timeout for such harnesses, while 4 stay comfortably within it (though a
-/// char-decoding harness can still approach the timeout on slow machines, so callers that must
-/// not time out should raise `--harness-timeout`).
-const AUTOHARNESS_STR_BOUND: u64 = 4;
-
-/// The bound for nondeterministic values of types that implement `BoundedArbitrary` (rather
-/// than `Arbitrary`) that automatic harnesses generate, e.g. `Vec<T>` or `String`.
-/// Verification results for functions with such arguments are only valid up to this bound.
-/// This is smaller than the slice/str bounds since `BoundedArbitrary` values are heap
-/// allocated, and for `String` additionally involve UTF-8 reasoning; a bound of 8 already
-/// makes simple `String` harnesses exceed Kani's default 60s harness timeout.
-const AUTOHARNESS_BOUNDED_ANY_BOUND: u64 = 4;
-
 /// Remap all locals and block targets of an inlined basic block. Returns false (bail out)
 /// when the block contains a construct the remapper does not support; the caller then falls
 /// back to non-inlined generation. The allowlist covers everything rustc emits for
@@ -381,7 +395,7 @@ fn inline_with_assumed_panics(
     arg_locals: &[Local],
     ret_ty: Ty,
 ) -> Option<Local> {
-    let callee_body = callee.body()?;
+    let callee_body = crate::kani_middle::body_without_tail_calls(tcx, callee)?;
     let span = source.span(body.blocks());
     let ret_lcl = body.new_local(ret_ty, span, Mutability::Mut);
 
@@ -526,7 +540,8 @@ fn inline_with_assumed_panics(
                         } else if depth < INLINE_MAX_DEPTH
                             && let Some((def, fn_args)) = &fn_def
                             && let Ok(inst) = Instance::resolve(*def, fn_args)
-                            && let Some(inner_body) = inst.body()
+                            && let Some(inner_body) =
+                                crate::kani_middle::body_without_tail_calls(self.tcx, inst)
                             && inner_body.blocks.len() <= INLINE_MAX_BLOCKS
                             && self.worth_inlining(&inner_body)
                         {
@@ -996,11 +1011,11 @@ fn check_mined_invariants(
 /// of `body`, which keeps it alive for as long as the transformed body executes.
 /// For `&[T]`/`&mut [T]`/`&str`, insert calls to the `KaniModel::AnySliceRef`/`AnyStrRef`
 /// models instead, which return a slice of nondeterministic length (bounded by
-/// [AUTOHARNESS_SLICE_BOUND]) backed by a nondeterministic array stored in a dedicated local,
+/// the configured slice bound) backed by a nondeterministic array stored in a dedicated local,
 /// which stays alive for the entire harness.
 /// If `ty` does not implement `Arbitrary` (and cannot derive it) but implements `BoundedArbitrary`
 /// (e.g. `Vec<T>` or `String`), insert a call to the `KaniModel::BoundedAny` model, which returns
-/// a *bounded* nondeterministic value (bounded by [AUTOHARNESS_BOUNDED_ANY_BOUND]).
+/// a *bounded* nondeterministic value (bounded by the configured `BoundedArbitrary` bound).
 /// If `ty` is an ADT that implements `Invariant`, additionally insert a call to the
 /// `KaniModel::AssumeSafe` model (`kani_assume_safe`), which assumes that the nondeterministic
 /// value respects the type's safety invariant, c.f.
@@ -1148,6 +1163,109 @@ impl UnboundedModels {
     }
 }
 
+/// Build a local holding a nondeterministic `[elem_ty; bound]` array, and a `&mut` reference to
+/// it under `region`. Both locals belong to the harness body being built, so they stay alive for
+/// as long as it executes. Returns the storage local and the reference local.
+///
+/// The array is built element-wise (rather than via `kani::any::<[T; N]>()`) so that element
+/// types whose Arbitrary implementation the compiler derives are supported: `<[T; N] as
+/// Arbitrary>::any` is unresolvable for such `T`, whereas each element can be generated through
+/// the same path as any other value of that type.
+#[allow(clippy::too_many_arguments)]
+fn build_any_array_storage_ref(
+    tcx: TyCtxt,
+    models: AnyModels,
+    body: &mut MutableBody,
+    elem_ty: Ty,
+    bound: u64,
+    region: Region,
+    source: &mut SourceInstruction,
+    invariant_cache: &mut FxHashMap<Ty, bool>,
+    mined_cache: &mut FxHashMap<Ty, Vec<MinedConjunct>>,
+) -> (Local, Local) {
+    let storage_ty = Ty::try_new_array(elem_ty, bound).unwrap();
+    let elem_lcls = (0..bound)
+        .map(|_| {
+            call_kani_any_for_ty(
+                tcx,
+                models,
+                body,
+                elem_ty,
+                Mutability::Not,
+                source,
+                invariant_cache,
+                mined_cache,
+            )
+        })
+        .collect::<Vec<_>>();
+    let storage_lcl = body.new_local(storage_ty, source.span(body.blocks()), Mutability::Mut);
+    body.assign_to(
+        Place::from(storage_lcl),
+        Rvalue::Aggregate(
+            AggregateKind::Array(elem_ty),
+            elem_lcls.into_iter().map(|lcl| Operand::Move(Place::from(lcl))).collect(),
+        ),
+        source,
+        InsertPosition::Before,
+    );
+
+    // Pass a mutable reference to the storage to the model.
+    let storage_ref_ty = Ty::new_ref(region.clone(), storage_ty, Mutability::Mut);
+    let storage_ref_lcl =
+        body.new_local(storage_ref_ty, source.span(body.blocks()), Mutability::Not);
+    body.assign_to(
+        Place::from(storage_ref_lcl),
+        Rvalue::Ref(region, BorrowKind::Mut { kind: MutBorrowKind::Default }, storage_lcl.into()),
+        source,
+        InsertPosition::Before,
+    );
+    (storage_lcl, storage_ref_lcl)
+}
+
+/// Like `build_any_array_storage_ref`, but generate the whole `[elem_ty; len]` storage with a
+/// single `kani::any()` call instead of one call per element, and return a `&mut` to it.
+///
+/// The searcher models overwrite their needle storage with a fresh nondeterministic value
+/// themselves (`*needle_storage = kani::any()`), so the harness only needs to provide initialized
+/// storage of the right type. Generating it in one call keeps the harness body the same size
+/// whatever `len` is: `len` comes from the argument type (the `N` of
+/// `CharArrayRefSearcher<'_, '_, N>`), so a per-element expansion would grow the MIR linearly
+/// with a user-written `N`.
+#[allow(clippy::too_many_arguments)]
+fn build_any_whole_array_storage_ref(
+    tcx: TyCtxt,
+    models: AnyModels,
+    body: &mut MutableBody,
+    elem_ty: Ty,
+    len: u64,
+    region: Region,
+    source: &mut SourceInstruction,
+    invariant_cache: &mut FxHashMap<Ty, bool>,
+    mined_cache: &mut FxHashMap<Ty, Vec<MinedConjunct>>,
+) -> Local {
+    let storage_ty = Ty::try_new_array(elem_ty, len).unwrap();
+    let storage_lcl = call_kani_any_for_ty(
+        tcx,
+        models,
+        body,
+        storage_ty,
+        Mutability::Mut,
+        source,
+        invariant_cache,
+        mined_cache,
+    );
+    let storage_ref_ty = Ty::new_ref(region.clone(), storage_ty, Mutability::Mut);
+    let storage_ref_lcl =
+        body.new_local(storage_ref_ty, source.span(body.blocks()), Mutability::Not);
+    body.assign_to(
+        Place::from(storage_ref_lcl),
+        Rvalue::Ref(region, BorrowKind::Mut { kind: MutBorrowKind::Default }, storage_lcl.into()),
+        source,
+        InsertPosition::Before,
+    );
+    storage_ref_lcl
+}
+
 #[allow(clippy::too_many_arguments)]
 fn call_kani_any_for_ty(
     tcx: TyCtxt,
@@ -1189,12 +1307,90 @@ fn call_kani_any_for_ty(
         return lcl;
     }
     if let TyKind::RigidTy(RigidTy::Ref(region, inner_ty, inner_mutability)) = ty.kind()
-        && matches!(
-            inner_ty.kind(),
-            TyKind::RigidTy(RigidTy::Slice(..)) | TyKind::RigidTy(RigidTy::Str)
-        )
+        && let TyKind::RigidTy(RigidTy::Adt(def, _)) = inner_ty.kind()
+        && is_formatter(tcx, def)
     {
-        let is_str = matches!(inner_ty.kind(), TyKind::RigidTy(RigidTy::Str));
+        // A `Formatter` writes to a sink, so the harness holds one as a local (the model's
+        // parameter type) and passes it to `any_formatter`, which builds a formatter with
+        // nondeterministic options over it; the sink outlives the formatter as the storage
+        // outlives a slice. Width and precision follow the slice bound.
+        let model_inst = Instance::resolve(
+            models.kani_any_formatter,
+            &GenericArgs(vec![GenericArgKind::Const(
+                TyConst::try_from_target_usize(models.slice_bound).unwrap(),
+            )]),
+        )
+        .unwrap();
+        let sink_ref_ty = model_inst.ty().kind().fn_sig().unwrap().skip_binder().inputs()[0];
+        let TyKind::RigidTy(RigidTy::Ref(_, sink_ty, _)) = sink_ref_ty.kind() else {
+            unreachable!("any_formatter takes the sink by mutable reference")
+        };
+        let TyKind::RigidTy(RigidTy::Adt(sink_def, sink_args)) = sink_ty.kind() else {
+            unreachable!("the sink is a struct")
+        };
+        let sink_lcl = body.new_local(sink_ty, source.span(body.blocks()), Mutability::Mut);
+        body.assign_to(
+            Place::from(sink_lcl),
+            Rvalue::Aggregate(
+                AggregateKind::Adt(sink_def, VariantIdx::to_val(0), sink_args, None, None),
+                vec![],
+            ),
+            source,
+            InsertPosition::Before,
+        );
+        let sink_ref_lcl = body.new_local(
+            Ty::new_ref(region.clone(), sink_ty, Mutability::Mut),
+            source.span(body.blocks()),
+            Mutability::Not,
+        );
+        body.assign_to(
+            Place::from(sink_ref_lcl),
+            Rvalue::Ref(
+                region.clone(),
+                BorrowKind::Mut { kind: MutBorrowKind::Default },
+                sink_lcl.into(),
+            ),
+            source,
+            InsertPosition::Before,
+        );
+        let fmt_lcl = body.new_local(inner_ty, source.span(body.blocks()), Mutability::Mut);
+        body.insert_call(
+            &model_inst,
+            source,
+            InsertPosition::Before,
+            vec![Operand::Move(Place::from(sink_ref_lcl))],
+            Place::from(fmt_lcl),
+        );
+        let ref_lcl = body.new_local(ty, source.span(body.blocks()), mutability);
+        let borrow_kind = if inner_mutability == Mutability::Not {
+            BorrowKind::Shared
+        } else {
+            BorrowKind::Mut { kind: MutBorrowKind::Default }
+        };
+        body.assign_to(
+            Place::from(ref_lcl),
+            Rvalue::Ref(region, borrow_kind, Place::from(fmt_lcl)),
+            source,
+            InsertPosition::Before,
+        );
+        return ref_lcl;
+    }
+    if let TyKind::RigidTy(RigidTy::Ref(region, inner_ty, inner_mutability)) = ty.kind()
+        && match inner_ty.kind() {
+            TyKind::RigidTy(RigidTy::Slice(..)) | TyKind::RigidTy(RigidTy::Str) => true,
+            TyKind::RigidTy(RigidTy::Adt(def, _)) => {
+                is_c_str(tcx, def) || is_byte_str(tcx, def) || is_wtf8(tcx, def)
+            }
+            _ => false,
+        }
+    {
+        // `&str` and `&Wtf8` take the string bound for their storage; the rest take the slice
+        // bound.
+        let is_str = match inner_ty.kind() {
+            TyKind::RigidTy(RigidTy::Str) => true,
+            TyKind::RigidTy(RigidTy::Adt(def, _)) => is_wtf8(tcx, def),
+            _ => false,
+        };
         let (elem_ty, model, model_args) = match inner_ty.kind() {
             TyKind::RigidTy(RigidTy::Slice(elem_ty)) => (
                 elem_ty,
@@ -1202,7 +1398,7 @@ fn call_kani_any_for_ty(
                 GenericArgs(vec![
                     GenericArgKind::Type(elem_ty),
                     GenericArgKind::Const(
-                        TyConst::try_from_target_usize(AUTOHARNESS_SLICE_BOUND).unwrap(),
+                        TyConst::try_from_target_usize(models.slice_bound).unwrap(),
                     ),
                 ]),
             ),
@@ -1210,66 +1406,59 @@ fn call_kani_any_for_ty(
                 Ty::unsigned_ty(UintTy::U8),
                 models.kani_any_str_ref,
                 GenericArgs(vec![GenericArgKind::Const(
-                    TyConst::try_from_target_usize(AUTOHARNESS_STR_BOUND).unwrap(),
+                    TyConst::try_from_target_usize(models.string_bound).unwrap(),
+                )]),
+            ),
+            // `&CStr` is the bytes of the storage up to the first NUL and `&ByteStr` a prefix of
+            // it; both are sized by the slice bound. `&Wtf8` is a valid WTF-8 prefix of the
+            // storage, unpaired surrogates included, and is sized by the string bound. Each ADT
+            // arm repeats its predicate from the guard above, so a type added there cannot fall
+            // into another type's model.
+            TyKind::RigidTy(RigidTy::Adt(def, _)) if is_c_str(tcx, def) => (
+                Ty::unsigned_ty(UintTy::U8),
+                models.kani_any_c_str_ref,
+                GenericArgs(vec![GenericArgKind::Const(
+                    TyConst::try_from_target_usize(models.slice_bound).unwrap(),
+                )]),
+            ),
+            TyKind::RigidTy(RigidTy::Adt(def, _)) if is_byte_str(tcx, def) => (
+                Ty::unsigned_ty(UintTy::U8),
+                models.kani_any_byte_str_ref,
+                GenericArgs(vec![GenericArgKind::Const(
+                    TyConst::try_from_target_usize(models.slice_bound).unwrap(),
+                )]),
+            ),
+            TyKind::RigidTy(RigidTy::Adt(def, _)) if is_wtf8(tcx, def) => (
+                Ty::unsigned_ty(UintTy::U8),
+                models.kani_any_wtf8_ref,
+                GenericArgs(vec![GenericArgKind::Const(
+                    TyConst::try_from_target_usize(models.string_bound).unwrap(),
                 )]),
             ),
             _ => unreachable!(),
         };
 
-        // Generate the backing storage: a local holding a nondeterministic array of the
-        // element type. Since it is a local of the harness body, it stays alive for the
-        // entire harness. The array is built element-wise (rather than via
-        // `kani::any::<[T; N]>()`) so that element types whose Arbitrary implementation the
-        // compiler derives are supported: `<[T; N] as Arbitrary>::any` is unresolvable for
-        // such `T`, whereas each element can be generated through the same path as any other
-        // value of that type.
-        let bound = if is_str { AUTOHARNESS_STR_BOUND } else { AUTOHARNESS_SLICE_BOUND };
-        let storage_ty = Ty::try_new_array(elem_ty, bound).unwrap();
-        let elem_lcls = (0..bound)
-            .map(|_| {
-                call_kani_any_for_ty(
-                    tcx,
-                    models,
-                    body,
-                    elem_ty,
-                    Mutability::Not,
-                    source,
-                    invariant_cache,
-                    mined_cache,
-                )
-            })
-            .collect::<Vec<_>>();
-        let storage_lcl = body.new_local(storage_ty, source.span(body.blocks()), Mutability::Mut);
-        body.assign_to(
-            Place::from(storage_lcl),
-            Rvalue::Aggregate(
-                AggregateKind::Array(elem_ty),
-                elem_lcls.into_iter().map(|lcl| Operand::Move(Place::from(lcl))).collect(),
-            ),
+        // Since it is a local of the harness body, the backing storage stays alive for the
+        // entire harness.
+        let bound = if is_str { models.string_bound } else { models.slice_bound };
+        let (_storage_lcl, storage_ref_lcl) = build_any_array_storage_ref(
+            tcx,
+            models,
+            body,
+            elem_ty,
+            bound,
+            region.clone(),
             source,
-            InsertPosition::Before,
+            invariant_cache,
+            mined_cache,
         );
-
-        // Pass a mutable reference to the storage to the model, which returns a slice of
-        // nondeterministic (bounded) length.
-        let storage_ref_ty = Ty::new_ref(region.clone(), storage_ty, Mutability::Mut);
-        let storage_ref_lcl =
-            body.new_local(storage_ref_ty, source.span(body.blocks()), Mutability::Not);
-        body.assign_to(
-            Place::from(storage_ref_lcl),
-            Rvalue::Ref(
-                region.clone(),
-                BorrowKind::Mut { kind: MutBorrowKind::Default },
-                storage_lcl.into(),
-            ),
-            source,
-            InsertPosition::Before,
-        );
+        // The model returns a slice of nondeterministic (bounded) length.
         let model_inst = Instance::resolve(model, &model_args).unwrap();
-        // For `&str`, the model already returns the shared-reference type (there is no
-        // `&mut str` in practice); for slices it returns `&mut [T]`.
+        // The slice model returns `&mut [T]`, to serve both mutabilities; the string models
+        // return the shared reference, since a mutable one is not supported.
+        let is_slice = matches!(inner_ty.kind(), TyKind::RigidTy(RigidTy::Slice(..)));
         let model_ret_ty =
-            if is_str { ty } else { Ty::new_ref(region.clone(), inner_ty, Mutability::Mut) };
+            if is_slice { Ty::new_ref(region.clone(), inner_ty, Mutability::Mut) } else { ty };
         let slice_lcl = body.new_local(model_ret_ty, source.span(body.blocks()), mutability);
         body.insert_call(
             &model_inst,
@@ -1279,7 +1468,7 @@ fn call_kani_any_for_ty(
             Place::from(slice_lcl),
         );
 
-        if inner_mutability == Mutability::Not && !is_str {
+        if inner_mutability == Mutability::Not && is_slice {
             // Reborrow the `&mut [T]` the model returned as `&[T]`.
             let shared_lcl = body.new_local(ty, source.span(body.blocks()), mutability);
             body.assign_to(
@@ -1378,6 +1567,219 @@ fn call_kani_any_for_ty(
         } else {
             ptr_lcl
         }
+    } else if let TyKind::RigidTy(RigidTy::Pat(base_ty, _)) = ty.kind() {
+        // A pattern type (e.g. `pattern_type!(u8 is 1..=12)`) is layout-compatible with its base
+        // type. Generate an arbitrary value of the base type, constrain it to the pattern's
+        // validity range via `assume_scalar_niche`, then transmute it to the pattern type. The
+        // assumption must come first: with `-Z valid-value-checks` the transmute itself is
+        // checked, so the value has to be valid before the pattern-typed local ever exists.
+        let base_lcl = call_kani_any_for_ty(
+            tcx,
+            models,
+            body,
+            base_ty,
+            mutability,
+            source,
+            invariant_cache,
+            mined_cache,
+        );
+        assume_scalar_niche(tcx, models.kani_assume, body, source, base_lcl, ty);
+        let pat_lcl = body.new_local(ty, source.span(body.blocks()), mutability);
+        body.assign_to(
+            Place::from(pat_lcl),
+            Rvalue::Cast(CastKind::Transmute, Operand::Move(Place::from(base_lcl)), ty),
+            source,
+            InsertPosition::Before,
+        );
+        pat_lcl
+    } else if let TyKind::RigidTy(RigidTy::Adt(def, args)) = ty.kind()
+        && let Some(kind) = crate::kani_middle::multi_char_eq_searcher_kind(tcx, def)
+    {
+        // These three `core::str::pattern` searcher types all have a lifetime generic arg, which
+        // `can_derive_arbitrary` (reached from the final `else` below via `arbitrary_or_derive`)
+        // always rejects; check this first, since each has its own by-value generation model.
+        //
+        // All three build their haystack the same way: a nondeterministic byte array backing
+        // `any_str_ref`, bounded like any other `&str` argument.
+        let haystack_bound = models.string_bound;
+        match kind {
+            crate::kani_middle::MultiCharEqSearcherKind::Array => {
+                // `CharArraySearcher<'a, const N: usize>`: one lifetime (the haystack borrow)
+                // and one const generic (the needle char count, the model's own `M`). The model
+                // generates the needle itself, so there is no separate needle storage here.
+                let [GenericArgKind::Lifetime(region), GenericArgKind::Const(needle_len)] =
+                    args.0.as_slice()
+                else {
+                    unreachable!(
+                        "CharArraySearcher<'_, N> should have one lifetime and one const generic arg, got {args:?}"
+                    );
+                };
+                let needle_len = needle_len
+                    .eval_target_usize()
+                    .expect("autoharness instantiates const generics before generating harnesses");
+
+                let (_, storage_ref_lcl) = build_any_array_storage_ref(
+                    tcx,
+                    models,
+                    body,
+                    Ty::unsigned_ty(UintTy::U8),
+                    haystack_bound,
+                    region.clone(),
+                    source,
+                    invariant_cache,
+                    mined_cache,
+                );
+                let model_inst = Instance::resolve(
+                    models.kani_any_char_array_searcher,
+                    &GenericArgs(vec![
+                        GenericArgKind::Const(
+                            TyConst::try_from_target_usize(haystack_bound).unwrap(),
+                        ),
+                        GenericArgKind::Const(TyConst::try_from_target_usize(needle_len).unwrap()),
+                    ]),
+                )
+                .unwrap();
+                let dest_lcl = body.new_local(ty, source.span(body.blocks()), mutability);
+                body.insert_call(
+                    &model_inst,
+                    source,
+                    InsertPosition::Before,
+                    vec![Operand::Move(Place::from(storage_ref_lcl))],
+                    Place::from(dest_lcl),
+                );
+                dest_lcl
+            }
+            crate::kani_middle::MultiCharEqSearcherKind::ArrayRef => {
+                // `CharArrayRefSearcher<'a, 'b, const N: usize>`: two lifetimes (haystack, then
+                // needle) and one const generic (the needle char count). Unlike
+                // `CharArraySearcher`, the needle is borrowed, so the caller (here, the harness
+                // body) owns its storage too. That storage is generated with a single
+                // `kani::any()` call (`build_any_whole_array_storage_ref`), so a large `N` does
+                // not grow the harness body.
+                let [
+                    GenericArgKind::Lifetime(haystack_region),
+                    GenericArgKind::Lifetime(needle_region),
+                    GenericArgKind::Const(needle_len),
+                ] = args.0.as_slice()
+                else {
+                    unreachable!(
+                        "CharArrayRefSearcher<'_, '_, N> should have two lifetimes and one const generic arg, got {args:?}"
+                    );
+                };
+                let needle_len = needle_len
+                    .eval_target_usize()
+                    .expect("autoharness instantiates const generics before generating harnesses");
+
+                let (_, storage_ref_lcl) = build_any_array_storage_ref(
+                    tcx,
+                    models,
+                    body,
+                    Ty::unsigned_ty(UintTy::U8),
+                    haystack_bound,
+                    haystack_region.clone(),
+                    source,
+                    invariant_cache,
+                    mined_cache,
+                );
+                let needle_ref_lcl = build_any_whole_array_storage_ref(
+                    tcx,
+                    models,
+                    body,
+                    Ty::from_rigid_kind(RigidTy::Char),
+                    needle_len,
+                    needle_region.clone(),
+                    source,
+                    invariant_cache,
+                    mined_cache,
+                );
+                let model_inst = Instance::resolve(
+                    models.kani_any_char_array_ref_searcher,
+                    &GenericArgs(vec![
+                        GenericArgKind::Const(
+                            TyConst::try_from_target_usize(haystack_bound).unwrap(),
+                        ),
+                        GenericArgKind::Const(TyConst::try_from_target_usize(needle_len).unwrap()),
+                    ]),
+                )
+                .unwrap();
+                let dest_lcl = body.new_local(ty, source.span(body.blocks()), mutability);
+                body.insert_call(
+                    &model_inst,
+                    source,
+                    InsertPosition::Before,
+                    vec![
+                        Operand::Move(Place::from(storage_ref_lcl)),
+                        Operand::Move(Place::from(needle_ref_lcl)),
+                    ],
+                    Place::from(dest_lcl),
+                );
+                dest_lcl
+            }
+            crate::kani_middle::MultiCharEqSearcherKind::Slice => {
+                // `CharSliceSearcher<'a, 'b>`: two lifetimes, but (unlike the other two kinds)
+                // no const generic -- the needle's nondeterministic length (0..=M, c.f.
+                // `any_char_slice_searcher`) has no type-level representation, so there is no
+                // bound to read off `ty`. Use the general slice bound instead, as the closest
+                // existing analogue (a nondeterministic-length `&[char]`).
+                let [
+                    GenericArgKind::Lifetime(haystack_region),
+                    GenericArgKind::Lifetime(needle_region),
+                ] = args.0.as_slice()
+                else {
+                    unreachable!(
+                        "CharSliceSearcher<'_, '_> should have exactly two lifetime args, got {args:?}"
+                    );
+                };
+                let needle_bound = models.slice_bound;
+
+                let (_, storage_ref_lcl) = build_any_array_storage_ref(
+                    tcx,
+                    models,
+                    body,
+                    Ty::unsigned_ty(UintTy::U8),
+                    haystack_bound,
+                    haystack_region.clone(),
+                    source,
+                    invariant_cache,
+                    mined_cache,
+                );
+                let needle_ref_lcl = build_any_whole_array_storage_ref(
+                    tcx,
+                    models,
+                    body,
+                    Ty::from_rigid_kind(RigidTy::Char),
+                    needle_bound,
+                    needle_region.clone(),
+                    source,
+                    invariant_cache,
+                    mined_cache,
+                );
+                let model_inst = Instance::resolve(
+                    models.kani_any_char_slice_searcher,
+                    &GenericArgs(vec![
+                        GenericArgKind::Const(
+                            TyConst::try_from_target_usize(haystack_bound).unwrap(),
+                        ),
+                        GenericArgKind::Const(
+                            TyConst::try_from_target_usize(needle_bound).unwrap(),
+                        ),
+                    ]),
+                )
+                .unwrap();
+                let dest_lcl = body.new_local(ty, source.span(body.blocks()), mutability);
+                body.insert_call(
+                    &model_inst,
+                    source,
+                    InsertPosition::Before,
+                    vec![
+                        Operand::Move(Place::from(storage_ref_lcl)),
+                        Operand::Move(Place::from(needle_ref_lcl)),
+                    ],
+                    Place::from(dest_lcl),
+                );
+                dest_lcl
+            }
+        }
     } else {
         // Prefer an unbounded nondeterministic value via (implemented or compiler-derived)
         // Arbitrary; fall back to a smart-pointer model (`Box`/`Rc`/`Arc` of a derivable pointee)
@@ -1410,7 +1812,7 @@ fn call_kani_any_for_ty(
                 &GenericArgs(vec![
                     GenericArgKind::Type(ty),
                     GenericArgKind::Const(
-                        TyConst::try_from_target_usize(AUTOHARNESS_BOUNDED_ANY_BOUND).unwrap(),
+                        TyConst::try_from_target_usize(models.bounded_arbitrary_bound).unwrap(),
                     ),
                 ]),
             )
@@ -1532,11 +1934,6 @@ impl AutomaticArbitraryPass {
     /// arguments and panic paths converted into assumptions
     /// (c.f. [find_unchecked_constructor][crate::kani_middle::find_unchecked_constructor]).
     /// Returns None if the constructor body contains constructs the inliner does not support.
-    ///
-    /// Soundness caveat: if the constructor is unsatisfiable for `ty` (every argument trips an
-    /// assertion), the generated body assumes `false` on all paths and the harness becomes
-    /// vacuous, reporting Success without checking anything. Not yet detected; tracked in
-    /// <https://github.com/model-checking/kani/issues/4757>.
     fn generate_unchecked_ctor_body(
         &self,
         tcx: TyCtxt,
@@ -1892,13 +2289,13 @@ impl AutomaticArbitraryPass {
 pub struct AutomaticHarnessPass {
     /// The Kani model functions used to construct nondeterministic values.
     models: AnyModels,
-    /// The FnDef of KaniModel::CheckDebugFmt
-    kani_check_debug_fmt: FnDef,
-    /// The FnDef of KaniModel::CheckDisplayFmt
-    kani_check_display_fmt: FnDef,
+    /// The `check_*_fmt` model for each formatting trait, c.f. `FmtTrait::model`.
+    check_fmt_models: FxHashMap<FmtTrait, FnDef>,
     init_contracts_hook: Instance,
     reset_clause_depth: Instance,
     kani_autoharness_intrinsic: FnDef,
+    /// The FnDef of KaniHook::Cover, c.f. `cover_function_reached`.
+    kani_cover: FnDef,
     /// Whether --check-invariants is enabled: check values returned by verified functions
     /// against the type's mined invariant conjuncts.
     check_invariants: bool,
@@ -1909,8 +2306,9 @@ impl AutomaticHarnessPass {
         let kani_fns = query_db.kani_functions();
         let kani_autoharness_intrinsic =
             *kani_fns.get(&KaniIntrinsic::AutomaticHarness.into()).unwrap();
-        let kani_check_debug_fmt = *kani_fns.get(&KaniModel::CheckDebugFmt.into()).unwrap();
-        let kani_check_display_fmt = *kani_fns.get(&KaniModel::CheckDisplayFmt.into()).unwrap();
+        let check_fmt_models = FmtTrait::iter()
+            .map(|fmt_trait| (fmt_trait, *kani_fns.get(&fmt_trait.model().into()).unwrap()))
+            .collect();
         let init_contracts_hook = *kani_fns.get(&KaniHook::InitContracts.into()).unwrap();
         let init_contracts_hook =
             Instance::resolve(init_contracts_hook, &GenericArgs(vec![])).unwrap();
@@ -1918,16 +2316,54 @@ impl AutomaticHarnessPass {
             *kani_fns.get(&KaniModel::ResetContractClauseDepth.into()).unwrap();
         let reset_clause_depth =
             Instance::resolve(reset_clause_depth, &GenericArgs(vec![])).unwrap();
+        let kani_cover = *kani_fns.get(&KaniHook::Cover.into()).unwrap();
         let check_invariants = query_db.args().autoharness_check_invariants;
         Self {
             models: AnyModels::new(query_db),
-            kani_check_debug_fmt,
-            kani_check_display_fmt,
+            check_fmt_models,
             init_contracts_hook,
             reset_clause_depth,
             kani_autoharness_intrinsic,
+            kani_cover,
             check_invariants,
         }
+    }
+
+    /// Under --constructor-args, emit `kani::cover(true, msg)` at `source`, where the harness is
+    /// about to call `function` (directly, or through a formatting model). The assumptions made
+    /// while generating the arguments (a constructor that never returns, mined conditions that
+    /// contradict it or each other) can exclude every input, so that the harness checks nothing;
+    /// the driver then reports the harness as vacuous
+    /// (<https://github.com/model-checking/kani/issues/4757>).
+    fn cover_function_reached(
+        &self,
+        body: &mut MutableBody,
+        source: &mut SourceInstruction,
+        function: Instance,
+    ) {
+        if !self.models.constructor_args {
+            return;
+        }
+        let cover_inst = Instance::resolve(self.kani_cover, &GenericArgs(vec![]))
+            .expect("the cover hook is always registered");
+        let span = source.span(body.blocks());
+        let true_op = Operand::Constant(ConstOperand {
+            span,
+            user_ty: None,
+            const_: MirConst::from_bool(true),
+        });
+        // kani-driver recognizes this cover by the start of its description.
+        let msg =
+            format!("{}`{}`", kani_metadata::AUTOHARNESS_VACUITY_COVER_PREFIX, function.name());
+        let msg_op = body.new_str_operand(&msg, span);
+        let unit_lcl = body.new_local(Ty::new_tuple(&[]), span, Mutability::Not);
+        body.insert_call(
+            &cover_inst,
+            source,
+            InsertPosition::Before,
+            vec![true_op, msg_op],
+            Place::from(unit_lcl),
+        );
     }
 }
 
@@ -1959,13 +2395,13 @@ impl TransformPass for AutomaticHarnessPass {
         let kind = instance.args().0[0].expect_ty().kind();
         let (def, args) = kind.fn_def().unwrap();
         let fn_to_verify = Instance::resolve(def, args).unwrap();
-        let fn_to_verify_body = fn_to_verify.body().unwrap();
+        let fn_to_verify_body = crate::kani_middle::checked_body(tcx, fn_to_verify).unwrap();
 
         let mut harness_body = MutableBody::from(body);
         harness_body.clear_body(TerminatorKind::Return);
         let mut source = SourceInstruction::Terminator { bb: 0 };
 
-        // Debug/Display fmt implementations are exercised through the corresponding check
+        // Formatting trait implementations are exercised through the corresponding check
         // model, which formats a nondeterministic value of the self type into a discarding
         // sink: their `&mut Formatter` argument cannot be generated nondeterministically,
         // and the model reaches `fn_to_verify` through the core formatting machinery with a
@@ -1987,10 +2423,7 @@ impl TransformPass for AutomaticHarnessPass {
                 &mut invariant_cache,
                 &mut mined_cache,
             );
-            let model = match fmt_trait {
-                FmtTrait::Debug => self.kani_check_debug_fmt,
-                FmtTrait::Display => self.kani_check_display_fmt,
-            };
+            let model = self.check_fmt_models[&fmt_trait];
             let model_inst =
                 Instance::resolve(model, &GenericArgs(vec![GenericArgKind::Type(self_ty)]))
                     .unwrap();
@@ -1999,6 +2432,7 @@ impl TransformPass for AutomaticHarnessPass {
                 source.span(harness_body.blocks()),
                 Mutability::Not,
             );
+            self.cover_function_reached(&mut harness_body, &mut source, fn_to_verify);
             harness_body.insert_call(
                 &model_inst,
                 &mut source,
@@ -2079,6 +2513,8 @@ impl TransformPass for AutomaticHarnessPass {
             func_to_verify_ret.mutability,
         );
         let ret_place = Place::from(ret_lcl);
+
+        self.cover_function_reached(&mut harness_body, &mut source, fn_to_verify);
 
         // Call `fn_to_verify` on the nondeterministic arguments generated above.
         harness_body.insert_call(

@@ -19,11 +19,17 @@
 // `core::mem::{size_of,align_of}_val_raw` are only reached by the `concrete_playback` paths of
 // the `kani_core` memory models this crate expands.
 #![cfg_attr(feature = "concrete_playback", feature(layout_for_ptr))]
+#![feature(byte_str)]
+#![feature(wtf8_internals)]
 #![feature(ptr_metadata)]
+#![feature(formatting_options)]
 #![feature(f16)]
 #![feature(f128)]
 #![feature(convert_float_to_int)]
 #![feature(sized_hierarchy)]
+// Used by the `core::str::pattern` searcher models (`any_char_array_searcher`,
+// `any_char_array_ref_searcher`, `any_char_slice_searcher`).
+#![feature(pattern)]
 
 // Allow us to use `kani::` to access crate features.
 extern crate self as kani;
@@ -38,6 +44,9 @@ pub mod shadow;
 pub mod vec;
 
 mod models;
+
+#[cfg(test)]
+mod fmt_model_tests;
 
 #[cfg(feature = "concrete_playback")]
 pub use concrete_playback::concrete_playback_run;
@@ -72,15 +81,15 @@ pub use core::assert as __kani__workaround_core_assert;
 
 #[macro_export]
 macro_rules! cover {
-    () => {
+    () => {{
         kani::cover(true, "cover location");
-    };
-    ($cond:expr $(,)?) => {
+    }};
+    ($cond:expr $(,)?) => {{
         kani::cover($cond, concat!("cover condition: ", stringify!($cond)));
-    };
-    ($cond:expr, $msg:literal) => {
+    }};
+    ($cond:expr, $msg:literal) => {{
         kani::cover($cond, $msg);
-    };
+    }};
 }
 
 /// `implies!(premise => conclusion)` means that if the `premise` is true, so

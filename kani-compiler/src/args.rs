@@ -122,6 +122,21 @@ pub struct Arguments {
     /// references). See kani_driver::autoharness_args for documentation.
     #[arg(long = "autoharness-bounded-arguments")]
     pub autoharness_bounded_arguments: bool,
+    /// If we are running the autoharness subcommand, the maximum length for nondeterministic
+    /// slice arguments. See kani_driver::autoharness_args for documentation.
+    #[arg(long = "autoharness-slice-bound", default_value_t = kani_metadata::AUTOHARNESS_SLICE_BOUND)]
+    pub autoharness_slice_bound: u64,
+    /// If we are running the autoharness subcommand, the maximum length for nondeterministic
+    /// string slice arguments. See kani_driver::autoharness_args for documentation.
+    #[arg(long = "autoharness-string-bound", default_value_t = kani_metadata::AUTOHARNESS_STR_BOUND)]
+    pub autoharness_string_bound: u64,
+    /// If we are running the autoharness subcommand, the bound for nondeterministic arguments
+    /// whose type implements BoundedArbitrary. See kani_driver::autoharness_args for documentation.
+    #[arg(
+        long = "autoharness-bounded-arbitrary-bound",
+        default_value_t = kani_metadata::AUTOHARNESS_BOUNDED_ARBITRARY_BOUND
+    )]
+    pub autoharness_bounded_arbitrary_bound: u64,
 
     /// Enable constructor-based nondeterministic value generation for autoharness.
     #[arg(long = "autoharness-constructor-args")]

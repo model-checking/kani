@@ -67,7 +67,9 @@ impl OverallStats {
         let krate = rustc_public::local_crate();
         let transitive_unsafe = visited
             .into_iter()
-            .filter_map(|(def, distance)| (def.krate() == krate).then_some((def.name(), distance)))
+            .filter_map(|(def, distance)| {
+                (def.krate() == krate).then_some((crate::item_name(&def), distance))
+            })
             .collect::<Vec<_>>();
         self.counters.push(("transitive_unsafe", transitive_unsafe.len()));
         crate::analysis::dump_csv(filename, &transitive_unsafe);
@@ -88,7 +90,7 @@ impl Node {
             return None;
         };
         let has_unsafe = if let Some(body) = def.body() {
-            let unsafe_ops = FnUnsafeOperations::new(def.name()).collect(&body, tcx);
+            let unsafe_ops = FnUnsafeOperations::new(crate::item_name(&def)).collect(&body, tcx);
             unsafe_ops.has_unsafe()
         } else {
             true

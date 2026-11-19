@@ -1,0 +1,11 @@
+[TEST] Copy standard library from the current toolchain
+[TEST] Modify library
+[TEST] Run kani autoharness --std --list
+exit status: 0
+Kani generated automatic harnesses for 1 function(s):
+| core | verify_nonnull_field::is_aligned |
+| core | verify_nonnull_field::array_holder | Missing Arbitrary implementation for argument(s) h: verify_nonnull_field::ArrayHolder |
+| core | verify_nonnull_field::first | Missing Arbitrary implementation for argument(s) b: verify_nonnull_field::Buffer |
+| core | verify_nonnull_field::opt_holder | Missing Arbitrary implementation for argument(s) h: verify_nonnull_field::OptHolder |
+| core | verify_nonnull_field::tuple_holder | Missing Arbitrary implementation for argument(s) h: verify_nonnull_field::TupleHolder |
+| | core | verify_nonnull_field::is_aligned |
