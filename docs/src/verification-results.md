@@ -185,4 +185,4 @@ cargo kani -Z export-json --export-json kani.json
 
 The file describes the tool versions, the configuration and the outcome of every harness. The format is unstable and may change between releases; see [RFC 0015](https://model-checking.github.io/kani/rfc/rfcs/0015-export-json.html) for the schema. The flag requires `-Z export-json`; `-Z unstable-options` alone is no longer enough.
 
-This version never writes the `INCOMPLETE` marker that the RFC describes. If a run is killed, the file from an earlier run can stay in place and look complete. Compare its `started_at` with the time of your run.
+After a successful build and harness selection, Kani replaces any earlier file with an `INCOMPLETE` marker before verification starts, and replaces the marker with the final document at the end. A killed or failed run can leave the marker. A failure before the marker is written leaves any earlier file in place; compare its `started_at` with the time of your run.

@@ -1,11 +1,11 @@
 // Full name: test::rem\
 pub fn rem(a: i32, b: i32) -> i32\
 {\
-    let _0: i32; // return\
+    let mut _0: i32; // return\
     let a: i32; // arg #1\
     let b: i32; // arg #2\
-    let _3: i32; // anonymous local\
-    let _4: i32; // anonymous local\
+    let mut _3: i32; // anonymous local\
+    let mut _4: i32; // anonymous local\
 \
     storage_live(_0)\
     storage_live(_3)\
@@ -23,11 +23,11 @@ pub fn rem(a: i32, b: i32) -> i32\
 // Full name: test::div\
 pub fn div(a: u32, b: u32) -> u32\
 {\
-    let _0: u32; // return\
+    let mut _0: u32; // return\
     let a: u32; // arg #1\
     let b: u32; // arg #2\
-    let _3: u32; // anonymous local\
-    let _4: u32; // anonymous local\
+    let mut _3: u32; // anonymous local\
+    let mut _4: u32; // anonymous local\
 \
     storage_live(_0)\
     storage_live(_3)\
@@ -45,9 +45,9 @@ pub fn div(a: u32, b: u32) -> u32\
 // Full name: test::main\
 pub fn main()\
 {\
-    let _0: (); // return\
-    let _1: u32; // anonymous local\
-    let _2: i32; // anonymous local\
+    let mut _0: (); // return\
+    let mut _1: u32; // anonymous local\
+    let mut _2: i32; // anonymous local\
 \
     storage_live(_0)\
     storage_live(_1)\

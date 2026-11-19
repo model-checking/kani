@@ -1,15 +1,15 @@
 // Full name: test::put\
 pub fn put<T>(s: Slot<T>, x: T) -> Slot<T>\
 {\
-    let _0: Slot<T>; // return\
+    let mut _0: Slot<T>; // return\
     let s: Slot<T>; // arg #1\
     let x: T; // arg #2\
     let count: u8; // local\
-    let _4: Option<T>; // anonymous local\
-    let _5: T; // anonymous local\
-    let _6: u8; // anonymous local\
-    let _7: u8; // anonymous local\
-    let _8: u8; // anonymous local\
+    let mut _4: Option<T>; // anonymous local\
+    let mut _5: T; // anonymous local\
+    let mut _6: u8; // anonymous local\
+    let mut _7: u8; // anonymous local\
+    let mut _8: u8; // anonymous local\
 \
     storage_live(_0)\
     storage_live(count)\

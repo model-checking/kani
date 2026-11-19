@@ -1,0 +1,17 @@
+- Status: FAILURE\
+- Description: "Check that i is assignable"\
+in function empty_clause
+
+- Status: FAILURE\
+- Description: "Check that i is assignable"\
+in function zero_sized_target
+
+- Status: FAILURE\
+- Description: "Check that i is assignable"\
+in function zero_sized_targets
+
+- Status: FAILURE\
+- Description: "Check that s is assignable"\
+in function for_loop_empty_clause
+
+Complete - 0 successfully verified harnesses, 4 failures, 4 total.
