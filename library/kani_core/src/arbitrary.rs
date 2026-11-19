@@ -199,6 +199,21 @@ macro_rules! generate_arbitrary {
             }
         }
 
+        /// Nondeterministically choose between `fresh`, a value generated from its own
+        /// storage, and `earlier`, the value generated for a preceding argument of the same
+        /// type. Choosing `earlier` makes the two arguments alias: both refer to the same
+        /// allocation, as when a caller passes the same reference or pointer twice.
+        ///
+        /// This model is used by the compiler to model caller-controlled aliasing between the
+        /// shared reference and raw pointer arguments of automatic harnesses
+        /// (`kani autoharness --alias-arguments`).
+        #[kanitool::fn_marker = "AnyAliasModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_alias<T: Copy>(fresh: T, earlier: T) -> T {
+            if crate::kani::any::<bool>() { earlier } else { fresh }
+        }
+
         /// Generate a slice of nondeterministic length (at most `N`) referring to a prefix of
         /// `storage`, a nondeterministic array that the caller keeps alive for as long as the
         /// returned slice is in use.
