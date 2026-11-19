@@ -28,6 +28,7 @@ use rustc_public::{
     },
     ty::{AdtKind, ConstantKind, RigidTy, Ty, TyConstKind, TyKind},
 };
+use std::collections::HashSet;
 
 pub struct CheckUninitVisitor<'tcx> {
     tcx: TyCtxt<'tcx>,
@@ -770,25 +771,32 @@ fn try_resolve_instance(
     locals: &[LocalDecl],
     func: &Operand,
 ) -> Result<Instance, String> {
-    resolve_call(tcx, func.ty(locals).unwrap())
+    resolve_call(tcx, func.ty(locals).unwrap()).map(|(instance, _)| instance)
 }
 
 /// Check whether a type may carry memory initialization state through a compiler-generated shim.
 /// Inspect unions and nested by-value storage; references and pointers carry addresses.
 /// Treat unknown types conservatively as carrying memory initialization state.
 fn shim_type_may_carry_shadow(tcx: TyCtxt<'_>, ty: Ty) -> bool {
-    fn inspect<'tcx>(tcx: TyCtxt<'tcx>, ty: rustc_middle::ty::Ty<'tcx>) -> bool {
+    fn inspect<'tcx>(
+        tcx: TyCtxt<'tcx>,
+        ty: rustc_middle::ty::Ty<'tcx>,
+        visited: &mut HashSet<rustc_middle::ty::Ty<'tcx>>,
+    ) -> bool {
         use rustc_middle::ty::TyKind;
+        if !visited.insert(ty) {
+            return false;
+        }
         match ty.kind() {
             TyKind::Adt(def, args) => {
                 def.is_union()
-                    || def
-                        .all_fields()
-                        .any(|field| inspect(tcx, field.ty(tcx, args).skip_normalization()))
+                    || def.all_fields().any(|field| {
+                        inspect(tcx, field.ty(tcx, *args).skip_normalization(), visited)
+                    })
             }
-            TyKind::Tuple(fields) => fields.iter().any(|field| inspect(tcx, field)),
-            TyKind::Array(element, _) | TyKind::Pat(element, _) => inspect(tcx, *element),
-            TyKind::Closure(_, args) => inspect(tcx, args.as_closure().tupled_upvars_ty()),
+            TyKind::Tuple(fields) => fields.iter().any(|field| inspect(tcx, field, visited)),
+            TyKind::Array(element, _) | TyKind::Pat(element, _) => inspect(tcx, *element, visited),
+            TyKind::Closure(_, args) => inspect(tcx, args.as_closure().tupled_upvars_ty(), visited),
             TyKind::Bool
             | TyKind::Char
             | TyKind::Int(_)
@@ -802,7 +810,7 @@ fn shim_type_may_carry_shadow(tcx: TyCtxt<'_>, ty: Ty) -> bool {
             _ => true,
         }
     }
-    inspect(tcx, rustc_internal::internal(tcx, ty))
+    inspect(tcx, rustc_internal::internal(tcx, ty), &mut HashSet::new())
 }
 
 /// Describe an unsupported call encountered during memory initialization checks.
