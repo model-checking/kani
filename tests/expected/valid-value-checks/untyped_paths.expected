@@ -1,0 +1,11 @@
+Failed Checks: Undefined Behavior: Invalid value of type `bool`
+
+Failed Checks: Undefined Behavior: Invalid value of type `{closure@
+
+Verification failed for - ub_reference
+Verification failed for - ub_volatile_store
+Verification failed for - ub_volatile_load
+Verification failed for - ub_store_of_other_restricted_type
+Verification failed for - ub_closure_capture
+Verification failed for - ub_after_nested_proof
+Complete - 3 successfully verified harnesses, 6 failures, 9 total.

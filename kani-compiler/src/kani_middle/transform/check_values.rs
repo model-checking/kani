@@ -615,10 +615,11 @@ impl<'a, 'b> CheckValueVisitor<'a, 'b> {
     }
 
     /// Whether `place` is a value a closure captured, read through its environment (`env.field`
-    /// or `(*env).field`). The environment is built by a typed aggregate, whose operands are
-    /// checked, and nothing names its type to write it untyped, so reading a capture needs no
-    /// check. Reads through a captured reference, into other memory, are still checked. Quantifier
-    /// predicates, which can't contain checks, read their captures this way.
+    /// or `(*env).field`). These reads are not checked: a closure is only called through a borrow
+    /// or a move of the closure value, and that read of the closure is checked where the closure
+    /// lives if its bytes may have been written untyped. Reads through a captured reference, into
+    /// other memory, are still checked. Quantifier predicates, which can't contain checks, read
+    /// their captures this way.
     fn is_closure_capture(&self, place: &Place) -> bool {
         let is_closure = |ty: Ty| {
             matches!(
@@ -652,8 +653,13 @@ impl<'a, 'b> CheckValueVisitor<'a, 'b> {
         }
     }
 
-    /// A store to `place`: a store through a pointer of a type without validity requirements is
-    /// untyped; any other store to memory that may be written untyped writes a valid value.
+    /// A store to `place`. A store of a restricted type directly into a local writes a valid value
+    /// of the local's type. A store through a pointer is recorded as untyped: if the pointee type
+    /// has no validity requirements, its bytes may be invalid for the memory's type; if it does,
+    /// the pointer may alias memory of another restricted type (a `*mut NonZeroU8` cast from a
+    /// `*mut bool`), and the reads that cover the bytes check them. A restricted type whose
+    /// validity can't be expressed clears the mark instead, so that its later reads don't report
+    /// an unsupported check.
     fn record_store(&mut self, place: &Place) {
         if !self.may_be_untyped(place) {
             return;
@@ -666,15 +672,14 @@ impl<'a, 'b> CheckValueVisitor<'a, 'b> {
         }
         let through_pointer =
             place.projection.iter().any(|elem| matches!(elem, ProjectionElem::Deref));
-        let untyped = matches!(
-            ty_validity_per_offset(self.tcx, &self.machine, ty, 0),
-            Ok(ranges) if ranges.is_empty()
-        );
-        if untyped && !through_pointer {
+        let validity = ty_validity_per_offset(self.tcx, &self.machine, ty, 0);
+        let unrestricted = matches!(&validity, Ok(ranges) if ranges.is_empty());
+        if unrestricted && !through_pointer {
             // A typed store of an unrestricted type into a local: nothing reads it as a
             // restricted type without a cast, and reads through casts are checked.
             return;
         }
+        let untyped = through_pointer && validity.is_ok();
         self.push_target(SourceOp::SetUntyped {
             ptr: Rvalue::AddressOf(RawPtrKind::Const, place.clone()),
             count: None,
@@ -850,6 +855,29 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                         Some("typed_swap_nonoverlapping") => {
                             self.record_untyped_write(&args[0], None);
                             self.record_untyped_write(&args[1], None);
+                        }
+                        // Volatile accesses read and write through the pointer without a MIR
+                        // place: treat them as a typed read and a store through the pointer.
+                        Some("volatile_load") | Some("unaligned_volatile_load") => {
+                            if let Some(place) = deref_place(&args[0]) {
+                                self.check_untyped_read(&place);
+                            }
+                        }
+                        Some("volatile_store") | Some("unaligned_volatile_store") => {
+                            if let Some(place) = deref_place(&args[0]) {
+                                self.record_store(&place);
+                            }
+                        }
+                        // Atomic operations other than loads and fences write an integer or a
+                        // pointer, types without validity requirements, through the pointer.
+                        Some(name)
+                            if name.starts_with("atomic_")
+                                && !matches!(
+                                    name,
+                                    "atomic_load" | "atomic_fence" | "atomic_singlethreadfence"
+                                ) =>
+                        {
+                            self.record_untyped_write(&args[0], None);
                         }
                         Some("transmute") | Some("transmute_copy") => {
                             unreachable!("Should've been lowered")
@@ -1106,7 +1134,11 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                 | AggregateKind::Tuple => {}
             },
             // Reading a discriminant, or a place to dereference it, is a typed read.
-            Rvalue::CopyForDeref(place) | Rvalue::Discriminant(place) => {
+            // So is forming a reference: Kani requires the target of a reference to be valid, as
+            // it does for `&*ptr`. Dropping a value borrows it, and its drop glue reads it.
+            Rvalue::CopyForDeref(place)
+            | Rvalue::Discriminant(place)
+            | Rvalue::Ref(_, _, place) => {
                 self.check_untyped_read(place);
             }
             Rvalue::AddressOf(_, _)
@@ -1114,7 +1146,6 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
             | Rvalue::CheckedBinaryOp(_, _, _)
             | Rvalue::Len(_)
             | Rvalue::Reborrow(..)
-            | Rvalue::Ref(_, _, _)
             | Rvalue::Repeat(_, _)
             | Rvalue::ThreadLocalRef(_)
             | Rvalue::UnaryOp(_, _)
@@ -1553,6 +1584,26 @@ pub fn ty_validity_per_offset(
                     }
                     Ok(tuple_validity)
                 }
+                // A closure is laid out like a tuple of its captures.
+                RigidTy::Closure(_, _) => {
+                    let rustc_middle::ty::TyKind::Closure(_, args) =
+                        rustc_internal::internal(tcx, ty).kind()
+                    else {
+                        unreachable!("Expected a closure: {ty:?}")
+                    };
+                    let upvars: Vec<Ty> =
+                        args.as_closure().upvar_tys().iter().map(rustc_internal::stable).collect();
+                    let mut closure_validity = vec![];
+                    for idx in layout.fields.fields_by_offset_order() {
+                        closure_validity.append(&mut ty_validity_per_offset(
+                            tcx,
+                            machine_info,
+                            upvars[idx],
+                            offsets[idx].bytes() + current_offset,
+                        )?);
+                    }
+                    Ok(closure_validity)
+                }
                 RigidTy::Bool
                 | RigidTy::Char
                 | RigidTy::Int(_)
@@ -1570,7 +1621,6 @@ pub fn ty_validity_per_offset(
                 }
                 RigidTy::FnDef(_, _)
                 | RigidTy::FnPtr(_)
-                | RigidTy::Closure(_, _)
                 | RigidTy::Coroutine(_, _)
                 | RigidTy::CoroutineClosure(_, _)
                 | RigidTy::CoroutineWitness(_, _)
@@ -1583,6 +1633,14 @@ pub fn ty_validity_per_offset(
             Ok(vec![])
         }
     }
+}
+
+/// The place `*ptr`, if the pointer operand is a place.
+fn deref_place(ptr: &Operand) -> Option<Place> {
+    let (Operand::Copy(place) | Operand::Move(place)) = ptr else { return None };
+    let mut projection = place.projection.clone();
+    projection.push(ProjectionElem::Deref);
+    Some(Place { local: place.local, projection })
 }
 
 /// The pointee of the raw pointer or reference type `ty`.

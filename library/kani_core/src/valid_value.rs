@@ -19,6 +19,7 @@ macro_rules! kani_valid_value {
         /// untyped, so that writing bytes that are invalid for a type is only reported when they
         /// are read as that type, as the language specifies.
         struct UntypedWriteState {
+            initialized: bool,
             tracked_object_id: usize,
             tracked_offset: usize,
             untyped: bool,
@@ -26,16 +27,25 @@ macro_rules! kani_valid_value {
 
         // Identified by its `fn_marker`, as `MEM_INIT_STATE` is.
         #[kanitool::fn_marker = "KaniUntypedWriteState"]
-        static mut UNTYPED_WRITE_STATE: UntypedWriteState =
-            UntypedWriteState { tracked_object_id: 0, tracked_offset: 0, untyped: false };
+        static mut UNTYPED_WRITE_STATE: UntypedWriteState = UntypedWriteState {
+            initialized: false,
+            tracked_object_id: 0,
+            tracked_offset: 0,
+            untyped: false,
+        };
 
-        /// Choose the tracked byte. Called once, where the harness starts.
+        /// Choose the tracked byte, where the harness starts. A harness is an ordinary function
+        /// that another harness can call, so only the first call chooses it: a later one would
+        /// forget the untyped writes made before it.
         #[kanitool::fn_marker = "InitializeUntypedWriteStateModel"]
         fn initialize_untyped_write_state() {
             unsafe {
-                UNTYPED_WRITE_STATE.tracked_object_id = super::any();
-                UNTYPED_WRITE_STATE.tracked_offset = super::any();
-                UNTYPED_WRITE_STATE.untyped = false;
+                if !UNTYPED_WRITE_STATE.initialized {
+                    UNTYPED_WRITE_STATE.initialized = true;
+                    UNTYPED_WRITE_STATE.tracked_object_id = super::any();
+                    UNTYPED_WRITE_STATE.tracked_offset = super::any();
+                    UNTYPED_WRITE_STATE.untyped = false;
+                }
             }
         }
 
