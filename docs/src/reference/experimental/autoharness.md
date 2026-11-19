@@ -322,7 +322,11 @@ pointee and constructs a new smart pointer around it. These arguments require no
 
 The generation models require allocation support and use the default allocator. They cover
 the pointee's generated values; `Rc` and `Arc` start with one strong reference and no weak
-references, so states with existing owners or weak references are not explored. Unsized
+references, so states with existing owners or weak references are not explored. A harness
+whose generated values contain an `Rc` or `Arc`, directly or nested (e.g. `Box<Rc<T>>`,
+`(u8, Rc<T>)`, `&Arc<T>`, or a struct with an `Arc` field), is therefore marked "(refcount)"
+(see [Summary table and markers](#summary-table-and-markers) and
+[Reference counts](#reference-counts)). Unsized
 pointees such as `str` and `[T]` are outside these models; some types, such as `Box<[T]>`,
 can instead be generated through `BoundedArbitrary` with `--bounded-arguments`.
 
@@ -422,7 +426,7 @@ The bounds are configurable with `--slice-bound` and `--string-bound` (and
 accept positive bounds only. They apply only to bounded generators; the unbounded primitive
 slice and `Vec` models continue to use nondeterministic lengths. A larger bound covers more
 inputs at a higher solver cost. A bound that is not below the effective loop-unwinding bound
-(`--default-unwind`, 20 by default) leaves loops over such an argument only partially unwound, and Kani warns when a
+(`--default-unwind`, 20 by default for automatic harnesses) leaves loops over such an argument only partially unwound, and Kani warns when a
 configured bound reaches it. The note printed after the summary table reports the bounds a run
 actually used.
 
@@ -654,20 +658,28 @@ results arrive in nondeterministic order; the summary table printed at the end i
 
 ### Default settings
 
-Unless you pass them yourself, `kani autoharness` sets two verification options so that a
-single harness cannot hold up the whole run:
+Unless you pass them yourself, `kani autoharness` verifies the automatic harnesses with two
+defaults so that a single harness cannot hold up the whole run:
 
-- `--harness-timeout 60s`: a harness whose verification takes longer than 60 seconds is
-  stopped and reported as a failure.
-- `--default-unwind 20`: loops are unwound up to 20 times. Automatic harnesses carry no
-  `#[kani::unwind]` attribute, so this bound applies to every loop unless you pass
-  `--unwind`. Kani's unwinding checks stay enabled, so a loop that needs more iterations fails
-  an unwinding assertion instead of being silently cut short.
+- a timeout of 60 seconds (as if `--harness-timeout 60s` had been passed): a harness whose
+  verification takes longer is stopped and reported as a failure.
+- a loop-unwinding bound of 20 (as if `--default-unwind 20` had been passed): loops are unwound
+  up to 20 times. Automatic harnesses carry no `#[kani::unwind]` attribute, so this bound
+  applies to every loop unless you pass `--unwind`. Kani's unwinding checks stay enabled, so a
+  loop that needs more iterations fails an unwinding assertion instead of being silently cut
+  short.
 
-To change either value, pass the option explicitly. When any automatic harness fails, Kani
-prints a reminder of these two defaults after the summary table, because the failure may come
-from a timeout or an insufficient unwinding bound rather than from a bug in the function. In
-that case, try larger values or, where possible, add a [loop contract](./loop-contracts.md).
+These defaults apply only to automatic harnesses. Manual harnesses (`#[kani::proof]` or
+`#[kani::proof_for_contract]`) that `autoharness` also verifies get the same bounds they would
+get under `kani`/`cargo kani`.
+
+To change either value, pass the option explicitly. An explicit `--harness-timeout`,
+`--default-unwind` or `--unwind` applies to every harness, manual or automatic, and a manual
+harness's `#[kani::unwind]` attribute still takes precedence over `--default-unwind`.
+
+When any automatic harness fails, Kani prints a reminder of these two defaults after the
+summary table, because the failure may come from a timeout or an insufficient unwinding bound
+rather than from a bug in the function. In that case, try larger values or, where possible, add a [loop contract](./loop-contracts.md).
 The default bounds for [bounded arguments](#bounded-argument-generation) are
 chosen to stay below the unwinding bound, and Kani warns if a configured bound reaches it.
 
@@ -704,8 +716,14 @@ may carry one or both of these markers:
   Harnesses filtered only by the mined invariants of a type with its own `Arbitrary`
   implementation are currently not marked; see
   [Mined-invariant heuristic](#mined-invariant-heuristic).
+- **"(refcount)"**: some generated values contain an `Rc` or `Arc`, whose reference counts are
+  modeled with only finitely many states (see [Reference counts](#reference-counts)). Unlike
+  "(bounded)", this needs no option: `Rc`/`Arc` arguments are generated by default and set
+  `has_refcount_caveat`, not `is_bounded`. A note after the table repeats the limitation, the
+  per-function "Checking function ..." message qualifies "all possible inputs", and the
+  `--export-json` document sets `has_refcount_caveat` for the harness.
 
-A `Success` without either marker still has the limitations described in
+A `Success` without any of these markers still has the limitations described in
 [Soundness caveats](#soundness-caveats).
 
 ## Soundness caveats
@@ -751,6 +769,28 @@ Their results only hold for inputs up to those bounds: a bug that needs a longer
 or a larger `BoundedArbitrary` value, is not found. The bounds a run used are printed in a note
 after the summary table. Arguments that are generated without bounds by default, such as slices
 and `Vec`s of primitive integers or floats, are not affected.
+
+### Reference counts
+
+Harnesses marked "(refcount)" generate `Rc`/`Arc` values whose reference counts are modeled with
+only finitely many states: currently every generated `Rc`/`Arc` is uniquely owned
+(`strong_count == 1`, `weak_count == 0`); [#4752](https://github.com/model-checking/kani/issues/4752)
+tracks generating shared states. What such a result does and does not cover:
+
+- **Exact counts.** A real caller can pass an `Rc` with any number of other strong and weak
+  references, but only the uniquely owned state is checked. In particular, the shared outcomes
+  of the uniqueness checks in `get_mut`, `try_unwrap`, `into_inner` and `make_mut` are never
+  reached, and code that reads `strong_count` or `weak_count` (e.g. `Rc::strong_count(&x) > 1`)
+  is only verified for the counts 1 and 0.
+- **No other holders.** Since no other strong or weak reference exists, nothing that another
+  holder could do is covered, e.g. keep a `RefCell` borrow active, upgrade a `Weak`, or access
+  the value from another thread.
+- **No aliasing between arguments.** Distinct `Rc`/`Arc` arguments never share an allocation
+  (`Rc::ptr_eq(&a, &b)` is never true).
+- **Detection** follows the argument types, including references, tuples, arrays, slices, `Box`,
+  struct and enum fields and generic arguments (skipping `PhantomData`), so it may also mark a
+  harness whose type mentions an `Rc`/`Arc` that the generated value never holds. Manual
+  harnesses calling `kani::any::<Rc<T>>()` are not marked.
 
 ### Vacuous constructors
 

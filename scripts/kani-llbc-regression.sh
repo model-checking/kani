@@ -39,6 +39,10 @@ echo "Check compiletest suite=$suite mode=$mode"
 cargo run -p compiletest --quiet -- --suite $suite --mode $mode \
     --quiet --no-fail-fast --require-success
 
+# Cargo packages, for what only `cargo kani` exercises (e.g. how dependencies are compiled).
+echo "Check compiletest suite=llbc-cargo mode=cargo-kani"
+cargo run -p compiletest --quiet -- --suite llbc-cargo --mode cargo-kani --quiet --no-fail-fast
+
 echo
 echo "All Kani llbc regression tests completed successfully."
 echo

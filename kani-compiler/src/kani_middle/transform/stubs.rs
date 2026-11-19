@@ -25,6 +25,7 @@ use tracing::{debug, trace};
 #[derive(Debug, Clone)]
 pub struct FnStubPass {
     stubs: Stubs,
+    body_source: Option<Instance>,
 }
 
 impl TransformPass for FnStubPass {
@@ -45,6 +46,7 @@ impl TransformPass for FnStubPass {
     /// Transform the function body by replacing it with the stub body.
     fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
+        self.body_source = None;
         let ty = instance.ty();
         if let TyKind::RigidTy(RigidTy::FnDef(fn_def, args)) = ty.kind()
             && let Some(replace) = self.stubs.get(&fn_def)
@@ -52,10 +54,15 @@ impl TransformPass for FnStubPass {
             let new_instance = Instance::resolve(*replace, &args).unwrap();
             debug!(from=?instance.name(), to=?new_instance.name(), "FnStubPass::transform");
             if let Some(body) = FnStubValidator::validate(tcx, (fn_def, *replace), new_instance) {
+                self.body_source = Some(new_instance);
                 return (true, body);
             }
         }
         (false, body)
+    }
+
+    fn take_body_source(&mut self) -> Option<Instance> {
+        self.body_source.take()
     }
 }
 
@@ -66,7 +73,7 @@ impl FnStubPass {
             .iter()
             .filter_map(|(from, to)| (has_body(*from) && has_body(*to)).then_some((*from, *to)))
             .collect::<HashMap<_, _>>();
-        FnStubPass { stubs }
+        FnStubPass { stubs, body_source: None }
     }
 }
 

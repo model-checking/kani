@@ -1,9 +1,10 @@
 | cargo_autoharness_smart_pointers | box_not_derivable | Missing Arbitrary implementation for argument(s) b: std::boxed::Box<NotDerivable> |
 | cargo_autoharness_smart_pointers | box_unsized       | Missing Arbitrary implementation for argument(s) b: std::boxed::Box<str>          |
 - Status: SATISFIED
-| cargo_autoharness_smart_pointers | arc_derivable     | #[kani::proof]            | Success             |
+| cargo_autoharness_smart_pointers | arc_derivable     | #[kani::proof] (refcount) | Success             |
 | cargo_autoharness_smart_pointers | box_derivable     | #[kani::proof]            | Success             |
 | cargo_autoharness_smart_pointers | box_derived       | #[kani::proof]            | Success             |
-| cargo_autoharness_smart_pointers | rc_derivable      | #[kani::proof]            | Success             |
-| cargo_autoharness_smart_pointers | arc_assert        | #[kani::proof]            | Failure             |
+| cargo_autoharness_smart_pointers | rc_derivable      | #[kani::proof] (refcount) | Success             |
+| cargo_autoharness_smart_pointers | arc_assert        | #[kani::proof] (refcount) | Failure             |
 Complete - 4 successfully verified functions, 1 failures, 5 total.
+Note: harnesses marked "(refcount)" generate Rc/Arc values whose reference counts are modeled with only finitely many states

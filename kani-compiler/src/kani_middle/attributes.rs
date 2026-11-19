@@ -50,7 +50,9 @@ pub fn attrs_by_path<'tcx>(
 /// `Attribute::path_matches` (nightly-2026-11-17); this is the same test it used to perform.
 fn attr_path_matches(attr: &Attribute, path: &[Symbol]) -> bool {
     match attr {
-        Attribute::Tool(item) | Attribute::DeriveHelper(item) => item.path.segments.iter().eq(path),
+        Attribute::Tool { item, .. } | Attribute::DeriveHelper(item) => {
+            item.path.segments.iter().eq(path)
+        }
         _ => false,
     }
 }
@@ -65,7 +67,7 @@ pub fn attr_value_str(attr: &Attribute) -> Option<Symbol> {
 /// always `Attribute::Tool`.
 fn normal_item(attr: &Attribute) -> &AttrItem {
     match attr {
-        Attribute::Tool(item) => item,
+        Attribute::Tool { item, .. } => item,
         Attribute::Parsed(_) | Attribute::DeriveHelper(_) => {
             unreachable!("Kani attributes are unparsed tool attributes: {attr:?}")
         }
@@ -1001,7 +1003,7 @@ impl<'tcx> KaniAttributes<'tcx> {
         #[allow(deprecated)]
         let attrs = self.tcx.get_all_attrs(def_id);
         let stub_set_attr = attrs.iter().find(|a| {
-            if let Attribute::Tool(normal) = a {
+            if let Attribute::Tool { item: normal, .. } = a {
                 let segments = &normal.path.segments;
                 segments.len() == 2
                     && segments[0].as_str() == "kanitool"
@@ -1370,7 +1372,7 @@ fn parse_key_values(attr: &Attribute) -> Result<BTreeMap<String, String>, String
 
 /// If the attribute is named `kanitool::name`, this extracts `name`
 fn attr_kind(tcx: TyCtxt, attr: &Attribute) -> Option<KaniAttributeKind> {
-    if let Attribute::Tool(normal) = attr {
+    if let Attribute::Tool { item: normal, .. } = attr {
         let segments = &normal.path.segments;
         if (!segments.is_empty()) && segments[0].as_str() == "kanitool" {
             let ident_str = segments[1..]
