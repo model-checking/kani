@@ -3,7 +3,7 @@
 // kani-flags: -Z valid-value-checks
 //! Check that Kani can identify UB when using niche attribute for a custom operation.
 #![feature(pattern_types)]
-#![feature(pattern_type_macro)]
+// `pattern_type!` is gated by `pattern_types` (the `pattern_type_macro` feature was removed).
 
 use std::mem::size_of;
 use std::{mem, ptr};

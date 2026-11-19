@@ -144,7 +144,7 @@ impl BodyTransformation {
         );
         transformer.add_pass(queries, IntrinsicGeneratorPass::new(unsupported_check_type, queries));
         transformer.add_pass(queries, LoopContractPass::new(tcx, queries, unit));
-        transformer.add_pass(queries, RustcIntrinsicsPass::new(queries));
+        transformer.add_pass(queries, RustcIntrinsicsPass::new(queries, &unit.stubs));
         transformer
     }
 

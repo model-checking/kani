@@ -1588,7 +1588,7 @@ impl GotocCtx<'_, '_> {
         assert!(!vtable_layout.is_unsized(), "Can't create a vtable for an unsized type");
         let vt_size = Expr::int_constant(vtable_layout.size.bytes(), Type::size_t())
             .with_size_of_annotation(self.codegen_ty_stable(operand_type));
-        let vt_align = Expr::int_constant(vtable_layout.align.abi.bytes(), Type::size_t());
+        let vt_align = Expr::int_constant(vtable_layout.align.bytes(), Type::size_t());
 
         (vt_size, vt_align)
     }
