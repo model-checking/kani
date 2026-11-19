@@ -873,7 +873,7 @@ impl GotocHook for LoopInvariantRegister {
 
         gcx.has_loop_contracts = true;
 
-        if gcx.queries.args().unstable_features.contains(&"loop-contracts".to_string()) {
+        if gcx.queries.args().unstable_features.iter().any(|arg| arg == "loop-contracts") {
             // When loop-contracts is enabled, codegen
             // free(0)
             // goto target --- with loop contracts annotated.

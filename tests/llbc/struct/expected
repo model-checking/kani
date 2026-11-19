@@ -7,7 +7,7 @@ pub struct MyStruct {\
 // Full name: test::struct_project\
 pub fn struct_project(s: MyStruct) -> i32\
 {\
-    let _0: i32; // return\
+    let mut _0: i32; // return\
     let s: MyStruct; // arg #1\
 \
     storage_live(_0)\
@@ -19,7 +19,7 @@ pub fn struct_project(s: MyStruct) -> i32\
 // Full name: test::main\
 pub fn main()\
 {\
-    let _0: (); // return\
+    let mut _0: (); // return\
     let s: MyStruct; // local\
     let a: i32; // local\
 \
