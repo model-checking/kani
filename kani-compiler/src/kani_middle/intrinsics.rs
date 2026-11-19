@@ -9,7 +9,7 @@ use rustc_index::IndexVec;
 use rustc_middle::mir::{Body, Const as mirConst, ConstValue, Operand, TerminatorKind};
 use rustc_middle::mir::{Local, LocalDecl};
 use rustc_middle::ty::{self, Ty, TyCtxt};
-use rustc_middle::ty::{Const, GenericArgs, IntrinsicDef};
+use rustc_middle::ty::{Const, GenericArgs, Intrinsic, IntrinsicDef};
 use rustc_span::Spanned;
 use rustc_span::symbol::{Symbol, sym};
 use tracing::{debug, trace};
@@ -39,7 +39,7 @@ impl<'tcx> ModelIntrinsics<'tcx> {
                 if let Some((intrinsic, generics)) = resolve_rust_intrinsic(self.tcx, func_ty) {
                     let intrinsic_name = intrinsic.name;
                     trace!(?func, ?intrinsic_name, "run_pass");
-                    if intrinsic_name == sym::simd_bitmask {
+                    if intrinsic_name == Intrinsic::Rustc(sym::simd_bitmask) {
                         self.replace_simd_bitmask(func, args, generics)
                     }
                 }
