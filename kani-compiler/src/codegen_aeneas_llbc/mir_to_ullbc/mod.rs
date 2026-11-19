@@ -2363,17 +2363,19 @@ pub fn prepare_translated_crate(tcx: TyCtxt, translated: &mut CharonTranslatedCr
 
     // As in Charon's `register_target_info`.
     let target_data = &tcx.data_layout;
+    // The alignment of `i8` is not part of the data layout (it is always 1).
+    let i8_align = rustc_abi::Integer::I8.align(target_data).bytes();
     let mut primitive_alignments = charon_lib::ast::SeqHashMap::new();
-    primitive_alignments.insert(CharonLiteralTy::Bool, target_data.i8_align.bytes());
+    primitive_alignments.insert(CharonLiteralTy::Bool, i8_align);
     let int = |ty| CharonLiteralTy::Integer(ty);
     for (ty, alignment) in [
-        (CharonIntegerTy::Signed(CharonIntTy::I8), target_data.i8_align.bytes()),
+        (CharonIntegerTy::Signed(CharonIntTy::I8), i8_align),
         (CharonIntegerTy::Signed(CharonIntTy::I16), target_data.i16_align.bytes()),
         (CharonIntegerTy::Signed(CharonIntTy::I32), target_data.i32_align.bytes()),
         (CharonIntegerTy::Signed(CharonIntTy::I64), target_data.i64_align.bytes()),
         (CharonIntegerTy::Signed(CharonIntTy::I128), target_data.i128_align.bytes()),
         (CharonIntegerTy::Signed(CharonIntTy::Isize), target_data.pointer_align().bytes()),
-        (CharonIntegerTy::Unsigned(CharonUIntTy::U8), target_data.i8_align.bytes()),
+        (CharonIntegerTy::Unsigned(CharonUIntTy::U8), i8_align),
         (CharonIntegerTy::Unsigned(CharonUIntTy::U16), target_data.i16_align.bytes()),
         (CharonIntegerTy::Unsigned(CharonUIntTy::U32), target_data.i32_align.bytes()),
         (CharonIntegerTy::Unsigned(CharonUIntTy::U64), target_data.i64_align.bytes()),
