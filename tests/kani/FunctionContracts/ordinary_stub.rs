@@ -168,10 +168,14 @@ fn replacement_verified_contract() {
     assert_eq!(f(8), 11);
 }
 
-#[kani::proof_for_contract(contracted_replacement)]
+#[kani::requires(x < 16)]
+#[kani::ensures(|result| *result == x + 3)]
+fn replacement_caller(x: u8) -> u8 {
+    f(x)
+}
+
+#[kani::proof_for_contract(replacement_caller)]
 #[kani::stub(f, contracted_replacement)]
 fn replacement_contract_target() {
-    // Reach the exact selected provider in this harness, as well as its copied body.
-    contracted_replacement(0);
-    f(kani::any());
+    replacement_caller(kani::any());
 }

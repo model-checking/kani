@@ -63,18 +63,21 @@ fn replacement_postcondition() {
     f(0);
 }
 
-// The direct input satisfies the contract; only the copied input violates it.
+// The replacement's postcondition fails for input 1.
 #[kani::ensures(|result| *result == 0)]
 fn discriminating_replacement(x: u8) -> u8 {
     x
 }
 
-#[kani::proof_for_contract(discriminating_replacement)]
+#[kani::ensures(|result| *result == x)]
+fn replacement_caller(x: u8) -> u8 {
+    f(x)
+}
+
+#[kani::proof_for_contract(replacement_caller)]
 #[kani::stub(f, discriminating_replacement)]
 fn replacement_provider_postcondition() {
-    // The exact PFC target must be reachable from this harness itself.
-    discriminating_replacement(0);
-    f(1);
+    replacement_caller(1);
 }
 
 #[kani::requires(x < 4)]
