@@ -19,20 +19,20 @@ pub enum MyEnum {\
 // Full name: test::enum_match\
 pub fn enum_match(e: MyEnum) -> i32\
 {\
-    let _0: i32; // return\
+    let mut _0: i32; // return\
     let e: MyEnum; // arg #1\
     let s: MyStruct; // local\
     let e0: MyEnum0; // local\
     let s1: MyStruct; // local\
     let b_5: i32; // local\
-    let _6: i32; // anonymous local\
-    let _7: i32; // anonymous local\
-    let _8: i32; // anonymous local\
-    let _9: i32; // anonymous local\
-    let _10: i32; // anonymous local\
+    let mut _6: i32; // anonymous local\
+    let mut _7: i32; // anonymous local\
+    let mut _8: i32; // anonymous local\
+    let mut _9: i32; // anonymous local\
+    let mut _10: i32; // anonymous local\
     let a: i32; // local\
     let b_12: i32; // local\
-    let _13: i32; // anonymous local\
+    let mut _13: i32; // anonymous local\
 \
     storage_live(_0)\
     storage_live(s)\
@@ -49,47 +49,6 @@ pub fn enum_match(e: MyEnum) -> i32\
     storage_live(_13)\
     match e {\
         MyEnum::A => {\
-            s = move (e as variant MyEnum::A)._0\
-            e0 = move (e as variant MyEnum::A)._1\
-            match e0 {\
-                MyEnum0::A => {\
-                    s1 = move (e0 as variant MyEnum0::A)._0\
-                    b_5 = copy (e0 as variant MyEnum0::A)._1\
-                    _6 = copy s1.a\
-                    _7 = copy _6 panic.+ copy b_5\
-                    _0 = move _7\
-                    storage_dead(_6)\
-                    storage_dead(s1)\
-                    storage_dead(e0)\
-                    storage_dead(s)\
-                    storage_dead(_13)\
-                    storage_dead(b_12)\
-                    storage_dead(a)\
-                    storage_dead(_10)\
-                    storage_dead(_7)\
-                    storage_dead(b_5)\
-                    storage_dead(e)\
-                    return\
-                },\
-                MyEnum0::B => {\
-                    _8 = copy s.a\
-                    _9 = copy s.b\
-                    _10 = copy _8 panic.+ copy _9\
-                    _0 = move _10\
-                    storage_dead(_9)\
-                    storage_dead(_8)\
-                    storage_dead(e0)\
-                    storage_dead(s)\
-                    storage_dead(_13)\
-                    storage_dead(b_12)\
-                    storage_dead(a)\
-                    storage_dead(_10)\
-                    storage_dead(_7)\
-                    storage_dead(b_5)\
-                    storage_dead(e)\
-                    return\
-                },\
-            }\
         },\
         MyEnum::B => {\
             a = copy (e as variant MyEnum::B)._0.0\
@@ -106,17 +65,47 @@ pub fn enum_match(e: MyEnum) -> i32\
             return\
         },\
     }\
-    undefined_behavior\
+    s = move (e as variant MyEnum::A)._0\
+    e0 = move (e as variant MyEnum::A)._1\
+    match e0 {\
+        MyEnum0::A => {\
+            s1 = move (e0 as variant MyEnum0::A)._0\
+            b_5 = copy (e0 as variant MyEnum0::A)._1\
+            _6 = copy s1.a\
+            _7 = copy _6 panic.+ copy b_5\
+            _0 = move _7\
+            storage_dead(_6)\
+            storage_dead(s1)\
+        },\
+        MyEnum0::B => {\
+            _8 = copy s.a\
+            _9 = copy s.b\
+            _10 = copy _8 panic.+ copy _9\
+            _0 = move _10\
+            storage_dead(_9)\
+            storage_dead(_8)\
+        },\
+    }\
+    storage_dead(e0)\
+    storage_dead(s)\
+    storage_dead(_13)\
+    storage_dead(b_12)\
+    storage_dead(a)\
+    storage_dead(_10)\
+    storage_dead(_7)\
+    storage_dead(b_5)\
+    storage_dead(e)\
+    return\
 }
 
 // Full name: test::main\
 pub fn main()\
 {\
-    let _0: (); // return\
+    let mut _0: (); // return\
     let s: MyStruct; // local\
     let s0: MyStruct; // local\
     let e: MyEnum; // local\
-    let _4: MyEnum0; // anonymous local\
+    let mut _4: MyEnum0; // anonymous local\
     let i: i32; // local\
 \
     storage_live(_0)\
@@ -133,6 +122,7 @@ pub fn main()\
     storage_dead(_4)\
     i = enum_match(copy e)\
     ↳⚡ undefined_behavior\
+    _0 = ()\
     storage_dead(i)\
     storage_dead(e)\
     storage_dead(s0)\
