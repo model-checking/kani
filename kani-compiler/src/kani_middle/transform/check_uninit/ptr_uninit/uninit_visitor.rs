@@ -398,6 +398,11 @@ impl MirVisitor for CheckUninitVisitor<'_> {
                                     value: true,
                                     position: InsertPosition::After,
                                 }),
+                            // An intrinsic that Kani does not know, but whose fallback body it uses
+                            // (e.g. `integer_max`, new in nightly-2026-11-17), runs ordinary MIR,
+                            // which is instrumented like any other function: an ordinary call.
+                            Intrinsic::Unimplemented { .. }
+                                if !crate::intrinsics::uses_kani_model(&instance) => {}
                             intrinsic => {
                                 self.push_target(MemoryInitOp::Unsupported {
                                     reason: format!("Kani does not support reasoning about memory initialization of intrinsic `{intrinsic:?}`."),

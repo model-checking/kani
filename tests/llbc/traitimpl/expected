@@ -16,7 +16,7 @@ pub struct B {\
 // Full name: test::{impl T for B}::get_val\
 pub fn impl_T_for_B::get_val<'_0>(self: &'_0 B) -> i32\
 {\
-    let _0: i32; // return\
+    let mut _0: i32; // return\
     let self: &'_ B; // arg #1\
 \
     storage_live(_0)\
@@ -33,7 +33,7 @@ pub struct A {\
 // Full name: test::{impl T for A}::get_val\
 pub fn impl_T_for_A::get_val<'_0>(self: &'_0 A) -> i32\
 {\
-    let _0: i32; // return\
+    let mut _0: i32; // return\
     let self: &'_ A; // arg #1\
 \
     storage_live(_0)\
@@ -45,13 +45,13 @@ pub fn impl_T_for_A::get_val<'_0>(self: &'_0 A) -> i32\
 // Full name: test::main\
 pub fn main()\
 {\
-    let _0: (); // return\
+    let mut _0: (); // return\
     let e: A; // local\
     let k: B; // local\
     let i: i32; // local\
-    let _4: &'_ A; // anonymous local\
+    let mut _4: &'_ A; // anonymous local\
     let j: i32; // local\
-    let _6: &'_ B; // anonymous local\
+    let mut _6: &'_ B; // anonymous local\
 \
     storage_live(_0)\
     storage_live(e)\
@@ -71,6 +71,7 @@ pub fn main()\
     j = impl_T_for_B::get_val<'_>(move _6)\
     ↳⚡ undefined_behavior\
     storage_dead(_6)\
+    _0 = ()\
     storage_dead(j)\
     storage_dead(i)\
     storage_dead(k)\

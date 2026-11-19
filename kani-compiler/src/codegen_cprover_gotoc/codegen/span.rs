@@ -5,6 +5,7 @@
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::codegen_cprover_gotoc::codegen::cache::{CacheEntry, cache_entry};
+use crate::kani_middle::attributes::{attr_meta_item_list, attrs_by_path};
 use cbmc::goto_program::Location;
 use lazy_static::lazy_static;
 use rustc_attr_ir::Attribute;
@@ -126,7 +127,7 @@ impl GotocCtx<'_, '_> {
 /// For example, `disable_checks(foo)` return `Some("foo")`
 fn parse_word(attr: &Attribute) -> Option<String> {
     // Vector of meta items , that contain the arguments given the attribute
-    let attr_args = attr.meta_item_list()?;
+    let attr_args = attr_meta_item_list(attr)?;
     // Only extracts one string ident as a string
     if attr_args.len() == 1 {
         attr_args[0].ident().map(|ident| ident.to_string())
@@ -153,13 +154,12 @@ pub fn disabled_check_pragmas(
         rustc_span::symbol::Symbol::intern("kanitool"),
         rustc_span::symbol::Symbol::intern("disable_checks"),
     ];
-    let disabled_checks: Vec<_> = gcx
-        .tcx
-        .get_attrs_by_path(
-            rustc_internal::internal(gcx.tcx, instance.def.def_id()),
-            &should_skip_ptr_checks_attr,
-        )
-        .collect();
+    let disabled_checks: Vec<_> = attrs_by_path(
+        gcx.tcx,
+        rustc_internal::internal(gcx.tcx, instance.def.def_id()),
+        &should_skip_ptr_checks_attr,
+    )
+    .collect();
     disabled_checks
         .iter()
         .map(|attr| {
