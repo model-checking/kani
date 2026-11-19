@@ -1,0 +1,35 @@
+// Full name: test::sum_product\
+pub fn sum_product(a: u8, b: u8, c: u8) -> u8\
+{\
+    let mut _0: u8; // return\
+    let a: u8; // arg #1\
+    let b: u8; // arg #2\
+    let c: u8; // arg #3\
+    let mut _4: u8; // anonymous local\
+    let mut _5: u8; // anonymous local\
+    let mut _6: u8; // anonymous local\
+    let mut _7: u8; // anonymous local\
+    let mut _8: u8; // anonymous local\
+\
+    storage_live(_0)\
+    storage_live(_4)\
+    storage_live(_5)\
+    storage_live(_6)\
+    storage_live(_7)\
+    storage_live(_8)\
+    _6 = copy a panic.+ copy b\
+    _5 = move _6\
+    _7 = copy _5 panic.* copy c\
+    _4 = move _7\
+    storage_dead(_5)\
+    _8 = copy _4 panic.- copy a\
+    _0 = move _8\
+    storage_dead(_4)\
+    storage_dead(_8)\
+    storage_dead(_7)\
+    storage_dead(_6)\
+    storage_dead(c)\
+    storage_dead(b)\
+    storage_dead(a)\
+    return\
+}

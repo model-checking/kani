@@ -1,7 +1,7 @@
 // Full name: test::is_zero\
 pub fn is_zero(i: i32) -> bool\
 {\
-    let _0: bool; // return\
+    let mut _0: bool; // return\
     let i: i32; // arg #1\
 \
     storage_live(_0)\
@@ -13,8 +13,8 @@ pub fn is_zero(i: i32) -> bool\
 // Full name: test::main\
 pub fn main()\
 {\
-    let _0: (); // return\
-    let _1: bool; // anonymous local\
+    let mut _0: (); // return\
+    let mut _1: bool; // anonymous local\
 \
     storage_live(_0)\
     storage_live(_1)\
@@ -22,5 +22,6 @@ pub fn main()\
     _1 = is_zero(const 0i32)\
     ↳⚡ undefined_behavior\
     storage_dead(_1)\
+    _0 = ()\
     return\
 }

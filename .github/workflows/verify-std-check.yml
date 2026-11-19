@@ -28,7 +28,7 @@ jobs:
     strategy:
       matrix:
         # Kani does not support windows.
-        os: [ ubuntu-22.04, macos-14 ]
+        os: [ ubuntu-22.04, macos-15 ]
     steps:
       - name: Checkout Library
         uses: actions/checkout@v6

@@ -1,7 +1,7 @@
 // Full name: test::shl\
 pub fn shl(a: u32, b: u32) -> u32\
 {\
-    let _0: u32; // return\
+    let mut _0: u32; // return\
     let a: u32; // arg #1\
     let b: u32; // arg #2\
 \
@@ -15,7 +15,7 @@ pub fn shl(a: u32, b: u32) -> u32\
 // Full name: test::shr\
 pub fn shr(a: i64, b: u32) -> i64\
 {\
-    let _0: i64; // return\
+    let mut _0: i64; // return\
     let a: i64; // arg #1\
     let b: u32; // arg #2\
 \
@@ -29,9 +29,9 @@ pub fn shr(a: i64, b: u32) -> i64\
 // Full name: test::main\
 pub fn main()\
 {\
-    let _0: (); // return\
-    let _1: u32; // anonymous local\
-    let _2: i64; // anonymous local\
+    let mut _0: (); // return\
+    let mut _1: u32; // anonymous local\
+    let mut _2: i64; // anonymous local\
 \
     storage_live(_0)\
     storage_live(_1)\
@@ -43,5 +43,6 @@ pub fn main()\
     _2 = shr(const -8i64, const 1u32)\
     ↳⚡ undefined_behavior\
     storage_dead(_2)\
+    _0 = ()\
     return\
 }
