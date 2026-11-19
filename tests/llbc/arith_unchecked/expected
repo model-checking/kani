@@ -1,7 +1,7 @@
 // Full name: test::sub\
 pub fn sub(a: i16, b: i16) -> i16\
 {\
-    let _0: i16; // return\
+    let mut _0: i16; // return\
     let a: i16; // arg #1\
     let b: i16; // arg #2\
 \
@@ -15,7 +15,7 @@ pub fn sub(a: i16, b: i16) -> i16\
 // Full name: test::add\
 pub fn add(a: u8, b: u8) -> u8\
 {\
-    let _0: u8; // return\
+    let mut _0: u8; // return\
     let a: u8; // arg #1\
     let b: u8; // arg #2\
 \
@@ -29,7 +29,7 @@ pub fn add(a: u8, b: u8) -> u8\
 // Full name: test::mul\
 pub fn mul(a: u32, b: u32) -> u32\
 {\
-    let _0: u32; // return\
+    let mut _0: u32; // return\
     let a: u32; // arg #1\
     let b: u32; // arg #2\
 \
@@ -43,10 +43,10 @@ pub fn mul(a: u32, b: u32) -> u32\
 // Full name: test::main\
 pub fn main()\
 {\
-    let _0: (); // return\
-    let _1: u8; // anonymous local\
-    let _2: i16; // anonymous local\
-    let _3: u32; // anonymous local\
+    let mut _0: (); // return\
+    let mut _1: u8; // anonymous local\
+    let mut _2: i16; // anonymous local\
+    let mut _3: u32; // anonymous local\
 \
     storage_live(_0)\
     storage_live(_1)\

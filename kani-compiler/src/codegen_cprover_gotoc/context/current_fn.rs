@@ -2,10 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::codegen_cprover_gotoc::GotocCtx;
-use crate::kani_middle::attributes::attrs_by_path;
+use crate::kani_middle::attributes::{attr_value_str, attrs_by_path};
 use cbmc::InternedString;
 use cbmc::goto_program::{Expr, Stmt};
-use rustc_ast::attr::AttributeExt;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_middle::ty::Instance as InstanceInternal;
 use rustc_middle::ty::{TyCtxt, UpvarCapture};
@@ -451,8 +450,7 @@ fn is_generated_contract_closure(tcx: TyCtxt, closure_def_id: rustc_span::def_id
         let Some((callee, _)) = func.const_fn_def() else {
             continue;
         };
-        let marker =
-            attrs_by_path(tcx, callee, &fn_marker_path).next().and_then(|attr| attr.value_str());
+        let marker = attrs_by_path(tcx, callee, &fn_marker_path).next().and_then(attr_value_str);
         if !matches!(
             marker.as_ref().map(|marker| marker.as_str()),
             Some("kani_force_fn_once" | "kani_force_fn_once_with_args" | "kani_register_contract")

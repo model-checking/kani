@@ -6,7 +6,6 @@ use std::collections::{BTreeMap, HashSet};
 
 use kani_metadata::{CbmcSolver, HarnessAttributes, HarnessKind, Stub};
 use quote::ToTokens;
-use rustc_ast::attr::AttributeExt;
 use rustc_ast::{LitKind, MetaItem, MetaItemInner, MetaItemKind};
 use rustc_attr_ir::{AttrArgs, AttrItem, Attribute};
 use rustc_data_structures::fx::FxHashMap;
@@ -44,7 +43,22 @@ pub fn attrs_by_path<'tcx>(
 ) -> impl Iterator<Item = &'tcx Attribute> {
     #[allow(deprecated)]
     let attrs = tcx.get_all_attrs(def_id);
-    attrs.iter().filter(move |attr| attr.path_matches(path))
+    attrs.iter().filter(move |attr| attr_path_matches(attr, path))
+}
+
+/// Whether `attr` is a tool (or derive helper) attribute whose path is `path`. rustc removed
+/// `Attribute::path_matches` (nightly-2026-11-17); this is the same test it used to perform.
+fn attr_path_matches(attr: &Attribute, path: &[Symbol]) -> bool {
+    match attr {
+        Attribute::Tool(item) | Attribute::DeriveHelper(item) => item.path.segments.iter().eq(path),
+        _ => false,
+    }
+}
+
+/// The string value of a `path = "value"` attribute, e.g. `#[kanitool::fn_marker = "..."]`.
+/// rustc removed `Attribute::value_str` (nightly-2026-11-17); `value_lit` gives the literal.
+pub fn attr_value_str(attr: &Attribute) -> Option<Symbol> {
+    attr.value_lit().and_then(|lit| lit.kind.str())
 }
 
 /// The item of a `kanitool::*` attribute. rustc does not parse tool attributes, so they are
