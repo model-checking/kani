@@ -301,7 +301,7 @@ impl GotocCtx<'_, '_> {
                 let expr = Expr::int_constant(layout.align.bytes(), Type::size_t());
                 self.codegen_expr_to_place_stable(place, expr, loc)
             }
-            Intrinsic::ArithOffset => self.codegen_arith_offset(fargs, place, loc),
+            Intrinsic::ArithOffset => self.codegen_arith_offset(fargs, farg_types[0], place, loc),
             Intrinsic::AssertInhabited => {
                 self.codegen_assert_intrinsic(instance, intrinsic_str, span)
             }
@@ -1256,13 +1256,26 @@ impl GotocCtx<'_, '_> {
     /// This function handles code generation for the `arith_offset` intrinsic.
     ///     <https://doc.rust-lang.org/std/intrinsics/fn.arith_offset.html>
     /// According to the documentation, the operation is always safe.
-    fn codegen_arith_offset(&mut self, mut fargs: Vec<Expr>, p: &Place, loc: Location) -> Stmt {
+    fn codegen_arith_offset(
+        &mut self,
+        mut fargs: Vec<Expr>,
+        pointer_type: Ty,
+        p: &Place,
+        loc: Location,
+    ) -> Stmt {
         let src_ptr = fargs.remove(0);
         let offset = fargs.remove(0);
 
-        // Compute `dst_ptr` with standard addition to avoid conversion
-        let dst_ptr = src_ptr.plus(offset);
-        self.codegen_expr_to_place_stable(p, dst_ptr, loc)
+        if self.is_zst_stable(pointee_type_stable(pointer_type).unwrap()) {
+            // Evaluate both MIR operands in order. Emitting the offset as a
+            // statement preserves safety checks on projected reads.
+            let (base, base_decl) =
+                self.decl_temp_variable(src_ptr.typ().clone(), Some(src_ptr), loc);
+            let assign = self.codegen_expr_to_place_stable(p, base, loc);
+            Stmt::block(vec![base_decl, offset.as_stmt(loc), assign], loc)
+        } else {
+            self.codegen_expr_to_place_stable(p, src_ptr.plus(offset), loc)
+        }
     }
 
     /// A transmute is a bitcast from the argument type to the return type.
