@@ -36,6 +36,7 @@ pub struct RustcIntrinsicsPass {
     models: HashMap<KaniModel, FnDef>,
     /// The enabled user stubs, which take precedence over Kani's own models.
     stubs: Stubs,
+    /// Lower native assertion failures only for GOTO, which hooks `PanicStub`.
     lower_assert_failures: bool,
 }
 
@@ -114,7 +115,7 @@ fn fmt_derive_helper_model(tcx: &TyCtxt, def_id: rustc_public::DefId) -> Option<
 }
 
 impl RustcIntrinsicsPass {
-    pub fn new(queries: &QueryDb, stubs: &Stubs) -> Self {
+    pub fn new(queries: &QueryDb, tcx: TyCtxt, stubs: &Stubs) -> Self {
         let models = queries
             .kani_functions()
             .iter()
@@ -125,11 +126,10 @@ impl RustcIntrinsicsPass {
         debug!(?models, "RustcIntrinsicsPass::new");
         let args = queries.args();
         let stubs = if args.stubbing_enabled { stubs.clone() } else { Stubs::new() };
-        RustcIntrinsicsPass {
-            models,
-            stubs,
-            lower_assert_failures: args.backend == BackendOption::CProver,
-        }
+        // Lowering an outer assertion entry would bypass a stub of an inner one.
+        let lower_assert_failures = args.backend == BackendOption::CProver
+            && !stubs.keys().any(|def| core_assert_failure_message(tcx, def.0).is_some());
+        RustcIntrinsicsPass { models, stubs, lower_assert_failures }
     }
 
     /// This function checks if we need to replace intrinsics that have been lowered.
@@ -215,9 +215,8 @@ impl MutMirVisitor for ReplaceIntrinsicCallVisitor<'_, '_> {
             && let TyKind::RigidTy(RigidTy::FnDef(def, mut args)) =
                 func.ty(&self.locals).unwrap().kind()
         {
-            // Cut off assertion formatting before reachability. Only GOTO hooks the stub.
-            let assertion_message = if self.lower_assert_failures && !self.stubs.contains_key(&def)
-            {
+            // Cut off assertion formatting before reachability.
+            let assertion_message = if self.lower_assert_failures {
                 core_assert_failure_message(self.tcx, def.0)
             } else {
                 None
@@ -252,6 +251,7 @@ impl MutMirVisitor for ReplaceIntrinsicCallVisitor<'_, '_> {
                         }),
                     );
                 }
+                // PanicStub is non-generic, including when it replaces `begin_panic::<M>`.
                 args.0.clear();
                 self.models[&KaniModel::PanicStub]
             } else if let Some(model) = fmt_derive_helper_model(&self.tcx, def.0)

@@ -3,7 +3,8 @@
 
 // kani-flags: -Z unstable-options --no-assert-overrides --output-format terse
 // compile-flags: -Cllvm-args=-Zstubbing
-//! Allow the stub annotation without enabling the compiler's stub pass.
+//! Defensive test with the stub annotation enabled via raw compiler flags and the stub pass off.
+//! The Kani CLI normally passes `--enable-stubbing` together with `-Z stubbing`.
 
 #![feature(panic_internals)]
 #![allow(internal_features)]
