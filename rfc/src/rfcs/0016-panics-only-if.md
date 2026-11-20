@@ -206,7 +206,7 @@ wrong because of this:
   For example, a `proof_for_contract` harness verifies under `--prove-safety-only` even when the function
   violates its `ensures` clause.
 
-The first step, which is useful on its own, is to give panics their own property class, `panic`:
+The first step, which is useful on its own ([#5212](https://github.com/model-checking/kani/issues/5212)), is to give panics their own property class, `panic`:
 - `codegen_panic` and the panicking MIR assertions use `panic`.
 - The `assert!`, `assert_eq!` and `assert_ne!` overrides call a new Kani-internal function, hooked to emit a
   `panic` check, instead of `kani::assert`.
