@@ -1,0 +1,22 @@
+Checking harness check_harness_panics...
+Failed Checks: "before the call" (not permitted by the contract)
+Failed Checks: "after the call" (not permitted by the contract)
+VERIFICATION:- FAILED
+
+Checking harness check_wrong_postcondition...
+Failed Checks: |result: &u8| *result == x
+VERIFICATION:- FAILED
+
+Checking harness check_ub_before_panic...
+Failed Checks: Offset result and original pointer must point to the same allocation
+VERIFICATION:- FAILED
+
+Checking harness check_unexpected_panic...
+Failed Checks: seven (not permitted by the contract)
+VERIFICATION:- FAILED
+
+Verification failed for - check_harness_panics
+Verification failed for - check_wrong_postcondition
+Verification failed for - check_ub_before_panic
+Verification failed for - check_unexpected_panic
+Complete - 0 successfully verified harnesses, 4 failures, 4 total.

@@ -1,0 +1,19 @@
+Checking harness postcondition...
+Failed Checks: |result: &u8| *result == x
+VERIFICATION:- FAILED (encountered failures other than panics, which were unexpected)
+
+Checking harness kani_assert...
+Failed Checks: kani check
+VERIFICATION:- FAILED (encountered failures other than panics, which were unexpected)
+
+Checking harness overflow...
+Failed Checks: attempt to add with overflow
+VERIFICATION:- SUCCESSFUL (encountered one or more panics as expected)
+
+Checking harness rust_assert...
+Failed Checks: assertion failed: x != 3
+VERIFICATION:- SUCCESSFUL (encountered one or more panics as expected)
+
+Verification failed for - postcondition
+Verification failed for - kani_assert
+Complete - 2 successfully verified harnesses, 2 failures, 4 total.
