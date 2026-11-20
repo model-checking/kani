@@ -6,9 +6,10 @@
 #[macro_export]
 macro_rules! ptr_generator {
     () => {
+        use core::cell::UnsafeCell;
         use core::marker::PhantomData;
         use core::mem::MaybeUninit;
-        use core::ptr::{self, addr_of_mut};
+        use core::ptr;
         use crate::kani;
 
         /// Pointer generator that can be used to generate arbitrary pointers.
@@ -36,7 +37,7 @@ macro_rules! ptr_generator {
         /// # use kani::*;
         /// # #[kani::proof]
         /// # fn harness() {
-        ///     let mut generator = PointerGenerator::<10>::new();
+        ///     let generator = PointerGenerator::<10>::new();
         ///     let arbitrary = generator.any_alloc_status::<char>();
         ///     kani::assume(arbitrary.status == AllocationStatus::InBounds);
         ///     // Pointer may be unaligned, but it should be in-bounds, so it is safe to write to
@@ -79,7 +80,7 @@ macro_rules! ptr_generator {
         /// # use kani::*;
         /// # #[kani::proof]
         /// # fn harness() {
-        ///     let mut generator = PointerGenerator::<6>::new();
+        ///     let generator = PointerGenerator::<6>::new();
         ///     let ptr1: *mut u8 = generator.any_in_bounds().ptr;
         ///     let ptr2: *mut u8 = generator.any_in_bounds().ptr;
         ///     let ptr3: *mut u32 = generator.any_in_bounds().ptr;
@@ -131,7 +132,7 @@ macro_rules! ptr_generator {
         /// # use kani::*;
         /// # #[kani::proof]
         /// # fn harness() {
-        ///     let mut generator = pointer_generator::<char, 5>();
+        ///     let generator = pointer_generator::<char, 5>();
         ///     let ptr1 = generator.any_in_bounds::<char>().ptr;
         ///     let ptr2 = generator.any_in_bounds::<char>().ptr;
         ///     // This cover is satisfied.
@@ -149,8 +150,8 @@ macro_rules! ptr_generator {
         /// # unsafe fn my_target<T>(_ptr1: *const T, _ptr2: *const T) {}
         /// # #[kani::proof]
         /// # fn harness() {
-        ///     let mut generator1 = pointer_generator::<char, 5>();
-        ///     let mut generator2 = pointer_generator::<char, 5>();
+        ///     let generator1 = pointer_generator::<char, 5>();
+        ///     let generator2 = pointer_generator::<char, 5>();
         ///     let ptr1: *const char = generator1.any_in_bounds().ptr;
         ///     let ptr2: *const char = if kani::any() {
         ///         // Pointers will have same provenance and may overlap.
@@ -181,7 +182,7 @@ macro_rules! ptr_generator {
         ///
         ///     // This pointer address will either point to unallocated memory, to a dead object
         ///     // or to allocated memory within the generator address space.
-        ///     let mut generator = PointerGenerator::<5>::new();
+        ///     let generator = PointerGenerator::<5>::new();
         ///     let ptr2: *const u8 = generator.any_alloc_status().ptr;
         /// # }
         /// ```
@@ -199,7 +200,15 @@ macro_rules! ptr_generator {
         #[derive(Debug)]
         pub struct PointerGenerator<const BYTES: usize> {
             // Internal allocation that may be used to generate valid pointers.
-            buf: MaybeUninit<[u8; BYTES]>,
+            //
+            // It is an `UnsafeCell` and the generator methods take `&self` so that generating a
+            // pointer does not invalidate the pointers generated before it under Rust's aliasing
+            // models (Stacked Borrows and Tree Borrows): a `&mut self` reborrow of the generator
+            // is an access to the whole buffer, which invalidates earlier pointers that were
+            // written through, and an initializing write would invalidate earlier pointers to
+            // overlapping bytes. Pointers derived from `UnsafeCell::get` through a shared
+            // reference allow both.
+            buf: UnsafeCell<MaybeUninit<[u8; BYTES]>>,
         }
 
         /// Enumeration with the cases currently covered by the pointer generator.
@@ -243,7 +252,7 @@ macro_rules! ptr_generator {
             )]
             pub fn new() -> Self {
                 let _ = Self::VALID;
-                PointerGenerator { buf: MaybeUninit::uninit() }
+                PointerGenerator { buf: UnsafeCell::new(MaybeUninit::uninit()) }
             }
 
             /// Creates a raw pointer with non-deterministic properties.
@@ -254,7 +263,7 @@ macro_rules! ptr_generator {
                 issue = 2690,
                 reason = "experimental memory predicates and manipulation feature"
             )]
-            pub fn any_alloc_status<'a, T>(&'a mut self) -> ArbitraryPointer<'a, T>
+            pub fn any_alloc_status<'a, T>(&'a self) -> ArbitraryPointer<'a, T>
              where T: kani::Arbitrary
             {
                 assert!(core::mem::size_of::<T>() <= Self::BUF_LEN,
@@ -278,7 +287,7 @@ macro_rules! ptr_generator {
                     }
                     AllocationStatus::OutOfBounds => {
                         // Generate potentially unaligned pointer.
-                        let buf_ptr = addr_of_mut!(self.buf) as *mut u8;
+                        let buf_ptr = self.buf.get() as *mut u8;
                         let offset = kani::any_where(|b: &usize| *b < core::mem::size_of::<T>());
                         unsafe { buf_ptr.add(Self::BUF_LEN - offset) as *mut T }
                     }
@@ -301,7 +310,7 @@ macro_rules! ptr_generator {
             /// # use kani::*;
             /// # #[kani::proof]
             /// # fn check_distance() {
-            ///     let mut generator = PointerGenerator::<6>::new();
+            ///     let generator = PointerGenerator::<6>::new();
             ///     let ptr1: *mut u8 = generator.any_in_bounds().ptr;
             ///     let ptr2: *mut u8 = generator.any_in_bounds().ptr;
             ///     // SAFETY: Both pointers have the same provenance.
@@ -314,7 +323,7 @@ macro_rules! ptr_generator {
                 issue = 2690,
                 reason = "experimental memory predicates and manipulation feature"
             )]
-            pub fn any_in_bounds<'a, T>(&'a mut self) -> ArbitraryPointer<'a, T>
+            pub fn any_in_bounds<'a, T>(&'a self) -> ArbitraryPointer<'a, T>
             where T: kani::Arbitrary {
                 assert!(core::mem::size_of::<T>() <= Self::BUF_LEN,
                     "Cannot generate in-bounds object of the requested type. Buffer is not big enough."
@@ -325,12 +334,12 @@ macro_rules! ptr_generator {
             /// This is the inner logic to create an arbitrary pointer that is inbounds.
             ///
             /// Note that pointer may be unaligned.
-            fn create_in_bounds_ptr<'a, T>(&'a mut self) -> ArbitraryPointer<'a, T>
+            fn create_in_bounds_ptr<'a, T>(&'a self) -> ArbitraryPointer<'a, T>
             where T: kani::Arbitrary {
                 assert!(core::mem::size_of::<T>() <= Self::BUF_LEN,
                     "Cannot generate in-bounds object of the requested type. Buffer is not big enough."
                 );
-                let buf_ptr = addr_of_mut!(self.buf) as *mut u8;
+                let buf_ptr = self.buf.get() as *mut u8;
                 let offset = kani::any_where(|b: &usize| *b <= Self::BUF_LEN - core::mem::size_of::<T>());
                 let ptr = unsafe { buf_ptr.add(offset) as *mut T };
                 let is_initialized = kani::any();

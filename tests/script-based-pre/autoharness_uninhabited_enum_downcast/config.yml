@@ -1,0 +1,5 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+script: run.sh
+expected: expected
+exit_code: 1

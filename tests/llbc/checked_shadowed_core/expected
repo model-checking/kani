@@ -1,0 +1,25 @@
+// Full name: test::add\
+pub fn add(a: u8, b: u8) -> u8\
+{\
+    let mut _0: u8; // return\
+    let a: u8; // arg #1\
+    let b: u8; // arg #2\
+    let mut _3: u8; // anonymous local\
+    let mut _4: u8; // anonymous local\
+    let mut _5: u8; // anonymous local\
+\
+    storage_live(_0)\
+    storage_live(_3)\
+    storage_live(_4)\
+    storage_live(_5)\
+    _3 = copy a\
+    _4 = copy b\
+    _5 = copy _3 panic.+ copy _4\
+    _0 = move _5\
+    storage_dead(_4)\
+    storage_dead(_3)\
+    storage_dead(_5)\
+    storage_dead(b)\
+    storage_dead(a)\
+    return\
+}

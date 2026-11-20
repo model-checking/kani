@@ -1,7 +1,7 @@
 // Full name: test::classify\
 pub fn classify(x: u8) -> u8\
 {\
-    let _0: u8; // return\
+    let mut _0: u8; // return\
     let x: u8; // arg #1\
 \
     storage_live(_0)\
@@ -27,8 +27,8 @@ pub fn classify(x: u8) -> u8\
 // Full name: test::main\
 pub fn main()\
 {\
-    let _0: (); // return\
-    let _1: u8; // anonymous local\
+    let mut _0: (); // return\
+    let mut _1: u8; // anonymous local\
 \
     storage_live(_0)\
     storage_live(_1)\
@@ -36,5 +36,6 @@ pub fn main()\
     _1 = classify(const 1u8)\
     ↳⚡ undefined_behavior\
     storage_dead(_1)\
+    _0 = ()\
     return\
 }

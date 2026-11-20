@@ -677,15 +677,19 @@ impl GotocCtx<'_, '_> {
             AggregateKind::Adt(..) | AggregateKind::Closure(..) | AggregateKind::Tuple => {
                 let typ = self.codegen_ty_stable(res_ty);
                 let layout = self.layout_of_stable(res_ty);
-                Expr::struct_expr_from_values(
-                    typ,
+                // `index_by_increasing_offset` reports one pseudo-field for a primitive layout.
+                // A struct with no fields can still have one (the `x87_f80_raw` lang item is an
+                // x87 float), and then there are no operands: its type is only padding.
+                let values = if operands.is_empty() {
+                    vec![]
+                } else {
                     layout
                         .fields
                         .index_by_increasing_offset()
                         .map(|idx| self.codegen_operand_stable(&operands[idx]))
-                        .collect(),
-                    &self.symbol_table,
-                )
+                        .collect()
+                };
+                Expr::struct_expr_from_values(typ, values, &self.symbol_table)
             }
             AggregateKind::RawPtr(pointee_ty, _) => {
                 // We expect two operands: "data" and "meta"
@@ -711,7 +715,7 @@ impl GotocCtx<'_, '_> {
                         let meta = self.codegen_operand_stable(&operands[1]);
                         slice_fat_ptr(typ, data_cast, meta, &self.symbol_table)
                     }
-                    TyKind::RigidTy(RigidTy::Adt(..)) => {
+                    TyKind::RigidTy(RigidTy::Adt(..)) | TyKind::RigidTy(RigidTy::Tuple(..)) => {
                         let layout = LayoutOf::new(pointee_ty);
                         let pointee_goto_typ = self.codegen_ty_stable(pointee_ty);
                         let data_cast =
@@ -1019,8 +1023,7 @@ impl GotocCtx<'_, '_> {
                     let discr_mir_ty = self.codegen_enum_discr_typ_stable(ty);
                     let discr_type = self.codegen_ty_stable(discr_mir_ty);
                     let niche_val = self.codegen_get_niche(e, offset.bytes() as usize, discr_type);
-                    let relative_discr =
-                        wrapping_sub(&niche_val, u64::try_from(*niche_start).unwrap());
+                    let relative_discr = wrapping_sub(&niche_val, *niche_start);
                     let relative_max = niche_variants.last.as_u32() - niche_variants.start.as_u32();
                     let is_niche = if relative_max == 0 {
                         relative_discr.clone().is_zero()
@@ -1589,7 +1592,7 @@ impl GotocCtx<'_, '_> {
         assert!(!vtable_layout.is_unsized(), "Can't create a vtable for an unsized type");
         let vt_size = Expr::int_constant(vtable_layout.size.bytes(), Type::size_t())
             .with_size_of_annotation(self.codegen_ty_stable(operand_type));
-        let vt_align = Expr::int_constant(vtable_layout.align.abi.bytes(), Type::size_t());
+        let vt_align = Expr::int_constant(vtable_layout.align.bytes(), Type::size_t());
 
         (vt_size, vt_align)
     }
@@ -1885,7 +1888,7 @@ impl GotocCtx<'_, '_> {
 /// Perform a wrapping subtraction of an Expr with a constant "expr - constant"
 /// where "-" is wrapping subtraction, i.e., the result should be interpreted as
 /// an unsigned value (2's complement).
-fn wrapping_sub(expr: &Expr, constant: u64) -> Expr {
+fn wrapping_sub(expr: &Expr, constant: u128) -> Expr {
     let unsigned_expr = if expr.typ().is_pointer() {
         expr.clone()
     } else {

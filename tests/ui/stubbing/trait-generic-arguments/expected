@@ -1,0 +1,4 @@
+invalid generic arguments: missing required trait type argument `T`
+invalid generic arguments: too many trait type arguments
+unable to find implementation of associated function `Generic::method` for Target
+error: aborting due to 3 previous errors

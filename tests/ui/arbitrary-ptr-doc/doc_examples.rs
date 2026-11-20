@@ -14,7 +14,7 @@ extern crate kani;
 use kani::*;
 #[kani::proof]
 fn basic_inbounds() {
-    let mut generator = PointerGenerator::<10>::new();
+    let generator = PointerGenerator::<10>::new();
     let arbitrary = generator.any_alloc_status::<char>();
     kani::assume(arbitrary.status == AllocationStatus::InBounds);
     // Pointer may be unaligned, but it should be in-bounds, so it is safe to write to
@@ -30,7 +30,7 @@ fn same_capacity() {
 
 #[kani::proof]
 fn generator_large_enough() {
-    let mut generator = PointerGenerator::<6>::new();
+    let generator = PointerGenerator::<6>::new();
     let ptr1: *mut u8 = generator.any_in_bounds().ptr;
     let ptr2: *mut u8 = generator.any_in_bounds().ptr;
     let ptr3: *mut u32 = generator.any_in_bounds().ptr;
@@ -45,7 +45,7 @@ fn generator_large_enough() {
 
 #[kani::proof]
 fn pointer_may_be_same() {
-    let mut generator = pointer_generator::<char, 5>();
+    let generator = pointer_generator::<char, 5>();
     let ptr1 = generator.any_in_bounds::<char>().ptr;
     let ptr2 = generator.any_in_bounds::<char>().ptr;
     // This cover is satisfied.
@@ -55,8 +55,8 @@ unsafe fn my_target<T>(_ptr1: *const T, _ptr2: *const T) {}
 
 #[kani::proof]
 fn usage_example() {
-    let mut generator1 = pointer_generator::<char, 5>();
-    let mut generator2 = pointer_generator::<char, 5>();
+    let generator1 = pointer_generator::<char, 5>();
+    let generator2 = pointer_generator::<char, 5>();
     let ptr1: *const char = generator1.any_in_bounds().ptr;
     let ptr2: *const char = if kani::any() {
         // Pointers will have same provenance and may overlap.
@@ -76,12 +76,12 @@ fn diff_from_usize() {
 
     // This pointer address will either point to unallocated memory, to a dead object
     // or to allocated memory within the generator address space.
-    let mut generator = PointerGenerator::<5>::new();
+    let generator = PointerGenerator::<5>::new();
     let ptr2: *const u8 = generator.any_alloc_status().ptr;
 }
 #[kani::proof]
 fn check_distance() {
-    let mut generator = PointerGenerator::<6>::new();
+    let generator = PointerGenerator::<6>::new();
     let ptr1: *mut u8 = generator.any_in_bounds().ptr;
     let ptr2: *mut u8 = generator.any_in_bounds().ptr;
     // SAFETY: Both pointers have the same provenance.

@@ -1,1 +1,2 @@
-error: failed to resolve `<MyBuf as Buf < 16 >>::write`: Kani currently cannot resolve const generic arguments in trait stubs
+error: failed to resolve `<MyBuf as Buf < 16 >>::write`: Kani currently cannot resolve trait-level const generic arguments
+note: Trait-level const generics remain unsupported; method-level const generics are supported.
