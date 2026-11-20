@@ -55,6 +55,42 @@ Downsides:
   (see [Naming](#naming)).
 - It relies on a change to how Kani classifies its checks, which changes some property names in Kani's output.
 
+### Evidence from verify-rust-std
+
+We surveyed [verify-rust-std](https://github.com/model-checking/verify-rust-std) (main at `a43ef3d40d9`, 1890
+harnesses) with the Kani version it pins.
+
+**`should_panic` rarely tests what it seems to.** The 28 `#[kani::should_panic]` attributes expand to 116
+harnesses. Only 27 pass because the function under verification panics. The other 89 pass for unrelated reasons:
+- 79 because the harness itself panics, for example in `kani::any::<Duration>()` (where `Duration::new` panics) or
+  in `unwrap()` on an expected `Err`;
+- 2 because the contract panics: `offset_from::<()>`'s `requires` divides by zero
+  (`library/core/src/ptr/const_ptr.rs:649`);
+- 8 because a check that is not a panic fails: the `should_fail_*` harnesses in
+  `library/core/src/intrinsics/mod.rs` rely on a failed `stub_verified` precondition.
+
+Fourteen of these are `proof_for_contract` harnesses whose target has `ensures` clauses, so a broken postcondition
+goes unnoticed ([#5212](https://github.com/model-checking/kani/issues/5212)). We confirmed this on five std
+functions. For example, we changed `Duration::as_secs` (`library/core/src/time.rs:615`) to return
+`secs.wrapping_add(1)`. `duration_as_secs` then fails its postcondition, but `duration_as_secs_panics` still passes:
+it lists the failed postcondition among the failures it accepts as expected panics.
+
+**Restrictions hide inputs that are safe to verify.** Of the 191 functions with a `requires`, 8 are safe. Three
+of those exclude exactly the inputs that their `# Panics` documentation names, for example `copy_from_slice`'s
+`requires(self.len() == src.len())` (`library/core/src/slice/mod.rs:4385`). Eleven `kani::assume` calls do the same
+in harnesses, and one sits in library code (`library/core/src/num/imp/dec2flt/decimal_seq.rs:183`). We removed
+the restriction in 16 harnesses covering 13 functions and ran them with `--prove-safety-only`. None reported
+undefined behavior on the panicking inputs, and each run took under 6 seconds. Without the flag, every failure
+was a panic. So for these functions the restriction excluded panics only, and it also kept their absence of
+undefined behavior from being checked on those inputs.
+
+**The conditions are easy to state.** For 12 of the 13 panicking functions we found, the `# Panics` condition is
+a simple expression over the arguments, such as `index >= self.len()`, `!align.is_power_of_two()` or
+`self.get() == MIN`. The exception is `NonNull::map_addr`, which panics if its closure does. For `NonZero::abs`
+and `Neg`, a "must panic" clause would hold only with overflow checks enabled, while
+`panics_only_if(self.get() == MIN)` holds in both build modes. Both cases favor a necessary condition over a
+sufficient one.
+
 ## User Experience
 
 The clause is part of function contracts and is available with `-Z function-contracts`.
