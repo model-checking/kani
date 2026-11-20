@@ -1112,7 +1112,7 @@ mod tests {
     #[test]
     fn export_with_failed_property() {
         let h = harness("my_harness");
-        let properties = vec![property("assertion", 1, CheckStatus::Failure)];
+        let properties = vec![property("panic", 1, CheckStatus::Failure)];
         let mut result = success_result(properties);
         result.status = VerificationStatus::Failure;
         result.failed_properties = FailedProperties::PanicsOnly;
@@ -1125,13 +1125,13 @@ mod tests {
         assert_eq!(hj["outcome"]["verdict"], "FAILURE");
         assert_eq!(hj["failure_kind"], "PANICS_ONLY");
         assert_eq!(hj["n_failed"], 1);
-        assert_eq!(hj["failed_properties"][0]["id"], "harness.assertion.1");
-        assert_eq!(hj["failed_properties"][0]["description"], "assertion check");
-        assert_eq!(hj["failed_properties"][0]["class"], "assertion");
+        assert_eq!(hj["failed_properties"][0]["id"], "harness.panic.1");
+        assert_eq!(hj["failed_properties"][0]["description"], "panic check");
+        assert_eq!(hj["failed_properties"][0]["class"], "panic");
         assert_eq!(hj["failed_properties"][0]["file"], "src/lib.rs");
         assert_eq!(
             hj["checks"]["failure"].as_array().unwrap(),
-            &vec![serde_json::Value::String("harness.assertion.1".to_string())]
+            &vec![serde_json::Value::String("harness.panic.1".to_string())]
         );
     }
 
@@ -1408,9 +1408,8 @@ mod tests {
         for (status, property_status, reported_oom, prover_status, kind, code, failure_kind) in
             cases
         {
-            let mut processed_items = vec![ParserItem::Result {
-                result: vec![property("assertion", 1, property_status)],
-            }];
+            let mut processed_items =
+                vec![ParserItem::Result { result: vec![property("panic", 1, property_status)] }];
             if reported_oom {
                 processed_items.push(ParserItem::Message {
                     message_text: "Out of memory".to_string(),

@@ -61,16 +61,24 @@ pub enum PropertyClass {
     ///
     /// SPECIAL BEHAVIOR: "Errors" for this type of assertion just mean "reachable" not failure.
     CodeCoverage,
-    /// Ordinary (Rust) assertions and panics.
+    /// Kani's own checks: `kani::assert`, `kani::check` and contract conditions.
     ///
-    /// SPECIAL BEHAVIOR: These assertion failures should be observable during normal execution of Rust code.
-    /// That is, they do not depend on special instrumentation that Kani performs that wouldn't
-    /// otherwise be observable.
+    /// SPECIAL BEHAVIOR: None. Unlike [`PropertyClass::Panic`], a failure is never an expected
+    /// panic and is never assumed away.
     Assertion,
     /// Another intrinsic check.
     ///
     /// SPECIAL BEHAVIOR: Same as SafetyCheck. TODO: Replace this with `SafetyCheck`.
     ExactDiv,
+    /// Rust panics: `panic!`, `assert!` and the other panicking macros, panicking library
+    /// functions such as `Option::unwrap`, and the panics rustc inserts for bounds checks,
+    /// arithmetic overflow and division by zero. Aborts are reported like panics, since Kani
+    /// compiles code with `-C panic=abort`.
+    ///
+    /// SPECIAL BEHAVIOR: These failures are observable during normal execution of Rust code.
+    /// `#[kani::should_panic]` accepts them as expected failures, and `--prove-safety-only`
+    /// assumes they do not occur.
+    Panic,
     /// Another intrinsic check.
     ///
     /// SPECIAL BEHAVIOR: Same as SafetyCheck. TODO: Replace this with `SafetyCheck`.
@@ -133,8 +141,27 @@ impl GotocCtx<'_, '_> {
         message: &str,
         loc: Location,
     ) -> Stmt {
-        if property_class == PropertyClass::Assertion && self.queries.args().prove_safety_only {
+        if property_class == PropertyClass::Panic && self.queries.args().prove_safety_only {
             Stmt::assume(cond, loc)
+        } else if property_class == PropertyClass::Panic
+            && let Some(permitted) = self.panic_permitted_flag()
+        {
+            // The function under contract verification has a `panics_only_if` or `panics_if`
+            // clause: the panic is a failure only if those clauses do not permit it. The path
+            // ends at the panic either way.
+            let message = format!("{message} (not permitted by the contract)");
+            Stmt::block(
+                vec![
+                    Stmt::assert(
+                        cond.clone().or(permitted),
+                        property_class.as_str(),
+                        &message,
+                        loc,
+                    ),
+                    Stmt::assume(cond, loc),
+                ],
+                loc,
+            )
         } else {
             let property_name = property_class.as_str();
             Stmt::block(
@@ -144,6 +171,20 @@ impl GotocCtx<'_, '_> {
                 ],
                 loc,
             )
+        }
+    }
+
+    /// The flag that says whether a panic is permitted by the `panics_only_if` / `panics_if`
+    /// clauses of the function under contract verification (see `kani::internal`), if this
+    /// codegen unit uses those clauses, i.e., if the functions that record them are reachable.
+    fn panic_permitted_flag(&self) -> Option<Expr> {
+        const SETTERS: [&str; 2] =
+            ["__VERIFIER_kani_set_panics_only_if", "__VERIFIER_kani_set_panics_if"];
+        const FLAG: &str = "__CPROVER_kani_panic_permitted";
+        if SETTERS.iter().any(|setter| self.symbol_table.contains((*setter).into())) {
+            self.symbol_table.lookup(FLAG).map(|flag| flag.to_expr().cast_to(Type::bool()))
+        } else {
+            None
         }
     }
 
@@ -242,7 +283,7 @@ impl GotocCtx<'_, '_> {
         let loc = self.codegen_caller_span_stable(span);
         // A projected operand can read memory even when the panic never uses its value.
         let mut statements: Vec<_> = fargs.into_iter().map(|arg| arg.as_stmt(loc)).collect();
-        statements.push(self.codegen_assert_assume_false(PropertyClass::Assertion, &msg, loc));
+        statements.push(self.codegen_assert_assume_false(PropertyClass::Panic, &msg, loc));
         Stmt::block(statements, loc)
     }
 

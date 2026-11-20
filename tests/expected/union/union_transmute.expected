@@ -1,4 +1,4 @@
-main.assertion.1\
+main.panic.1\
          - Status: SUCCESS\
          - Description: "assertion failed: y == 256"
 

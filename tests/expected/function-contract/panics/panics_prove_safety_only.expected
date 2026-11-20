@@ -1,0 +1,9 @@
+Checking harness check_postcondition_kept...
+Failed Checks: |result: &u8| *result == x
+VERIFICATION:- FAILED
+
+Checking harness check_panics_assumed_away...
+VERIFICATION:- SUCCESSFUL
+
+Verification failed for - check_postcondition_kept
+Complete - 1 successfully verified harnesses, 1 failures, 2 total.

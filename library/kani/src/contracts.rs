@@ -206,6 +206,42 @@
 //! Unlike `proof_for_contract` multiple `stub_verified` attributes are allowed
 //! on the same proof harness though they must target different functions.
 //!
+//! ## Panic Conditions
+//!
+//! By default, a [`proof_for_contract`][macro@proof_for_contract] harness reports
+//! every panic of the function under verification as a failure. Two clauses
+//! describe functions that are meant to panic for some inputs:
+//!
+//! - [`panics_only_if(cond)`][macro@panics_only_if]: the function may panic only
+//!   if `cond` held on entry. A panic when `cond` did not hold is a failure.
+//! - [`panics_if(cond)`][macro@panics_if]: the function must panic if `cond` held
+//!   on entry, i.e., returning is a failure. Without a `panics_only_if` clause, it
+//!   may also panic only if `cond` held.
+//!
+//! Both conditions are evaluated on entry, after the preconditions. Undefined
+//! behavior is still checked on every path, including paths that panic, and
+//! postconditions are checked whenever the function returns. For example:
+//!
+//! ```
+//! # use kani::{ensures, panics_if};
+//! // Panics if and only if `divisor == 0`.
+//! #[panics_if(divisor == 0)]
+//! #[ensures(|result : &usize| *result <= dividend)]
+//! fn my_div(dividend: usize, divisor: usize) -> usize {
+//!     dividend / divisor
+//! }
+//! ```
+//!
+//! When the function is replaced by its contract with
+//! [`stub_verified`][macro@stub_verified], the replacement may panic when the
+//! `panics_only_if` condition holds, and panics when the `panics_if` condition
+//! holds. The panic is a panic of the caller, so the caller has to avoid those
+//! inputs or permit the panic in its own contract.
+//!
+//! A panic that these clauses permit is not a failed check, so it does not
+//! satisfy `#[kani::should_panic]`. Under `--prove-safety-only`,
+//! panics are assumed not to occur, so the clauses add no checks.
+//!
 //! ## Inductive Verification
 //!
 //! Function contracts by default use inductive verification to efficiently
@@ -275,4 +311,6 @@
 //! Here, the value stored in `a` is precomputed and remembered after the function
 //! is called, even though the contents of `a` changed during the function execution.
 //!
-pub use super::{ensures, modifies, proof_for_contract, requires, stub_verified};
+pub use super::{
+    ensures, modifies, panics_if, panics_only_if, proof_for_contract, requires, stub_verified,
+};

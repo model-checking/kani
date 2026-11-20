@@ -1,11 +1,11 @@
 Checking harness check_remainder...
 
 RESULTS:
-check_remainder.assertion\
+check_remainder.panic\
 Status: FAILURE\
 Description: "attempt to calculate the remainder with a divisor of zero"
 
-check_remainder.assertion\
+check_remainder.panic\
 Status: FAILURE\
 Description: "attempt to calculate the remainder with overflow"
 
@@ -25,11 +25,11 @@ Failed Checks: attempt to calculate the remainder with a divisor of zero
 Failed Checks: attempt to calculate the remainder with overflow
 
 Checking harness check_division...
-check_division.assertion\
+check_division.panic\
 Status: FAILURE\
 Description: "attempt to divide by zero"
 
-check_division.assertion\
+check_division.panic\
 Status: FAILURE\
 Description: "attempt to divide with overflow"
 
