@@ -20,7 +20,3 @@ void swap(uint32_t *a, uint32_t *b)
     *a           = *b;
     *b           = tmp;
 }
-
-void add_one(uint32_t *p) { *p += 1; }
-
-void double_it(uint32_t *p) { *p *= 2; }

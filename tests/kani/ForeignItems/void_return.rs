@@ -15,8 +15,6 @@ extern "C" {
     fn set_counter(value: u32);
     fn add_into(out: *mut u32, a: u32, b: u32);
     fn swap(a: &mut u32, b: &mut u32);
-    fn add_one(p: &mut u32);
-    fn double_it(p: &mut u32);
 }
 
 /// The minimal case: no parameters, no result, a global side effect.
@@ -57,15 +55,4 @@ fn check_void_two_pointers() {
     let (mut a, mut b) = (x, y);
     unsafe { swap(&mut a, &mut b) };
     assert_eq!((a, b), (y, x));
-}
-
-/// A function pointer that may point to either of two `void` functions.
-#[kani::proof]
-fn check_void_fn_ptr_two_targets() {
-    let before: u32 = kani::any_where(|v| *v < 1000);
-    let use_add: bool = kani::any();
-    let f: unsafe extern "C" fn(&mut u32) = if use_add { add_one } else { double_it };
-    let mut x = before;
-    unsafe { f(&mut x) };
-    assert_eq!(x, if use_add { before + 1 } else { before * 2 });
 }

@@ -20,7 +20,7 @@ use rustc_public::CrateDef;
 use rustc_public::abi::{CallConvention, PassMode};
 use rustc_public::mir::Place;
 use rustc_public::mir::mono::Instance;
-use rustc_public::ty::{RigidTy, TyKind};
+use rustc_public::ty::{RigidTy, Ty, TyKind};
 use tracing::{debug, trace};
 
 lazy_static! {
@@ -76,10 +76,7 @@ impl GotocCtx<'_, '_> {
             // TODO: Add proper casting and clashing definitions check.
             // https://github.com/model-checking/kani/issues/2426
             self.ensure(mangled_fn_name, |gcx, _| {
-                // A C function returning `void` is declared in Rust as returning `()`.
-                // Declare it as returning `void`, not `struct Unit`, so that it links
-                // with its C definition.
-                let typ = gcx.codegen_ffi_type_with(instance, true);
+                let typ = gcx.codegen_ffi_type(instance);
                 Symbol::function(mangled_fn_name, typ, None, instance.name(), loc)
                     .with_is_extern(true)
             })
@@ -164,13 +161,6 @@ impl GotocCtx<'_, '_> {
 
     /// Generate type for the given foreign instance.
     fn codegen_ffi_type(&mut self, instance: Instance) -> Type {
-        self.codegen_ffi_type_with(instance, false)
-    }
-
-    /// Generate type for the given foreign instance. If `unit_as_void`, a function whose
-    /// return type is `()` returns `void`; [`Self::codegen_foreign_call`] does not assign
-    /// the result of such a call.
-    fn codegen_ffi_type_with(&mut self, instance: Instance, unit_as_void: bool) -> Type {
         let fn_name = instance.mangled_name();
         let loc = self.codegen_span_stable(instance.def.span());
         if self.is_unsupported_variadic(instance) {
@@ -192,7 +182,7 @@ impl GotocCtx<'_, '_> {
                     arg_type.as_parameter(Some(arg_name.into()), Some(base_name.into()))
                 })
                 .collect();
-            let ret_type = self.codegen_ty_stable(sig.output());
+            let ret_type = self.codegen_ffi_ret_type(sig.output());
             return Type::variadic_code(params, ret_type);
         }
         let fn_abi = instance.fn_abi().unwrap();
@@ -225,16 +215,27 @@ impl GotocCtx<'_, '_> {
                 arg_type.as_parameter(Some(arg_name.into()), Some(base_name.into()))
             })
             .collect();
-        let ret_type = if unit_as_void && fn_abi.ret.ty.kind().is_unit() {
-            Type::empty()
-        } else {
-            self.codegen_ty_stable(fn_abi.ret.ty)
-        };
+        let ret_type = self.codegen_ffi_ret_type(fn_abi.ret.ty);
 
         if fn_abi.c_variadic {
             Type::variadic_code(params, ret_type)
         } else {
             Type::code(params, ret_type)
+        }
+    }
+
+    /// Generate the return type of a foreign function.
+    ///
+    /// A C function returning `void` is declared in Rust as returning `()`, or `!` if it does
+    /// not return. Declare it as returning `void`, not `struct Unit` (or `struct Never`), so that
+    /// it links with its C definition. [`Self::codegen_foreign_call`] does not assign the result
+    /// of such a call.
+    fn codegen_ffi_ret_type(&mut self, ret_ty: Ty) -> Type {
+        let ret_kind = ret_ty.kind();
+        if ret_kind.is_unit() || matches!(ret_kind, TyKind::RigidTy(RigidTy::Never)) {
+            Type::empty()
+        } else {
+            self.codegen_ty_stable(ret_ty)
         }
     }
 
