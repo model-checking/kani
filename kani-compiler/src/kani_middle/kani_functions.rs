@@ -232,6 +232,8 @@ pub enum KaniHook {
     IsAllocated,
     #[strum(serialize = "PanicHook")]
     Panic,
+    #[strum(serialize = "PanicAssertHook")]
+    PanicAssert,
     #[strum(serialize = "PointerObjectHook")]
     PointerObject,
     #[strum(serialize = "PointerOffsetHook")]

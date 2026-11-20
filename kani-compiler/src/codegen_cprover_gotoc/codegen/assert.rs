@@ -61,16 +61,23 @@ pub enum PropertyClass {
     ///
     /// SPECIAL BEHAVIOR: "Errors" for this type of assertion just mean "reachable" not failure.
     CodeCoverage,
-    /// Ordinary (Rust) assertions and panics.
+    /// Kani's own checks: `kani::assert`, `kani::check` and contract conditions.
     ///
-    /// SPECIAL BEHAVIOR: These assertion failures should be observable during normal execution of Rust code.
-    /// That is, they do not depend on special instrumentation that Kani performs that wouldn't
-    /// otherwise be observable.
+    /// SPECIAL BEHAVIOR: None. Unlike [`PropertyClass::Panic`], a failure is never an expected
+    /// panic and is never assumed away.
     Assertion,
     /// Another intrinsic check.
     ///
     /// SPECIAL BEHAVIOR: Same as SafetyCheck. TODO: Replace this with `SafetyCheck`.
     ExactDiv,
+    /// Rust panics: `panic!`, `assert!` and the other panicking macros, panicking library
+    /// functions such as `Option::unwrap`, and the panics rustc inserts for bounds checks,
+    /// arithmetic overflow and division by zero.
+    ///
+    /// SPECIAL BEHAVIOR: These failures are observable during normal execution of Rust code.
+    /// `#[kani::should_panic]` accepts them as expected failures, and `--prove-safety-only`
+    /// assumes they do not occur.
+    Panic,
     /// Another intrinsic check.
     ///
     /// SPECIAL BEHAVIOR: Same as SafetyCheck. TODO: Replace this with `SafetyCheck`.
@@ -133,7 +140,7 @@ impl GotocCtx<'_, '_> {
         message: &str,
         loc: Location,
     ) -> Stmt {
-        if property_class == PropertyClass::Assertion && self.queries.args().prove_safety_only {
+        if property_class == PropertyClass::Panic && self.queries.args().prove_safety_only {
             Stmt::assume(cond, loc)
         } else {
             let property_name = property_class.as_str();
@@ -239,7 +246,7 @@ impl GotocCtx<'_, '_> {
         let msg = self.extract_const_message(&fargs[0]).unwrap_or(String::from(
             "This is a placeholder message; Kani doesn't support message formatted at runtime",
         ));
-        self.codegen_fatal_error(PropertyClass::Assertion, &msg, span)
+        self.codegen_fatal_error(PropertyClass::Panic, &msg, span)
     }
 
     /// Kani does not currently support all MIR constructs.

@@ -115,7 +115,7 @@ impl CodegenUnits {
                     *kani_fns.get(&KaniModel::Any.into()).unwrap(),
                     *kani_fns.get(&KaniModel::BoundedAny.into()).unwrap(),
                     SmartPointerModels::from_kani_functions(kani_fns),
-                    *kani_fns.get(&KaniHook::Assert.into()).unwrap(),
+                    crate::kani_middle::mined_invariants::AssertFns::from_kani_functions(kani_fns),
                     // Require *all three* unbounded models: eligibility admits `&[T]`, `&mut [T]`
                     // and `Vec<T>`, but generation resolves each model independently, so gating on
                     // only one could report a `&mut [T]`/`Vec<T>` arg as unbounded-verified while
@@ -1211,7 +1211,7 @@ fn automatic_harness_partition(
     kani_any_def: FnDef,
     kani_bounded_any_def: FnDef,
     smart_pointer_models: SmartPointerModels,
-    kani_assert_def: FnDef,
+    assert_fns: crate::kani_middle::mined_invariants::AssertFns,
     unbounded_slice_available: bool,
     nondet_fns: &NondetFnModels,
 ) -> (Vec<(Instance, AutoHarnessCaveats)>, BTreeMap<String, AutoHarnessSkipReason>) {
@@ -1437,7 +1437,7 @@ fn automatic_harness_partition(
                                 tcx,
                                 arg.ty,
                                 kani_any_def,
-                                kani_assert_def,
+                                assert_fns,
                                 &mut ty_arbitrary_cache_ctor,
                                 &mut vec![],
                             )

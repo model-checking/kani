@@ -10,7 +10,9 @@ use crate::args::ReachabilityType;
 use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::codegen_units::CodegenUnit;
 use crate::kani_middle::kani_functions::{KaniFunction, KaniHook, KaniIntrinsic, KaniModel};
-use crate::kani_middle::mined_invariants::{MinedConjunct, MinedExpr, mine_self_assert_conjuncts};
+use crate::kani_middle::mined_invariants::{
+    AssertFns, MinedConjunct, MinedExpr, mine_self_assert_conjuncts,
+};
 use crate::kani_middle::transform::body::{
     InsertPosition, MutableBody, SourceInstruction, synthetic_source_info,
 };
@@ -69,9 +71,9 @@ struct AnyModels {
     /// The FnDef of KaniHook::Assume (used for layout-niche assumptions and constructor
     /// success).
     kani_assume: FnDef,
-    /// The FnDef of KaniHook::Assert (rewritten into assumptions when inlining
-    /// assert-guarded constructors).
-    kani_assert: FnDef,
+    /// The assertion functions (rewritten into assumptions when inlining assert-guarded
+    /// constructors; `kani::assert` is also used to insert checks).
+    assert_fns: AssertFns,
     /// The FnDef of KaniModel::AssumeSafe
     kani_assume_safe: FnDef,
     /// The FnDef of KaniModel::BoundedAny
@@ -115,7 +117,7 @@ impl AnyModels {
                 .get(&KaniModel::AnyCharSliceSearcher.into())
                 .unwrap(),
             kani_assume: *kani_fns.get(&KaniHook::Assume.into()).unwrap(),
-            kani_assert: *kani_fns.get(&KaniHook::Assert.into()).unwrap(),
+            assert_fns: AssertFns::from_kani_functions(kani_fns),
             kani_assume_safe: *kani_fns.get(&KaniModel::AssumeSafe.into()).unwrap(),
             kani_bounded_any: *kani_fns.get(&KaniModel::BoundedAny.into()).unwrap(),
             smart_pointer_models: SmartPointerModels::from_kani_functions(kani_fns),
@@ -388,7 +390,7 @@ const INLINE_MAX_BLOCKS: usize = 32;
 fn inline_with_assumed_panics(
     tcx: TyCtxt,
     kani_assume: FnDef,
-    kani_assert: FnDef,
+    assert_fns: AssertFns,
     body: &mut MutableBody,
     source: &mut SourceInstruction,
     callee: Instance,
@@ -408,7 +410,7 @@ fn inline_with_assumed_panics(
 
     struct Ctx<'tcx, 'a> {
         tcx: TyCtxt<'tcx>,
-        kani_assert: FnDef,
+        assert_fns: AssertFns,
         assume_inst: Instance,
         body: &'a mut MutableBody,
         planned: Vec<Option<BasicBlock>>,
@@ -450,7 +452,7 @@ fn inline_with_assumed_panics(
                 TerminatorKind::Call { func, .. } => {
                     match func.ty(fn_body.locals()).map(|t| t.kind()) {
                         Ok(TyKind::RigidTy(RigidTy::FnDef(def, _))) => {
-                            def == self.kani_assert
+                            self.assert_fns.contains(def)
                                 || is_assert_unchecked_def(def)
                                 || is_panic_def(self.tcx, def)
                         }
@@ -509,7 +511,7 @@ fn inline_with_assumed_panics(
                             _ => None,
                         };
                         if let Some((def, _)) = &fn_def
-                            && (*def == self.kani_assert || is_assert_unchecked_def(*def))
+                            && (self.assert_fns.contains(*def) || is_assert_unchecked_def(*def))
                             && let Some(cond) = args.first()
                         {
                             // kani::assert(cond, msg) / assert_unchecked(cond) -> assume(cond)
@@ -638,7 +640,7 @@ fn inline_with_assumed_panics(
         local_map.push(body.new_local(decl.ty, span, Mutability::Mut));
     }
 
-    let mut ctx = Ctx { tcx, kani_assert, assume_inst, body, planned: vec![], block_offset, span };
+    let mut ctx = Ctx { tcx, assert_fns, assume_inst, body, planned: vec![], block_offset, span };
     let outer_base = ctx.alloc(callee_body.blocks.len());
     if !ctx.plan_body(&callee_body, &local_map, outer_base, continuation, 0) {
         return None;
@@ -1833,7 +1835,7 @@ fn call_kani_any_for_ty(
         if models.constructor_args && matches!(ty.kind(), TyKind::RigidTy(RigidTy::Adt(..))) {
             let conjuncts = mined_cache
                 .entry(ty)
-                .or_insert_with(|| mine_self_assert_conjuncts(tcx, ty, models.kani_assert))
+                .or_insert_with(|| mine_self_assert_conjuncts(tcx, ty, models.assert_fns))
                 .clone();
             if !conjuncts.is_empty() {
                 assume_mined_invariants(tcx, models.kani_assume, body, source, lcl, ty, &conjuncts);
@@ -1966,7 +1968,7 @@ impl AutomaticArbitraryPass {
         let ret_lcl = inline_with_assumed_panics(
             tcx,
             self.models.kani_assume,
-            self.models.kani_assert,
+            self.models.assert_fns,
             &mut new_body,
             &mut source,
             ctor,
@@ -2605,13 +2607,13 @@ impl TransformPass for AutomaticHarnessPass {
                 let conjuncts = mined_cache
                     .entry(check_ty)
                     .or_insert_with(|| {
-                        mine_self_assert_conjuncts(tcx, check_ty, self.models.kani_assert)
+                        mine_self_assert_conjuncts(tcx, check_ty, self.models.assert_fns)
                     })
                     .clone();
                 if !conjuncts.is_empty() {
                     check_mined_invariants(
                         tcx,
-                        self.models.kani_assert,
+                        self.models.assert_fns.kani_assert,
                         &mut harness_body,
                         &mut source,
                         lcl,

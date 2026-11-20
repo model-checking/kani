@@ -558,6 +558,19 @@ macro_rules! kani_intrinsics {
             panic!("{}", message)
         }
 
+        /// A Rust assertion: like [`assert`], but a failure is a panic rather than a Kani check.
+        ///
+        /// Kani's `assert!`, `assert_eq!` and `assert_ne!` overrides call this function, so
+        /// `#[kani::should_panic]` and `--prove-safety-only` treat their failures as panics, and
+        /// treat `kani::assert` failures as failed checks. For concrete executions, it invokes the
+        /// regular `core::assert!()` macro.
+        #[inline(never)]
+        #[kanitool::fn_marker = "PanicAssertHook"]
+        #[doc(hidden)]
+        pub const fn panic_assert(cond: bool, msg: &'static str) {
+            assert!(cond, "{}", msg);
+        }
+
         #[doc(hidden)]
         #[allow(dead_code)]
         #[kanitool::fn_marker = "SafetyCheckHook"]

@@ -55,9 +55,11 @@ In particular, using the `#[kani::should_panic]` attribute will return one of th
   - `VERIFICATION:- FAILED (encountered failures other than panics, which were unexpected)` if there were failed checks but not all them were related to panics.
   - `VERIFICATION:- SUCCESSFUL (encountered one or more panics as expected)` otherwise.
 
-At the moment, to determine if a check is related to a panic, we check if its class is `assertion`.
+To determine if a check is related to a panic, we check if its class is `panic`.
 The class is the second member in the property name, the triple that's printed after `Check X: `: `<function>.<class>.<number>`.
-For example, the class in `Check 1: my_harness.assertion.1` is `assertion`, so this check is considered to be related to a panic.
+For example, the class in `Check 1: my_harness.panic.1` is `panic`, so this check is considered to be related to a panic.
+Panics include `panic!`, `assert!`, `assert_eq!` and the other panicking macros, panicking library functions such as `Option::unwrap`, and the panics that Rust inserts for out-of-bounds indexing, arithmetic overflow and division by zero.
+Kani's own checks are not panics: a failed `kani::assert`, `kani::check` or contract postcondition (class `assertion`) makes a `#[kani::should_panic]` harness fail.
 
 > **NOTE**: The `#[kani::should_panic]` is only recommended for writing
 > harnesses which complement existing harnesses that don't use the same
