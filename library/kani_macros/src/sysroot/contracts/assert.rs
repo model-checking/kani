@@ -29,7 +29,7 @@ impl<'a> ContractConditionsHandler<'a> {
         quote!(
             #[kanitool::is_contract_generated(assert)]
             #[allow(dead_code, unused_variables, unused_mut)]
-            let mut #assert_ident = || #output #body;
+            let mut #assert_ident = kani_force_fn_once(|| #output #body);
         )
     }
 
@@ -44,14 +44,14 @@ impl<'a> ContractConditionsHandler<'a> {
     fn initial_assert_stmts(&self) -> Vec<Stmt> {
         let body_wrapper_ident = Ident::new("body_wrapper", Span::call_site());
         let output = &self.annotated_fn.sig.output;
-        let return_type = return_type_to_type(&output);
+        let return_type = return_type_to_type(output);
         let stmts = &self.annotated_fn.block.stmts;
         let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
 
         parse_quote!(
-            let mut body_wrapper = || #output {
+            let mut body_wrapper = kani_force_fn_once(|| #output {
                 #(#stmts)*
-            };
+            });
             let #result : #return_type = #body_wrapper_ident();
             #result
         )
@@ -64,16 +64,19 @@ impl<'a> ContractConditionsHandler<'a> {
         let Self { attr_copy, .. } = self;
         match &self.condition_type {
             ContractConditionsData::Requires { attr } => {
+                let assert_bracketed =
+                    bracket_clause_stmt(quote!(kani::assert(#attr, stringify!(#attr_copy));));
                 quote!({
-                    kani::assert(#attr, stringify!(#attr_copy));
+                    #assert_bracketed
                     #(#body_stmts)*
                 })
             }
             ContractConditionsData::Ensures { attr } => {
                 let (remembers, ensures_clause) = build_ensures(attr);
+                let ensures_bracketed = bracket_clause_expr(quote!(#ensures_clause));
 
                 let exec_postconditions = quote!(
-                    kani::assert(#ensures_clause, stringify!(#attr_copy));
+                    kani::assert(#ensures_bracketed, stringify!(#attr_copy));
                 );
 
                 let return_expr = body_stmts.pop();

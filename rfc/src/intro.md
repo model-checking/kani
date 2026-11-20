@@ -61,8 +61,10 @@ This is the overall workflow for the RFC process:
    4. Add regression tests to cover all expected behaviors and unit tests whenever possible.
 5. Stabilization.
    1. Propose to stabilize the feature when feature is well tested and UX has received positive feedback.
-   2. Create a new PR that removes the `-Z <FEATURE_ID>` guard and that marks the RFC status as "STABLE".
+   2. Create a new PR that makes the option a no-op with a deprecation warning.
+   3. *Only after the PR from #2 is included in a release*, create another PR that actually removes the option and marks the RFC status as "STABLE".
       1. Make sure the RFC reflects the final implementation and user experience.
+      2. See [#3561](https://github.com/model-checking/kani/issues/3561) for an example of such a two-phase deletion, where we first deprecate the option in one release, then remove it in the next. See also [0006-unstable-api](rfcs/0006-unstable-api.md).
    3. In some cases, we might decide not to incorporate a feature
       (E.g.: performance degradation, bad user experience, better alternative).
       In those cases, please update the RFC status to "CANCELLED as per <PR_LINK | ISSUE_LINK>" and remove the code

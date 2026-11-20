@@ -21,8 +21,8 @@
 //! they fit in.
 
 use crate::kani_middle::attributes;
-use stable_mir::mir::mono::Instance;
-use stable_mir::ty::FnDef;
+use rustc_public::mir::mono::Instance;
+use rustc_public::ty::FnDef;
 use std::collections::HashMap;
 use std::str::FromStr;
 use strum::IntoEnumIterator;
@@ -63,10 +63,84 @@ pub enum KaniIntrinsic {
 pub enum KaniModel {
     #[strum(serialize = "AlignOfDynObjectModel")]
     AlignOfDynObject,
+    #[strum(serialize = "NondetFn0Model")]
+    NondetFn0,
+    #[strum(serialize = "NondetFn1Model")]
+    NondetFn1,
+    #[strum(serialize = "NondetFn1RefModel")]
+    NondetFn1Ref,
+    #[strum(serialize = "NondetFn2Model")]
+    NondetFn2,
+    #[strum(serialize = "NondetFn2RefRefModel")]
+    NondetFn2RefRef,
+    #[strum(serialize = "NondetFn2RefValModel")]
+    NondetFn2RefVal,
+    #[strum(serialize = "NondetFn2ValRefModel")]
+    NondetFn2ValRef,
+    #[strum(serialize = "NondetFn3Model")]
+    NondetFn3,
     #[strum(serialize = "AlignOfValRawModel")]
     AlignOfVal,
+    #[strum(serialize = "AnySliceMutUnboundedModel")]
+    AnySliceMutUnbounded,
+    #[strum(serialize = "AnySliceRefUnboundedModel")]
+    AnySliceRefUnbounded,
+    #[strum(serialize = "AnyVecUnboundedModel")]
+    AnyVecUnbounded,
     #[strum(serialize = "AnyModel")]
     Any,
+    #[strum(serialize = "AnyArcModel")]
+    AnyArc,
+    #[strum(serialize = "AnyBoxModel")]
+    AnyBox,
+    #[strum(serialize = "AnyByteStrRefModel")]
+    AnyByteStrRef,
+    #[strum(serialize = "AnyCStrRefModel")]
+    AnyCStrRef,
+    #[strum(serialize = "AnyCharArrayRefSearcherModel")]
+    AnyCharArrayRefSearcher,
+    #[strum(serialize = "AnyCharArraySearcherModel")]
+    AnyCharArraySearcher,
+    #[strum(serialize = "DebugCLikeEnumWriteStrModel")]
+    DebugCLikeEnumWriteStr,
+    #[strum(serialize = "DebugStructFieldsFinishModel")]
+    DebugStructFieldsFinish,
+    #[strum(serialize = "AnyCharSliceSearcherModel")]
+    AnyCharSliceSearcher,
+    #[strum(serialize = "AnyFormatterModel")]
+    AnyFormatter,
+    #[strum(serialize = "AnyPtrModel")]
+    AnyPtr,
+    #[strum(serialize = "AnyRcModel")]
+    AnyRc,
+    #[strum(serialize = "AnySliceRefModel")]
+    AnySliceRef,
+    #[strum(serialize = "AnyStrRefModel")]
+    AnyStrRef,
+    #[strum(serialize = "AnyWtf8RefModel")]
+    AnyWtf8Ref,
+    #[strum(serialize = "AssumeSafeModel")]
+    AssumeSafe,
+    #[strum(serialize = "BoundedAnyModel")]
+    BoundedAny,
+    #[strum(serialize = "CheckBinaryFmtModel")]
+    CheckBinaryFmt,
+    #[strum(serialize = "CheckDebugFmtModel")]
+    CheckDebugFmt,
+    #[strum(serialize = "CheckDisplayFmtModel")]
+    CheckDisplayFmt,
+    #[strum(serialize = "CheckLowerExpFmtModel")]
+    CheckLowerExpFmt,
+    #[strum(serialize = "CheckLowerHexFmtModel")]
+    CheckLowerHexFmt,
+    #[strum(serialize = "CheckOctalFmtModel")]
+    CheckOctalFmt,
+    #[strum(serialize = "CheckPointerFmtModel")]
+    CheckPointerFmt,
+    #[strum(serialize = "CheckUpperExpFmtModel")]
+    CheckUpperExpFmt,
+    #[strum(serialize = "CheckUpperHexFmtModel")]
+    CheckUpperHexFmt,
     #[strum(serialize = "CopyInitStateModel")]
     CopyInitState,
     #[strum(serialize = "CopyInitStateSingleModel")]
@@ -75,6 +149,12 @@ pub enum KaniModel {
     LoadArgument,
     #[strum(serialize = "InitializeMemoryInitializationStateModel")]
     InitializeMemoryInitializationState,
+    #[strum(serialize = "EnterContractClauseModel")]
+    EnterContractClause,
+    #[strum(serialize = "ExitContractClauseModel")]
+    ExitContractClause,
+    #[strum(serialize = "InContractClauseModel")]
+    InContractClause,
     #[strum(serialize = "IsPtrInitializedModel")]
     IsPtrInitialized,
     #[strum(serialize = "IsStrPtrInitializedModel")]
@@ -87,8 +167,10 @@ pub enum KaniModel {
     Offset,
     #[strum(serialize = "PtrOffsetFromModel")]
     PtrOffsetFrom,
-    #[strum(serialize = "PtrSubPtrModel")]
-    PtrSubPtr,
+    #[strum(serialize = "PtrOffsetFromUnsignedModel")]
+    PtrOffsetFromUnsigned,
+    #[strum(serialize = "ResetContractClauseDepthModel")]
+    ResetContractClauseDepth,
     #[strum(serialize = "RunContractModel")]
     RunContract,
     #[strum(serialize = "RunLoopContractModel")]
@@ -99,6 +181,8 @@ pub enum KaniModel {
     SetSliceChunkPtrInitialized,
     #[strum(serialize = "SetSlicePtrInitializedModel")]
     SetSlicePtrInitialized,
+    #[strum(serialize = "PanicStub")]
+    PanicStub,
     #[strum(serialize = "SetStrPtrInitializedModel")]
     SetStrPtrInitialized,
     #[strum(serialize = "SizeOfDynObjectModel")]
@@ -127,12 +211,18 @@ pub enum KaniHook {
     AnyRaw,
     #[strum(serialize = "AssertHook")]
     Assert,
+    #[strum(serialize = "SliceValidityAssumeHook")]
+    SliceValidityAssume,
     #[strum(serialize = "AssumeHook")]
     Assume,
     #[strum(serialize = "CheckHook")]
     Check,
     #[strum(serialize = "CoverHook")]
     Cover,
+    #[strum(serialize = "ExistsHook")]
+    Exists,
+    #[strum(serialize = "ForallHook")]
+    Forall,
     // TODO: this is temporarily implemented as a hook, but should be implemented as an intrinsic
     #[strum(serialize = "FloatToIntInRangeHook")]
     FloatToIntInRange,
@@ -148,10 +238,58 @@ pub enum KaniHook {
     PointerOffset,
     #[strum(serialize = "SafetyCheckHook")]
     SafetyCheck,
+    #[strum(serialize = "SafetyCheckNoAssumeHook")]
+    SafetyCheckNoAssume,
     #[strum(serialize = "UnsupportedCheckHook")]
     UnsupportedCheck,
     #[strum(serialize = "UntrackedDerefHook")]
     UntrackedDeref,
+}
+
+impl KaniModel {
+    /// Whether this model may legitimately be absent. These models require `alloc` and are
+    /// only defined in the `kani` library, not in `core::kani` (the `no_core` flow used by
+    /// `kani verify-std`). Code retrieving optional models must handle their absence.
+    pub fn is_optional(&self) -> bool {
+        matches!(
+            self,
+            KaniModel::AnyArc
+                | KaniModel::AnyBox
+                | KaniModel::AnyRc
+                | KaniModel::AnySliceMutUnbounded
+                | KaniModel::AnySliceRefUnbounded
+                | KaniModel::AnyVecUnbounded
+                | KaniModel::NondetFn0
+                | KaniModel::NondetFn1
+                | KaniModel::NondetFn1Ref
+                | KaniModel::NondetFn2
+                | KaniModel::NondetFn2RefRef
+                | KaniModel::NondetFn2RefVal
+                | KaniModel::NondetFn2ValRef
+                | KaniModel::NondetFn3
+        )
+    }
+}
+
+impl KaniHook {
+    /// Whether this hook may legitimately be absent. `SliceValidityAssume` is only defined in the
+    /// `kani` library, not in `core::kani` (the `no_core` flow used by `kani verify-std`), and it
+    /// is not monomorphized into every crate that is compiled.
+    pub fn is_optional(&self) -> bool {
+        matches!(self, KaniHook::SliceValidityAssume)
+    }
+}
+
+impl KaniFunction {
+    /// Whether this function may legitimately be absent from the crate being compiled,
+    /// c.f. [KaniModel::is_optional] and [KaniHook::is_optional].
+    pub fn is_optional(&self) -> bool {
+        match self {
+            KaniFunction::Model(model) => model.is_optional(),
+            KaniFunction::Hook(hook) => hook.is_optional(),
+            KaniFunction::Intrinsic(_) => false,
+        }
+    }
 }
 
 impl From<KaniIntrinsic> for KaniFunction {
@@ -189,20 +327,25 @@ impl TryFrom<FnDef> for KaniFunction {
     }
 }
 
+/// Tries to get the [KaniFunction] from a given attribute string.
+pub fn try_get_kani_function(fn_attr: &str) -> Option<KaniFunction> {
+    if let Ok(intrinsic) = KaniIntrinsic::from_str(fn_attr) {
+        Some(intrinsic.into())
+    } else if let Ok(model) = KaniModel::from_str(fn_attr) {
+        Some(model.into())
+    } else if let Ok(hook) = KaniHook::from_str(fn_attr) {
+        Some(hook.into())
+    } else {
+        None
+    }
+}
+
 impl TryFrom<Instance> for KaniFunction {
     type Error = ();
 
     fn try_from(instance: Instance) -> Result<Self, Self::Error> {
-        let value = attributes::fn_marker(instance.def).ok_or(())?;
-        if let Ok(intrinsic) = KaniIntrinsic::from_str(&value) {
-            Ok(intrinsic.into())
-        } else if let Ok(model) = KaniModel::from_str(&value) {
-            Ok(model.into())
-        } else if let Ok(hook) = KaniHook::from_str(&value) {
-            Ok(hook.into())
-        } else {
-            Err(())
-        }
+        let fn_attr = attributes::fn_marker(instance.def).ok_or(())?;
+        try_get_kani_function(&fn_attr).ok_or(())
     }
 }
 
@@ -212,10 +355,10 @@ impl TryFrom<Instance> for KaniFunction {
 /// If there's no Kani crate, look for the items in `core` since we could be using `kani_core`.
 /// Note that users could have other `kani` crates, so we look in all the ones we find.
 pub fn find_kani_functions() -> HashMap<KaniFunction, FnDef> {
-    let mut kani = stable_mir::find_crates("kani");
+    let mut kani = rustc_public::find_crates("kani");
     if kani.is_empty() {
         // In case we are using `kani_core`.
-        kani.extend(stable_mir::find_crates("core"));
+        kani.extend(rustc_public::find_crates("core"));
     }
     debug!(?kani, "find_kani_functions");
     let fns = kani
@@ -247,8 +390,8 @@ pub fn find_kani_functions() -> HashMap<KaniFunction, FnDef> {
 /// This is a utility function used to ensure that we have found all the expected functions, as well
 /// as to ensure that the cached IDs are up-to-date.
 ///
-/// The second condition is to ensure the cached StableMIR `FnDef` objects are still valid, i.e.:,
-/// that we are not storing them past the StableMIR `run` context.
+/// The second condition is to ensure the cached rustc_public `FnDef` objects are still valid, i.e.:,
+/// that we are not storing them past the rustc_public `run` context.
 pub fn validate_kani_functions(kani_funcs: &HashMap<KaniFunction, FnDef>) {
     let mut missing = 0u8;
     for func in KaniIntrinsic::iter()
@@ -258,10 +401,14 @@ pub fn validate_kani_functions(kani_funcs: &HashMap<KaniFunction, FnDef>) {
     {
         if let Some(fn_def) = kani_funcs.get(&func) {
             assert_eq!(KaniFunction::try_from(*fn_def), Ok(func), "Unexpected function marker");
-        } else {
+        } else if !func.is_optional() {
             tracing::error!(?func, "Missing kani function");
             missing += 1;
         }
     }
-    assert_eq!(missing, 0, "Failed to find `{missing}` Kani functions");
+    // If this is failing for #[no_std] crates, try explicitly adding `extern crate kani` to the crate root.
+    // See https://github.com/model-checking/kani/issues/3906 for why this is required.
+    if missing != 0 {
+        tracing::error!("Failed to find `{missing}` Kani functions")
+    }
 }

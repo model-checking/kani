@@ -14,34 +14,36 @@
 //!
 //! We have kept this module agnostic of any Kani code in case we can contribute this back to rustc.
 //!
-//! Note that this is a copy of `reachability.rs` that uses StableMIR but the public APIs are still
+//! Note that this is a copy of `reachability.rs` that uses rustc_public but the public APIs are still
 //! kept with internal APIs.
 use tracing::{debug, debug_span, trace};
 
 use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_data_structures::fx::FxHashSet;
-use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
+use rustc_data_structures::stable_hash::{StableHash, StableHasher};
 use rustc_middle::ty::{TyCtxt, VtblEntry};
-use rustc_session::config::OutputType;
-use rustc_smir::rustc_internal;
-use stable_mir::CrateItem;
-use stable_mir::mir::alloc::{AllocId, GlobalAlloc};
-use stable_mir::mir::mono::{Instance, InstanceKind, MonoItem, StaticDef};
-use stable_mir::mir::{
+use rustc_public::CrateItem;
+use rustc_public::mir::alloc::{AllocId, GlobalAlloc};
+use rustc_public::mir::mono::{Instance, InstanceKind, MonoItem, StaticDef};
+use rustc_public::mir::{
     Body, CastKind, ConstOperand, MirVisitor, PointerCoercion, Rvalue, Terminator, TerminatorKind,
     visit::Location,
 };
-use stable_mir::ty::{Allocation, ClosureKind, ConstantKind, RigidTy, Ty, TyKind};
-use stable_mir::{CrateDef, ItemKind};
+use rustc_public::rustc_internal;
+use rustc_public::ty::{Allocation, ClosureKind, ConstantKind, RigidTy, Ty, TyKind};
+use rustc_public::{CrateDef, ItemKind};
+#[cfg(debug_assertions)]
+use rustc_session::config::OutputType;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
-use std::{
-    collections::{HashMap, HashSet},
-    fs::File,
-    io::{BufWriter, Write},
-};
+#[cfg(debug_assertions)]
+use std::fs::File;
+#[cfg(debug_assertions)]
+use std::io::{BufWriter, Write};
 
 use crate::kani_middle::coercion;
 use crate::kani_middle::coercion::CoercionBase;
+use crate::kani_middle::is_anon_static;
 use crate::kani_middle::transform::BodyTransformation;
 
 /// Collect all reachable items starting from the given starting points.
@@ -78,7 +80,7 @@ pub fn filter_crate_items<F>(tcx: TyCtxt, predicate: F) -> Vec<Instance>
 where
     F: Fn(TyCtxt, Instance) -> bool,
 {
-    let crate_items = stable_mir::all_local_items();
+    let crate_items = rustc_public::all_local_items();
     // Filter regular items.
     crate_items
         .iter()
@@ -93,36 +95,6 @@ where
                 .flatten()
         })
         .collect::<Vec<_>>()
-}
-
-/// Use a predicate to find `const` declarations, then extract all items reachable from them.
-///
-/// Probably only specifically useful with a predicate to find `TestDescAndFn` const declarations from
-/// tests and extract the closures from them.
-pub fn filter_const_crate_items<F>(
-    tcx: TyCtxt,
-    transformer: &mut BodyTransformation,
-    mut predicate: F,
-) -> Vec<MonoItem>
-where
-    F: FnMut(TyCtxt, Instance) -> bool,
-{
-    let crate_items = stable_mir::all_local_items();
-    let mut roots = Vec::new();
-    // Filter regular items.
-    for item in crate_items {
-        // Only collect monomorphic items.
-        if let Ok(instance) = Instance::try_from(item) {
-            if predicate(tcx, instance) {
-                let body = transformer.body(tcx, instance);
-                let mut collector =
-                    MonoItemsFnCollector { tcx, body: &body, collected: FxHashSet::default() };
-                collector.visit_body(&body);
-                roots.extend(collector.collected.into_iter());
-            }
-        }
-    }
-    roots.into_iter().map(|root| root.item).collect()
 }
 
 /// Reason for introducing an edge in the call graph.
@@ -199,10 +171,10 @@ impl<'tcx, 'a> MonoItemsCollector<'tcx, 'a> {
     /// Visit a function and collect all mono-items reachable from its instructions.
     fn visit_fn(&mut self, instance: Instance) -> Vec<CollectedItem> {
         let _guard = debug_span!("visit_fn", function=?instance).entered();
-        let body = self.transformer.body(self.tcx, instance);
+        let body = self.transformer.body_ref(self.tcx, instance);
         let mut collector =
-            MonoItemsFnCollector { tcx: self.tcx, collected: FxHashSet::default(), body: &body };
-        collector.visit_body(&body);
+            MonoItemsFnCollector { tcx: self.tcx, collected: FxHashSet::default(), body };
+        collector.visit_body(body);
         collector.collected.into_iter().collect()
     }
 
@@ -211,20 +183,25 @@ impl<'tcx, 'a> MonoItemsCollector<'tcx, 'a> {
         let _guard = debug_span!("visit_static", ?def).entered();
         let mut next_items = vec![];
 
-        // Collect drop function.
-        let static_ty = def.ty();
-        let instance = Instance::resolve_drop_in_place(static_ty);
-        next_items
-            .push(CollectedItem { item: instance.into(), reason: CollectionReason::StaticDrop });
+        // Collect drop function, unless it's an anonymous static.
+        if !is_anon_static(self.tcx, def.def_id()) {
+            let static_ty = def.ty();
+            let instance = Instance::resolve_drop_in_place(static_ty);
+            next_items.push(CollectedItem {
+                item: instance.into(),
+                reason: CollectionReason::StaticDrop,
+            });
 
-        // Collect initialization.
-        let alloc = def.eval_initializer().unwrap();
-        for (_, prov) in alloc.provenance.ptrs {
-            next_items.extend(
-                collect_alloc_items(prov.0)
-                    .into_iter()
-                    .map(|item| CollectedItem { item, reason: CollectionReason::Static }),
-            );
+            // Collect initialization.
+            let alloc = def.eval_initializer().unwrap();
+            debug!(?alloc, "visit_static: initializer");
+            for (_, prov) in alloc.provenance.ptrs {
+                next_items.extend(
+                    collect_alloc_items(self.tcx, prov.0)
+                        .into_iter()
+                        .map(|item| CollectedItem { item, reason: CollectionReason::Static }),
+                );
+            }
         }
 
         next_items
@@ -294,16 +271,16 @@ impl MonoItemsFnCollector<'_, '_> {
                 assert!(is_direct_call, "Expected direct call {instance:?}");
                 false
             }
+            InstanceKind::LlvmIntrinsic => {
+                // LLVM intrinsics have no Rust body to collect.
+                assert!(is_direct_call, "Expected direct call {instance:?}");
+                false
+            }
             InstanceKind::Intrinsic => {
                 // Intrinsics may have a fallback body.
                 assert!(is_direct_call, "Expected direct call {instance:?}");
-                let TyKind::RigidTy(RigidTy::FnDef(def, _)) = instance.ty().kind() else {
-                    unreachable!("Expected function type for intrinsic: {instance:?}")
-                };
-                // The compiler is currently transitioning how to handle intrinsic fallback body.
-                // Until https://github.com/rust-lang/project-stable-mir/issues/79 is implemented
-                // we have to check `must_be_overridden` and `has_body`.
-                !def.as_intrinsic().unwrap().must_be_overridden() && instance.has_body()
+                // Collect the fallback body only if codegen uses it.
+                !crate::intrinsics::uses_kani_model(&instance)
             }
             InstanceKind::Shim | InstanceKind::Item => true,
         };
@@ -323,7 +300,7 @@ impl MonoItemsFnCollector<'_, '_> {
         debug!(?alloc, "collect_allocation");
         for (_, id) in &alloc.provenance.ptrs {
             self.collected.extend(
-                collect_alloc_items(id.0)
+                collect_alloc_items(self.tcx, id.0)
                     .into_iter()
                     .map(|item| CollectedItem { item, reason: CollectionReason::Static }),
             )
@@ -372,7 +349,7 @@ impl MirVisitor for MonoItemsFnCollector<'_, '_> {
                 }
             }
             Rvalue::Cast(
-                CastKind::PointerCoercion(PointerCoercion::ReifyFnPointer),
+                CastKind::PointerCoercion(PointerCoercion::ReifyFnPointer(_)),
                 ref operand,
                 _,
             ) => {
@@ -417,7 +394,17 @@ impl MirVisitor for MonoItemsFnCollector<'_, '_> {
         let allocation = match constant.const_.kind() {
             ConstantKind::Allocated(allocation) => allocation,
             ConstantKind::Unevaluated(_) => {
-                unreachable!("Instance with polymorphic constant: `{constant:?}`")
+                // Instance bodies are monomorphic, so their constants are evaluated when the
+                // body is built. A constant is only left unevaluated if its evaluation failed,
+                // e.g., a type too big for the target architecture, in which case the error
+                // has already been reported. Skip the constant and let
+                // `collect_reachable_items` abort compilation once collection finishes.
+                // See <https://github.com/model-checking/kani/issues/4814>.
+                assert!(
+                    self.tcx.dcx().has_errors().is_some(),
+                    "Instance with polymorphic constant: `{constant:?}`"
+                );
+                return;
             }
             ConstantKind::Param(_) => unreachable!("Unexpected parameter constant: {constant:?}"),
             ConstantKind::ZeroSized => {
@@ -429,7 +416,7 @@ impl MirVisitor for MonoItemsFnCollector<'_, '_> {
                 return;
             }
         };
-        self.collect_allocation(&allocation);
+        self.collect_allocation(allocation);
     }
 
     /// Collect function calls.
@@ -502,7 +489,7 @@ fn extract_unsize_coercion(tcx: TyCtxt, orig_ty: Ty, dst_trait: Ty) -> (Ty, Ty) 
 fn to_fingerprint(tcx: TyCtxt, item: &MonoItem) -> Fingerprint {
     tcx.with_stable_hashing_context(|mut hcx| {
         let mut hasher = StableHasher::new();
-        rustc_internal::internal(tcx, item).hash_stable(&mut hcx, &mut hasher);
+        rustc_internal::internal(tcx, item).stable_hash(&mut hcx, &mut hasher);
         hasher.finish()
     })
 }
@@ -512,28 +499,40 @@ fn should_codegen_locally(instance: &Instance) -> bool {
     !instance.is_foreign_item()
 }
 
-fn collect_alloc_items(alloc_id: AllocId) -> Vec<MonoItem> {
+fn collect_alloc_items(tcx: TyCtxt, alloc_id: AllocId) -> Vec<MonoItem> {
     trace!(?alloc_id, "collect_alloc_items");
     let mut items = vec![];
     match GlobalAlloc::from(alloc_id) {
         GlobalAlloc::Static(def) => {
-            // This differ from rustc's collector since rustc does not include static from
-            // upstream crates.
-            let instance = Instance::try_from(CrateItem::from(def)).unwrap();
-            should_codegen_locally(&instance).then(|| items.push(MonoItem::from(def)));
+            if is_anon_static(tcx, def.def_id()) {
+                let alloc = def.eval_initializer().unwrap();
+                items.extend(
+                    alloc
+                        .provenance
+                        .ptrs
+                        .iter()
+                        .flat_map(|(_, prov)| collect_alloc_items(tcx, prov.0)),
+                );
+            } else {
+                // This differ from rustc's collector since rustc does not include static from
+                // upstream crates.
+                let instance = Instance::try_from(CrateItem::from(def)).unwrap();
+                should_codegen_locally(&instance).then(|| items.push(MonoItem::from(def)));
+            }
         }
         GlobalAlloc::Function(instance) => {
             should_codegen_locally(&instance).then(|| items.push(MonoItem::from(instance)));
         }
         GlobalAlloc::Memory(alloc) => {
             items.extend(
-                alloc.provenance.ptrs.iter().flat_map(|(_, prov)| collect_alloc_items(prov.0)),
+                alloc.provenance.ptrs.iter().flat_map(|(_, prov)| collect_alloc_items(tcx, prov.0)),
             );
         }
         vtable_alloc @ GlobalAlloc::VTable(..) => {
             let vtable_id = vtable_alloc.vtable_allocation().unwrap();
-            items = collect_alloc_items(vtable_id);
+            items = collect_alloc_items(tcx, vtable_id);
         }
+        GlobalAlloc::TypeId { ty: _ } => {}
     };
     items
 }
@@ -592,6 +591,7 @@ impl CallGraph {
 
     /// Print the graph in DOT format to a file.
     /// See <https://graphviz.org/doc/info/lang.html> for more information.
+    #[cfg(debug_assertions)]
     fn dump_dot(&self, tcx: TyCtxt, initial: Option<MonoItem>) -> std::io::Result<()> {
         if let Ok(target) = std::env::var("KANI_REACH_DEBUG") {
             debug!(?target, "dump_dot");
@@ -620,6 +620,7 @@ impl CallGraph {
     }
 
     /// Write all notes to the given writer.
+    #[cfg(debug_assertions)]
     fn dump_all<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
         tracing::info!(nodes=?self.nodes.len(), edges=?self.edges.len(), "dump_all");
         for node in &self.nodes {
@@ -633,6 +634,7 @@ impl CallGraph {
     }
 
     /// Write all notes that may have led to the discovery of the given target.
+    #[cfg(debug_assertions)]
     fn dump_reason<W: Write>(&self, writer: &mut W, target: &str) -> std::io::Result<()> {
         let mut queue: Vec<Node> =
             self.nodes.iter().filter(|item| item.to_string().contains(target)).cloned().collect();

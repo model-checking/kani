@@ -228,6 +228,68 @@ class RegressionTests(unittest.TestCase):
                 run_bc.proc.returncode, 1, msg=run_bc.stderr)
 
 
+    def test_error_on_regression_all_metrics(self):
+        """Ensure that a check with `all_metrics` judges one metric in the light of another: a
+        slowdown only counts when the `steps` metric moved too."""
+
+        def config(new_steps):
+            return {
+                "variants": {
+                    "old": {
+                        "config": {
+                            "directory": str(self.tmp),
+                            "command_line":
+                                "mkdir bench_1 && "
+                                "echo 10 > bench_1/runtime && "
+                                "echo 100 > bench_1/steps"
+                        },
+                    },
+                    "new": {
+                        "config": {
+                            "directory": str(self.tmp),
+                            "command_line":
+                                "mkdir bench_1 && "
+                                "echo 30 > bench_1/runtime && "
+                                f"echo {new_steps} > bench_1/steps"
+                        }
+                    }
+                },
+                "run": {
+                    "suites": {
+                        "suite_1": {
+                            "parser": {"module": "test_file_to_metric"},
+                            "variants": ["old", "new"]
+                        }
+                    }
+                },
+                "visualize": [{
+                    "type": "error_on_regression",
+                    "variant_pairs": [["old", "new"]],
+                    "checks": [{
+                        "metric": "runtime",
+                        "all_metrics": True,
+                        "test":
+                            "lambda old, new: old['steps'] != new['steps'] "
+                            "and new['runtime'] / old['runtime'] > 1.5"
+                    }]
+                }]
+            }
+
+        # Three times slower, but on the same number of steps: not attributable, so no error.
+        with tempfile.TemporaryDirectory() as tmp:
+            self.tmp = tmp
+            run_bc = Benchcomp(config(new_steps=100))
+            run_bc()
+            self.assertEqual(run_bc.proc.returncode, 0, msg=run_bc.stderr)
+
+        # Three times slower on a different number of steps: a regression.
+        with tempfile.TemporaryDirectory() as tmp:
+            self.tmp = tmp
+            run_bc = Benchcomp(config(new_steps=500))
+            run_bc()
+            self.assertEqual(run_bc.proc.returncode, 1, msg=run_bc.stderr)
+
+
     def test_error_on_regression_visualization_success_regressed(self):
         """Ensure that benchcomp terminates with exit of 1 when the "error_on_regression" visualization is configured and one of the benchmarks' success metric has regressed"""
 
@@ -477,18 +539,28 @@ class RegressionTests(unittest.TestCase):
                     ```
                     Scatterplot axis ranges are 5 (bottom/left) to 10 (top/right).
 
+                    <details> <summary>Breakdown by harness</summary>
+
                     | Benchmark |  variant_1 | variant_2 | ratio |
                     | --- | --- | --- | --- |
                     | bench_1 | 5 | 10 | **2.0** |
                     | bench_2 | 10 | 5 | 0.5 |
 
+                    </details>
+                    
+                    
                     ## success
+
+                    <details> <summary>Breakdown by harness</summary>
 
                     | Benchmark |  variant_1 | variant_2 | notes |
                     | --- | --- | --- | --- |
                     | bench_1 | True | True |  |
                     | bench_2 | True | False | regressed |
                     | bench_3 | False | True | newly passing |
+
+                    </details>
+                    
                     """))
 
 

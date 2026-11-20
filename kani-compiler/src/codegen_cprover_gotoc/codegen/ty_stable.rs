@@ -7,21 +7,23 @@
 //! `typ.rs`.
 
 use crate::codegen_cprover_gotoc::GotocCtx;
+use crate::codegen_cprover_gotoc::codegen::cache::{CacheEntry, cache_entry};
 use crate::kani_middle::abi::LayoutOf;
 use cbmc::goto_program::Type;
 use rustc_middle::ty::layout::{LayoutOf as _, TyAndLayout};
-use rustc_smir::rustc_internal;
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{Local, Operand, Place, Rvalue};
-use stable_mir::ty::{FnSig, RigidTy, Ty, TyKind};
+use rustc_public::mir::mono::Instance;
+use rustc_public::mir::{Local, Operand, Place, Rvalue};
+use rustc_public::rustc_internal;
+use rustc_public::ty::{FnSig, RigidTy, Ty, TyKind};
 
-impl<'tcx> GotocCtx<'tcx> {
+impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     pub fn place_ty_stable(&self, place: &Place) -> Ty {
         place.ty(self.current_fn().locals()).unwrap()
     }
 
     pub fn codegen_ty_stable(&mut self, ty: Ty) -> Type {
-        self.codegen_ty(rustc_internal::internal(self.tcx, ty))
+        cache_entry::<Type>(ty)
+            .or_insert_with(|| self.codegen_ty(rustc_internal::internal(self.tcx, ty)))
     }
 
     pub fn codegen_ty_ref_stable(&mut self, ty: Ty) -> Type {
@@ -107,14 +109,6 @@ impl<'tcx> GotocCtx<'tcx> {
         } else {
             Type::code_with_unnamed_parameters(params, self.codegen_ty_stable(sig.output()))
         }
-    }
-
-    /// Convert a type into a user readable type representation.
-    ///
-    /// This should be replaced by StableMIR `pretty_ty()` after
-    /// <https://github.com/rust-lang/rust/pull/118364> is merged.
-    pub fn pretty_ty(&self, ty: Ty) -> String {
-        ty.to_string()
     }
 
     pub fn requires_caller_location(&self, instance: Instance) -> bool {

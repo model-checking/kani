@@ -11,7 +11,7 @@
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt, duplex};
 
-#[cfg(disabled)] // because it timed out after 2h
+#[cfg(disabled)] // requires pthread_key_create
 #[kani::proof]
 #[kani::unwind(2)]
 async fn ping_pong() {
@@ -29,7 +29,7 @@ async fn ping_pong() {
 }
 
 // Kani does not support this one yet because it uses spawn
-#[cfg(disabled)] // because it timed out after 2h
+#[cfg(disabled)] // requires pthread_key_create
 #[kani::proof]
 #[kani::unwind(2)]
 async fn across_tasks() {
@@ -54,7 +54,7 @@ async fn across_tasks() {
 }
 
 // Kani does not support this one yet because it uses spawn
-#[cfg(disabled)] // because it timed out after 2h
+#[cfg(disabled)] // requires pthread_key_create
 #[kani::proof]
 #[kani::unwind(2)]
 async fn disconnect() {
@@ -79,7 +79,7 @@ async fn disconnect() {
 }
 
 // Kani does not support this one yet because it uses spawn
-#[cfg(disabled)] // because it timed out after 2h
+#[cfg(disabled)] // requires pthread_key_create
 #[kani::proof]
 #[kani::unwind(2)]
 async fn disconnect_reader() {
@@ -101,7 +101,7 @@ async fn disconnect_reader() {
 }
 
 // Kani does not support this one yet because it uses spawn
-#[cfg(disabled)] // because it timed out after 2h
+#[cfg(disabled)] // requires pthread_key_create
 #[kani::proof]
 #[kani::unwind(2)]
 async fn max_write_size() {
@@ -124,7 +124,7 @@ async fn max_write_size() {
 }
 
 // Kani does not support this one yet because it uses select
-#[cfg(disabled)] // because it timed out after 2h
+#[cfg(disabled)] // requires pthread_key_create
 #[kani::proof]
 #[kani::unwind(2)]
 async fn duplex_is_cooperative() {

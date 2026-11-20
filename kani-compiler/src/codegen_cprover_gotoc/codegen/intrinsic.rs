@@ -10,10 +10,10 @@ use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{BinaryOperator, BuiltinFn, Expr, Location, Stmt, Type};
 use rustc_middle::ty::TypingEnv;
 use rustc_middle::ty::layout::ValidityRequirement;
-use rustc_smir::rustc_internal;
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{BasicBlockIdx, Operand, Place};
-use stable_mir::ty::{GenericArgs, RigidTy, Span, Ty, TyKind, UintTy};
+use rustc_public::mir::mono::Instance;
+use rustc_public::mir::{BasicBlockIdx, Operand, Place};
+use rustc_public::rustc_internal;
+use rustc_public::ty::{GenericArgs, RigidTy, Span, Ty, TyKind, UintTy};
 use tracing::debug;
 
 pub struct SizeAlign {
@@ -26,7 +26,7 @@ enum VTableInfo {
     Align,
 }
 
-impl GotocCtx<'_> {
+impl GotocCtx<'_, '_> {
     fn binop<F: FnOnce(Expr, Expr) -> Expr>(
         &mut self,
         place: &Place,
@@ -74,15 +74,33 @@ impl GotocCtx<'_> {
         debug!("codegen_never_return_intrinsic:\n\tinstance {:?}\n\tspan {:?}", instance, span);
 
         match intrinsic.as_str() {
-            "abort" => {
-                self.codegen_fatal_error(PropertyClass::Assertion, "reached intrinsic::abort", span)
-            }
+            // `abort` was renamed to `abort_immediate`; the current pinned toolchain
+            // only emits the latter. The `"abort"` arm is kept so the match still
+            // handles a toolchain that predates the rename.
+            "abort" | "abort_immediate" => self.codegen_fatal_error(
+                PropertyClass::Assertion,
+                &format!("reached intrinsic::{intrinsic}"),
+                span,
+            ),
             // Transmuting to an uninhabited type is UB.
             "transmute" => self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,
                 "transmuting to uninhabited type has undefined behavior",
                 span,
             ),
+            // Reject uninhabited ZST results even when MIR has no return target.
+            "volatile_load"
+                if {
+                    let ret_ty = instance.ty().kind().fn_sig().unwrap().skip_binder().output();
+                    self.is_zst_stable(ret_ty) && self.layout_of_stable(ret_ty).is_uninhabited()
+                } =>
+            {
+                self.codegen_fatal_error(
+                    PropertyClass::SafetyCheck,
+                    "volatile load of an uninhabited type has undefined behavior",
+                    span,
+                )
+            }
             _ => self.codegen_fatal_error(
                 PropertyClass::UnsupportedConstruct,
                 &format!("Unsupported intrinsic {intrinsic}"),
@@ -200,19 +218,6 @@ impl GotocCtx<'_> {
             }};
         }
 
-        // Intrinsics which encode a value known during compilation
-        macro_rules! codegen_intrinsic_const {
-            () => {{
-                let place_ty = self.place_ty_stable(&place);
-                let stable_instance = instance;
-                let alloc = stable_instance.try_const_eval(place_ty).unwrap();
-                // We assume that the intrinsic has type checked at this point, so
-                // we can use the place type as the expression type.
-                let expr = self.codegen_allocation(&alloc, place_ty, loc);
-                self.codegen_expr_to_place_stable(&place, expr, loc)
-            }};
-        }
-
         // Most atomic intrinsics do:
         //   1. Perform an operation on a primary argument (e.g., addition)
         //   2. Return the previous value of the primary argument
@@ -230,14 +235,16 @@ impl GotocCtx<'_> {
         // -------------------------
         //
         // In fetch functions of atomic_ptr such as https://doc.rust-lang.org/std/sync/atomic/struct.AtomicPtr.html#method.fetch_byte_add,
-        // the type of var2 can be pointer (invalid_mut).
-        // In such case, atomic binops are transformed as follows to avoid typecheck failure.
+        // the type of var1 is a pointer.
+        // In this case, var2 is guaranteed to be a usize,
+        // c.f. https://github.com/rust-lang/rust/blob/a1531335fe2807715fff569904d99602022643a7/library/core/src/intrinsics/mod.rs#L203
+        // We transform such binops as follows to avoid typecheck failure.
         // -------------------------
         // var = atomic_op(var1, var2)
         // -------------------------
         // unsigned char tmp;
         // tmp = *var1;
-        // *var1 = (typeof var1)op((size_t)*var1, (size_t)var2);
+        // *var1 = (typeof var1)op((size_t)*var1, var2);
         // var = tmp;
         // -------------------------
         //
@@ -251,9 +258,9 @@ impl GotocCtx<'_> {
                 let (tmp, decl_stmt) =
                     self.decl_temp_variable(var1.typ().clone(), Some(var1.to_owned()), loc);
                 let var2 = fargs.remove(0);
-                let op_expr = if var2.typ().is_pointer() {
+                let op_expr = if var1.typ().is_pointer() {
                     (var1.clone().cast_to(Type::c_size_t()))
-                        .$op(var2.cast_to(Type::c_size_t()))
+                        .$op(var2)
                         .with_location(loc)
                         .cast_to(var1.typ().clone())
                 } else {
@@ -265,23 +272,34 @@ impl GotocCtx<'_> {
             }};
         }
 
-        macro_rules! unstable_codegen {
-            ($($tt:tt)*) => {{
-                let expr = self.codegen_unimplemented_expr(
-                    &format!("'{}' intrinsic", intrinsic_str),
-                    cbmc_ret_ty,
-                    loc,
-                    "https://github.com/model-checking/kani/issues/new/choose",
-                );
-                self.codegen_expr_to_place_stable(place, expr, loc)
-            }};
-        }
-
         let intrinsic = Intrinsic::from_instance(&instance);
+
+        // A SIMD intrinsic operates on SIMD vectors (see `Intrinsic::simd_vector_operand`). rustc's
+        // codegen backends reject any other instantiation, but Kani replaces those backends, so a
+        // scalar can reach this point (e.g. autoharness instantiating stdarch's `simd_imin::<T>`
+        // with `T = i32`, or a harness calling such a helper directly). Report it as unsupported
+        // rather than panic in the codegen below.
+        if let Some(ty) = intrinsic.simd_vector_operand(farg_types, ret_ty)
+            && !ty.kind().is_simd()
+        {
+            return self.codegen_unimplemented_stmt(
+                &format!("`{intrinsic_str}` on non-SIMD type `{ty}`"),
+                loc,
+                "https://github.com/model-checking/kani/issues/new/choose",
+            );
+        }
 
         match intrinsic {
             Intrinsic::AddWithOverflow => {
                 self.codegen_op_with_overflow(BinaryOperator::OverflowResultPlus, fargs, place, loc)
+            }
+            Intrinsic::AlignOf => {
+                let genarg = instance.args();
+                let tys = genarg.0.clone();
+                let t = tys.first().unwrap().ty().unwrap();
+                let layout = self.layout_of_stable(*t);
+                let expr = Expr::int_constant(layout.align.bytes(), Type::size_t());
+                self.codegen_expr_to_place_stable(place, expr, loc)
             }
             Intrinsic::ArithOffset => self.codegen_arith_offset(fargs, place, loc),
             Intrinsic::AssertInhabited => {
@@ -299,30 +317,28 @@ impl GotocCtx<'_> {
             Intrinsic::Assume => self.codegen_assert_assume(
                 fargs.remove(0).cast_to(Type::bool()),
                 PropertyClass::Assume,
-                "assumption failed",
+                "Rust intrinsic assumption failed",
                 loc,
             ),
-            Intrinsic::AtomicAnd(_) => codegen_atomic_binop!(bitand),
-            Intrinsic::AtomicCxchg(_) | Intrinsic::AtomicCxchgWeak(_) => {
+            Intrinsic::AtomicAnd => codegen_atomic_binop!(bitand),
+            Intrinsic::AtomicCxchg | Intrinsic::AtomicCxchgWeak => {
                 self.codegen_atomic_cxchg(intrinsic_str, fargs, place, loc)
             }
 
-            Intrinsic::AtomicFence(_) => self.codegen_atomic_noop(intrinsic_str, loc),
-            Intrinsic::AtomicLoad(_) => self.codegen_atomic_load(intrinsic_str, fargs, place, loc),
-            Intrinsic::AtomicMax(_) => codegen_atomic_binop!(max),
-            Intrinsic::AtomicMin(_) => codegen_atomic_binop!(min),
-            Intrinsic::AtomicNand(_) => codegen_atomic_binop!(bitnand),
-            Intrinsic::AtomicOr(_) => codegen_atomic_binop!(bitor),
-            Intrinsic::AtomicSingleThreadFence(_) => self.codegen_atomic_noop(intrinsic_str, loc),
-            Intrinsic::AtomicStore(_) => {
-                self.codegen_atomic_store(intrinsic_str, fargs, place, loc)
-            }
-            Intrinsic::AtomicUmax(_) => codegen_atomic_binop!(max),
-            Intrinsic::AtomicUmin(_) => codegen_atomic_binop!(min),
-            Intrinsic::AtomicXadd(_) => codegen_atomic_binop!(plus),
-            Intrinsic::AtomicXchg(_) => self.codegen_atomic_store(intrinsic_str, fargs, place, loc),
-            Intrinsic::AtomicXor(_) => codegen_atomic_binop!(bitxor),
-            Intrinsic::AtomicXsub(_) => codegen_atomic_binop!(sub),
+            Intrinsic::AtomicFence => self.codegen_atomic_noop(intrinsic_str, loc),
+            Intrinsic::AtomicLoad => self.codegen_atomic_load(intrinsic_str, fargs, place, loc),
+            Intrinsic::AtomicMax => codegen_atomic_binop!(max),
+            Intrinsic::AtomicMin => codegen_atomic_binop!(min),
+            Intrinsic::AtomicNand => codegen_atomic_binop!(bitnand),
+            Intrinsic::AtomicOr => codegen_atomic_binop!(bitor),
+            Intrinsic::AtomicSingleThreadFence => self.codegen_atomic_noop(intrinsic_str, loc),
+            Intrinsic::AtomicStore => self.codegen_atomic_store(intrinsic_str, fargs, place, loc),
+            Intrinsic::AtomicUmax => codegen_atomic_binop!(max),
+            Intrinsic::AtomicUmin => codegen_atomic_binop!(min),
+            Intrinsic::AtomicXadd => codegen_atomic_binop!(plus),
+            Intrinsic::AtomicXchg => self.codegen_atomic_store(intrinsic_str, fargs, place, loc),
+            Intrinsic::AtomicXor => codegen_atomic_binop!(bitxor),
+            Intrinsic::AtomicXsub => codegen_atomic_binop!(sub),
             Intrinsic::Bitreverse => {
                 self.codegen_expr_to_place_stable(place, fargs.remove(0).bitreverse(), loc)
             }
@@ -359,17 +375,47 @@ impl GotocCtx<'_> {
             Intrinsic::Exp2F64 => codegen_simple_intrinsic!(Exp2),
             Intrinsic::ExpF32 => codegen_simple_intrinsic!(Expf),
             Intrinsic::ExpF64 => codegen_simple_intrinsic!(Exp),
+            // CBMC models neither `fabsf16` nor `fabsf128`, so compute the absolute
+            // value by clearing the IEEE sign bit. This is exactly `fabs` for every
+            // input (NaN, +/-0, and +/-inf included).
+            Intrinsic::FabsF16 => {
+                let arg = fargs.remove(0);
+                let bits = arg.transmute_to(Type::unsigned_int(16), &self.symbol_table);
+                let abs_bits = bits.bitand(Expr::int_constant(0x7fff, Type::unsigned_int(16)));
+                let result = abs_bits.transmute_to(Type::float16(), &self.symbol_table);
+                self.codegen_expr_to_place_stable(place, result, loc)
+            }
+            Intrinsic::FabsF128 => {
+                let arg = fargs.remove(0);
+                let bits = arg.transmute_to(Type::unsigned_int(128), &self.symbol_table);
+                // `i128::MAX` (== `u128::MAX >> 1`) clears only the sign bit (bit 127).
+                let abs_bits = bits.bitand(Expr::int_constant(i128::MAX, Type::unsigned_int(128)));
+                let result = abs_bits.transmute_to(Type::float128(), &self.symbol_table);
+                self.codegen_expr_to_place_stable(place, result, loc)
+            }
             Intrinsic::FabsF32 => codegen_simple_intrinsic!(Fabsf),
             Intrinsic::FabsF64 => codegen_simple_intrinsic!(Fabs),
             Intrinsic::FaddFast => {
                 let fargs_clone = fargs.clone();
                 let binop_stmt = codegen_intrinsic_binop!(plus);
-                self.add_finite_args_checks(intrinsic_str, fargs_clone, binop_stmt, span)
+                self.add_fast_math_finiteness_checks(
+                    intrinsic_str,
+                    fargs_clone,
+                    place,
+                    binop_stmt,
+                    span,
+                )
             }
             Intrinsic::FdivFast => {
                 let fargs_clone = fargs.clone();
                 let binop_stmt = codegen_intrinsic_binop!(div);
-                self.add_finite_args_checks(intrinsic_str, fargs_clone, binop_stmt, span)
+                self.add_fast_math_finiteness_checks(
+                    intrinsic_str,
+                    fargs_clone,
+                    place,
+                    binop_stmt,
+                    span,
+                )
             }
             Intrinsic::FloatToIntUnchecked => self.codegen_float_to_int_unchecked(
                 intrinsic_str,
@@ -386,13 +432,25 @@ impl GotocCtx<'_> {
             Intrinsic::FmulFast => {
                 let fargs_clone = fargs.clone();
                 let binop_stmt = codegen_intrinsic_binop!(mul);
-                self.add_finite_args_checks(intrinsic_str, fargs_clone, binop_stmt, span)
+                self.add_fast_math_finiteness_checks(
+                    intrinsic_str,
+                    fargs_clone,
+                    place,
+                    binop_stmt,
+                    span,
+                )
             }
             Intrinsic::Forget => Stmt::skip(loc),
             Intrinsic::FsubFast => {
                 let fargs_clone = fargs.clone();
                 let binop_stmt = codegen_intrinsic_binop!(sub);
-                self.add_finite_args_checks(intrinsic_str, fargs_clone, binop_stmt, span)
+                self.add_fast_math_finiteness_checks(
+                    intrinsic_str,
+                    fargs_clone,
+                    place,
+                    binop_stmt,
+                    span,
+                )
             }
             Intrinsic::IsValStaticallyKnown => {
                 // Returning false is sound according do this intrinsic's documentation:
@@ -408,29 +466,25 @@ impl GotocCtx<'_> {
             Intrinsic::LogF64 => codegen_simple_intrinsic!(Log),
             Intrinsic::MaxNumF32 => codegen_simple_intrinsic!(Fmaxf),
             Intrinsic::MaxNumF64 => codegen_simple_intrinsic!(Fmax),
-            Intrinsic::MinAlignOf => codegen_intrinsic_const!(),
             Intrinsic::MinNumF32 => codegen_simple_intrinsic!(Fminf),
             Intrinsic::MinNumF64 => codegen_simple_intrinsic!(Fmin),
             Intrinsic::MulWithOverflow => {
                 self.codegen_op_with_overflow(BinaryOperator::OverflowResultMult, fargs, place, loc)
             }
-            Intrinsic::NearbyIntF32 => codegen_simple_intrinsic!(Nearbyintf),
-            Intrinsic::NearbyIntF64 => codegen_simple_intrinsic!(Nearbyint),
-            Intrinsic::NeedsDrop => codegen_intrinsic_const!(),
             Intrinsic::PowF32 => codegen_simple_intrinsic!(Powf),
             Intrinsic::PowF64 => codegen_simple_intrinsic!(Pow),
             Intrinsic::PowIF32 => codegen_simple_intrinsic!(Powif),
             Intrinsic::PowIF64 => codegen_simple_intrinsic!(Powi),
-            Intrinsic::PrefAlignOf => codegen_intrinsic_const!(),
             Intrinsic::PtrGuaranteedCmp => self.codegen_ptr_guaranteed_cmp(fargs, place, loc),
             Intrinsic::RawEq => self.codegen_intrinsic_raw_eq(instance, fargs, place, loc),
             Intrinsic::RetagBoxToRaw => self.codegen_retag_box_to_raw(fargs, place, loc),
-            Intrinsic::RintF32 => codegen_simple_intrinsic!(Rintf),
-            Intrinsic::RintF64 => codegen_simple_intrinsic!(Rint),
             Intrinsic::RotateLeft => codegen_intrinsic_binop!(rol),
             Intrinsic::RotateRight => codegen_intrinsic_binop!(ror),
             Intrinsic::RoundF32 => codegen_simple_intrinsic!(Roundf),
             Intrinsic::RoundF64 => codegen_simple_intrinsic!(Round),
+            Intrinsic::RoundTiesEvenF32 | Intrinsic::RoundTiesEvenF64 => {
+                self.codegen_round_to_integral(cbmc::RoundingMode::ToNearest, fargs, place, loc)
+            }
             Intrinsic::SaturatingAdd => codegen_intrinsic_binop_with_mm!(saturating_add),
             Intrinsic::SaturatingSub => codegen_intrinsic_binop_with_mm!(saturating_sub),
             Intrinsic::SinF32 => codegen_simple_intrinsic!(Sinf),
@@ -449,27 +503,86 @@ impl GotocCtx<'_> {
             Intrinsic::SimdDiv | Intrinsic::SimdRem => {
                 self.codegen_simd_div_with_overflow(fargs, intrinsic_str, place, loc)
             }
-            Intrinsic::SimdEq => {
-                self.codegen_simd_cmp(Expr::vector_eq, fargs, place, span, farg_types, ret_ty)
+            Intrinsic::SimdEq => self.codegen_simd_cmp(
+                Expr::vector_eq,
+                fargs,
+                place,
+                farg_types,
+                ret_ty,
+                intrinsic_str,
+                loc,
+            ),
+            Intrinsic::SimdReduceAll => {
+                // Boolean AND-reduction: returns whether every lane is "true". The
+                // argument is a mask-like integer vector (lanes are 0 or all-ones),
+                // so a lane is true iff it is non-zero.
+                let vec = fargs.remove(0);
+                let (size, _) = self.simd_size_and_type(farg_types[0]);
+                let lane =
+                    |v: &Expr, i: u64| v.clone().index_array(Expr::int_constant(i, Type::size_t()));
+                let lane_true = |l: Expr| {
+                    let zero = Expr::int_constant(0, l.typ().clone());
+                    l.neq(zero)
+                };
+                let mut acc = lane_true(lane(&vec, 0));
+                for i in 1..size {
+                    acc = acc.and(lane_true(lane(&vec, i)));
+                }
+                self.codegen_expr_to_place_stable(place, acc.cast_to(cbmc_ret_ty), loc)
             }
+            Intrinsic::SimdReduceMax => {
+                self.codegen_simd_reduce_max_min(true, fargs, place, farg_types, intrinsic_str, loc)
+            }
+            Intrinsic::SimdReduceMin => self.codegen_simd_reduce_max_min(
+                false,
+                fargs,
+                place,
+                farg_types,
+                intrinsic_str,
+                loc,
+            ),
             Intrinsic::SimdExtract => {
                 self.codegen_intrinsic_simd_extract(fargs, place, farg_types, ret_ty, span)
             }
-            Intrinsic::SimdGe => {
-                self.codegen_simd_cmp(Expr::vector_ge, fargs, place, span, farg_types, ret_ty)
-            }
-            Intrinsic::SimdGt => {
-                self.codegen_simd_cmp(Expr::vector_gt, fargs, place, span, farg_types, ret_ty)
-            }
+            Intrinsic::SimdGe => self.codegen_simd_cmp(
+                Expr::vector_ge,
+                fargs,
+                place,
+                farg_types,
+                ret_ty,
+                intrinsic_str,
+                loc,
+            ),
+            Intrinsic::SimdGt => self.codegen_simd_cmp(
+                Expr::vector_gt,
+                fargs,
+                place,
+                farg_types,
+                ret_ty,
+                intrinsic_str,
+                loc,
+            ),
             Intrinsic::SimdInsert => {
-                self.codegen_intrinsic_simd_insert(fargs, place, cbmc_ret_ty, farg_types, span, loc)
+                self.codegen_intrinsic_simd_insert(fargs, place, cbmc_ret_ty, farg_types, loc)
             }
-            Intrinsic::SimdLe => {
-                self.codegen_simd_cmp(Expr::vector_le, fargs, place, span, farg_types, ret_ty)
-            }
-            Intrinsic::SimdLt => {
-                self.codegen_simd_cmp(Expr::vector_lt, fargs, place, span, farg_types, ret_ty)
-            }
+            Intrinsic::SimdLe => self.codegen_simd_cmp(
+                Expr::vector_le,
+                fargs,
+                place,
+                farg_types,
+                ret_ty,
+                intrinsic_str,
+                loc,
+            ),
+            Intrinsic::SimdLt => self.codegen_simd_cmp(
+                Expr::vector_lt,
+                fargs,
+                place,
+                farg_types,
+                ret_ty,
+                intrinsic_str,
+                loc,
+            ),
             Intrinsic::SimdMul => self.codegen_simd_op_with_overflow(
                 Expr::mul,
                 Expr::mul_overflow_p,
@@ -478,16 +591,55 @@ impl GotocCtx<'_> {
                 place,
                 loc,
             ),
-            Intrinsic::SimdNe => {
-                self.codegen_simd_cmp(Expr::vector_neq, fargs, place, span, farg_types, ret_ty)
-            }
+            Intrinsic::SimdNe => self.codegen_simd_cmp(
+                Expr::vector_neq,
+                fargs,
+                place,
+                farg_types,
+                ret_ty,
+                intrinsic_str,
+                loc,
+            ),
             Intrinsic::SimdOr => codegen_intrinsic_binop!(bitor),
             Intrinsic::SimdShl | Intrinsic::SimdShr => {
                 self.codegen_simd_shift_with_distance_check(fargs, intrinsic_str, place, loc)
             }
             Intrinsic::SimdShuffle(stripped) => {
-                let n: u64 = self.simd_shuffle_length(stripped.as_str(), farg_types, span);
+                let Some(n) = self.simd_shuffle_length(stripped.as_str(), farg_types, span) else {
+                    return self.codegen_unimplemented_stmt(
+                        &format!(
+                            "`{intrinsic_str}` with the index type `{}` (not a SIMD vector of `u32`)",
+                            farg_types[2]
+                        ),
+                        loc,
+                        "https://github.com/model-checking/kani/issues/new/choose",
+                    );
+                };
                 self.codegen_intrinsic_simd_shuffle(fargs, place, farg_types, ret_ty, n, span)
+            }
+            Intrinsic::SimdSplat => {
+                // Broadcast the scalar argument to every lane of the result vector.
+                let val = fargs.remove(0);
+                let (size, ret_base_type) = self.simd_size_and_type(ret_ty);
+                // `simd_splat<T, U>(value: U) -> T` has independent generic parameters,
+                // so a monomorphization where `U` is not `T`'s element type can reach
+                // codegen. Report it as unsupported (like `simd_extract` and `simd_insert`
+                // above) rather than silently casting the value. An error here would abort
+                // the whole crate; as an unsupported construct it fails only the harnesses
+                // that reach it.
+                if farg_types[0] != ret_base_type {
+                    return self.codegen_unimplemented_stmt(
+                        &format!(
+                            "`{intrinsic_str}` with the argument type `{}` (the output `{ret_ty}` has `{ret_base_type}` lanes)",
+                            farg_types[0]
+                        ),
+                        loc,
+                        "https://github.com/model-checking/kani/issues/new/choose",
+                    );
+                }
+                let elem_ty = cbmc_ret_ty.base_type().unwrap().clone();
+                let elems = vec![val.cast_to(elem_ty); size as usize];
+                self.codegen_expr_to_place_stable(place, Expr::vector_expr(cbmc_ret_ty, elems), loc)
             }
             Intrinsic::SimdSub => self.codegen_simd_op_with_overflow(
                 Expr::sub,
@@ -498,6 +650,15 @@ impl GotocCtx<'_> {
                 loc,
             ),
             Intrinsic::SimdXor => codegen_intrinsic_binop!(bitxor),
+            Intrinsic::SizeOf => {
+                let genarg = instance.args();
+                let tys = genarg.0.clone();
+                let t = tys.first().unwrap().ty().unwrap();
+                let layout = self.layout_of_stable(*t);
+                let expr = Expr::int_constant(layout.size.bytes_usize(), Type::size_t())
+                    .with_size_of_annotation(self.codegen_ty_stable(*t));
+                self.codegen_expr_to_place_stable(place, expr, loc)
+            }
             Intrinsic::SqrtF32 => codegen_simple_intrinsic!(Sqrtf),
             Intrinsic::SqrtF64 => codegen_simple_intrinsic!(Sqrt),
             Intrinsic::SubWithOverflow => self.codegen_op_with_overflow(
@@ -509,24 +670,80 @@ impl GotocCtx<'_> {
             Intrinsic::Transmute => self.codegen_intrinsic_transmute(fargs, ret_ty, place, loc),
             Intrinsic::TruncF32 => codegen_simple_intrinsic!(Truncf),
             Intrinsic::TruncF64 => codegen_simple_intrinsic!(Trunc),
-            Intrinsic::TypeId => codegen_intrinsic_const!(),
-            Intrinsic::TypeName => codegen_intrinsic_const!(),
             Intrinsic::TypedSwap => self.codegen_swap(fargs, farg_types, loc),
+            // No alignment assertion for these two, by design: tolerating a
+            // misaligned pointer is the entire purpose of the `unaligned_*`
+            // variants. CBMC models the misaligned typed access byte-precisely,
+            // so the plain dereference is faithful -- see the byte-wise oracle
+            // tests in `tests/kani/Intrinsics/Volatile/unaligned.rs`, which
+            // compare the loaded value against `u32::from_ne_bytes` at every
+            // offset -- native order, so the oracle stays byte-precise without
+            // assuming an endianness. Dereferenceability itself is still checked
+            // by `--pointer-check`, as for the aligned variants.
             Intrinsic::UnalignedVolatileLoad => {
-                unstable_codegen!(self.codegen_expr_to_place_stable(
-                    place,
-                    fargs.remove(0).dereference(),
-                    loc
-                ))
+                self.codegen_expr_to_place_stable(place, fargs.remove(0).dereference(), loc)
+            }
+            Intrinsic::UnalignedVolatileStore => {
+                assert!(self.place_ty_stable(place).kind().is_unit());
+                let dst = fargs.remove(0);
+                let src = fargs.remove(0);
+                let dst_typ = farg_types[0];
+                if self.is_zst_stable(pointee_type_stable(dst_typ).unwrap()) {
+                    // Do not dereference (and assign) a ZST -- same guard as
+                    // `codegen_volatile_store`. A ZST pointer may legally be
+                    // dangling-but-aligned, so this path is reachable.
+                    Stmt::skip(loc)
+                } else {
+                    dst.dereference().assign(src, loc)
+                }
             }
             Intrinsic::UncheckedDiv => codegen_op_with_div_overflow_check!(div),
             Intrinsic::UncheckedRem => codegen_op_with_div_overflow_check!(rem),
             Intrinsic::Unlikely => self.codegen_expr_to_place_stable(place, fargs.remove(0), loc),
-            Intrinsic::VolatileCopyMemory => unstable_codegen!(codegen_intrinsic_copy!(Memmove)),
+            // These two document their safety requirements as "consistent
+            // with `copy`" / "consistent with `copy_nonoverlapping`", so
+            // reusing `codegen_copy` checks the conditions their own docs
+            // state. Volatility itself constrains the optimizer (the access
+            // must not be elided or reordered), which Kani has no need to
+            // model since it performs no such optimization.
+            //
+            // One direction is worth being explicit about: the volatile
+            // family's docs additionally permit pointers *outside* any Rust
+            // allocation (the MMIO carve-out on `ptr::read_volatile`), which
+            // the non-volatile counterparts do not. Reusing `codegen_copy`
+            // therefore checks *at least* the documented UB conditions and is
+            // conservative rather than exact -- a legal MMIO access may be
+            // rejected by `--pointer-check`. That is incompleteness, never a
+            // missed UB, which is the safe direction for a verifier.
+            //
+            // Both intrinsics are declared as `(dst, src, count)`, but
+            // `codegen_copy` expects `fargs`/`farg_types` ordered as
+            // `[src, dst, ..]` (it does `fargs.remove(0)` for `src` followed
+            // by `fargs.remove(0)` for `dst`). So we swap the first two
+            // entries of `fargs`, and build a `farg_types` slice with the
+            // first two entries swapped as well, before delegating.
+            Intrinsic::VolatileCopyMemory => {
+                fargs.swap(0, 1);
+                let swapped_types = [farg_types[1], farg_types[0]];
+                self.codegen_copy(intrinsic_str, false, fargs, &swapped_types, Some(place), loc)
+            }
             Intrinsic::VolatileCopyNonOverlappingMemory => {
-                unstable_codegen!(codegen_intrinsic_copy!(Memcpy))
+                fargs.swap(0, 1);
+                let swapped_types = [farg_types[1], farg_types[0]];
+                self.codegen_copy(intrinsic_str, true, fargs, &swapped_types, Some(place), loc)
             }
             Intrinsic::VolatileLoad => self.codegen_volatile_load(fargs, farg_types, place, loc),
+            // `volatile_set_memory(dst, val, count)` has the same argument
+            // order as `write_bytes(dst, val, count)` (no `dst`/`src` swap is
+            // needed, unlike the two copy intrinsics above), and its docs
+            // state its safety requirements as "consistent with
+            // `write_bytes`", so `codegen_write_bytes` checks the conditions
+            // its own docs state. The same conservative-direction caveat as
+            // the copy intrinsics above applies to the MMIO carve-out.
+            Intrinsic::VolatileSetMemory => {
+                assert!(self.place_ty_stable(place).kind().is_unit());
+                self.codegen_write_bytes(fargs, farg_types, loc)
+            }
             Intrinsic::VolatileStore => {
                 assert!(self.place_ty_stable(place).kind().is_unit());
                 self.codegen_volatile_store(fargs, farg_types, loc)
@@ -540,11 +757,11 @@ impl GotocCtx<'_> {
                 assert!(self.place_ty_stable(place).kind().is_unit());
                 self.codegen_write_bytes(fargs, farg_types, loc)
             }
-            Intrinsic::PtrOffsetFrom
+            Intrinsic::AlignOfVal
+            | Intrinsic::PtrOffsetFrom
             | Intrinsic::PtrOffsetFromUnsigned
-            | Intrinsic::SizeOfVal
-            | Intrinsic::MinAlignOfVal => {
-                unreachable!("Intrinsic `{}` is handled before codegen", intrinsic_str)
+            | Intrinsic::SizeOfVal => {
+                unreachable!("Kani models the intrinsic `{}` before codegen", intrinsic_str)
             }
             // Unimplemented
             Intrinsic::Unimplemented { name, issue_link } => {
@@ -565,7 +782,7 @@ impl GotocCtx<'_> {
             self.intrinsics_typecheck_fail(span, "ctpop", "integer type", arg_rust_ty)
         } else {
             let loc = self.codegen_span_stable(span);
-            self.codegen_expr_to_place_stable(&target_place, arg.popcount(), loc)
+            self.codegen_expr_to_place_stable(target_place, arg.popcount(), loc)
         }
     }
 
@@ -584,8 +801,7 @@ impl GotocCtx<'_> {
             self.tcx,
             span,
             format!(
-                "Type check failed for intrinsic `{name}`: Expected {expected}, found {}",
-                self.pretty_ty(actual)
+                "Type check failed for intrinsic `{name}`: Expected {expected}, found {actual}"
             ),
         );
         self.tcx.dcx().abort_if_errors();
@@ -593,14 +809,16 @@ impl GotocCtx<'_> {
     }
 
     // Fast math intrinsics for floating point operations like `fadd_fast`
-    // assume that their inputs are finite:
+    // require that both their inputs AND their result are finite:
     // https://doc.rust-lang.org/std/intrinsics/fn.fadd_fast.html
-    // This function adds assertions to the statement which performs the
-    // operation and checks for overflow failures.
-    fn add_finite_args_checks(
+    // This function adds assertions to check that the arguments are finite
+    // (precondition) and that the result is also finite (postcondition).
+    // Producing a non-finite result (e.g., overflow to infinity) is UB.
+    fn add_fast_math_finiteness_checks(
         &mut self,
         intrinsic: &str,
         mut fargs: Vec<Expr>,
+        place: &Place,
         stmt: Stmt,
         span: Span,
     ) -> Stmt {
@@ -608,6 +826,7 @@ impl GotocCtx<'_> {
         let arg2 = fargs.remove(0);
         let msg1 = format!("first argument for {intrinsic} is finite");
         let msg2 = format!("second argument for {intrinsic} is finite");
+        let msg_result = format!("result of {intrinsic} is finite");
         let loc = self.codegen_span_stable(span);
         let finite_check1 = self.codegen_assert_assume(
             arg1.is_finite(),
@@ -621,7 +840,20 @@ impl GotocCtx<'_> {
             msg2.as_str(),
             loc,
         );
-        Stmt::block(vec![finite_check1, finite_check2, stmt], loc)
+        // Check that the result is also finite (it's UB if the result overflows
+        // to infinity or produces NaN).
+        let result_expr = unwrap_or_return_codegen_unimplemented_stmt!(
+            self,
+            self.codegen_place_stable(place, loc)
+        )
+        .goto_expr;
+        let finite_check_result = self.codegen_assert_assume(
+            result_expr.is_finite(),
+            PropertyClass::FiniteCheck,
+            msg_result.as_str(),
+            loc,
+        );
+        Stmt::block(vec![finite_check1, finite_check2, stmt, finite_check_result], loc)
     }
 
     fn div_does_not_overflow(&self, a: Expr, b: Expr) -> Expr {
@@ -636,6 +868,23 @@ impl GotocCtx<'_> {
         let divisor_is_minus_one =
             if btyp.is_signed(mm) { b.clone().eq(btyp.one().neg()) } else { Expr::bool_false() };
         dividend_is_int_min.and(divisor_is_minus_one).not()
+    }
+
+    // Builds a floatbv_round_to_integral expression with specified cbmc::RoundingMode.
+    fn codegen_round_to_integral(
+        &mut self,
+        rounding_mode: cbmc::RoundingMode,
+        mut fargs: Vec<Expr>,
+        place: &Place,
+        loc: Location,
+    ) -> Stmt {
+        let place_ty = self.place_ty_stable(place);
+        let result_type = self.codegen_ty_stable(place_ty);
+        let f = fargs.remove(0);
+        assert!(fargs.is_empty());
+        let rm = Expr::int_constant(rounding_mode, Type::c_int());
+        let expr = Expr::floatbv_round_to_integral(f, rm, result_type);
+        self.codegen_expr_to_place_stable(place, expr, loc)
     }
 
     /// Intrinsics of the form *_with_overflow
@@ -719,10 +968,7 @@ impl GotocCtx<'_> {
         if layout.is_uninhabited() {
             return self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,
-                &format!(
-                    "attempted to instantiate uninhabited type `{}`",
-                    self.pretty_ty(*target_ty)
-                ),
+                &format!("attempted to instantiate uninhabited type `{}`", *target_ty),
                 span,
             );
         }
@@ -740,10 +986,7 @@ impl GotocCtx<'_> {
         {
             return self.codegen_fatal_error(
                 PropertyClass::SafetyCheck,
-                &format!(
-                    "attempted to zero-initialize type `{}`, which is invalid",
-                    self.pretty_ty(*target_ty)
-                ),
+                &format!("attempted to zero-initialize type `{}`, which is invalid", *target_ty),
                 span,
             );
         }
@@ -761,7 +1004,7 @@ impl GotocCtx<'_> {
                 PropertyClass::SafetyCheck,
                 &format!(
                     "attempted to leave type `{}` uninitialized, which is invalid",
-                    self.pretty_ty(*target_ty)
+                    *target_ty
                 ),
                 span,
             );
@@ -797,16 +1040,15 @@ impl GotocCtx<'_> {
     /// its primary argument and returns a tuple that contains:
     ///  * the previous value
     ///  * a boolean value indicating whether the operation was successful or not
-    ///
-    /// In a sequential context, the update is always sucessful so we assume the
-    /// second value to be true.
     /// -------------------------
     /// var = atomic_cxchg(var1, var2, var3)
     /// -------------------------
     /// unsigned char tmp;
+    /// bool success;
     /// tmp = *var1;
-    /// if (*var1 == var2) *var1 = var3;
-    /// var = (tmp, true);
+    /// success = (*var1 == var2);
+    /// if (success) *var1 = var3;
+    /// var = (tmp, success);
     /// -------------------------
     fn codegen_atomic_cxchg(
         &mut self,
@@ -822,28 +1064,26 @@ impl GotocCtx<'_> {
             self.decl_temp_variable(var1.typ().clone(), Some(var1.to_owned()), loc);
         let var2 = fargs.remove(0).with_location(loc);
         let var3 = fargs.remove(0).with_location(loc);
-        let eq_expr = (var1.clone()).eq(var2);
+        let eq_expr = var1.clone().eq(var2);
+        // Store the comparison result so we can use it both for the condition and the return value
+        let (success, success_decl) = self.decl_temp_variable(Type::bool(), Some(eq_expr), loc);
         let assign_stmt = var1.assign(var3, loc);
-        let cond_update_stmt = Stmt::if_then_else(eq_expr, assign_stmt, None, loc);
+        let cond_update_stmt = Stmt::if_then_else(success.clone(), assign_stmt, None, loc);
         let place_type = self.place_ty_stable(p);
         let res_type = self.codegen_ty_stable(place_type);
-        let tuple_expr =
-            Expr::struct_expr_from_values(res_type, vec![tmp, Expr::c_true()], &self.symbol_table)
-                .with_location(loc);
+        let tuple_expr = Expr::struct_expr_from_values(
+            res_type,
+            vec![tmp, success.cast_to(Type::c_bool())],
+            &self.symbol_table,
+        )
+        .with_location(loc);
         let res_stmt = self.codegen_expr_to_place_stable(p, tuple_expr, loc);
-        Stmt::atomic_block(vec![decl_stmt, cond_update_stmt, res_stmt], loc)
+        Stmt::atomic_block(vec![decl_stmt, success_decl, cond_update_stmt, res_stmt], loc)
     }
 
-    /// An atomic store updates the value referenced in
-    /// its primary argument and returns its previous value
-    /// -------------------------
-    /// var = atomic_store(var1, var2)
-    /// -------------------------
-    /// unsigned char tmp;
-    /// tmp = *var1;
-    /// *var1 = var2;
-    /// var = tmp;
-    /// -------------------------
+    /// Code generation shared by atomic stores and exchanges.
+    /// A store writes the new value without reading the old one.
+    /// An exchange also reads and returns the previous value.
     fn codegen_atomic_store(
         &mut self,
         intrinsic: &str,
@@ -854,9 +1094,12 @@ impl GotocCtx<'_> {
         self.store_concurrent_construct(intrinsic, loc);
         let var1_ref = fargs.remove(0);
         let var1 = var1_ref.dereference().with_location(loc);
+        let var2 = fargs.remove(0).with_location(loc);
+        if self.place_ty_stable(place).kind().is_unit() {
+            return Stmt::atomic_block(vec![var1.assign(var2, loc)], loc);
+        }
         let (tmp, decl_stmt) =
             self.decl_temp_variable(var1.typ().clone(), Some(var1.to_owned()), loc);
-        let var2 = fargs.remove(0).with_location(loc);
         let assign_stmt = var1.assign(var2, loc);
         let res_stmt = self.codegen_expr_to_place_stable(place, tmp, loc);
         Stmt::atomic_block(vec![decl_stmt, assign_stmt, res_stmt], loc)
@@ -1131,7 +1374,14 @@ impl GotocCtx<'_> {
     ///     (e.g., `simd_shuffle4`).
     ///  2. `simd_shuffle`, where `N` isn't specified and must be computed from
     ///     the length of the indexes SIMD vector (the third argument).
-    fn simd_shuffle_length(&mut self, stripped: &str, farg_types: &[Ty], span: Span) -> u64 {
+    ///
+    /// Returns `None` if the indexes of a `simd_shuffle` are not a SIMD vector of `u32`.
+    fn simd_shuffle_length(
+        &mut self,
+        stripped: &str,
+        farg_types: &[Ty],
+        span: Span,
+    ) -> Option<u64> {
         let n = if stripped.is_empty() {
             // Make sure that this is an SIMD vector, since only the
             // length-suffixed version of `simd_shuffle` (e.g.,
@@ -1144,13 +1394,7 @@ impl GotocCtx<'_> {
             {
                 self.simd_size_and_type(farg_types[2]).0
             } else {
-                let err_msg = format!(
-                    "simd_shuffle index must be a SIMD vector of `u32`, got `{}`",
-                    self.pretty_ty(farg_types[2])
-                );
-                utils::span_err(self.tcx, span, err_msg);
-                // Return a dummy value
-                u64::MIN
+                return None;
             }
         } else {
             stripped.parse().unwrap_or_else(|_| {
@@ -1164,7 +1408,7 @@ impl GotocCtx<'_> {
             })
         };
         self.tcx.dcx().abort_if_errors();
-        n
+        Some(n)
     }
 
     /// This function computes the size and alignment of a dynamically-sized type.
@@ -1176,7 +1420,7 @@ impl GotocCtx<'_> {
         if !layout.is_unsized() {
             let size = Expr::int_constant(layout.size.bytes_usize(), Type::size_t())
                 .with_size_of_annotation(self.codegen_ty_stable(ty));
-            let align = Expr::int_constant(layout.align.abi.bytes(), usizet);
+            let align = Expr::int_constant(layout.align.bytes(), usizet);
             return SizeAlign { size, align };
         }
         match ty.kind() {
@@ -1186,6 +1430,14 @@ impl GotocCtx<'_> {
                 SizeAlign {
                     size: vtable.clone().member("size", &self.symbol_table),
                     align: vtable.member("align", &self.symbol_table),
+                }
+            }
+            TyKind::RigidTy(RigidTy::Foreign(_)) => {
+                // An `extern type` has no known size; rustc lays it out with size 0 and align 1,
+                // so only the fields before it count, as in rustc's own `dereferenceable` bounds.
+                SizeAlign {
+                    size: Type::size_t().zero(),
+                    align: Expr::int_constant(layout.align.bytes(), usizet),
                 }
             }
             TyKind::RigidTy(RigidTy::Slice(_)) | TyKind::RigidTy(RigidTy::Str) => {
@@ -1200,7 +1452,7 @@ impl GotocCtx<'_> {
                 let size = Expr::int_constant(unit.size.bytes_usize(), Type::size_t())
                     .with_size_of_annotation(self.codegen_ty_stable(unit_t))
                     .mul(arg.member("len", &self.symbol_table));
-                let align = Expr::int_constant(layout.align.abi.bytes(), usizet);
+                let align = Expr::int_constant(layout.align.bytes(), usizet);
                 SizeAlign { size, align }
             }
             _ => {
@@ -1223,7 +1475,7 @@ impl GotocCtx<'_> {
                 let sized_size =
                     Expr::int_constant(layout.fields.offset(n).bytes(), Type::size_t())
                         .with_size_of_annotation(self.codegen_ty_stable(ty));
-                let sized_align = Expr::int_constant(layout.align.abi.bytes(), Type::size_t());
+                let sized_align = Expr::int_constant(layout.align.bytes(), Type::size_t());
 
                 // Call this function recursively to compute the size and align for the last field.
                 let field_ty = rustc_internal::stable(layout.field(self, n).ty);
@@ -1237,10 +1489,10 @@ impl GotocCtx<'_> {
                 let size = sized_size.plus(unsized_size);
 
                 // Packed types ignore the alignment of their fields.
-                if let TyKind::RigidTy(RigidTy::Adt(def, _)) = ty.kind() {
-                    if rustc_internal::internal(self.tcx, def).repr().packed() {
-                        unsized_align = sized_align.clone();
-                    }
+                if let TyKind::RigidTy(RigidTy::Adt(def, _)) = ty.kind()
+                    && rustc_internal::internal(self.tcx, def).repr().packed()
+                {
+                    unsized_align = sized_align.clone();
                 }
 
                 // The alignment should be the maximum of the alignments for the
@@ -1282,20 +1534,25 @@ impl GotocCtx<'_> {
         let vec = fargs.remove(0);
         let index = fargs.remove(0);
 
+        let loc = self.codegen_span_stable(span);
         let (_, vector_base_type) = self.simd_size_and_type(rust_arg_types[0]);
         if rust_ret_type != vector_base_type {
-            let err_msg = format!(
-                "expected return type `{}` (element of input `{}`), found `{}`",
-                self.pretty_ty(vector_base_type),
-                self.pretty_ty(rust_arg_types[0]),
-                self.pretty_ty(rust_ret_type)
+            return self.codegen_unimplemented_stmt(
+                &format!(
+                    "`simd_extract` with the result type `{rust_ret_type}` (the input `{}` has `{vector_base_type}` lanes)",
+                    rust_arg_types[0]
+                ),
+                loc,
+                "https://github.com/model-checking/kani/issues/new/choose",
             );
-            utils::span_err(self.tcx, span, err_msg);
         }
-        self.tcx.dcx().abort_if_errors();
 
-        let loc = self.codegen_span_stable(span);
-        self.codegen_expr_to_place_stable(p, vec.index_array(index), loc)
+        // A pointer lane is modeled as an integer of the same width (see `codegen_vector`), so the
+        // extracted lane has to be cast back to the return type. `simd_insert` and `simd_splat`
+        // cast in the other direction for the same reason. This is a no-op for every other element
+        // type, where the lane type already is the return type.
+        let ret_typ = self.codegen_ty_stable(rust_ret_type);
+        self.codegen_expr_to_place_stable(p, vec.index_array(index).cast_to(ret_typ), loc)
     }
 
     /// Insert is a generic update of a single value in a SIMD vector.
@@ -1315,7 +1572,6 @@ impl GotocCtx<'_> {
         p: &Place,
         cbmc_ret_ty: Type,
         rust_arg_types: &[Ty],
-        span: Span,
         loc: Location,
     ) -> Stmt {
         assert!(fargs.len() == 3, "`simd_insert` had unexpected arguments {fargs:?}");
@@ -1325,15 +1581,15 @@ impl GotocCtx<'_> {
 
         let (_, vector_base_type) = self.simd_size_and_type(rust_arg_types[0]);
         if vector_base_type != rust_arg_types[2] {
-            let err_msg = format!(
-                "expected inserted type `{}` (element of input `{}`), found `{}`",
-                self.pretty_ty(vector_base_type),
-                self.pretty_ty(rust_arg_types[0]),
-                self.pretty_ty(rust_arg_types[2]),
+            return self.codegen_unimplemented_stmt(
+                &format!(
+                    "`simd_insert` with the inserted type `{}` (the input `{}` has `{vector_base_type}` lanes)",
+                    rust_arg_types[2], rust_arg_types[0],
+                ),
+                loc,
+                "https://github.com/model-checking/kani/issues/new/choose",
             );
-            utils::span_err(self.tcx, span, err_msg);
         }
-        self.tcx.dcx().abort_if_errors();
 
         // Type checker should have ensured it's a vector type
         let elem_ty = cbmc_ret_ty.base_type().unwrap().clone();
@@ -1348,74 +1604,89 @@ impl GotocCtx<'_> {
         )
     }
 
-    /// Generates code for a SIMD vector comparison intrinsic.
-    ///
-    /// We perform some typechecks here for two reasons:
-    ///  * In the case of SIMD intrinsics, these checks depend on the backend.
-    ///  * We can emit a friendly error here, but not in `cprover_bindings`.
-    ///
-    /// We check the following:
-    ///  1. The return type must be the same length as the input types. The
-    ///     argument types have already been checked to ensure they have the same
-    ///     length (an error would've been emitted otherwise), so we can compare
-    ///     the return type against any of the argument types.
-    ///
-    ///     An example that triggers this error:
-    ///     ```rust
-    ///     let x = u64x2(0, 0);
-    ///     let y = u64x2(0, 1);
-    ///     unsafe { let invalid_simd: u32x4 = simd_eq(x, y); }
-    ///     ```
-    ///     We compare two `u64x2` vectors but try to store the result in a `u32x4`.
-    ///  2. The return type must have an integer base type.
-    ///
-    ///     An example that triggers this error:
-    ///     ```rust
-    ///     let x = u64x2(0, 0);
-    ///     let y = u64x2(0, 1);
-    ///     unsafe { let invalid_simd: f32x2 = simd_eq(x, y); }
-    ///     ```
-    ///     We compare two `u64x2` vectors but try to store the result in a `f32x4`,
-    ///     which is composed of `f32` values.
+    /// `simd_reduce_max` (`is_max`) or `simd_reduce_min`. Both take integer vectors only (portable
+    /// SIMD's float `reduce_max`/`reduce_min` fold with `max`/`min` instead), so any other lane type
+    /// is reported as unsupported.
+    fn codegen_simd_reduce_max_min(
+        &mut self,
+        is_max: bool,
+        mut fargs: Vec<Expr>,
+        place: &Place,
+        farg_types: &[Ty],
+        intrinsic_str: &str,
+        loc: Location,
+    ) -> Stmt {
+        let (size, lane_ty) = self.simd_size_and_type(farg_types[0]);
+        if !lane_ty.kind().is_integral() {
+            return self.codegen_unimplemented_stmt(
+                &format!("`{intrinsic_str}` on non-integer lane type `{lane_ty}`"),
+                loc,
+                "https://github.com/model-checking/kani/issues/new/choose",
+            );
+        }
+        // rustc rejects any other result type with `E0511`; see `codegen_simd_cmp` for why the
+        // check is ours and why it is an unsupported construct.
+        let ret_ty = self.place_ty_stable(place);
+        if ret_ty != lane_ty {
+            return self.codegen_unimplemented_stmt(
+                &format!(
+                    "`{intrinsic_str}` with the result type `{ret_ty}` (lane type `{lane_ty}`)"
+                ),
+                loc,
+                "https://github.com/model-checking/kani/issues/new/choose",
+            );
+        }
+        let arg = fargs.remove(0);
+        let (simd, simd_decl) = self.decl_temp_variable(arg.typ().clone(), Some(arg), loc);
+        let lane = |i: u64| simd.clone().index_array(Expr::int_constant(i, Type::size_t()));
+        // Folding into a variable keeps the expression linear in the number of lanes.
+        let (acc, acc_decl) = self.decl_temp_variable(lane(0).typ().clone(), Some(lane(0)), loc);
+        let mut stmts = vec![simd_decl, acc_decl];
+        for i in 1..size {
+            let keep = if is_max { acc.clone().ge(lane(i)) } else { acc.clone().le(lane(i)) };
+            stmts.push(acc.clone().assign(keep.ternary(acc.clone(), lane(i)), loc));
+        }
+        let ret_typ = self.codegen_ty_stable(ret_ty);
+        stmts.push(self.codegen_expr_to_place_stable(place, acc.cast_to(ret_typ), loc));
+        Stmt::block(stmts, loc)
+    }
+
+    /// Generates code for a SIMD vector comparison intrinsic, after checking that the result type
+    /// is a valid mask for the operands (see [crate::intrinsics::simd_mask_problem]). The argument
+    /// types have already been checked to have the same length, so comparing the result against
+    /// the first one is enough.
+    #[allow(clippy::too_many_arguments)]
     fn codegen_simd_cmp<F: FnOnce(Expr, Expr, Type) -> Expr>(
         &mut self,
         f: F,
         mut fargs: Vec<Expr>,
         p: &Place,
-        span: Span,
         rust_arg_types: &[Ty],
         rust_ret_type: Ty,
+        intrinsic: &str,
+        loc: Location,
     ) -> Stmt {
+        // rustc's codegen backends reject these result types with `E0511`, but Kani replaces the
+        // backend, so the check is ours. Report a violation as an unsupported construct rather
+        // than a compile error: a compile error aborts the whole crate, and autoharness can reach
+        // an invalid instantiation that no caller in the crate makes (e.g. a generic helper
+        // instantiated through another generic function; see #4926 and #4950). As an unsupported
+        // construct it fails only the harnesses that reach it.
+        if let Some(problem) =
+            crate::intrinsics::simd_mask_problem(self.tcx, rust_arg_types[0], rust_ret_type)
+        {
+            return self.codegen_unimplemented_stmt(
+                &format!("`{intrinsic}` with the result type `{rust_ret_type}` ({problem})"),
+                loc,
+                "https://github.com/model-checking/kani/issues/4950",
+            );
+        }
         let arg1 = fargs.remove(0);
         let arg2 = fargs.remove(0);
         let ret_typ = self.codegen_ty_stable(rust_ret_type);
 
-        if arg1.typ().len().unwrap() != ret_typ.len().unwrap() {
-            let err_msg = format!(
-                "expected return type with length {} (same as input type `{}`), \
-                found `{}` with length {}",
-                arg1.typ().len().unwrap(),
-                self.pretty_ty(rust_arg_types[0]),
-                self.pretty_ty(rust_ret_type),
-                ret_typ.len().unwrap()
-            );
-            utils::span_err(self.tcx, span, err_msg);
-        }
-
-        if !ret_typ.base_type().unwrap().is_integer() {
-            let (_, rust_base_type) = self.simd_size_and_type(rust_ret_type);
-            let err_msg = format!(
-                "expected return type with integer elements, found `{}` with non-integer `{}`",
-                self.pretty_ty(rust_ret_type),
-                self.pretty_ty(rust_base_type),
-            );
-            utils::span_err(self.tcx, span, err_msg);
-        }
-        self.tcx.dcx().abort_if_errors();
-
         // Create the vector comparison expression
         let e = f(arg1, arg2, ret_typ);
-        let loc = self.codegen_span_stable(span);
         self.codegen_expr_to_place_stable(p, e, loc)
     }
 
@@ -1560,7 +1831,8 @@ impl GotocCtx<'_> {
     }
 
     /// `simd_shuffle` constructs a new vector from the elements of two input
-    /// vectors, choosing values according to an input array of indexes.
+    /// vectors, choosing values according to an input array of indexes. See
+    /// https://doc.rust-lang.org/std/intrinsics/simd/fn.simd_shuffle.html
     ///
     /// We check that:
     ///  1. The return type length is equal to the expected length (`n`) of the
@@ -1575,13 +1847,6 @@ impl GotocCtx<'_> {
     /// TODO: Check that `indexes` contains constant values which are within the
     /// expected bounds. See
     /// <https://github.com/model-checking/kani/issues/1960> for more details.
-    ///
-    /// This code mimics CBMC's `shuffle_vector_exprt::lower()` here:
-    /// <https://github.com/diffblue/cbmc/blob/develop/src/ansi-c/c_expr.cpp>
-    ///
-    /// We can't use shuffle_vector_exprt because it's not understood by the CBMC backend,
-    /// it's immediately lowered by the C frontend.
-    /// Issue: <https://github.com/diffblue/cbmc/issues/6297>
     fn codegen_intrinsic_simd_shuffle(
         &mut self,
         mut fargs: Vec<Expr>,
@@ -1597,55 +1862,51 @@ impl GotocCtx<'_> {
         // [u32; n]: translated wrapped in a struct
         let indexes = fargs.remove(0);
 
-        let (in_type_len, vec_subtype) = self.simd_size_and_type(rust_arg_types[0]);
+        let loc = self.codegen_span_stable(span);
+        let (_, vec_subtype) = self.simd_size_and_type(rust_arg_types[0]);
         let (ret_type_len, ret_type_subtype) = self.simd_size_and_type(rust_ret_type);
         if ret_type_len != n {
-            let err_msg = format!(
-                "expected return type of length {n}, found `{}` with length {ret_type_len}",
-                self.pretty_ty(rust_ret_type),
+            return self.codegen_unimplemented_stmt(
+                &format!(
+                    "`simd_shuffle` with the result type `{rust_ret_type}` ({ret_type_len} lanes for a {n}-lane shuffle)"
+                ),
+                loc,
+                "https://github.com/model-checking/kani/issues/new/choose",
             );
-            utils::span_err(self.tcx, span, err_msg);
         }
         if vec_subtype != ret_type_subtype {
-            let err_msg = format!(
-                "expected return element type `{}` (element of input `{}`), \
-                 found `{}` with element type `{}`",
-                self.pretty_ty(vec_subtype),
-                self.pretty_ty(rust_arg_types[0]),
-                self.pretty_ty(rust_ret_type),
-                self.pretty_ty(ret_type_subtype),
+            return self.codegen_unimplemented_stmt(
+                &format!(
+                    "`simd_shuffle` with the result type `{rust_ret_type}` (the input `{}` has `{vec_subtype}` lanes)",
+                    rust_arg_types[0]
+                ),
+                loc,
+                "https://github.com/model-checking/kani/issues/new/choose",
             );
-            utils::span_err(self.tcx, span, err_msg);
         }
 
         // An unsigned type here causes an invariant violation in CBMC.
         // Issue: https://github.com/diffblue/cbmc/issues/6298
         let st_rep = Type::ssize_t();
-        let n_rep = Expr::int_constant(in_type_len, st_rep.clone());
 
-        // P = indexes.expanded_map(v -> if v < N then vec1[v] else vec2[v-N])
         let elems = (0..n)
             .map(|i| {
                 let idx = Expr::int_constant(i, st_rep.clone());
                 // Must not use `indexes.index(i)` directly, because codegen wraps arrays in struct
-                let v = self.codegen_idx_array(indexes.clone(), idx).cast_to(st_rep.clone());
-                let cond = v.clone().lt(n_rep.clone());
-                let t = vec1.clone().index(v.clone());
-                let e = vec2.clone().index(v.sub(n_rep.clone()));
-                cond.ternary(t, e)
+                self.codegen_idx_array(indexes.clone(), idx).cast_to(st_rep.clone())
             })
             .collect();
-        self.tcx.dcx().abort_if_errors();
         let cbmc_ret_ty = self.codegen_ty_stable(rust_ret_type);
-        let loc = self.codegen_span_stable(span);
-        self.codegen_expr_to_place_stable(p, Expr::vector_expr(cbmc_ret_ty, elems), loc)
+        let shuffle_vector = Expr::shuffle_vector(vec1, vec2, elems);
+        assert_eq!(*shuffle_vector.typ(), cbmc_ret_ty);
+        self.codegen_expr_to_place_stable(p, shuffle_vector, loc)
     }
 
     /// A volatile load of a memory location:
     /// <https://doc.rust-lang.org/std/ptr/fn.read_volatile.html>
     ///
     /// Undefined behavior if any of these conditions are violated:
-    ///  * `src` must be valid for writes (done by `--pointer-check`)
+    ///  * For non-ZSTs, `src` must be valid for reads (done by `--pointer-check`)
     ///  * `src` must be properly aligned (done by `align_check` below)
     ///
     /// TODO: Add a check for the condition:
@@ -1667,7 +1928,22 @@ impl GotocCtx<'_> {
             "`src` must be properly aligned",
             loc,
         );
-        let expr = src.dereference();
+        let pointee_type = pointee_type_stable(src_typ).unwrap();
+        let expr = if self.is_zst_stable(pointee_type) {
+            // ZST reads do not access memory, but still require alignment and a valid value.
+            if self.layout_of_stable(pointee_type).is_uninhabited() {
+                let validity_check = self.codegen_assert_assume_false(
+                    PropertyClass::SafetyCheck,
+                    "volatile load of an uninhabited type has undefined behavior",
+                    loc,
+                );
+                return Stmt::block(vec![align_check, validity_check], loc);
+            }
+            let typ = self.codegen_ty_stable(pointee_type);
+            Expr::init_unit(typ, &self.symbol_table)
+        } else {
+            src.dereference()
+        };
         let res_stmt = self.codegen_expr_to_place_stable(p, expr, loc);
         Stmt::block(vec![align_check, res_stmt], loc)
     }
@@ -1734,7 +2010,7 @@ impl GotocCtx<'_> {
 
         // Check that computing `count` in bytes would not overflow
         let (count_bytes, overflow_check) = self.count_in_bytes(
-            count,
+            count.clone(),
             pointee_type_stable(dst_typ).unwrap(),
             Type::size_t(),
             "write_bytes",
@@ -1742,7 +2018,12 @@ impl GotocCtx<'_> {
         );
 
         let memset_call = BuiltinFn::Memset.call(vec![dst, val, count_bytes], loc);
-        Stmt::block(vec![align_check, overflow_check, memset_call.as_stmt(loc)], loc)
+        Stmt::if_then_else(
+            count.clone().gt(Expr::int_constant(0, count.typ().clone())),
+            Stmt::block(vec![align_check, overflow_check, memset_call.as_stmt(loc)], loc),
+            None,
+            loc,
+        )
     }
 
     /// Computes (multiplies) the equivalent of a memory-related number (e.g., an offset) in bytes.
@@ -1782,7 +2063,7 @@ impl GotocCtx<'_> {
         let pointee_type = pointee_type_stable(ty).unwrap();
         // Obtain the alignment for the pointee type `T`
         let layout = self.layout_of_stable(pointee_type);
-        let align = Expr::int_constant(layout.align.abi.bytes(), Type::size_t());
+        let align = Expr::int_constant(layout.align.bytes(), Type::size_t());
         // Cast the pointer to `usize` and return the alignment expression
         let cast_ptr = ptr.cast_to(Type::size_t());
         let zero = Type::size_t().zero();
@@ -1866,12 +2147,11 @@ impl GotocCtx<'_> {
         assert!(ty.kind().is_float());
         let TyKind::RigidTy(integral_ty) = res_ty.kind() else {
             panic!(
-                "Expected intrinsic `{}` type to be `RigidTy`, but found: `{:?}`",
-                intrinsic, res_ty
+                "Expected intrinsic `{intrinsic}` type to be `RigidTy`, but found: `{res_ty:?}`"
             );
         };
         let TyKind::RigidTy(RigidTy::Float(float_type)) = ty.kind() else {
-            panic!("Expected intrinsic `{}` type to be `Float`, but found: `{:?}`", intrinsic, ty);
+            panic!("Expected intrinsic `{intrinsic}` type to be `Float`, but found: `{ty:?}`");
         };
         let mm = self.symbol_table.machine_model();
         let in_range = utils::codegen_in_range_expr(&expr, float_type, integral_ty, mm);

@@ -2,15 +2,27 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 //! Utility functions that allow us to modify a function body.
+//!
+//! TODO: We should not need this code anymore now that https://github.com/rust-lang/rust/pull/138536 is merged
 
 use crate::kani_middle::kani_functions::KaniHook;
 use crate::kani_queries::QueryDb;
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::*;
-use stable_mir::ty::{GenericArgs, MirConst, Span, Ty, UintTy};
+use rustc_public::mir::mono::Instance;
+use rustc_public::mir::*;
+use rustc_public::ty::{GenericArgs, MirConst, Span, Ty, UintTy};
 use std::fmt::Debug;
 use std::mem;
 
+/// The `SourceInfo` for a statement or terminator that Kani synthesizes at `span`.
+///
+/// As of nightly-2026-08-01 `Statement` and `Terminator` carry a `SourceInfo` (span plus source
+/// scope) instead of a bare `Span`. Kani-synthesized MIR does not belong to any inlined scope, so
+/// it uses the outermost one -- scope 0, which `Body::new` always allocates.
+pub fn synthetic_source_info(span: Span) -> SourceInfo {
+    SourceInfo { span, scope: 0 }
+}
+
+#[derive(Debug)]
 /// This structure mimics a Body that can actually be modified.
 pub struct MutableBody {
     blocks: Vec<BasicBlock>,
@@ -54,12 +66,10 @@ impl MutableBody {
         &self.locals
     }
 
-    #[allow(dead_code)]
     pub fn arg_count(&self) -> usize {
         self.arg_count
     }
 
-    #[allow(dead_code)]
     pub fn var_debug_info(&self) -> &Vec<VarDebugInfo> {
         &self.var_debug_info
     }
@@ -152,7 +162,10 @@ impl MutableBody {
         let span = source.span(&self.blocks);
         let ret_ty = rvalue.ty(&self.locals).unwrap();
         let result = self.new_local(ret_ty, span, Mutability::Not);
-        let stmt = Statement { kind: StatementKind::Assign(Place::from(result), rvalue), span };
+        let stmt = Statement {
+            kind: StatementKind::Assign(Place::from(result), rvalue),
+            source_info: synthetic_source_info(span),
+        };
         self.insert_stmt(stmt, source, position);
         result
     }
@@ -166,7 +179,10 @@ impl MutableBody {
         position: InsertPosition,
     ) {
         let span = source.span(&self.blocks);
-        let stmt = Statement { kind: StatementKind::Assign(place, rvalue), span };
+        let stmt = Statement {
+            kind: StatementKind::Assign(place, rvalue),
+            source_info: synthetic_source_info(span),
+        };
         self.insert_stmt(stmt, source, position);
     }
 
@@ -181,23 +197,31 @@ impl MutableBody {
         check_type: &CheckType,
         source: &mut SourceInstruction,
         position: InsertPosition,
-        value: Local,
+        value: Option<Local>,
         msg: &str,
     ) {
-        assert_eq!(
-            self.locals[value].ty,
-            Ty::bool_ty(),
-            "Expected boolean value as the assert input"
-        );
         let new_bb = self.blocks.len();
         let span = source.span(&self.blocks);
-        let CheckType::Assert(assert_fn) = check_type;
+        let msg_op = self.new_str_operand(msg, span);
+        let (assert_fn, args) = match check_type {
+            CheckType::SafetyCheck(assert_fn) | CheckType::SafetyCheckNoAssume(assert_fn) => {
+                assert_eq!(
+                    self.locals[value.unwrap()].ty,
+                    Ty::bool_ty(),
+                    "Expected boolean value as the assert input"
+                );
+                (assert_fn, vec![Operand::Move(Place::from(value.unwrap())), msg_op])
+            }
+            CheckType::UnsupportedCheck(assert_fn) => {
+                assert!(value.is_none());
+                (assert_fn, vec![msg_op])
+            }
+        };
         let assert_op =
             Operand::Copy(Place::from(self.new_local(assert_fn.ty(), span, Mutability::Not)));
-        let msg_op = self.new_str_operand(msg, span);
         let kind = TerminatorKind::Call {
             func: assert_op,
-            args: vec![Operand::Move(Place::from(value)), msg_op],
+            args,
             destination: Place {
                 local: self.new_local(Ty::new_tuple(&[]), span, Mutability::Not),
                 projection: vec![],
@@ -205,7 +229,7 @@ impl MutableBody {
             target: Some(new_bb),
             unwind: UnwindAction::Terminate,
         };
-        let terminator = Terminator { kind, span };
+        let terminator = Terminator { kind, source_info: synthetic_source_info(span) };
         self.insert_terminator(source, position, terminator);
     }
 
@@ -234,7 +258,7 @@ impl MutableBody {
             target: Some(new_bb),
             unwind: UnwindAction::Terminate,
         };
-        let terminator = Terminator { kind, span };
+        let terminator = Terminator { kind, source_info: synthetic_source_info(span) };
         self.insert_terminator(source, position, terminator);
     }
 
@@ -320,7 +344,6 @@ impl MutableBody {
     /// `InsertPosition` is `InsertPosition::Before`, `source` will point to the same instruction as
     /// before. If `InsertPosition` is `InsertPosition::After`, `source` will point to the
     /// terminator of the newly inserted basic block.
-    #[allow(dead_code)]
     pub fn insert_bb(
         &mut self,
         mut bb: BasicBlock,
@@ -336,7 +359,7 @@ impl MutableBody {
         *target = split_bb_idx;
         let new_term = Terminator {
             kind: TerminatorKind::Goto { target: inserted_bb_idx },
-            span: source.span(&self.blocks),
+            source_info: synthetic_source_info(source.span(&self.blocks)),
         };
         self.split_bb(source, position, new_term);
         self.blocks.push(bb);
@@ -349,6 +372,28 @@ impl MutableBody {
         terminator: Terminator,
     ) {
         self.split_bb(source, position, terminator);
+    }
+
+    /// Append a fully-formed basic block (whose targets the caller has already remapped into
+    /// this body's index space) and return its index. Building block for inlining callee
+    /// bodies, c.f. `automatic::inline_with_assumed_panics`.
+    pub fn push_raw_bb(&mut self, bb: BasicBlock) -> BasicBlockIdx {
+        self.blocks.push(bb);
+        self.blocks.len() - 1
+    }
+
+    /// Split the block at `source`, terminating the first half with `terminator` (whose
+    /// targets may still be placeholders), and return (index of the terminator's block,
+    /// index of the remainder block). Building block for inlining callee bodies.
+    pub fn split_with_terminator(
+        &mut self,
+        source: &mut SourceInstruction,
+        terminator: Terminator,
+    ) -> (BasicBlockIdx, BasicBlockIdx) {
+        let remainder_idx = self.blocks.len();
+        let term_bb_idx = source.bb();
+        self.split_bb(source, InsertPosition::Before, terminator);
+        (term_bb_idx, remainder_idx)
     }
 
     /// Insert statement before or after the source instruction and update the source as needed. If
@@ -392,7 +437,7 @@ impl MutableBody {
                             statements: vec![new_stmt],
                             terminator: Terminator {
                                 kind: TerminatorKind::Goto { target: *target_bb },
-                                span,
+                                source_info: synthetic_source_info(span),
                             },
                         };
                         *target_bb = new_bb_idx;
@@ -413,7 +458,7 @@ impl MutableBody {
     /// Keep all the locals untouched, so they can be reused by the passes if needed.
     pub fn clear_body(&mut self, kind: TerminatorKind) {
         self.blocks.clear();
-        let terminator = Terminator { kind, span: self.span };
+        let terminator = Terminator { kind, source_info: synthetic_source_info(self.span) };
         self.blocks.push(BasicBlock { statements: Vec::default(), terminator })
     }
 
@@ -441,30 +486,35 @@ impl MutableBody {
     }
 }
 
-// TODO: Remove this enum, since we now only support kani's assert.
 #[derive(Clone, Debug)]
 pub enum CheckType {
-    /// This is used by default when the `kani` crate is available.
-    Assert(Instance),
+    SafetyCheck(Instance),
+    SafetyCheckNoAssume(Instance),
+    UnsupportedCheck(Instance),
 }
 
 impl CheckType {
-    /// This will create the type of check that is available in the current crate, attempting to
-    /// create a check that generates an assertion following by an assumption of the same assertion.
-    pub fn new_assert_assume(queries: &QueryDb) -> CheckType {
-        let fn_def = queries.kani_functions()[&KaniHook::Assert.into()];
-        CheckType::Assert(Instance::resolve(fn_def, &GenericArgs(vec![])).unwrap())
+    /// This will create the type of safety check that is available in the current crate, attempting
+    /// to create a check that generates an assertion following by an assumption of the same
+    /// assertion.
+    pub fn new_safety_check_assert_assume(queries: &QueryDb) -> CheckType {
+        let fn_def = queries.kani_functions()[&KaniHook::SafetyCheck.into()];
+        CheckType::SafetyCheck(Instance::resolve(fn_def, &GenericArgs(vec![])).unwrap())
     }
 
-    /// This will create the type of check that is available in the current crate, attempting to
-    /// create a check that generates an assertion, without assuming the condition afterwards.
-    ///
-    /// If `kani` crate is available, this will return [CheckType::Assert], and the instance will
-    /// point to `kani::assert`. Otherwise, we will collect the `core::panic_str` method and return
-    /// [CheckType::Panic].
-    pub fn new_assert(queries: &QueryDb) -> CheckType {
-        let fn_def = queries.kani_functions()[&KaniHook::Check.into()];
-        CheckType::Assert(Instance::resolve(fn_def, &GenericArgs(vec![])).unwrap())
+    /// This will create the type of safety check that is available in the current crate, attempting
+    /// to create a check that generates an assertion, but not following by an assumption.
+    pub fn new_safety_check_assert_no_assume(queries: &QueryDb) -> CheckType {
+        let fn_def = queries.kani_functions()[&KaniHook::SafetyCheckNoAssume.into()];
+        CheckType::SafetyCheckNoAssume(Instance::resolve(fn_def, &GenericArgs(vec![])).unwrap())
+    }
+
+    /// This will create the type of operation-unsupported check that is available in the current
+    /// crate, attempting to create a check that generates an assertion following by an assumption
+    /// of the same assertion.
+    pub fn new_unsupported_check_assert_assume_false(queries: &QueryDb) -> CheckType {
+        let fn_def = queries.kani_functions()[&KaniHook::UnsupportedCheck.into()];
+        CheckType::UnsupportedCheck(Instance::resolve(fn_def, &GenericArgs(vec![])).unwrap())
     }
 }
 
@@ -478,8 +528,8 @@ pub enum SourceInstruction {
 impl SourceInstruction {
     pub fn span(&self, blocks: &[BasicBlock]) -> Span {
         match *self {
-            SourceInstruction::Statement { idx, bb } => blocks[bb].statements[idx].span,
-            SourceInstruction::Terminator { bb } => blocks[bb].terminator.span,
+            SourceInstruction::Statement { idx, bb } => blocks[bb].statements[idx].source_info.span,
+            SourceInstruction::Terminator { bb } => blocks[bb].terminator.source_info.span,
         }
     }
 
@@ -494,7 +544,7 @@ impl SourceInstruction {
 ///
 /// We removed many methods for simplicity.
 ///
-/// TODO: Contribute this to stable_mir.
+/// TODO: Contribute this to rustc_public.
 /// <https://github.com/rust-lang/project-stable-mir/issues/81>
 ///
 /// This code was based on the existing MirVisitor:
@@ -556,10 +606,8 @@ pub trait MutMirVisitor {
             },
             StatementKind::FakeRead(_, _)
             | StatementKind::SetDiscriminant { .. }
-            | StatementKind::Deinit(_)
             | StatementKind::StorageLive(_)
             | StatementKind::StorageDead(_)
-            | StatementKind::Retag(_, _)
             | StatementKind::PlaceMention(_)
             | StatementKind::AscribeUserType { .. }
             | StatementKind::Coverage(_)
@@ -612,15 +660,13 @@ pub trait MutMirVisitor {
             Rvalue::Repeat(op, _) => {
                 self.visit_operand(op);
             }
-            Rvalue::ShallowInitBox(op, _) => self.visit_operand(op),
-            Rvalue::UnaryOp(_, op) | Rvalue::Use(op) => {
+            Rvalue::UnaryOp(_, op) | Rvalue::Use(op, _) => {
                 self.visit_operand(op);
             }
             Rvalue::AddressOf(..) => {}
             Rvalue::CopyForDeref(_) | Rvalue::Discriminant(_) | Rvalue::Len(_) => {}
-            Rvalue::Ref(..) => {}
+            Rvalue::Ref(..) | Rvalue::Reborrow(..) => {}
             Rvalue::ThreadLocalRef(_) => {}
-            Rvalue::NullaryOp(..) => {}
         }
     }
 }

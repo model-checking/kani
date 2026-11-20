@@ -53,6 +53,9 @@ pub enum ParserItem {
     Result {
         result: Vec<Property>,
     },
+    Properties {
+        properties: Vec<ListedProperty>,
+    },
     #[serde(rename_all = "camelCase")]
     ProverStatus {
         _c_prover_status: String,
@@ -86,6 +89,15 @@ pub struct Property {
     pub trace: Option<Vec<TraceItem>>,
 }
 
+/// Struct that represents a single property listed by `--show-properties`.
+#[derive(Clone, Debug, Deserialize)]
+pub struct ListedProperty {
+    pub description: String,
+    pub name: String,
+    #[serde(rename = "sourceLocation")]
+    pub source_location: SourceLocation,
+}
+
 /// CBMC's somewhat-ish consistent format for naming properties.
 #[derive(Clone, Debug)]
 pub struct PropertyId {
@@ -97,6 +109,7 @@ pub struct PropertyId {
 impl Property {
     const COVER_PROPERTY_CLASS: &'static str = "cover";
     const COVERAGE_PROPERTY_CLASS: &'static str = "code_coverage";
+    const UNSUPPORTED_CONSTRUCT_PROPERTY_CLASS: &'static str = "unsupported_construct";
 
     pub fn property_class(&self) -> String {
         self.property_id.class.clone()
@@ -110,6 +123,10 @@ impl Property {
     /// Returns true if this is a cover property
     pub fn is_cover_property(&self) -> bool {
         self.property_id.class == Self::COVER_PROPERTY_CLASS
+    }
+
+    pub fn is_unsupported_construct_property(&self) -> bool {
+        self.property_id.class == Self::UNSUPPORTED_CONSTRUCT_PROPERTY_CLASS
     }
 
     pub fn property_name(&self) -> String {
@@ -209,6 +226,30 @@ impl<'de> serde::Deserialize<'de> for PropertyId {
             class,
             id: attributes_tuple.2.parse().unwrap(),
         })
+    }
+}
+
+impl PropertyId {
+    /// CBMC's property id format, with the demangled function name (as `Deserialize` above
+    /// produces it). Unlike [`Property::property_name`], a display rendering that always uses the
+    /// three-part shape, this keeps the shorter `missing_definition` and `recursion` forms.
+    pub fn to_cbmc_id(&self) -> String {
+        if self.class == "recursion" && self.id == 1 {
+            return match &self.fn_name {
+                Some(name) => format!("{name}.recursion"),
+                None => ".recursion".to_string(),
+            };
+        }
+        if self.class == "missing_definition" {
+            return match &self.fn_name {
+                Some(name) => format!("{name}.{}", self.id),
+                None => format!("{}.{}", self.class, self.id),
+            };
+        }
+        match &self.fn_name {
+            Some(name) => format!("{name}.{}.{}", self.class, self.id),
+            None => format!("{}.{}", self.class, self.id),
+        }
     }
 }
 
@@ -341,6 +382,7 @@ pub enum CheckStatus {
     Unreachable,
     Uncovered,     // for `code_coverage` properties only
     Unsatisfiable, // for `cover` properties only
+    Error,         // returned by CBMC when using SMT solvers
 }
 
 impl std::fmt::Display for CheckStatus {
@@ -357,6 +399,8 @@ impl std::fmt::Display for CheckStatus {
             // impossible to definitively conclude whether other properties hold or not.
             CheckStatus::Unknown => style("UNDETERMINED").yellow(),
             CheckStatus::Unsatisfiable => style("UNSATISFIABLE").yellow(),
+            // CBMC returns ERROR when using SMT solvers and the solver encounters an error.
+            CheckStatus::Error => style("ERROR").red(),
         };
         write!(f, "{check_str}")
     }
@@ -373,10 +417,11 @@ enum Action {
 ///
 /// CBMC's JSON output is defined as a JSON array which contains:
 ///  1. One program at the beginning (i.e., a message with CBMC's version).
-///  2. Messages, which can appears anywhere, and are either status messages or error messages.
+///  2. Messages, which can appear anywhere, and are either status messages or error messages.
 ///  3. Verification results, another JSON array with all individual checks.
-///  4. Prover status, at the end. Because the verification results depends on
-///     our postprocessing, this is not used.
+///  4. Prover status, at the end. Because the verification results depend on
+///     our postprocessing, its value is not used, but its presence shows that
+///     CBMC finished writing the verification results.
 ///
 /// The parser reads the output line by line. A line may trigger one action, and
 /// the action may return a parsed item.
@@ -739,6 +784,49 @@ mod tests {
     }
 
     #[test]
+    fn to_cbmc_id_general_form() {
+        let with_fn = PropertyId {
+            fn_name: Some("alloc::raw_vec::RawVec::<u8>::allocate_in".to_string()),
+            class: "sanity_check".to_string(),
+            id: 1,
+        };
+        assert_eq!(
+            with_fn.to_cbmc_id(),
+            "alloc::raw_vec::RawVec::<u8>::allocate_in.sanity_check.1"
+        );
+
+        let without_fn = PropertyId { fn_name: None, class: "assertion".to_string(), id: 7 };
+        assert_eq!(without_fn.to_cbmc_id(), "assertion.7");
+    }
+
+    #[test]
+    fn to_cbmc_id_missing_definition_shorter_forms() {
+        let with_fn = PropertyId {
+            fn_name: Some("alloc::raw_vec::RawVec::<u8>::allocate_in".to_string()),
+            class: "missing_definition".to_string(),
+            id: 1,
+        };
+        assert_eq!(with_fn.to_cbmc_id(), "alloc::raw_vec::RawVec::<u8>::allocate_in.1");
+
+        let without_fn =
+            PropertyId { fn_name: None, class: "missing_definition".to_string(), id: 3 };
+        assert_eq!(without_fn.to_cbmc_id(), "missing_definition.3");
+    }
+
+    #[test]
+    fn to_cbmc_id_recursion_form() {
+        let with_fn = PropertyId {
+            fn_name: Some("alloc::raw_vec::RawVec::<u8>::allocate_in".to_string()),
+            class: "recursion".to_string(),
+            id: 1,
+        };
+        assert_eq!(with_fn.to_cbmc_id(), "alloc::raw_vec::RawVec::<u8>::allocate_in.recursion");
+
+        let without_fn = PropertyId { fn_name: None, class: "recursion".to_string(), id: 1 };
+        assert_eq!(without_fn.to_cbmc_id(), ".recursion");
+    }
+
+    #[test]
     fn check_trace_value_deserialization_works() {
         let data = format!(
             r#"{{
@@ -773,9 +861,52 @@ mod tests {
                 }
             ]
         }"#;
-        let parser_item: Result<ParserItem, _> = serde_json::from_str(&data);
-        let result_struct: Result<ResultStruct, _> = serde_json::from_str(&data);
+        let parser_item: Result<ParserItem, _> = serde_json::from_str(data);
+        let result_struct: Result<ResultStruct, _> = serde_json::from_str(data);
         assert!(parser_item.is_ok());
         assert!(result_struct.is_ok());
+    }
+
+    /// Checks that a CBMC "properties" item, as printed by `--show-properties`,
+    /// can be deserialized into a `ParserItem`.
+    #[test]
+    fn check_properties_deserialization_works() {
+        let data = r#"{
+            "properties": [
+                {
+                    "class": "assertion",
+                    "description": "assertion failed: x.wrapping_add(0) == x",
+                    "expression": "x == x",
+                    "name": "main.assertion.1",
+                    "sourceLocation": {
+                        "column": "5",
+                        "comment": "assertion failed: x.wrapping_add(0) == x",
+                        "file": "/home/ubuntu/main.rs",
+                        "function": "main",
+                        "line": "9",
+                        "propertyClass": "assertion",
+                        "propertyId": "main.assertion.1"
+                    }
+                }
+            ]
+        }"#;
+        let parser_item: ParserItem = serde_json::from_str(data).unwrap();
+        assert!(
+            matches!(parser_item, ParserItem::Properties { properties } if properties[0].name == "main.assertion.1")
+        );
+    }
+
+    #[test]
+    fn check_property_id_round_trips() {
+        let cases = [
+            "alloc::raw_vec::RawVec::<u8>::allocate_in.sanity_check.1",
+            "alloc::raw_vec::RawVec::<u8>::allocate_in.1",
+            "assertion.1",
+            "alloc::raw_vec::RawVec::<u8>::allocate_in.recursion",
+        ];
+        for prop_id_string in cases {
+            let prop_id: PropertyId = serde_json::from_str(&format!("{prop_id_string:?}")).unwrap();
+            assert_eq!(prop_id.to_cbmc_id(), prop_id_string, "round trip for {prop_id_string:?}");
+        }
     }
 }

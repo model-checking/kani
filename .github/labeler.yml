@@ -5,9 +5,20 @@
 #
 # Note that we enable dot, so "**" matches all files in a folder
 
-Z-BenchCI:
+Z-EndToEndBenchCI:
 - any:
   - changed-files:
-    - any-glob-to-any-file: ['kani-compiler/**', 'kani-driver/src/call-*', 'cprover_bindings/**', 'library/**']
+    - any-glob-to-any-file: ['kani-compiler/**', 'kani-driver/src/call_*', 'cprover_bindings/**', 'library/**']
     - any-glob-to-any-file: ['rust-toolchain.toml', 'Cargo.lock']
     - any-glob-to-any-file: ['kani-dependencies']
+
+Z-CompilerBenchCI:
+- any:
+  # we want to run compiler benchmarks if:
+  - changed-files:
+    # any parts of the compiler change
+    - any-glob-to-any-file: ['kani-compiler/**', 'cprover_bindings/**', 'library/**']
+    # the way we call the compiler changes
+    - any-glob-to-any-file: ['kani-driver/src/call_cargo.rs', 'kani-driver/src/call_single_file.rs']
+    # or if our dependencies change
+    - any-glob-to-any-file: ['rust-toolchain.toml', 'Cargo.lock']

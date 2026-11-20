@@ -57,9 +57,6 @@ fn check_next_y() {
     let _ = p1.next_y();
 }
 
-/// We should enable this once we add support to specifying trait methods:
-/// <https://github.com/model-checking/kani/issues/1997>
-#[cfg(ignore)]
 #[kani::proof_for_contract(Point::add)]
 fn check_add() {
     let (p1, p2): (Point, Point) = kani::any();

@@ -5,31 +5,106 @@ use anyhow::{Result, bail};
 use kani_metadata::{CbmcSolver, HarnessMetadata};
 use regex::Regex;
 use rustc_demangle::demangle;
+use serde::Serialize;
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
 use std::ffi::OsString;
 use std::fmt::Write;
 use std::path::Path;
-use std::sync::OnceLock;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
+use strum_macros::Display;
 use tokio::process::Command as TokioCommand;
 
 use crate::args::common::Verbosity;
-use crate::args::{OutputFormat, VerificationArgs};
+use crate::args::{OutputFormat, Timeout, VerificationArgs};
 use crate::cbmc_output_parser::{
-    CheckStatus, Property, VerificationOutput, extract_results, process_cbmc_output,
+    CheckStatus, ParserItem, Property, VerificationOutput, extract_results, process_cbmc_output,
 };
-use crate::cbmc_property_renderer::{format_coverage, format_result, kani_cbmc_output_filter};
+use crate::cbmc_property_renderer::{
+    format_coverage, format_result, is_vacuous_harness_cover, kani_cbmc_output_filter,
+};
 use crate::coverage::cov_results::{CoverageCheck, CoverageResults};
 use crate::coverage::cov_results::{CoverageRegion, CoverageTerm};
 use crate::session::KaniSession;
 use crate::util::render_command;
 
+const MAX_WARNING_MESSAGE_CHARS: usize = 4096;
+const MAX_WARNINGS_PER_HARNESS: usize = 20;
+
+/// `--export-json`'s `harnesses[].warnings[]` element. `original_chars` is
+/// `Some(pre-truncation count)` exactly when `truncated` is `true`.
+#[derive(Clone, Debug, Serialize)]
+pub struct Warning {
+    pub message: String,
+    pub truncated: bool,
+    pub original_chars: Option<usize>,
+}
+
+fn truncate_warning(message: &str) -> Warning {
+    let total_chars = message.chars().count();
+    if total_chars <= MAX_WARNING_MESSAGE_CHARS {
+        return Warning { message: message.to_string(), truncated: false, original_chars: None };
+    }
+    let prefix: String = message.chars().take(MAX_WARNING_MESSAGE_CHARS).collect();
+    Warning { message: prefix, truncated: true, original_chars: Some(total_chars) }
+}
+
+/// Bounded warning retention for `--export-json`, built up as messages stream in: at most
+/// `MAX_WARNINGS_PER_HARNESS` full `Warning` records, with everything past the cap counted (not
+/// cloned) into `truncated` -- so a long-running harness never holds every warning CBMC printed
+/// just in case a `--harness-timeout` cancellation needs them.
+#[derive(Default)]
+struct CapturedWarnings {
+    warnings: Vec<Warning>,
+    truncated: usize,
+}
+
+impl CapturedWarnings {
+    fn push(&mut self, message: &str) {
+        if self.warnings.len() < MAX_WARNINGS_PER_HARNESS {
+            self.warnings.push(truncate_warning(message));
+        } else {
+            self.truncated += 1;
+        }
+    }
+
+    fn into_parts(self) -> (Vec<Warning>, usize) {
+        (self.warnings, self.truncated)
+    }
+}
+
+/// Wraps `output_filter` so that, when `export_json` is set, every `WARNING`-typed message it
+/// passes through is also retained in the returned handle (capped, see `CapturedWarnings`) --
+/// outside the cancellable `process_cbmc_output` future, so a `--harness-timeout` cancellation
+/// still has access to whatever was captured before the cut.
+fn warning_capturing_filter<F>(
+    export_json: bool,
+    mut output_filter: F,
+) -> (impl FnMut(ParserItem) -> Option<ParserItem>, Arc<Mutex<CapturedWarnings>>)
+where
+    F: FnMut(ParserItem) -> Option<ParserItem>,
+{
+    let captured = Arc::new(Mutex::new(CapturedWarnings::default()));
+    let capture = captured.clone();
+    let filter = move |item| {
+        let filtered = output_filter(item);
+        if export_json
+            && let Some(ParserItem::Message { message_text, message_type }) = &filtered
+            && message_type.eq_ignore_ascii_case("warning")
+        {
+            capture.lock().unwrap().push(message_text);
+        }
+        filtered
+    };
+    (filter, captured)
+}
+
 /// We will use Cadical by default since it performed better than MiniSAT in our analysis.
 /// Note: Kissat was marginally better, but it is an external solver which could be more unstable.
 static DEFAULT_SOLVER: CbmcSolver = CbmcSolver::Cadical;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Display, PartialEq, Eq)]
 pub enum VerificationStatus {
     Success,
     Failure,
@@ -37,7 +112,8 @@ pub enum VerificationStatus {
 
 /// Represents failed properties in three different categories.
 /// This simplifies the process to determine and format verification results.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, serde::Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum FailedProperties {
     // No failures
     None,
@@ -45,6 +121,8 @@ pub enum FailedProperties {
     PanicsOnly,
     // One or more failures that aren't panic-related
     Other,
+    // One or more properties resulted in an ERROR rather than a failing/successful verification
+    Error,
 }
 
 /// The possible CBMC exit statuses
@@ -52,6 +130,9 @@ pub enum FailedProperties {
 pub enum ExitStatus {
     Timeout,
     OutOfMemory,
+    /// CBMC printed a result array but not the overall status that follows the complete array,
+    /// so the results may be truncated; the integer is the process exit status
+    IncompleteResults(i32),
     /// the integer is the process exit status
     Other(i32),
 }
@@ -72,21 +153,33 @@ pub struct VerificationResult {
     pub runtime: Duration,
     /// Whether concrete playback generated a test
     pub generated_concrete_test: bool,
+    /// The number of quantifier expressions CBMC's solver backend could not encode and
+    /// dropped (replaced with unconstrained values), c.f. CBMC's "warning: ignoring forall"
+    /// messages. A nonzero count makes the analysis unsound -- an `assume` containing such a
+    /// quantifier is not enforced (a successful result would be vacuous), and an `assert`
+    /// containing one may fail spuriously -- so it forces the verification to fail (see
+    /// `VerificationResult::from`).
+    pub ignored_quantifiers: usize,
     /// The coverage results
     pub coverage_results: Option<CoverageResults>,
+    /// Raw CBMC `WARNING`-type messages, capped; retained only when `--export-json` is set.
+    pub warnings: Vec<Warning>,
+    pub warnings_truncated: usize,
 }
 
 impl KaniSession {
     /// Verify a goto binary that's been prepared with goto-instrument
     pub fn run_cbmc(&self, file: &Path, harness: &HarnessMetadata) -> Result<VerificationResult> {
         let args: Vec<OsString> = self.cbmc_flags(file, harness)?;
+        let timeout =
+            resolve_harness_timeout(&self.args, harness, self.autoharness_harness_timeout);
 
         // TODO get cbmc path from self
         let mut cmd = TokioCommand::new("cbmc");
         cmd.args(args);
 
-        let verification_results = if self.args.output_format == crate::args::OutputFormat::Old {
-            if self.run_terminal_timeout(cmd).is_err() {
+        let verification_results = if self.args.output_format() == crate::args::OutputFormat::Old {
+            if self.run_terminal_timeout(cmd, timeout).is_err() {
                 VerificationResult::mock_failure()
             } else {
                 VerificationResult::mock_success()
@@ -97,7 +190,7 @@ impl KaniSession {
             // TODO: move this now that we don't use --visualize
             cmd.arg("--json-ui");
 
-            self.runtime.block_on(self.run_cbmc_piped(cmd, harness))?
+            self.runtime.block_on(self.run_cbmc_piped(cmd, harness, timeout))?
         };
 
         Ok(verification_results)
@@ -107,6 +200,7 @@ impl KaniSession {
         &self,
         mut cmd: TokioCommand,
         harness: &HarnessMetadata,
+        timeout: Option<Timeout>,
     ) -> Result<VerificationResult> {
         if self.args.common_args.verbose() {
             println!("[Kani] Running: `{}`", render_command(cmd.as_std()).to_string_lossy());
@@ -119,32 +213,28 @@ impl KaniSession {
 
         let start_time = Instant::now();
 
-        let res = if let Some(timeout) = self.args.harness_timeout {
-            tokio::time::timeout(
-                timeout.into(),
-                process_cbmc_output(&mut cbmc_process, |i| {
-                    kani_cbmc_output_filter(
-                        i,
-                        self.args.extra_pointer_checks,
-                        self.args.common_args.quiet,
-                        &self.args.output_format,
-                    )
-                }),
+        let export_json = self.args.export_json.is_some();
+        let (filter, captured_warnings) = warning_capturing_filter(export_json, |item| {
+            kani_cbmc_output_filter(
+                item,
+                self.args.extra_pointer_checks,
+                self.args.common_args.quiet,
+                &self.args.output_format(),
+                self.args.log_file.as_ref(),
             )
-            .await
+        });
+
+        let res = if let Some(timeout) = timeout {
+            tokio::time::timeout(timeout.into(), process_cbmc_output(&mut cbmc_process, filter))
+                .await
         } else {
-            Ok(process_cbmc_output(&mut cbmc_process, |i| {
-                kani_cbmc_output_filter(
-                    i,
-                    self.args.extra_pointer_checks,
-                    self.args.common_args.quiet,
-                    &self.args.output_format,
-                )
-            })
-            .await)
+            Ok(process_cbmc_output(&mut cbmc_process, filter).await)
         };
 
-        let verification_results = if res.is_err() {
+        let mut result = if let Ok(output) = res {
+            // The timeout wasn't reached
+            VerificationResult::from(output?, harness.attributes.should_panic, start_time)
+        } else {
             // An error occurs if the timeout was reached
 
             // Kill the process
@@ -156,15 +246,15 @@ impl KaniSession {
                 results: Err(ExitStatus::Timeout),
                 runtime: start_time.elapsed(),
                 generated_concrete_test: false,
+                ignored_quantifiers: 0,
                 coverage_results: None,
+                warnings: Vec::new(),
+                warnings_truncated: 0,
             }
-        } else {
-            // The timeout wasn't reached
-            let output = res.unwrap()?;
-            VerificationResult::from(output, harness.attributes.should_panic, start_time)
         };
-
-        Ok(verification_results)
+        (result.warnings, result.warnings_truncated) =
+            std::mem::take(&mut *captured_warnings.lock().unwrap()).into_parts();
+        Ok(result)
     }
 
     /// "Internal," but also used by call_cbmc_viewer
@@ -180,7 +270,9 @@ impl KaniSession {
             args.push(object_bits.to_string().into());
         }
 
-        if let Some(unwind_value) = resolve_unwind_value(&self.args, harness_metadata) {
+        if let Some(unwind_value) =
+            resolve_unwind_value(&self.args, harness_metadata, self.autoharness_default_unwind)
+        {
             args.push("--unwind".into());
             args.push(unwind_value.to_string().into());
         }
@@ -198,6 +290,17 @@ impl KaniSession {
 
         if self.args.concrete_playback.is_some() {
             args.push("--trace".into());
+            // Concrete playback only consumes the values of `kani::any_raw_*`
+            // return-value assignments from the trace. CBMC's compact trace
+            // retains those (they are regular, non-hidden assignments) while
+            // dropping hidden instrumentation steps whose values can dominate
+            // the trace by orders of magnitude on contract-heavy harnesses
+            // (e.g. 427 MB -> 3 MB of JSON). Requires CBMC with
+            // https://github.com/diffblue/cbmc/pull/9135 to have an effect;
+            // CBMC versions that do not yet honor `--compact-trace` with
+            // `--json-ui` accept but ignore the option, so this is
+            // compatible either way.
+            args.push("--compact-trace".into());
         }
 
         args.extend(self.args.cbmc_args.iter().cloned());
@@ -263,66 +366,158 @@ impl KaniSession {
         args
     }
 
+    /// The solver this run will actually use for a harness: `--solver` takes precedence over the
+    /// harness attribute, which takes precedence over the default.
+    ///
+    /// Anything reporting the configuration of a run must resolve it through here rather than
+    /// reading the harness attribute directly, or it will describe a different run than the one
+    /// `handle_solver_args` builds.
+    pub fn resolved_solver<'a>(&'a self, harness_solver: &'a Option<CbmcSolver>) -> &'a CbmcSolver {
+        self.args.solver.as_ref().or(harness_solver.as_ref()).unwrap_or(&DEFAULT_SOLVER)
+    }
+
     pub fn handle_solver_args(
         &self,
         harness_solver: &Option<CbmcSolver>,
         args: &mut Vec<OsString>,
     ) -> Result<()> {
-        let solver = if let Some(solver) = &self.args.solver {
-            // `--solver` option takes precedence over attributes
-            solver
-        } else if let Some(solver) = harness_solver {
-            solver
-        } else {
-            &DEFAULT_SOLVER
-        };
+        let solver = self.resolved_solver(harness_solver);
 
-        match solver {
-            CbmcSolver::Cadical => {
-                args.push("--sat-solver".into());
-                args.push("cadical".into());
-            }
-            CbmcSolver::Kissat => {
-                args.push("--external-sat-solver".into());
-                args.push("kissat".into());
-            }
-            CbmcSolver::Minisat => {
-                // Minisat is currently CBMC's default solver, so no need to
-                // pass any arguments
-            }
-            CbmcSolver::Binary(solver_binary) => {
-                // Check if the specified binary exists in path
-                if which::which(solver_binary).is_err() {
-                    bail!("the specified solver \"{solver_binary}\" was not found in path")
-                }
-                args.push("--external-sat-solver".into());
-                args.push(solver_binary.into());
-            }
+        // Check if the specified binary exists in path
+        if let CbmcSolver::Binary(solver_binary) = solver
+            && which::which(solver_binary).is_err()
+        {
+            bail!("the specified solver \"{solver_binary}\" was not found in path")
         }
+        args.extend(solver_flags(solver));
         Ok(())
     }
+}
+
+/// The CBMC flags that select `solver`.
+pub(crate) fn solver_flags(solver: &CbmcSolver) -> Vec<OsString> {
+    match solver {
+        CbmcSolver::Bitwuzla => vec!["--bitwuzla".into()],
+        CbmcSolver::Cadical => vec!["--sat-solver".into(), "cadical".into()],
+        CbmcSolver::Cvc5 => vec!["--cvc5".into()],
+        CbmcSolver::Kissat => vec!["--external-sat-solver".into(), "kissat".into()],
+        // Minisat is currently CBMC's default solver, so no need to
+        // pass any arguments
+        CbmcSolver::Minisat => vec![],
+        CbmcSolver::Z3 => vec!["--z3".into()],
+        CbmcSolver::Binary(solver_binary) => {
+            vec!["--external-sat-solver".into(), solver_binary.into()]
+        }
+    }
+}
+
+/// Count CBMC messages reporting that a quantifier expression could not be encoded and was
+/// dropped. CBMC's SAT-based backends only support quantifiers with constant bounds; other
+/// quantifiers are replaced by unconstrained values, with only a low-visibility message
+/// (`prop_conv_solvert::ignoring`, printed as "warning: ignoring forall" followed by the
+/// pretty-printed expression).
+fn count_ignored_quantifiers(items: &[ParserItem]) -> usize {
+    items
+        .iter()
+        .filter(|item| {
+            matches!(item, ParserItem::Message { message_text, .. }
+                if message_text.starts_with("warning: ignoring forall")
+                    || message_text.starts_with("warning: ignoring exists"))
+        })
+        .count()
+}
+
+/// The error rendered when the solver backend dropped quantifier expressions.
+fn ignored_quantifiers_error(count: usize) -> String {
+    format!(
+        "error: the solver backend does not support quantifiers with non-constant bounds \
+and ignored {count} quantifier expression(s), replacing them with unconstrained values.\n\
+         Kani cannot soundly verify this harness: `kani::assume` calls containing such a \
+quantifier are NOT enforced (a successful result would not cover the intended property), and \
+`kani::assert` calls containing one may fail spuriously.\n\
+         Use an SMT solver backend that supports quantifiers, e.g. `#[kani::solver(z3)]`.\n"
+    )
+}
+
+/// Whether CBMC's exit status shows that it finished reporting its results.
+///
+/// CBMC exits with 0 when all properties pass and with 10 when some property fails. It exits
+/// with 6 when some property has status ERROR (e.g., a solver error), which the results already
+/// report as a failure. It exits with 5 when some property is UNKNOWN or NOT_CHECKED; Kani's
+/// verdict does not count those as failures, so such results are rejected. Any other status means
+/// CBMC failed along the way: for instance, when it runs out of memory while writing a trace, it
+/// still closes the JSON output (exit status 6), but the result array is truncated and may be
+/// missing failed properties. A truncated array can even contain an ERROR property, so callers
+/// check for an out-of-memory message first (see `cbmc_reported_out_of_memory`).
+/// See <https://github.com/model-checking/kani/issues/4905>.
+fn cbmc_completed_results(process_status: i32, results: &[Property]) -> bool {
+    match process_status {
+        0 | 10 => true,
+        6 => results.iter().any(|prop| prop.status == CheckStatus::Error),
+        _ => false,
+    }
+}
+
+/// Whether CBMC reported that it ran out of memory. CBMC catches `std::bad_alloc`, reports it
+/// with this error message, and exits with status 6, a status it shares with other errors.
+fn cbmc_reported_out_of_memory(items: &[ParserItem]) -> bool {
+    items.iter().any(|item| {
+        matches!(item, ParserItem::Message { message_text, message_type }
+            if message_type == "ERROR" && message_text == "Out of memory")
+    })
+}
+
+/// Whether CBMC reported its overall status (`cProverStatus`). When CBMC prints a result array,
+/// it prints its overall status only after the complete array (`output_overall_result` in
+/// `goto-checker/report_util.cpp`), so a result array without it may be truncated, whatever
+/// stopped CBMC.
+fn cbmc_reported_prover_status(items: &[ParserItem]) -> bool {
+    items.iter().any(|item| matches!(item, ParserItem::ProverStatus { .. }))
 }
 
 impl VerificationResult {
     /// Computes a `VerificationResult` (kani-driver's notion of the result of a CBMC call) from a
     /// `VerificationOutput` (cbmc_output_parser's idea of CBMC results).
     ///
-    /// NOTE: We actually ignore the CBMC exit status, in favor of two checks:
+    /// NOTE: We mostly ignore the CBMC exit status, in favor of two checks:
     ///   1. Examining the actual results of CBMC properties.
     ///      (CBMC will regularly report "failure" but that's just our cover checks.)
     ///   2. Positively checking for the presence of results.
     ///      (Do not mistake lack of results for success: report it as failure.)
-    fn from(
+    ///
+    /// Results are only used if CBMC finished reporting them: it must have printed its overall
+    /// status after the result array (see `cbmc_reported_prover_status`), must not have run out
+    /// of memory, and its exit status must agree (see `cbmc_completed_results`).
+    pub(crate) fn from(
         output: VerificationOutput,
         should_panic: bool,
         start_time: Instant,
     ) -> VerificationResult {
         let runtime = start_time.elapsed();
-        let (_, results) = extract_results(output.processed_items);
+        let ignored_quantifiers = count_ignored_quantifiers(&output.processed_items);
+        let (remaining_items, results) = extract_results(output.processed_items);
+        let reported_results = results.is_some();
 
-        if let Some(results) = results {
-            let (status, failed_properties) =
+        if let Some(results) = results
+            && cbmc_reported_prover_status(&remaining_items)
+            && !cbmc_reported_out_of_memory(&remaining_items)
+            && cbmc_completed_results(output.process_status, &results)
+        {
+            let (mut status, mut failed_properties) =
                 verification_outcome_from_properties(&results, should_panic);
+            // `format_result` prints the explanation.
+            if results.iter().any(is_vacuous_harness_cover) {
+                status = VerificationStatus::Failure;
+                failed_properties = FailedProperties::Other;
+            }
+            // A dropped quantifier makes the analysis unsound: a `kani::assume` containing one is
+            // silently not enforced, so a "successful" result may be vacuous. Kani must never
+            // report success in that case -- force a failure and (via the rendered error) direct
+            // the user to an SMT backend that supports quantifiers.
+            if ignored_quantifiers > 0 {
+                status = VerificationStatus::Failure;
+                failed_properties = FailedProperties::Error;
+            }
             let coverage_results = coverage_results_from_properties(&results);
             VerificationResult {
                 status,
@@ -330,22 +525,32 @@ impl VerificationResult {
                 results: Ok(results),
                 runtime,
                 generated_concrete_test: false,
+                ignored_quantifiers,
                 coverage_results,
+                warnings: Vec::new(),
+                warnings_truncated: 0,
             }
         } else {
-            // We never got results from CBMC - something went wrong (e.g. crash) so it's failure
-            let exit_status = if output.process_status == 137 {
-                ExitStatus::OutOfMemory
-            } else {
-                ExitStatus::Other(output.process_status)
-            };
+            // We never got (complete) results from CBMC - something went wrong (e.g. crash) so
+            // it's failure
+            let exit_status =
+                if output.process_status == 137 || cbmc_reported_out_of_memory(&remaining_items) {
+                    ExitStatus::OutOfMemory
+                } else if reported_results && !cbmc_reported_prover_status(&remaining_items) {
+                    ExitStatus::IncompleteResults(output.process_status)
+                } else {
+                    ExitStatus::Other(output.process_status)
+                };
             VerificationResult {
                 status: VerificationStatus::Failure,
                 failed_properties: FailedProperties::Other,
                 results: Err(exit_status),
                 runtime,
                 generated_concrete_test: false,
+                ignored_quantifiers,
                 coverage_results: None,
+                warnings: Vec::new(),
+                warnings_truncated: 0,
             }
         }
     }
@@ -357,7 +562,10 @@ impl VerificationResult {
             results: Ok(vec![]),
             runtime: Duration::from_secs(0),
             generated_concrete_test: false,
+            ignored_quantifiers: 0,
             coverage_results: None,
+            warnings: Vec::new(),
+            warnings_truncated: 0,
         }
     }
 
@@ -371,7 +579,10 @@ impl VerificationResult {
             results: Err(ExitStatus::Other(42)),
             runtime: Duration::from_secs(0),
             generated_concrete_test: false,
+            ignored_quantifiers: 0,
             coverage_results: None,
+            warnings: Vec::new(),
+            warnings_truncated: 0,
         }
     }
 
@@ -394,6 +605,20 @@ impl VerificationResult {
                 } else {
                     format_result(results, status, should_panic, failed_properties, show_checks)
                 };
+                if self.ignored_quantifiers > 0 {
+                    let error = ignored_quantifiers_error(self.ignored_quantifiers);
+                    // Surface the soundness error immediately before the overall
+                    // `VERIFICATION:- ...` line, so it explains the forced failure. Fall back to
+                    // appending it (e.g. coverage output, which has no such line) if the marker
+                    // isn't present.
+                    match result.find("\nVERIFICATION:- ") {
+                        Some(pos) => result.insert_str(pos + 1, &error),
+                        None => {
+                            result.push('\n');
+                            result.push_str(&error);
+                        }
+                    }
+                }
                 writeln!(result, "Verification Time: {}s", self.runtime.as_secs_f32()).unwrap();
                 result
             }
@@ -411,6 +636,13 @@ impl VerificationResult {
                         "CBMC timed out. You may want to rerun your proof with a larger timeout \
                     or use stubbing to reduce the size of the code the verifier reasons about.\n",
                     ),
+                    ExitStatus::IncompleteResults(exit_status) => (
+                        format!(
+                            "CBMC did not finish reporting its results (exit status {exit_status})"
+                        ),
+                        "CBMC's output ended before its overall verification status, so the \
+                    results it reported may be incomplete and were not used.\n",
+                    ),
                     ExitStatus::Other(exit_status) => {
                         (format!("CBMC failed with status {exit_status}"), "")
                     }
@@ -423,16 +655,6 @@ impl VerificationResult {
             }
         }
     }
-
-    /// Find the failed properties from this verification run
-    pub fn failed_properties(&self) -> Vec<&Property> {
-        if let Ok(properties) = &self.results {
-            properties.iter().filter(|prop| prop.status == CheckStatus::Failure).collect()
-        } else {
-            debug_assert!(false, "expected error to be handled before invoking this function");
-            vec![]
-        }
-    }
 }
 
 /// We decide if verification succeeded based on properties, not (typically) on exit code
@@ -443,11 +665,13 @@ fn verification_outcome_from_properties(
     let failed_properties = determine_failed_properties(properties);
     let status = if should_panic {
         match failed_properties {
+            FailedProperties::Error => VerificationStatus::Failure,
             FailedProperties::None | FailedProperties::Other => VerificationStatus::Failure,
             FailedProperties::PanicsOnly => VerificationStatus::Success,
         }
     } else {
         match failed_properties {
+            FailedProperties::Error => VerificationStatus::Failure,
             FailedProperties::None => VerificationStatus::Success,
             FailedProperties::PanicsOnly | FailedProperties::Other => VerificationStatus::Failure,
         }
@@ -457,6 +681,9 @@ fn verification_outcome_from_properties(
 
 /// Determines the `FailedProperties` variant that corresponds to an array of properties
 fn determine_failed_properties(properties: &[Property]) -> FailedProperties {
+    if properties.iter().any(|prop| prop.status == CheckStatus::Error) {
+        return FailedProperties::Error;
+    };
     let failed_properties: Vec<&Property> =
         properties.iter().filter(|prop| prop.status == CheckStatus::Failure).collect();
     // Return `FAILURE` if there isn't at least one failed property
@@ -501,7 +728,7 @@ fn coverage_results_from_properties(properties: &[Property]) -> Option<CoverageR
         static COUNTER_RE: OnceLock<Regex> = OnceLock::new();
         COUNTER_RE.get_or_init(|| {
             Regex::new(
-                r#"^(?<kind>CounterIncrement|ExpressionUsed)\((?<counter_num>[0-9]+)\) \$(?<func_name>[^\$]+)\$ - (?<span>.+)"#,
+                r#"^(?<kind>VirtualCounter\(bcb)(?<counter_num>[0-9]+)\) \$(?<func_name>[^\$]+)\$ - (?<span>.+)"#,
             )
             .unwrap()
         })
@@ -511,20 +738,14 @@ fn coverage_results_from_properties(properties: &[Property]) -> Option<CoverageR
 
     for prop in cov_properties {
         let mut prop_processed = false;
-
         if let Some(captures) = counter_re.captures(&prop.description) {
-            let kind = &captures["kind"];
             let counter_num = &captures["counter_num"];
             let function = demangle(&captures["func_name"]).to_string();
             let status = prop.status;
             let span = captures["span"].to_string();
 
             let counter_id = counter_num.parse().unwrap();
-            let term = match kind {
-                "CounterIncrement" => CoverageTerm::Counter(counter_id),
-                "ExpressionUsed" => CoverageTerm::Expression(counter_id),
-                _ => unreachable!("counter kind could not be recognized: {:?}", kind),
-            };
+            let term = CoverageTerm::Counter(counter_id);
             let region = CoverageRegion::from_str(span);
 
             let cov_check = CoverageCheck::new(function, term, region, status);
@@ -544,22 +765,437 @@ fn coverage_results_from_properties(properties: &[Property]) -> Option<CoverageR
     Some(CoverageResults::new(coverage_results))
 }
 /// Solve Unwind Value from conflicting inputs of unwind values. (--default-unwind, annotation-unwind, --unwind)
+///
+/// The precedence is `--unwind` > `#[kani::unwind]` > `--default-unwind` > the autoharness
+/// default. The autoharness default (`autoharness_default_unwind`, `None` outside autoharness)
+/// only applies to automatically generated harnesses: manual harnesses verified in the same
+/// `autoharness` run must resolve exactly as they would under plain `kani`/`cargo kani` (#5103).
 pub fn resolve_unwind_value(
     args: &VerificationArgs,
     harness_metadata: &HarnessMetadata,
+    autoharness_default_unwind: Option<u32>,
 ) -> Option<u32> {
     // Check for which flag is being passed and prioritize extracting unwind from the
     // respective flag/annotation.
-    args.unwind.or(harness_metadata.attributes.unwind_value).or(args.default_unwind)
+    args.unwind
+        .or(harness_metadata.attributes.unwind_value)
+        .or(args.default_unwind)
+        .or(autoharness_default_unwind.filter(|_| harness_metadata.is_automatically_generated))
+}
+
+/// Resolve the timeout for verifying a harness: `--harness-timeout` if passed, otherwise the
+/// autoharness default (`autoharness_harness_timeout`, `None` outside autoharness), which, like
+/// the autoharness unwinding default, only applies to automatically generated harnesses.
+pub fn resolve_harness_timeout(
+    args: &VerificationArgs,
+    harness_metadata: &HarnessMetadata,
+    autoharness_harness_timeout: Option<Timeout>,
+) -> Option<Timeout> {
+    args.harness_timeout
+        .or(autoharness_harness_timeout.filter(|_| harness_metadata.is_automatically_generated))
 }
 
 #[cfg(test)]
 mod tests {
     use crate::args;
+    use crate::cbmc_output_parser::{PropertyId, SourceLocation};
     use crate::metadata::tests::mock_proof_harness;
     use clap::Parser;
 
     use super::*;
+
+    fn property(class: &str, id: u32, status: CheckStatus) -> Property {
+        Property {
+            description: format!("{class} check"),
+            property_id: PropertyId {
+                fn_name: Some("harness".to_string()),
+                class: class.to_string(),
+                id,
+            },
+            source_location: SourceLocation {
+                file: Some("src/lib.rs".to_string()),
+                line: Some("12".to_string()),
+                column: Some("3".to_string()),
+                function: Some("harness".to_string()),
+            },
+            status,
+            reach: None,
+            trace: None,
+        }
+    }
+
+    #[test]
+    fn determine_failed_properties_classifies_by_status_and_class() {
+        assert!(matches!(
+            determine_failed_properties(&[property("assertion", 1, CheckStatus::Success)]),
+            FailedProperties::None
+        ));
+        assert!(matches!(
+            determine_failed_properties(&[
+                property("assertion", 1, CheckStatus::Failure),
+                property("assertion", 2, CheckStatus::Success),
+            ]),
+            FailedProperties::PanicsOnly
+        ));
+        assert!(matches!(
+            determine_failed_properties(&[
+                property("assertion", 1, CheckStatus::Failure),
+                property("overflow", 2, CheckStatus::Failure),
+            ]),
+            FailedProperties::Other
+        ));
+        assert!(matches!(
+            determine_failed_properties(&[property("overflow", 1, CheckStatus::Failure)]),
+            FailedProperties::Other
+        ));
+        assert!(matches!(
+            determine_failed_properties(&[
+                property("assertion", 1, CheckStatus::Failure),
+                property("cover", 2, CheckStatus::Error),
+            ]),
+            FailedProperties::Error
+        ));
+    }
+
+    #[test]
+    fn verification_outcome_from_properties_truth_table() {
+        let none = [property("assertion", 1, CheckStatus::Success)];
+        let panics_only = [property("assertion", 1, CheckStatus::Failure)];
+        let other = [property("overflow", 1, CheckStatus::Failure)];
+        let error = [property("cover", 1, CheckStatus::Error)];
+
+        assert!(matches!(
+            verification_outcome_from_properties(&none, false),
+            (VerificationStatus::Success, FailedProperties::None)
+        ));
+        assert!(matches!(
+            verification_outcome_from_properties(&panics_only, false),
+            (VerificationStatus::Failure, FailedProperties::PanicsOnly)
+        ));
+        assert!(matches!(
+            verification_outcome_from_properties(&other, false),
+            (VerificationStatus::Failure, FailedProperties::Other)
+        ));
+        assert!(matches!(
+            verification_outcome_from_properties(&error, false),
+            (VerificationStatus::Failure, FailedProperties::Error)
+        ));
+
+        assert!(matches!(
+            verification_outcome_from_properties(&none, true),
+            (VerificationStatus::Failure, FailedProperties::None)
+        ));
+        assert!(matches!(
+            verification_outcome_from_properties(&panics_only, true),
+            (VerificationStatus::Success, FailedProperties::PanicsOnly)
+        ));
+        assert!(matches!(
+            verification_outcome_from_properties(&other, true),
+            (VerificationStatus::Failure, FailedProperties::Other)
+        ));
+        assert!(matches!(
+            verification_outcome_from_properties(&error, true),
+            (VerificationStatus::Failure, FailedProperties::Error)
+        ));
+    }
+
+    #[test]
+    fn verification_result_from_ignored_quantifiers_overrides_without_error_status_property() {
+        let output = VerificationOutput {
+            process_status: 0,
+            processed_items: vec![
+                ParserItem::Message {
+                    message_text: "warning: ignoring forall (x : int) ...".to_string(),
+                    message_type: "WARNING".to_string(),
+                },
+                ParserItem::Result { result: vec![property("assertion", 1, CheckStatus::Success)] },
+                ParserItem::ProverStatus { _c_prover_status: "success".to_string() },
+            ],
+        };
+        let vr = VerificationResult::from(output, false, Instant::now());
+        assert_eq!(vr.ignored_quantifiers, 1);
+        assert!(matches!(vr.status, VerificationStatus::Failure));
+        assert!(matches!(vr.failed_properties, FailedProperties::Error));
+    }
+
+    #[test]
+    fn verification_result_from_without_ignored_quantifiers_does_not_override() {
+        let output = VerificationOutput {
+            process_status: 0,
+            processed_items: vec![
+                ParserItem::Result { result: vec![property("assertion", 1, CheckStatus::Success)] },
+                ParserItem::ProverStatus { _c_prover_status: "success".to_string() },
+            ],
+        };
+        let vr = VerificationResult::from(output, false, Instant::now());
+        assert_eq!(vr.ignored_quantifiers, 0);
+        assert!(matches!(vr.status, VerificationStatus::Success));
+        assert!(matches!(vr.failed_properties, FailedProperties::None));
+    }
+
+    #[test]
+    fn verification_result_from_no_results_reports_out_of_memory_for_process_status_137() {
+        let output = VerificationOutput {
+            process_status: 137,
+            processed_items: vec![ParserItem::Message {
+                message_text: "Killed".to_string(),
+                message_type: "STATUS-MESSAGE".to_string(),
+            }],
+        };
+        let vr = VerificationResult::from(output, false, Instant::now());
+        assert!(matches!(vr.status, VerificationStatus::Failure));
+        assert!(matches!(vr.failed_properties, FailedProperties::Other));
+        assert!(matches!(vr.results, Err(ExitStatus::OutOfMemory)));
+    }
+
+    #[test]
+    fn verification_result_from_no_results_reports_other_for_non_137_process_status() {
+        let output = VerificationOutput { process_status: 6, processed_items: vec![] };
+        let vr = VerificationResult::from(output, false, Instant::now());
+        assert!(matches!(vr.status, VerificationStatus::Failure));
+        assert!(matches!(vr.failed_properties, FailedProperties::Other));
+        assert!(matches!(vr.results, Err(ExitStatus::Other(6))));
+    }
+
+    #[test]
+    fn warning_message_truncation_boundary() {
+        let cases: [(i64, bool); 4] = [(-1, false), (0, false), (1, true), (500, true)];
+        for (len_delta, expect_truncated) in cases {
+            let len = (MAX_WARNING_MESSAGE_CHARS as i64 + len_delta) as usize;
+            let message = "x".repeat(len);
+            let w = truncate_warning(&message);
+            assert_eq!(w.truncated, expect_truncated, "len_delta={len_delta}");
+            if expect_truncated {
+                assert_eq!(w.message, "x".repeat(MAX_WARNING_MESSAGE_CHARS));
+                assert_eq!(w.original_chars, Some(len));
+            } else {
+                assert_eq!(w.message, message);
+                assert_eq!(w.original_chars, None);
+            }
+        }
+    }
+
+    #[test]
+    fn captured_warnings_cap_boundary() {
+        for (extra, expect_truncated) in [(0, 0), (1, 1), (3, 3)] {
+            let mut captured = CapturedWarnings::default();
+            for i in 0..MAX_WARNINGS_PER_HARNESS + extra {
+                captured.push(&format!("warning {i}"));
+            }
+            let (warnings, truncated) = captured.into_parts();
+            assert_eq!(warnings.len(), MAX_WARNINGS_PER_HARNESS, "extra={extra}");
+            assert_eq!(truncated, expect_truncated, "extra={extra}");
+            assert_eq!(warnings[0].message, "warning 0");
+        }
+    }
+
+    #[test]
+    fn warning_capturing_filter_ignores_warnings_when_export_json_disabled() {
+        let (mut filter, captured) = warning_capturing_filter(false, Some);
+        let _ = filter(ParserItem::Message {
+            message_text: "warning 0".to_string(),
+            message_type: "WARNING".to_string(),
+        });
+        let (warnings, truncated) = std::mem::take(&mut *captured.lock().unwrap()).into_parts();
+        assert!(warnings.is_empty());
+        assert_eq!(truncated, 0);
+    }
+
+    #[test]
+    fn warning_capturing_filter_only_captures_warning_typed_messages() {
+        let (mut filter, captured) = warning_capturing_filter(true, Some);
+        let _ = filter(ParserItem::Message {
+            message_text: "not a warning".to_string(),
+            message_type: "STATUS-MESSAGE".to_string(),
+        });
+        let _ = filter(ParserItem::Message {
+            message_text: "warning 0".to_string(),
+            message_type: "WARNING".to_string(),
+        });
+        let _ = filter(ParserItem::Message {
+            message_text: "warning 1".to_string(),
+            message_type: "warning".to_string(),
+        });
+        let (warnings, _) = std::mem::take(&mut *captured.lock().unwrap()).into_parts();
+        let messages: Vec<&str> = warnings.iter().map(|w| w.message.as_str()).collect();
+        assert_eq!(messages, ["warning 0", "warning 1"]);
+    }
+
+    #[test]
+    fn warning_capture_survives_a_real_timeout_cancellation() {
+        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        rt.block_on(async {
+            let total = MAX_WARNINGS_PER_HARNESS + 5;
+            let mut script = String::from(
+                "printf '[\\n  {\\n    \"program\": \"unit-test fake cbmc\"\\n  },\\n'; ",
+            );
+            for i in 0..total {
+                script.push_str(&format!(
+                    "printf '  {{\\n    \"messageText\": \"warning {i}\",\\n    \"messageType\": \"WARNING\"\\n  }},\\n'; "
+                ));
+            }
+            script.push_str("exec sleep 100");
+
+            let mut child = TokioCommand::new("sh")
+                .arg("-c")
+                .arg(script)
+                .stdout(std::process::Stdio::piped())
+                .spawn()
+                .unwrap();
+
+            let (filter, captured) = warning_capturing_filter(true, Some);
+            let mut parse = Box::pin(process_cbmc_output(&mut child, filter));
+            let all_seen = tokio::time::timeout(
+                Duration::from_secs(30),
+                std::future::poll_fn(|cx| {
+                    if parse.as_mut().poll(cx).is_ready() {
+                        return std::task::Poll::Ready(false);
+                    }
+                    let captured = captured.lock().unwrap();
+                    if captured.warnings.len() + captured.truncated == total {
+                        std::task::Poll::Ready(true)
+                    } else {
+                        std::task::Poll::Pending
+                    }
+                }),
+            )
+            .await;
+            assert_eq!(all_seen.ok(), Some(true), "the fake process must emit every warning and stay blocked");
+            drop(parse);
+            child.kill().await.unwrap();
+
+            let (warnings, truncated) =
+                std::mem::take(&mut *captured.lock().unwrap()).into_parts();
+            assert_eq!(warnings.len(), MAX_WARNINGS_PER_HARNESS);
+            assert_eq!(truncated, 5);
+            assert_eq!(warnings[0].message, "warning 0");
+        });
+    }
+
+    #[test]
+    fn solver_flags_per_solver() {
+        let flags = |solver: CbmcSolver| -> Vec<String> {
+            solver_flags(&solver).iter().map(|f| f.to_string_lossy().into_owned()).collect()
+        };
+        assert_eq!(flags(CbmcSolver::Bitwuzla), ["--bitwuzla"]);
+        assert_eq!(flags(CbmcSolver::Cadical), ["--sat-solver", "cadical"]);
+        assert_eq!(flags(CbmcSolver::Cvc5), ["--cvc5"]);
+        assert_eq!(flags(CbmcSolver::Kissat), ["--external-sat-solver", "kissat"]);
+        assert!(flags(CbmcSolver::Minisat).is_empty());
+        assert_eq!(flags(CbmcSolver::Z3), ["--z3"]);
+        assert_eq!(
+            flags(CbmcSolver::Binary("my-solver".to_string())),
+            ["--external-sat-solver", "my-solver"]
+        );
+    }
+
+    /// The output of a CBMC run that reported a single property with the given status, followed
+    /// by the given error messages and, if CBMC finished reporting, its overall `prover_status`,
+    /// and exited with `process_status`.
+    fn mock_cbmc_output(
+        process_status: i32,
+        property_status: &str,
+        errors: &[&str],
+        prover_status: Option<&str>,
+    ) -> VerificationOutput {
+        let result = format!(
+            r#"{{
+                "result": [
+                    {{
+                        "description": "assertion failed: x < 10",
+                        "property": "check.assertion.1",
+                        "sourceLocation": {{ "file": "main.rs", "function": "check", "line": "5" }},
+                        "status": "{property_status}"
+                    }}
+                ]
+            }}"#
+        );
+        let mut processed_items = vec![serde_json::from_str(&result).unwrap()];
+        processed_items.extend(errors.iter().map(|text| ParserItem::Message {
+            message_text: text.to_string(),
+            message_type: "ERROR".to_string(),
+        }));
+        if let Some(status) = prover_status {
+            let item = format!(r#"{{ "cProverStatus": "{status}" }}"#);
+            processed_items.push(serde_json::from_str(&item).unwrap());
+        }
+        VerificationOutput { process_status, processed_items }
+    }
+
+    fn verify(output: VerificationOutput) -> VerificationResult {
+        VerificationResult::from(output, false, Instant::now())
+    }
+
+    /// CBMC's exit status for complete results must not change the verdict the properties give.
+    #[test]
+    fn check_complete_results_decide_verdict() {
+        let result = verify(mock_cbmc_output(0, "SUCCESS", &[], Some("success")));
+        assert_eq!(result.status, VerificationStatus::Success);
+        assert!(result.results.is_ok());
+
+        let result = verify(mock_cbmc_output(10, "FAILURE", &[], Some("failure")));
+        assert_eq!(result.status, VerificationStatus::Failure);
+        assert!(result.results.is_ok());
+
+        // CBMC exits with status 6 when a property has status ERROR, e.g. on a solver error.
+        let result = verify(mock_cbmc_output(6, "ERROR", &[], Some("error")));
+        assert_eq!(result.status, VerificationStatus::Failure);
+        assert!(matches!(result.failed_properties, FailedProperties::Error));
+        assert!(result.results.is_ok());
+    }
+
+    /// When CBMC runs out of memory while writing its results, the result array it emitted is
+    /// truncated and must not be mistaken for success.
+    /// See <https://github.com/model-checking/kani/issues/4905>.
+    #[test]
+    fn check_truncated_results_fail() {
+        let result = verify(mock_cbmc_output(6, "SUCCESS", &["Out of memory"], None));
+        assert_eq!(result.status, VerificationStatus::Failure);
+        assert!(matches!(result.results, Err(ExitStatus::OutOfMemory)));
+
+        let result = verify(mock_cbmc_output(6, "SUCCESS", &["some internal error"], None));
+        assert_eq!(result.status, VerificationStatus::Failure);
+        assert!(matches!(result.results, Err(ExitStatus::IncompleteResults(6))));
+
+        // A truncated array can contain an ERROR property from before the truncation point.
+        let result = verify(mock_cbmc_output(6, "ERROR", &["Out of memory"], None));
+        assert_eq!(result.status, VerificationStatus::Failure);
+        assert!(matches!(result.results, Err(ExitStatus::OutOfMemory)));
+
+        // Killed by a signal (here SIGSEGV) after writing some results.
+        let result = verify(mock_cbmc_output(139, "SUCCESS", &[], None));
+        assert_eq!(result.status, VerificationStatus::Failure);
+        assert!(matches!(result.results, Err(ExitStatus::IncompleteResults(139))));
+
+        // CBMC exits with 5 when some property is UNKNOWN or NOT_CHECKED. Kani's verdict logic
+        // does not treat UNKNOWN as a failure, so these results must not be used.
+        let result = verify(mock_cbmc_output(5, "UNKNOWN", &[], Some("inconclusive")));
+        assert_eq!(result.status, VerificationStatus::Failure);
+        assert!(matches!(result.results, Err(ExitStatus::Other(5))));
+    }
+
+    /// CBMC prints its overall status only after the complete result array, so results without
+    /// it must not be used, whatever the exit status.
+    #[test]
+    fn check_results_without_prover_status_fail() {
+        // An exception other than `std::bad_alloc` while writing the results: the truncated array
+        // may contain an ERROR property from before the truncation point.
+        let result = verify(mock_cbmc_output(6, "ERROR", &["some internal error"], None));
+        assert_eq!(result.status, VerificationStatus::Failure);
+        assert!(matches!(result.results, Err(ExitStatus::IncompleteResults(6))));
+
+        let result = verify(mock_cbmc_output(0, "SUCCESS", &[], None));
+        assert_eq!(result.status, VerificationStatus::Failure);
+        assert!(matches!(result.results, Err(ExitStatus::IncompleteResults(0))));
+        // The message must not call an exit status of 0 a failure.
+        let message = result.render(&OutputFormat::Regular, false);
+        assert!(message.contains("CBMC did not finish reporting its results (exit status 0)"));
+        assert!(!message.contains("CBMC failed with status"));
+
+        let result = verify(mock_cbmc_output(10, "FAILURE", &[], None));
+        assert_eq!(result.status, VerificationStatus::Failure);
+        assert!(matches!(result.results, Err(ExitStatus::IncompleteResults(10))));
+    }
 
     #[test]
     fn check_resolve_unwind_value() {
@@ -577,6 +1213,7 @@ mod tests {
             resolve_unwind_value(
                 &args::StandaloneArgs::try_parse_from(args).unwrap().verify_opts,
                 harness,
+                None,
             )
         }
 
@@ -591,5 +1228,92 @@ mod tests {
         assert_eq!(resolve(&args_only_default, &harness_some), Some(3));
         assert_eq!(resolve(&args_only_harness, &harness_some), Some(1));
         assert_eq!(resolve(&args_both, &harness_some), Some(1));
+    }
+
+    fn verify_opts(args: &[&str]) -> VerificationArgs {
+        args::StandaloneArgs::try_parse_from(args).unwrap().verify_opts
+    }
+
+    fn automatic_harness(name: &str) -> HarnessMetadata {
+        let mut harness = mock_proof_harness(name, None, None, None);
+        harness.is_automatically_generated = true;
+        harness
+    }
+
+    /// The autoharness unwinding default only reaches automatically generated harnesses, c.f.
+    /// https://github.com/model-checking/kani/issues/5103.
+    #[test]
+    fn autoharness_default_unwind_is_scoped_to_automatic_harnesses() {
+        const AUTO: Option<u32> = Some(20);
+        let args_empty = ["kani", "x.rs"];
+        let args_only_default = ["kani", "x.rs", "--default-unwind", "2"];
+        let args_only_harness = ["kani", "x.rs", "--unwind", "1", "--harness", "check_one"];
+
+        let manual_none = mock_proof_harness("check_one", None, None, None);
+        let manual_some = mock_proof_harness("check_one", Some(3), None, None);
+        let automatic = automatic_harness("check_one");
+
+        // A manual harness without `#[kani::unwind]` keeps CBMC's default (no `--unwind`), as
+        // under plain `kani`; an automatic harness gets the autoharness default.
+        assert_eq!(resolve_unwind_value(&verify_opts(&args_empty), &manual_none, AUTO), None);
+        assert_eq!(resolve_unwind_value(&verify_opts(&args_empty), &automatic, AUTO), Some(20));
+
+        // A manual harness's `#[kani::unwind]` attribute still applies.
+        assert_eq!(resolve_unwind_value(&verify_opts(&args_empty), &manual_some, AUTO), Some(3));
+
+        // An explicit `--default-unwind` / `--unwind` still applies to every harness and beats
+        // the autoharness default.
+        for harness in [&manual_none, &automatic] {
+            assert_eq!(
+                resolve_unwind_value(&verify_opts(&args_only_default), harness, AUTO),
+                Some(2)
+            );
+            assert_eq!(
+                resolve_unwind_value(&verify_opts(&args_only_harness), harness, AUTO),
+                Some(1)
+            );
+        }
+        // `--unwind` still beats the attribute, and the attribute still beats `--default-unwind`.
+        assert_eq!(
+            resolve_unwind_value(&verify_opts(&args_only_harness), &manual_some, AUTO),
+            Some(1)
+        );
+        assert_eq!(
+            resolve_unwind_value(&verify_opts(&args_only_default), &manual_some, AUTO),
+            Some(3)
+        );
+
+        // Outside autoharness there is no autoharness default, whatever the harness.
+        assert_eq!(resolve_unwind_value(&verify_opts(&args_empty), &automatic, None), None);
+    }
+
+    /// Like the unwinding default, the autoharness timeout only reaches automatically generated
+    /// harnesses, while an explicit `--harness-timeout` applies to every harness.
+    #[test]
+    fn autoharness_timeout_is_scoped_to_automatic_harnesses() {
+        let auto_timeout: Option<Timeout> = Some("60s".parse().unwrap());
+        let args_empty = ["kani", "x.rs"];
+        let args_timeout = ["kani", "x.rs", "-Z", "unstable-options", "--harness-timeout", "5m"];
+        let explicit: Option<Timeout> = Some("5m".parse().unwrap());
+
+        let manual = mock_proof_harness("check_one", None, None, None);
+        let automatic = automatic_harness("check_one");
+
+        assert_eq!(resolve_harness_timeout(&verify_opts(&args_empty), &manual, auto_timeout), None);
+        assert_eq!(
+            resolve_harness_timeout(&verify_opts(&args_empty), &automatic, auto_timeout),
+            auto_timeout
+        );
+        for harness in [&manual, &automatic] {
+            assert_eq!(
+                resolve_harness_timeout(&verify_opts(&args_timeout), harness, auto_timeout),
+                explicit
+            );
+            assert_eq!(
+                resolve_harness_timeout(&verify_opts(&args_timeout), harness, None),
+                explicit
+            );
+        }
+        assert_eq!(resolve_harness_timeout(&verify_opts(&args_empty), &automatic, None), None);
     }
 }

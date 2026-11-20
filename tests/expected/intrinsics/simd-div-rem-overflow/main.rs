@@ -7,8 +7,14 @@ use std::intrinsics::simd::{simd_div, simd_rem};
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 pub struct i32x2([i32; 2]);
+
+impl i32x2 {
+    fn into_array(self) -> [i32; 2] {
+        unsafe { std::mem::transmute(self) }
+    }
+}
 
 unsafe fn do_simd_div(dividends: i32x2, divisors: i32x2) -> i32x2 {
     simd_div(dividends, divisors)
@@ -25,7 +31,7 @@ fn test_simd_div_overflow() {
     let divisor = -1;
     let divisors = i32x2([divisor, divisor]);
     let quotients = unsafe { do_simd_div(dividends, divisors) };
-    assert_eq!(quotients.0[0], quotients.0[1]);
+    assert_eq!(quotients.into_array()[0], quotients.into_array()[1]);
 }
 
 #[kani::proof]
@@ -35,5 +41,5 @@ fn test_simd_rem_overflow() {
     let divisor = -1;
     let divisors = i32x2([divisor, divisor]);
     let remainders = unsafe { do_simd_rem(dividends, divisors) };
-    assert_eq!(remainders.0[0], remainders.0[1]);
+    assert_eq!(remainders.into_array()[0], remainders.into_array()[1]);
 }

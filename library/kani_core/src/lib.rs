@@ -17,11 +17,12 @@
 
 #![feature(no_core)]
 #![no_core]
-#![feature(f16)]
-#![feature(f128)]
 
 mod arbitrary;
+mod bounded_arbitrary;
 mod float;
+mod invariant;
+mod iter;
 mod mem;
 mod mem_init;
 mod models;
@@ -41,10 +42,15 @@ macro_rules! kani_lib {
         #[unstable(feature = "kani", issue = "none")]
         pub mod kani {
             // We need to list them all today because there is conflict with unstable.
+            use core as core_path;
             pub use kani_core::*;
-            kani_core::kani_intrinsics!(core);
-            kani_core::generate_arbitrary!(core);
+
+            kani_core::kani_intrinsics!();
+            kani_core::generate_arbitrary!();
+            kani_core::generate_bounded_arbitrary!();
+            kani_core::generate_invariant!();
             kani_core::generate_models!();
+            kani_core::generate_iter!();
 
             pub mod float {
                 kani_core::generate_float!(core);
@@ -62,9 +68,14 @@ macro_rules! kani_lib {
 
     (kani) => {
         pub use kani_core::*;
-        kani_core::kani_intrinsics!(std);
-        kani_core::generate_arbitrary!(std);
+        use std as core_path;
+
+        kani_core::kani_intrinsics!();
+        kani_core::generate_arbitrary!();
+        kani_core::generate_bounded_arbitrary!();
+        kani_core::generate_invariant!();
         kani_core::generate_models!();
+        kani_core::generate_iter!();
 
         pub mod float {
             //! This module contains functions useful for float-related checks
@@ -75,22 +86,15 @@ macro_rules! kani_lib {
             //! This module contains functions useful for checking unsafe memory access.
             //!
             //! Given the following validity rules provided in the Rust documentation:
-            //! <https://doc.rust-lang.org/std/ptr/index.html> (accessed Feb 6th, 2024)
+            //! <https://doc.rust-lang.org/std/ptr/index.html> (accessed May 20th, 2025)
             //!
-            //! 1. A null pointer is never valid, not even for accesses of size zero.
-            //! 2. For a pointer to be valid, it is necessary, but not always sufficient, that the pointer
+            //! 1. For memory accesses of size zero, every pointer is valid, including the null pointer.
+            //!    The following points are only concerned with non-zero-sized accesses.
+            //! 2. A null pointer is never valid.
+            //! 3. For a pointer to be valid, it is necessary, but not always sufficient, that the pointer
             //!    be dereferenceable: the memory range of the given size starting at the pointer must all be
             //!    within the bounds of a single allocated object. Note that in Rust, every (stack-allocated)
             //!    variable is considered a separate allocated object.
-            //!    ~~Even for operations of size zero, the pointer must not be pointing to deallocated memory,
-            //!    i.e., deallocation makes pointers invalid even for zero-sized operations.~~
-            //!    ZST access is not OK for any pointer.
-            //!    See: <https://github.com/rust-lang/unsafe-code-guidelines/issues/472>
-            //! 3. However, casting any non-zero integer literal to a pointer is valid for zero-sized
-            //!    accesses, even if some memory happens to exist at that address and gets deallocated.
-            //!    This corresponds to writing your own allocator: allocating zero-sized objects is not very
-            //!    hard. The canonical way to obtain a pointer that is valid for zero-sized accesses is
-            //!    `NonNull::dangling`.
             //! 4. All accesses performed by functions in this module are non-atomic in the sense of atomic
             //!    operations used to synchronize between threads.
             //!    This means it is undefined behavior to perform two concurrent accesses to the same location
@@ -101,13 +105,7 @@ macro_rules! kani_lib {
             //!    object is live and no reference (just raw pointers) is used to access the same memory.
             //!    That is, reference and pointer accesses cannot be interleaved.
             //!
-            //! Kani is able to verify #1 and #2 today.
-            //!
-            //! For #3, we are overly cautious, and Kani will only consider zero-sized pointer access safe if
-            //! the address matches `NonNull::<()>::dangling()`.
-            //! The way Kani tracks provenance is not enough to check if the address was the result of a cast
-            //! from a non-zero integer literal.
-            //!
+            //! Kani is able to verify #1, #2, and #3 today.
             kani_core::kani_mem!(std);
         }
 
@@ -138,7 +136,7 @@ macro_rules! kani_lib {
 #[allow(clippy::crate_in_macro_def)]
 #[macro_export]
 macro_rules! kani_intrinsics {
-    ($core:tt) => {
+    () => {
         /// Creates an assumption that will be valid after this statement run. Note that the assumption
         /// will only be applied for paths that follow the assumption. If the assumption doesn't hold, the
         /// program will exit successfully.
@@ -200,6 +198,51 @@ macro_rules! kani_intrinsics {
             assert!(cond, "{}", msg);
         }
 
+        #[macro_export]
+        macro_rules! forall {
+            // Typed variable: |d: u64 in (lo, hi)| predicate
+            // Uses $t:tt instead of $t:ty because Rust macro rules do not allow
+            // `ty` fragments to be followed by `in`. This means the type must be
+            // a single token (e.g., u64, usize, i32) — path types like
+            // std::num::NonZeroU64 are not supported in this position.
+            (|$i:ident : $t:tt in ($lower_bound:expr, $upper_bound:expr)| $predicate:expr) => {{
+                let lower_bound: $t = $lower_bound;
+                let upper_bound: $t = $upper_bound;
+                let predicate = |$i: $t| $predicate;
+                kani::internal::kani_forall(lower_bound, upper_bound, predicate)
+            }};
+            (|$i:ident in ($lower_bound:expr, $upper_bound:expr)| $predicate:expr) => {{
+                let lower_bound: usize = $lower_bound;
+                let upper_bound: usize = $upper_bound;
+                let predicate = |$i| $predicate;
+                kani::internal::kani_forall(lower_bound, upper_bound, predicate)
+            }};
+            (|$i:ident | $predicate:expr) => {{
+                let predicate = |$i| $predicate;
+                kani::internal::kani_forall(usize::MIN, usize::MAX, predicate)
+            }};
+        }
+
+        #[macro_export]
+        macro_rules! exists {
+            (|$i:ident : $t:tt in ($lower_bound:expr, $upper_bound:expr)| $predicate:expr) => {{
+                let lower_bound: $t = $lower_bound;
+                let upper_bound: $t = $upper_bound;
+                let predicate = |$i: $t| $predicate;
+                kani::internal::kani_exists(lower_bound, upper_bound, predicate)
+            }};
+            (|$i:ident in ($lower_bound:expr, $upper_bound:expr)| $predicate:expr) => {{
+                let lower_bound: usize = $lower_bound;
+                let upper_bound: usize = $upper_bound;
+                let predicate = |$i| $predicate;
+                kani::internal::kani_exists(lower_bound, upper_bound, predicate)
+            }};
+            (|$i:ident | $predicate:expr) => {{
+                let predicate = |$i| $predicate;
+                kani::internal::kani_exists(usize::MIN, usize::MAX, predicate)
+            }};
+        }
+
         /// Creates a cover property with the specified condition and message.
         ///
         /// # Example:
@@ -251,6 +294,175 @@ macro_rules! kani_intrinsics {
         #[inline(always)]
         pub fn any<T: Arbitrary>() -> T {
             T::any()
+        }
+
+        /// A [`core::fmt::Write`] sink that discards everything written to it, used by the
+        /// `check_*_fmt` and `any_formatter` models below. Writing never fails, so `fmt`
+        /// implementations are not verified against the write-error path.
+        #[doc(hidden)]
+        pub struct DiscardingSink;
+
+        impl core_path::fmt::Write for DiscardingSink {
+            fn write_str(&mut self, _s: &str) -> core_path::fmt::Result {
+                Ok(())
+            }
+        }
+
+        /// Exercise a type's `Debug` implementation by formatting a value into a sink that
+        /// discards the output. The `Formatter` is constructed by the core formatting
+        /// machinery, so it is always valid; panics or undefined behavior inside the `fmt`
+        /// implementation are detected as usual. Note that the `Formatter` carries the default
+        /// formatting parameters, i.e. paths that `fmt` takes only for a non-default width,
+        /// precision, fill, alignment, sign, or the alternate (`{:#?}`) flag are not covered.
+        ///
+        /// This model is used by the compiler to generate automatic harnesses for `Debug::fmt`
+        /// implementations (`kani autoharness`), whose `&mut Formatter` argument cannot be
+        /// generated nondeterministically.
+        #[kanitool::fn_marker = "CheckDebugFmtModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn check_debug_fmt<T: core_path::fmt::Debug>(value: &T) {
+            let _ = core_path::fmt::write(&mut DiscardingSink, format_args!("{value:?}"));
+        }
+
+        /// Like [check_debug_fmt], but for `Display` implementations.
+        #[kanitool::fn_marker = "CheckDisplayFmtModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn check_display_fmt<T: core_path::fmt::Display>(value: &T) {
+            let _ = core_path::fmt::write(&mut DiscardingSink, format_args!("{value}"));
+        }
+
+        /// Like [check_debug_fmt], but for `Binary` implementations.
+        #[kanitool::fn_marker = "CheckBinaryFmtModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn check_binary_fmt<T: core_path::fmt::Binary>(value: &T) {
+            let _ = core_path::fmt::write(&mut DiscardingSink, format_args!("{value:b}"));
+        }
+
+        /// Like [check_debug_fmt], but for `Octal` implementations.
+        #[kanitool::fn_marker = "CheckOctalFmtModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn check_octal_fmt<T: core_path::fmt::Octal>(value: &T) {
+            let _ = core_path::fmt::write(&mut DiscardingSink, format_args!("{value:o}"));
+        }
+
+        /// Like [check_debug_fmt], but for `LowerHex` implementations.
+        #[kanitool::fn_marker = "CheckLowerHexFmtModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn check_lower_hex_fmt<T: core_path::fmt::LowerHex>(value: &T) {
+            let _ = core_path::fmt::write(&mut DiscardingSink, format_args!("{value:x}"));
+        }
+
+        /// Like [check_debug_fmt], but for `UpperHex` implementations.
+        #[kanitool::fn_marker = "CheckUpperHexFmtModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn check_upper_hex_fmt<T: core_path::fmt::UpperHex>(value: &T) {
+            let _ = core_path::fmt::write(&mut DiscardingSink, format_args!("{value:X}"));
+        }
+
+        /// Like [check_debug_fmt], but for `LowerExp` implementations.
+        #[kanitool::fn_marker = "CheckLowerExpFmtModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn check_lower_exp_fmt<T: core_path::fmt::LowerExp>(value: &T) {
+            let _ = core_path::fmt::write(&mut DiscardingSink, format_args!("{value:e}"));
+        }
+
+        /// Like [check_debug_fmt], but for `UpperExp` implementations.
+        #[kanitool::fn_marker = "CheckUpperExpFmtModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn check_upper_exp_fmt<T: core_path::fmt::UpperExp>(value: &T) {
+            let _ = core_path::fmt::write(&mut DiscardingSink, format_args!("{value:E}"));
+        }
+
+        /// Like [check_debug_fmt], but for `Pointer` implementations.
+        ///
+        /// Unlike the other formatting traits, `Pointer` for `&T` formats the address of the
+        /// reference rather than delegating to `T`, so `{value:p}` would never reach `T`'s
+        /// implementation. `ViaPointer` calls it directly.
+        #[kanitool::fn_marker = "CheckPointerFmtModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn check_pointer_fmt<T: core_path::fmt::Pointer>(value: &T) {
+            struct ViaPointer<'a, T: ?Sized>(&'a T);
+            impl<T: ?Sized + core_path::fmt::Pointer> core_path::fmt::Pointer for ViaPointer<'_, T> {
+                fn fmt(&self, f: &mut core_path::fmt::Formatter<'_>) -> core_path::fmt::Result {
+                    core_path::fmt::Pointer::fmt(self.0, f)
+                }
+            }
+            let via = ViaPointer(value);
+            let _ = core_path::fmt::write(&mut DiscardingSink, format_args!("{via:p}"));
+        }
+
+        /// Generate a `Formatter` over a sink that discards its output, with every formatting
+        /// option nondeterministic: width and precision (each unset or up to `N`, at most
+        /// `u16::MAX`), fill
+        /// character, alignment, sign, the alternate and zero-padding flags, and debug hex mode.
+        /// Every combination is a valid `Formatter`, so none is excluded. The sink never
+        /// fails, so paths that handle a write error are not reached.
+        ///
+        /// This model is used by the compiler to generate `&Formatter` and `&mut Formatter`
+        /// arguments for automatic harnesses (`kani autoharness`). Note that any verification
+        /// result obtained with a bounded value like this one is valid only up to the bound.
+        #[kanitool::fn_marker = "AnyFormatterModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_formatter<const N: usize>(
+            sink: &mut DiscardingSink,
+        ) -> core_path::fmt::Formatter<'_> {
+            use core_path::fmt::{Alignment, DebugAsHex, FormattingOptions, Sign};
+            // Width and precision: unset, or a count in `0..=N` (capped at `u16::MAX`, their type in
+            // the API), by reduction rather than by an assumption. Written out rather than as a nested
+            // fn, which the standard-library flow would offer a harness of its own.
+            let max = N.min(u16::MAX as usize);
+            let width = match <Option<u16> as Arbitrary>::any() {
+                None => None,
+                Some(v) => Some((v as usize % (max + 1)) as u16),
+            };
+            let precision = match <Option<u16> as Arbitrary>::any() {
+                None => None,
+                Some(v) => Some((v as usize % (max + 1)) as u16),
+            };
+            let mut options = FormattingOptions::new();
+            options
+                .width(width)
+                .precision(precision)
+                .fill(<char as Arbitrary>::any())
+                .alternate(<bool as Arbitrary>::any())
+                .sign_aware_zero_pad(<bool as Arbitrary>::any())
+                .align(match <Option<u8> as Arbitrary>::any() {
+                    None => None,
+                    Some(0) => Some(Alignment::Left),
+                    Some(1) => Some(Alignment::Right),
+                    Some(_) => Some(Alignment::Center),
+                })
+                .sign(match <Option<bool> as Arbitrary>::any() {
+                    None => None,
+                    Some(true) => Some(Sign::Plus),
+                    Some(false) => Some(Sign::Minus),
+                })
+                .debug_as_hex(match <Option<bool> as Arbitrary>::any() {
+                    None => None,
+                    Some(true) => Some(DebugAsHex::Upper),
+                    Some(false) => Some(DebugAsHex::Lower),
+                });
+            core_path::fmt::Formatter::new(sink, options)
+        }
+
+        /// Creates a symbolic value *bounded* by `N`. Bounded means `|T| <= N`. The type
+        /// implementing BoundedArbitrary decides exactly what size means for them.
+        ///
+        /// *Note*: Any proof using a bounded symbolic value is only valid up to that bound.
+        #[kanitool::fn_marker = "BoundedAnyModel"]
+        #[inline(always)]
+        pub fn bounded_any<T: BoundedArbitrary, const N: usize>() -> T {
+            T::bounded_any::<N>()
         }
 
         /// This function is only used for function contract instrumentation.
@@ -351,6 +563,18 @@ macro_rules! kani_intrinsics {
         #[kanitool::fn_marker = "SafetyCheckHook"]
         #[inline(never)]
         pub(crate) fn safety_check(cond: bool, msg: &'static str) {
+            #[cfg(not(feature = "concrete_playback"))]
+            return kani_intrinsic();
+
+            #[cfg(feature = "concrete_playback")]
+            assert!(cond, "Safety check failed: {msg}");
+        }
+
+        #[doc(hidden)]
+        #[allow(dead_code)]
+        #[kanitool::fn_marker = "SafetyCheckNoAssumeHook"]
+        #[inline(never)]
+        pub(crate) fn safety_check_no_assume(cond: bool, msg: &'static str) {
             #[cfg(not(feature = "concrete_playback"))]
             return kani_intrinsic();
 
@@ -555,6 +779,125 @@ macro_rules! kani_intrinsics {
             /// Insert the contract into the body of the function as assertion(s).
             pub const ASSERT: Mode = 4;
 
+            /// Tracks whether execution is currently evaluating a contract
+            /// clause (requires / ensures / modifies expression). Nesting is
+            /// possible when a clause calls a function whose own contract
+            /// clauses are evaluated, hence a depth counter rather than a
+            /// flag. Verification is single-threaded, so a static is sound.
+            ///
+            /// The `__CPROVER_` linker-symbol prefix marks the storage as a
+            /// verifier-internal object. This mirrors the naming applied to
+            /// `enter_contract_clause` / `exit_contract_clause` below and is
+            /// the reason `in_contract_clause` can be queried at every call
+            /// dispatch (including OUTSIDE any enter/exit bracket) without
+            /// risking a spuriously-nonzero havocked value causing a call to
+            /// be mis-dispatched to the original body.
+            #[unsafe(export_name = "__CPROVER_kani_contract_clause_depth")]
+            static mut CONTRACT_CLAUSE_DEPTH: usize = 0;
+
+            /// Resets the clause-depth counter at harness entry. Static
+            /// variables are not reliably zero-initialized in every
+            /// verification configuration, so harnesses reset the counter
+            /// explicitly before the first contract dispatch.
+            #[doc(hidden)]
+            #[inline(never)]
+            #[kanitool::fn_marker = "ResetContractClauseDepthModel"]
+            pub fn reset_contract_clause_depth() {
+                unsafe {
+                    CONTRACT_CLAUSE_DEPTH = 0;
+                }
+            }
+
+            /// Marks the beginning of the evaluation of a contract clause.
+            /// Inserted by the contract macros around every clause expression.
+            ///
+            /// The `__VERIFIER` symbol prefix makes CBMC's function-contract
+            /// instrumentation (DFCC) treat this function as
+            /// verification-internal (see `dfcc_is_cprover_function_symbol`),
+            /// so the counter update is not flagged as an illegal side effect
+            /// (assigns-clause violation) of a function under contract
+            /// checking.
+            #[doc(hidden)]
+            #[inline(never)]
+            #[kanitool::fn_marker = "EnterContractClauseModel"]
+            #[unsafe(export_name = "__VERIFIER_kani_enter_contract_clause")]
+            pub fn enter_contract_clause() {
+                // Saturating arithmetic is used defensively so that even if
+                // the underlying static were to be havocked (which the
+                // `__CPROVER_` symbol prefix on `CONTRACT_CLAUSE_DEPTH`
+                // aims to prevent), enter/exit calls remain well-defined
+                // and cannot silently wrap. Within an enter/exit bracket
+                // the depth is guaranteed >= 1 regardless of the initial
+                // value.
+                unsafe {
+                    let depth = CONTRACT_CLAUSE_DEPTH;
+                    if depth < usize::MAX {
+                        CONTRACT_CLAUSE_DEPTH = depth + 1;
+                    }
+                }
+            }
+
+            /// Marks the end of the evaluation of a contract clause.
+            ///
+            /// See [enter_contract_clause] regarding the symbol name.
+            #[doc(hidden)]
+            #[inline(never)]
+            #[kanitool::fn_marker = "ExitContractClauseModel"]
+            #[unsafe(export_name = "__VERIFIER_kani_exit_contract_clause")]
+            pub fn exit_contract_clause() {
+                unsafe {
+                    let depth = CONTRACT_CLAUSE_DEPTH;
+                    if depth > 0 {
+                        CONTRACT_CLAUSE_DEPTH = depth - 1;
+                    }
+                }
+            }
+
+            /// RAII guard returned by [enter_contract_clause_guard]. Its
+            /// `Drop` impl calls [exit_contract_clause] so the counter is
+            /// balanced even when the bracketed expression exits its
+            /// enclosing function early (via `?` / `return`) or panics-
+            /// unwinds. This prevents the depth from leaking to a nonzero
+            /// value outside a clause and mis-dispatching later calls.
+            #[doc(hidden)]
+            pub struct ContractClauseGuard;
+
+            impl Drop for ContractClauseGuard {
+                #[inline(never)]
+                fn drop(&mut self) {
+                    exit_contract_clause();
+                }
+            }
+
+            /// Increments the clause-depth counter and returns a guard whose
+            /// `Drop` decrements it. Used by the contract macros to bracket
+            /// clause expressions; see `bracket_clause_expr` in
+            /// `library/kani_macros/src/sysroot/contracts/helpers.rs`.
+            #[doc(hidden)]
+            #[inline(never)]
+            pub fn enter_contract_clause_guard() -> ContractClauseGuard {
+                enter_contract_clause();
+                ContractClauseGuard
+            }
+
+            /// Whether execution is currently evaluating a contract clause.
+            ///
+            /// The contract transformation pass dispatches calls to the
+            /// function under contract verification to its *original body*
+            /// rather than its contract *check* when they occur during clause
+            /// evaluation: clauses of other functions in the harness's call
+            /// graph may legitimately call the function under verification
+            /// (e.g. a postcondition mentioning `NonNull::as_ptr` while
+            /// `as_ptr` itself is being verified), and such calls must
+            /// neither consume the single top-level contract check nor be
+            /// checked inside the clause's write-set context.
+            #[doc(hidden)]
+            #[inline(never)]
+            #[kanitool::fn_marker = "InContractClauseModel"]
+            pub fn in_contract_clause() -> bool {
+                unsafe { CONTRACT_CLAUSE_DEPTH > 0 }
+            }
+
             /// Creates a non-fatal property with the specified condition and message.
             ///
             /// This check will not impact the program control flow even when it fails.
@@ -582,6 +925,34 @@ macro_rules! kani_intrinsics {
             #[kanitool::fn_marker = "CheckHook"]
             pub(crate) const fn check(cond: bool, msg: &'static str) {
                 assert!(cond, "{}", msg);
+            }
+
+            #[crate::kani::unstable_feature(
+                feature = "quantifiers",
+                issue = 2546,
+                reason = "experimental quantifiers"
+            )]
+            #[inline(never)]
+            #[kanitool::fn_marker = "ForallHook"]
+            pub fn kani_forall<T, F>(lower_bound: T, upper_bound: T, predicate: F) -> bool
+            where
+                F: Fn(T) -> bool,
+            {
+                predicate(lower_bound)
+            }
+
+            #[crate::kani::unstable_feature(
+                feature = "quantifiers",
+                issue = 2546,
+                reason = "experimental quantifiers"
+            )]
+            #[inline(never)]
+            #[kanitool::fn_marker = "ExistsHook"]
+            pub fn kani_exists<T, F>(lower_bound: T, upper_bound: T, predicate: F) -> bool
+            where
+                F: Fn(T) -> bool,
+            {
+                predicate(lower_bound)
             }
         }
     };

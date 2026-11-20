@@ -3,7 +3,7 @@
 
 //! Implements the `verify-std` subcommand handling.
 
-use crate::args::{ValidateArgs, VerificationArgs};
+use crate::args::{ValidateArgs, VerificationArgs, validate_std_path};
 use clap::error::ErrorKind;
 use clap::{Error, Parser};
 use kani_metadata::UnstableFeature;
@@ -40,38 +40,6 @@ impl ValidateArgs for VerifyStdArgs {
             ));
         }
 
-        if !self.std_path.exists() {
-            Err(Error::raw(
-                ErrorKind::InvalidValue,
-                format!(
-                    "Invalid argument: `<STD_PATH>` argument `{}` does not exist",
-                    self.std_path.display()
-                ),
-            ))
-        } else if !self.std_path.is_dir() {
-            Err(Error::raw(
-                ErrorKind::InvalidValue,
-                format!(
-                    "Invalid argument: `<STD_PATH>` argument `{}` is not a directory",
-                    self.std_path.display()
-                ),
-            ))
-        } else {
-            let full_path = self.std_path.canonicalize()?;
-            let dir = full_path.file_stem().unwrap();
-            if dir != "library" {
-                Err(Error::raw(
-                    ErrorKind::InvalidValue,
-                    format!(
-                        "Invalid argument: Expected `<STD_PATH>` to point to the `library` folder \
-                    containing the standard library crates.\n\
-                    Found `{}` folder instead",
-                        dir.to_string_lossy()
-                    ),
-                ))
-            } else {
-                Ok(())
-            }
-        }
+        validate_std_path(&self.std_path)
     }
 }

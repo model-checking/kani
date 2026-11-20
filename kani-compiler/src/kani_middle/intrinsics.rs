@@ -9,8 +9,8 @@ use rustc_index::IndexVec;
 use rustc_middle::mir::{Body, Const as mirConst, ConstValue, Operand, TerminatorKind};
 use rustc_middle::mir::{Local, LocalDecl};
 use rustc_middle::ty::{self, Ty, TyCtxt};
-use rustc_middle::ty::{Const, GenericArgsRef, IntrinsicDef};
-use rustc_span::source_map::Spanned;
+use rustc_middle::ty::{Const, GenericArgs, Intrinsic, IntrinsicDef};
+use rustc_span::Spanned;
 use rustc_span::symbol::{Symbol, sym};
 use tracing::{debug, trace};
 
@@ -39,7 +39,7 @@ impl<'tcx> ModelIntrinsics<'tcx> {
                 if let Some((intrinsic, generics)) = resolve_rust_intrinsic(self.tcx, func_ty) {
                     let intrinsic_name = intrinsic.name;
                     trace!(?func, ?intrinsic_name, "run_pass");
-                    if intrinsic_name == sym::simd_bitmask {
+                    if intrinsic_name == Intrinsic::Rustc(sym::simd_bitmask) {
                         self.replace_simd_bitmask(func, args, generics)
                     }
                 }
@@ -53,7 +53,7 @@ impl<'tcx> ModelIntrinsics<'tcx> {
         &self,
         func: &mut Operand<'tcx>,
         args: &[Spanned<Operand<'tcx>>],
-        gen_args: GenericArgsRef<'tcx>,
+        gen_args: GenericArgs<'tcx>,
     ) {
         assert_eq!(args.len(), 1);
         let tcx = self.tcx;
@@ -80,7 +80,7 @@ impl<'tcx> ModelIntrinsics<'tcx> {
             let Operand::Constant(fn_def) = func else { unreachable!() };
             fn_def.const_ = mirConst::from_value(
                 ConstValue::ZeroSized,
-                tcx.type_of(stub_id).instantiate(tcx, &*new_gen_args),
+                tcx.type_of(stub_id).instantiate(tcx, &*new_gen_args).skip_normalization(),
             );
         } else {
             debug!(?arg_ty, "replace_simd_bitmask failed");
@@ -93,7 +93,9 @@ fn simd_len_and_type<'tcx>(tcx: TyCtxt<'tcx>, simd_ty: Ty<'tcx>) -> (Const<'tcx>
         ty::Adt(def, args) => {
             assert!(def.repr().simd(), "`simd_size_and_type` called on non-SIMD type");
             let variant = def.non_enum_variant();
-            let f0_ty = variant.fields[0u32.into()].ty(tcx, args);
+            let f0_ty = variant.fields[rustc_abi::FieldIdx::from_usize(0)]
+                .ty(tcx, *args)
+                .skip_normalization();
 
             match f0_ty.kind() {
                 ty::Array(elem_ty, len) => (*len, *elem_ty),
@@ -107,11 +109,11 @@ fn simd_len_and_type<'tcx>(tcx: TyCtxt<'tcx>, simd_ty: Ty<'tcx>) -> (Const<'tcx>
 fn resolve_rust_intrinsic<'tcx>(
     tcx: TyCtxt<'tcx>,
     func_ty: Ty<'tcx>,
-) -> Option<(IntrinsicDef, GenericArgsRef<'tcx>)> {
-    if let ty::FnDef(def_id, args) = *func_ty.kind() {
-        if let Some(symbol) = tcx.intrinsic(def_id) {
-            return Some((symbol, args));
-        }
+) -> Option<(IntrinsicDef, GenericArgs<'tcx>)> {
+    if let ty::FnDef(def_id, args) = *func_ty.kind()
+        && let Some(symbol) = tcx.intrinsic(def_id)
+    {
+        return Some((symbol, args.skip_binder()));
     }
     None
 }

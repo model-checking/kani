@@ -3,7 +3,7 @@
    3|     | \
    4|    1| fn find_positive(nums: &[i32]) -> Option<i32> {\
    5|    1|     for &num in nums {\
-   6|     |         if num > 0 {\
+   6|    1|         if num > 0 {\
    7|    1|             return Some(num);\
    8|    1|         } \
    9|     |     }\

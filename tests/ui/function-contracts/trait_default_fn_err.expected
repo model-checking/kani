@@ -1,0 +1,6 @@
+error: #[kani::requires] cannot be applied to trait function declarations without default bodies.\
+       help: Apply this attribute to the implementation of the function instead.\
+trait_default_fn_err.rs\
+|\
+|     #[kani::requires(true)]\
+|     ^^^^^^^^^^^^^^^^^^^^^

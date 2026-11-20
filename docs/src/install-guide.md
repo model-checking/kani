@@ -14,20 +14,24 @@ GitHub CI workflows, see [GitHub CI Action](./install-github-ci.md).
 
 The following must already be installed:
 
-* **Python version 3.7 or newer** and the package installer `pip`.
 * Rust 1.58 or newer installed via `rustup`.
 
 ## Installing the latest version
 
-To install the latest version of Kani, run:
+Installing the latest version of Kani is a two step process.
 
+First, download and build Kani's installer package using:
 ```bash
 cargo install --locked kani-verifier
+```
+This will build and place in `~/.cargo/bin` (in a typical environment) the `kani` and `cargo-kani` binaries.
+
+Next, run the installer to download and install the prebuilt binaries as well as supporting libraries and data:
+```bash
 cargo kani setup
 ```
 
-This will build and place in `~/.cargo/bin` (in a typical environment) the `kani` and `cargo-kani` binaries.
-The second step (`cargo kani setup`) will download the Kani compiler and other necessary dependencies, and place them under `~/.kani/` by default.
+The second step will download the Kani compiler and other necessary dependencies, and place them under `~/.kani/` by default.
 A custom path can be specified using the `KANI_HOME` environment variable.
 
 ## Installing an older version

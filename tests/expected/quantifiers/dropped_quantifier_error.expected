@@ -1,0 +1,4 @@
+error: the solver backend does not support quantifiers with non-constant bounds and ignored 1 quantifier expression(s), replacing them with unconstrained values.
+Kani cannot soundly verify this harness: `kani::assume` calls containing such a quantifier are NOT enforced (a successful result would not cover the intended property), and `kani::assert` calls containing one may fail spuriously.
+Use an SMT solver backend that supports quantifiers, e.g. `#[kani::solver(z3)]`.
+VERIFICATION:- FAILED

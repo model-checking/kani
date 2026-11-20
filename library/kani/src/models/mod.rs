@@ -74,17 +74,92 @@ mod intrinsics {
         T: MaskElement,
     {
         let mut mask_array = [0; mask_len(LANES)];
-        for lane in (0..input.len()).rev() {
-            let byte = lane / 8;
-            let mask = &mut mask_array[byte];
-            let shift_mask = *mask << 1;
-            *mask = if input[lane] == T::TRUE {
-                shift_mask | 0x1
-            } else {
-                assert_eq!(input[lane], T::FALSE, "Masks values should either be 0 or -1");
-                shift_mask
-            };
+
+        // The implementation below is the equivalent of the following:
+        // ```rust
+        //     for lane in (0..input.len()).rev() {
+        //         let byte = lane / 8;
+        //         let mask = &mut mask_array[byte];
+        //         let shift_mask = *mask << 1;
+        //         *mask = if input[lane] == T::TRUE {
+        //             shift_mask | 0x1
+        //         } else {
+        //             assert_eq!(input[lane], T::FALSE, "Masks values should either be 0 or -1");
+        //             shift_mask
+        //         };
+        //     }
+        // ```
+        // but is intentionally written in a way that minimizes the number of
+        // loop iterations. In particular, it's implemented as a nested loop
+        // where the outer loop iterates over bytes and the inner "loop" (which
+        // is manually unwound) iterates over bits in a byte.  This is to avoid
+        // needing a high unwind value for harnesses that invoke this code (e.g.
+        // through the `HashSet` data structure).
+        for (byte_idx, byte) in mask_array.iter_mut().enumerate() {
+            // Calculate the starting lane for this byte
+            let start_lane = byte_idx << 3;
+            // Calculate how many bits to process (handle the last byte which might be partial)
+            let bits_to_process = (LANES - start_lane).min(8);
+
+            *byte = if bits_to_process > 0 && input[start_lane] == T::TRUE { 1 << 0 } else { 0 }
+                | if bits_to_process > 1 && input[start_lane + 1] == T::TRUE { 1 << 1 } else { 0 }
+                | if bits_to_process > 2 && input[start_lane + 2] == T::TRUE { 1 << 2 } else { 0 }
+                | if bits_to_process > 3 && input[start_lane + 3] == T::TRUE { 1 << 3 } else { 0 }
+                | if bits_to_process > 4 && input[start_lane + 4] == T::TRUE { 1 << 4 } else { 0 }
+                | if bits_to_process > 5 && input[start_lane + 5] == T::TRUE { 1 << 5 } else { 0 }
+                | if bits_to_process > 6 && input[start_lane + 6] == T::TRUE { 1 << 6 } else { 0 }
+                | if bits_to_process > 7 && input[start_lane + 7] == T::TRUE { 1 << 7 } else { 0 };
+
+            assert!(
+                bits_to_process < 1
+                    || input[start_lane] == T::TRUE
+                    || input[start_lane] == T::FALSE,
+                "Masks values should either be 0 or -1"
+            );
+            assert!(
+                bits_to_process < 2
+                    || input[start_lane + 1] == T::TRUE
+                    || input[start_lane + 1] == T::FALSE,
+                "Masks values should either be 0 or -1"
+            );
+            assert!(
+                bits_to_process < 3
+                    || input[start_lane + 2] == T::TRUE
+                    || input[start_lane + 2] == T::FALSE,
+                "Masks values should either be 0 or -1"
+            );
+            assert!(
+                bits_to_process < 4
+                    || input[start_lane + 3] == T::TRUE
+                    || input[start_lane + 3] == T::FALSE,
+                "Masks values should either be 0 or -1"
+            );
+            assert!(
+                bits_to_process < 5
+                    || input[start_lane + 4] == T::TRUE
+                    || input[start_lane + 4] == T::FALSE,
+                "Masks values should either be 0 or -1"
+            );
+            assert!(
+                bits_to_process < 6
+                    || input[start_lane + 5] == T::TRUE
+                    || input[start_lane + 5] == T::FALSE,
+                "Masks values should either be 0 or -1"
+            );
+            assert!(
+                bits_to_process < 7
+                    || input[start_lane + 6] == T::TRUE
+                    || input[start_lane + 6] == T::FALSE,
+                "Masks values should either be 0 or -1"
+            );
+            assert!(
+                bits_to_process < 8
+                    || input[start_lane + 7] == T::TRUE
+                    || input[start_lane + 7] == T::FALSE,
+                "Masks values should either be 0 or -1"
+            );
         }
+
         mask_array
     }
 
@@ -114,9 +189,11 @@ mod intrinsics {
             "Expected size of input and lanes to match",
         );
 
-        let data = &*(&input as *const T as *const [E; LANES]);
-        let mask = simd_bitmask_impl(data);
-        (&mask as *const [u8; mask_len(LANES)] as *const U).read()
+        unsafe {
+            let data = &*(&input as *const T as *const [E; LANES]);
+            let mask = simd_bitmask_impl(data);
+            (&mask as *const [u8; mask_len(LANES)] as *const U).read()
+        }
     }
 
     /// Structure used for sanity check our parameters.
@@ -142,7 +219,7 @@ mod test {
     #[test]
     #[should_panic(expected = "Masks values should either be 0 or -1")]
     fn test_invalid_bitmask() {
-        let invalid_mask = unsafe { mask32x16::from_int_unchecked(i32x16::splat(10)) };
+        let invalid_mask = unsafe { mask32x16::from_simd_unchecked(i32x16::splat(10)) };
         assert_eq!(
             unsafe { kani_intrinsic::simd_bitmask::<_, u16, i32, 16>(invalid_mask) },
             u16::MAX
@@ -170,8 +247,16 @@ mod test {
     }
 
     #[repr(simd)]
-    #[derive(Clone, Debug)]
+    #[derive(Copy)]
     struct CustomMask<T, const LANES: usize>([T; LANES]);
+
+    // Derived `Clone` and `Debug` would project into the SIMD field, which MIR no longer allows
+    // (MCP#838, nightly-2026-11-17), so copy the whole value instead.
+    impl<T: Copy, const LANES: usize> Clone for CustomMask<T, LANES> {
+        fn clone(&self) -> Self {
+            *self
+        }
+    }
 
     /// Check that the bitmask model can handle odd size SIMD arrays.
     /// Since the portable_simd restricts the number of lanes, we have to use our own custom SIMD.
@@ -185,7 +270,6 @@ mod test {
     fn check_portable_bitmask<T, E, const LANES: usize, M>(mask: Mask<T, LANES>)
     where
         T: std::simd::MaskElement,
-        LaneCount<LANES>: SupportedLaneCount,
         E: kani_intrinsic::MaskElement,
         [u8; kani_intrinsic::mask_len(LANES)]: Sized,
         u64: From<M>,
@@ -199,15 +283,14 @@ mod test {
     /// Compare the value returned by our model and the simd_bitmask intrinsic.
     fn check_bitmask<T, U, E, const LANES: usize>(mask: T)
     where
-        T: Clone,
+        T: Clone + Copy,
         U: PartialEq + Debug,
         E: kani_intrinsic::MaskElement,
         [u8; kani_intrinsic::mask_len(LANES)]: Sized,
     {
-        assert_eq!(
-            unsafe { kani_intrinsic::simd_bitmask::<_, U, E, LANES>(mask.clone()) },
-            unsafe { simd_bitmask::<T, U>(mask) }
-        );
+        assert_eq!(unsafe { kani_intrinsic::simd_bitmask::<_, U, E, LANES>(mask) }, unsafe {
+            simd_bitmask::<T, U>(mask)
+        });
     }
 
     /// Similar to portable simd_harness.

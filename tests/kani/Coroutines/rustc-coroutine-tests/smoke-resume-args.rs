@@ -24,16 +24,16 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 fn drain<G: Coroutine<R, Yield = Y> + Unpin, R, Y>(
-    gen: &mut G,
+    g: &mut G,
     inout: Vec<(R, CoroutineState<Y, G::Return>)>,
 ) where
     Y: Debug + PartialEq,
     G::Return: Debug + PartialEq,
 {
-    let mut gen = Pin::new(gen);
+    let mut g = Pin::new(g);
 
     for (input, out) in inout {
-        assert_eq!(gen.as_mut().resume(input), out);
+        assert_eq!(g.as_mut().resume(input), out);
     }
 }
 

@@ -5,9 +5,11 @@
 //! <https://github.com/model-checking/kani/issues/3312>
 
 #[kani::proof]
-#[kani::unwind(4)]
+#[kani::unwind(13)]
 fn check_new() {
-    let data: [char; 3] = kani::any();
-    let input: String = data.iter().collect();
+    let data: [u8; 12] = kani::any();
+    let res = String::from_utf8(data.into());
+    kani::assume(res.is_ok());
+    let input: String = res.unwrap();
     smol_str::SmolStr::new(&input);
 }

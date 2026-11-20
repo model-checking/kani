@@ -10,7 +10,7 @@ use syn::spanned::Spanned;
 use syn::{Attribute, Expr, ExprBlock, Local, LocalInit, PatIdent, Stmt, parse_quote};
 
 /// If an explicit return type was provided it is returned, otherwise `()`.
-pub fn return_type_to_type(return_type: &syn::ReturnType) -> Cow<syn::Type> {
+pub fn return_type_to_type(return_type: &syn::ReturnType) -> Cow<'_, syn::Type> {
     match return_type {
         syn::ReturnType::Default => Cow::Owned(syn::Type::Tuple(syn::TypeTuple {
             paren_token: syn::token::Paren::default(),
@@ -94,8 +94,9 @@ pub fn find_contract_closure<'a>(
 ///
 /// Panic if no closure was found.
 pub fn expect_closure<'a>(stmts: &'a mut [Stmt], name: &'static str) -> &'a mut Stmt {
-    find_contract_closure(stmts, name)
-        .expect(&format!("Internal Failure: Expected to find `{name}` closure, but found none"))
+    find_contract_closure(stmts, name).unwrap_or_else(|| {
+        panic!("Internal Failure: Expected to find `{name}` closure, but found none")
+    })
 }
 
 /// Find a closure inside a match block.
@@ -112,7 +113,9 @@ pub fn expect_closure_in_match<'a>(stmts: &'a mut [Stmt], name: &'static str) ->
             None
         }
     });
-    closure.expect(&format!("Internal Failure: Expected to find `{name}` closure, but found none"))
+    closure.unwrap_or_else(|| {
+        panic!("Internal Failure: Expected to find `{name}` closure, but found none")
+    })
 }
 
 /// Extract the body of a closure declaration.
@@ -120,9 +123,25 @@ pub fn closure_body(closure: &mut Stmt) -> &mut ExprBlock {
     let Stmt::Local(Local { init: Some(LocalInit { expr, .. }), .. }) = closure else {
         unreachable!()
     };
-    let Expr::Closure(closure) = expr.as_mut() else { unreachable!() };
-    let Expr::Block(body) = closure.body.as_mut() else { unreachable!() };
-    body
+    match expr.as_mut() {
+        // The case of closures wrapped in `kani_force_fn_once`
+        Expr::Call(call) if call.args.len() == 1 => {
+            let arg = call.args.first_mut().unwrap();
+            match arg {
+                Expr::Closure(closure) => {
+                    let Expr::Block(body) = closure.body.as_mut() else { unreachable!() };
+                    body
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        Expr::Closure(closure) => {
+            let Expr::Block(body) = closure.body.as_mut() else { unreachable!() };
+            body
+        }
+        _ => unreachable!(),
+    }
 }
 
 /// Does the provided path have the same chain of identifiers as `mtch` (match)
@@ -185,4 +204,54 @@ macro_rules! assert_spanned_err {
     ($condition:expr, $span_source:expr) => {
         assert_spanned_err!($condition, $span_source, concat!("Failed assertion ", stringify!($condition)))
     };
+}
+
+/// Wrap the evaluation of a contract clause expression so that the
+/// kani_core clause-depth counter is incremented around it and its value is
+/// returned.
+///
+/// While a clause is being evaluated, calls to the function whose contract is
+/// currently under verification are dispatched to its *original body* instead
+/// of its contract *check* (see `FunctionWithContractPass::set_mode` in the
+/// Kani compiler).
+///
+/// The counter is decremented via an RAII guard rather than a direct call so
+/// the balancing `exit_contract_clause()` also runs on early exit from the
+/// enclosing function (e.g. an `?` or `return` inside `#expr`) and on
+/// unwinding panics; otherwise the counter could stay nonzero and mis-
+/// dispatch subsequent calls. The guard's `Drop` runs when the block scope
+/// ends, i.e. after `#expr` has been fully evaluated.
+///
+/// `#expr` is bound with a `let` (expression position) rather than left as a
+/// block tail expression, so a clause that begins with a block-like construct
+/// followed by an operator (e.g. `#[kani::modifies({ .. } as *const _)]` or
+/// `#[kani::requires(unsafe { .. } < 100)]`) still parses. Because this moves
+/// the whole clause value behind the wrapper block, callers that need the
+/// clause value's *span* preserved for diagnostics (i.e. `requires`) instead
+/// use [`bracket_clause_stmt`], which keeps the clause expression as a direct
+/// argument to `assume`/`assert`.
+pub fn bracket_clause_expr(expr: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
+    quote::quote!({
+        let __kani_clause_guard = kani::internal::enter_contract_clause_guard();
+        let __kani_clause_value = #expr;
+        __kani_clause_value
+    })
+}
+
+/// Wrap a contract clause *statement* (e.g. `kani::assume(#cond);` or
+/// `kani::assert(#cond, ..);`) in a scope that increments the clause-depth
+/// counter for its duration, via the same RAII guard as [`bracket_clause_expr`].
+///
+/// Unlike [`bracket_clause_expr`], the clause expression is left in place as a
+/// direct argument to `assume`/`assert` rather than moved behind a wrapper
+/// block. This preserves its span, so that a non-`bool` clause reports the
+/// type error on the offending sub-expression rather than on the generated
+/// wrapper (see tests/ui/function-contracts/non_bool_contracts.rs and
+/// https://github.com/model-checking/kani/issues/3009). The guard is still
+/// dropped on all exits from the scope, including unwinding.
+pub fn bracket_clause_stmt(stmt: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
+    quote::quote!({
+        let __kani_clause_guard = kani::internal::enter_contract_clause_guard();
+        #stmt
+    })
 }

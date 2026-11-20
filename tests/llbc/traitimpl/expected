@@ -1,0 +1,80 @@
+// Full name: test::{impl T for A}\
+impl "impl_T_for_A" T for A {\
+    vtable: unknown // Kani does not translate vtables\
+}
+
+// Full name: test::{impl T for B}\
+impl "impl_T_for_B" T for B {\
+    vtable: unknown // Kani does not translate vtables\
+}
+
+// Full name: test::B\
+pub struct B {\
+  index: i32,\
+}
+
+// Full name: test::{impl T for B}::get_val\
+pub fn impl_T_for_B::get_val<'_0>(self: &'_0 B) -> i32\
+{\
+    let mut _0: i32; // return\
+    let self: &'_ B; // arg #1\
+\
+    storage_live(_0)\
+    _0 = copy (*self).index\
+    storage_dead(self)\
+    return\
+}
+
+// Full name: test::A\
+pub struct A {\
+  val: i32,\
+}
+
+// Full name: test::{impl T for A}::get_val\
+pub fn impl_T_for_A::get_val<'_0>(self: &'_0 A) -> i32\
+{\
+    let mut _0: i32; // return\
+    let self: &'_ A; // arg #1\
+\
+    storage_live(_0)\
+    _0 = copy (*self).val\
+    storage_dead(self)\
+    return\
+}
+
+// Full name: test::main\
+pub fn main()\
+{\
+    let mut _0: (); // return\
+    let e: A; // local\
+    let k: B; // local\
+    let i: i32; // local\
+    let mut _4: &'_ A; // anonymous local\
+    let j: i32; // local\
+    let mut _6: &'_ B; // anonymous local\
+\
+    storage_live(_0)\
+    storage_live(e)\
+    storage_live(k)\
+    storage_live(i)\
+    storage_live(_4)\
+    storage_live(j)\
+    storage_live(_6)\
+    _0 = ()\
+    e = A { val: const 3i32 }\
+    k = B { index: const 3i32 }\
+    _4 = &e\
+    i = impl_T_for_A::get_val<'_>(move _4)\
+    ↳⚡ undefined_behavior\
+    storage_dead(_4)\
+    _6 = &k\
+    j = impl_T_for_B::get_val<'_>(move _6)\
+    ↳⚡ undefined_behavior\
+    storage_dead(_6)\
+    _0 = ()\
+    storage_dead(j)\
+    storage_dead(i)\
+    storage_dead(k)\
+    storage_dead(e)\
+    return\
+}

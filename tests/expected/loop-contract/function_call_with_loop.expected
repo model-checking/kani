@@ -1,0 +1,11 @@
+has_loop::{closure#3}::{closure#0}.loop_invariant_base.1\
+	 - Status: SUCCESS\
+	 - Description: "Check invariant before entry for loop has_loop::{closure#3}::{closure#0}.0"\
+in function has_loop::{closure#3}::{closure#0}
+
+has_loop::{closure#3}::{closure#0}.precondition_instance.5\
+	 - Status: SUCCESS\
+	 - Description: "free called for new[] object"\
+in function has_loop::{closure#3}::{closure#0}
+
+Failed Checks: i>=2

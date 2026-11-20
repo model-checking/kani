@@ -9,6 +9,7 @@ At present, the available Kani attributes are the following:
  - [`#[kani::unwind(<number>)]`](#kaniunwindnumber)
  - [`#[kani::solver(<solver>)]`](#kanisolversolver)
  - [`#[kani::stub(<original>, <replacement>)]`](#kanistuboriginal-replacement)
+ - [Contract-related attributes](#contract-attributes)
 
 ## `#[kani::proof]`
 
@@ -206,6 +207,9 @@ At present, `<solver>` can be one of:
  - `minisat`: [MiniSat](http://minisat.se/).
  - `cadical` (default): [CaDiCaL](https://github.com/arminbiere/cadical).
  - `kissat`: [kissat](https://github.com/arminbiere/kissat).
+ - `z3`: [Z3](https://github.com/Z3Prover/z3/).
+ - `bitwuzla`: [Bitwuzla](https://github.com/bitwuzla/bitwuzla).
+ - `cvc5`: [cvc5](https://github.com/cvc5/cvc5).
  - `bin="<SAT_SOLVER_BINARY>"`: A custom solver binary, `"<SAT_SOLVER_BINARY>"`, that must be in path.
 
 ### Example
@@ -235,4 +239,15 @@ default one.
 
 **Replaces the function/method with name <original> with the function/method with name <replacement> during compilation**
 
-Check the [*Stubbing* section](../reference/stubbing.md) for more information about stubbing.
+Check the [*Stubbing* section](../reference/experimental/stubbing.md) for more information about stubbing.
+
+## Contract Attributes
+
+There are numerous attributes for function and loop contracts. At present, these are:
+
+- Proof harness for contracts: `#[kani::proof_for_contract(name-of-function)]`
+- Verified stubbing: `#[kani::stub_verified]`
+- Function contract specification: `#[kani::requires]`, `#[kani::modifies]`, `#[kani::ensures]`, `#[kani::recursion]`
+- Loop contract specification: `#[kani::loop_invariant]`, `#[kani::loop_modifies]`, `#[kani::loop_decreases]`.
+
+See the documentation on [function contracts](./experimental/contracts.md) and [loop contracts](./experimental/loop-contracts.md) for details.

@@ -12,7 +12,7 @@ use crate::kani_middle::abi::LayoutOf;
 use crate::kani_middle::attributes::KaniAttributes;
 use crate::kani_middle::kani_functions::{KaniFunction, KaniIntrinsic, KaniModel};
 use crate::kani_middle::transform::body::{
-    CheckType, InsertPosition, MutableBody, SourceInstruction,
+    CheckType, InsertPosition, MutableBody, SourceInstruction, synthetic_source_info,
 };
 use crate::kani_middle::transform::check_uninit::PointeeInfo;
 use crate::kani_middle::transform::check_uninit::{
@@ -22,24 +22,28 @@ use crate::kani_middle::transform::check_values::{build_limits, ty_validity_per_
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{
+use rustc_public::CrateDefType;
+use rustc_public::mir::mono::Instance;
+use rustc_public::mir::{
     AggregateKind, BasicBlock, BinOp, Body, ConstOperand, Local, Mutability, Operand, Place,
     RETURN_LOCAL, Rvalue, Statement, StatementKind, Terminator, TerminatorKind, UnOp, UnwindAction,
+    WithRetag,
 };
-use stable_mir::target::MachineInfo;
-use stable_mir::ty::{
-    AdtDef, FnDef, GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyKind, UintTy,
+use rustc_public::rustc_internal;
+use rustc_public::target::MachineInfo;
+use rustc_public::ty::{
+    AdtDef, FnDef, GenericArgKind, GenericArgs, MirConst, RigidTy, Ty, TyKind, UintTy, VariantIdx,
 };
+use rustc_public_bridge::IndexedVal;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::str::FromStr;
 use tracing::{debug, trace};
 
 /// Generate the body for a few Kani intrinsics.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct IntrinsicGeneratorPass {
-    check_type: CheckType,
+    unsupported_check_type: CheckType,
     /// Used to cache FnDef lookups for models and Kani intrinsics.
     kani_defs: HashMap<KaniFunction, FnDef>,
     /// Whether the user enabled uninitialized memory checks when they invoked Kani.
@@ -70,10 +74,33 @@ impl TransformPass for IntrinsicGeneratorPass {
             attributes.fn_marker().and_then(|name| KaniIntrinsic::from_str(name.as_str()).ok())
         {
             match kani_intrinsic {
-                KaniIntrinsic::CheckedAlignOf => (true, self.checked_align_of(body, instance)),
-                KaniIntrinsic::CheckedSizeOf => (true, self.checked_size_of(body, instance)),
+                // `fn_marker` is an internal attribute, but nothing prevents user code from
+                // attaching it to a function with an incompatible signature. The size/align
+                // generators consume the signature pieces extracted by `checked_intrinsic_sig`;
+                // reject any function it cannot handle with a diagnostic rather than panicking
+                // while building the `Some`/`None` return value (see issue #4589).
+                KaniIntrinsic::CheckedAlignOf | KaniIntrinsic::CheckedSizeOf => {
+                    if let Some(sig) = checked_intrinsic_sig(&body) {
+                        if matches!(kani_intrinsic, KaniIntrinsic::CheckedAlignOf) {
+                            (true, self.checked_align_of(body, instance, sig))
+                        } else {
+                            (true, self.checked_size_of(body, instance, sig))
+                        }
+                    } else {
+                        let name: &str = kani_intrinsic.into();
+                        tcx.dcx().span_err(
+                            rustc_internal::internal(tcx, body.span),
+                            format!(
+                                "the `{name}` intrinsic marker can only be applied to a \
+                                 function with a single raw-pointer argument that returns \
+                                 `Option<usize>`"
+                            ),
+                        );
+                        (false, body)
+                    }
+                }
                 KaniIntrinsic::IsInitialized => (true, self.is_initialized_body(body)),
-                KaniIntrinsic::ValidValue => (true, self.valid_value_body(body)),
+                KaniIntrinsic::ValidValue => (true, self.valid_value_body(tcx, body)),
                 // The former two are handled in contracts pass for now, while the latter is handled in the the automatic harness pass.
                 KaniIntrinsic::WriteAny
                 | KaniIntrinsic::AnyModifies
@@ -86,11 +113,11 @@ impl TransformPass for IntrinsicGeneratorPass {
 }
 
 impl IntrinsicGeneratorPass {
-    pub fn new(check_type: CheckType, queries: &QueryDb) -> Self {
+    pub fn new(unsupported_check_type: CheckType, queries: &QueryDb) -> Self {
         let enable_uninit = queries.args().ub_check.contains(&ExtraChecks::Uninit);
         let kani_defs = queries.kani_functions().clone();
         debug!(?kani_defs, ?enable_uninit, "IntrinsicGeneratorPass::new");
-        IntrinsicGeneratorPass { check_type, enable_uninit, kani_defs }
+        IntrinsicGeneratorPass { unsupported_check_type, enable_uninit, kani_defs }
     }
 
     /// Generate the body for valid value. Which should be something like:
@@ -105,7 +132,7 @@ impl IntrinsicGeneratorPass {
     ///     ret
     /// }
     /// ```
-    fn valid_value_body(&self, body: Body) -> Body {
+    fn valid_value_body(&self, tcx: TyCtxt, body: Body) -> Body {
         let mut new_body = MutableBody::from(body);
         new_body.clear_body(TerminatorKind::Return);
 
@@ -115,27 +142,30 @@ impl IntrinsicGeneratorPass {
         let span = new_body.locals()[ret_var].span;
         let assign = StatementKind::Assign(
             Place::from(ret_var),
-            Rvalue::Use(Operand::Constant(ConstOperand {
-                span,
-                user_ty: None,
-                const_: MirConst::from_bool(true),
-            })),
+            Rvalue::Use(
+                Operand::Constant(ConstOperand {
+                    span,
+                    user_ty: None,
+                    const_: MirConst::from_bool(true),
+                }),
+                WithRetag::No,
+            ),
         );
-        let stmt = Statement { kind: assign, span };
+        let stmt = Statement { kind: assign, source_info: synthetic_source_info(span) };
         new_body.insert_stmt(stmt, &mut terminator, InsertPosition::Before);
         let machine_info = MachineInfo::target();
 
         // The first and only argument type.
         let arg_ty = new_body.locals()[1].ty;
         let TyKind::RigidTy(RigidTy::RawPtr(target_ty, _)) = arg_ty.kind() else { unreachable!() };
-        let validity = ty_validity_per_offset(&machine_info, target_ty, 0);
+        let validity = ty_validity_per_offset(tcx, &machine_info, target_ty, 0);
         match validity {
             Ok(ranges) if ranges.is_empty() => {
                 // Nothing to check
             }
             Ok(ranges) => {
                 // Given the pointer argument, check for possible invalid ranges.
-                let rvalue = Rvalue::Use(Operand::Move(Place::from(1)));
+                let rvalue = Rvalue::Use(Operand::Move(Place::from(1)), WithRetag::No);
                 for range in ranges {
                     let result =
                         build_limits(&mut new_body, &range, rvalue.clone(), &mut terminator);
@@ -145,27 +175,20 @@ impl IntrinsicGeneratorPass {
                         Operand::Move(Place::from(result)),
                     );
                     let assign = StatementKind::Assign(Place::from(ret_var), rvalue);
-                    let stmt = Statement { kind: assign, span };
+                    let stmt = Statement { kind: assign, source_info: synthetic_source_info(span) };
                     new_body.insert_stmt(stmt, &mut terminator, InsertPosition::Before);
                 }
             }
             Err(msg) => {
                 // We failed to retrieve all the valid ranges.
-                let rvalue = Rvalue::Use(Operand::Constant(ConstOperand {
-                    const_: MirConst::from_bool(false),
-                    span,
-                    user_ty: None,
-                }));
-                let result =
-                    new_body.insert_assignment(rvalue, &mut terminator, InsertPosition::Before);
                 let reason = format!(
                     "Kani currently doesn't support checking validity of `{target_ty}`. {msg}"
                 );
                 new_body.insert_check(
-                    &self.check_type,
+                    &self.unsupported_check_type,
                     &mut terminator,
                     InsertPosition::Before,
-                    result,
+                    None,
                     &reason,
                 );
             }
@@ -193,14 +216,17 @@ impl IntrinsicGeneratorPass {
             let span = new_body.locals()[ret_var].span;
             let assign = StatementKind::Assign(
                 Place::from(ret_var),
-                Rvalue::Use(Operand::Constant(ConstOperand {
-                    span,
-                    user_ty: None,
-                    const_: MirConst::from_bool(true),
-                })),
+                Rvalue::Use(
+                    Operand::Constant(ConstOperand {
+                        span,
+                        user_ty: None,
+                        const_: MirConst::from_bool(true),
+                    }),
+                    WithRetag::No,
+                ),
             );
             new_body.insert_stmt(
-                Statement { kind: assign, span },
+                Statement { kind: assign, source_info: synthetic_source_info(span) },
                 &mut source,
                 InsertPosition::Before,
             );
@@ -228,14 +254,20 @@ impl IntrinsicGeneratorPass {
                             let span = new_body.locals()[ret_var].span;
                             let assign = StatementKind::Assign(
                                 Place::from(ret_var),
-                                Rvalue::Use(Operand::Constant(ConstOperand {
-                                    span,
-                                    user_ty: None,
-                                    const_: MirConst::from_bool(true),
-                                })),
+                                Rvalue::Use(
+                                    Operand::Constant(ConstOperand {
+                                        span,
+                                        user_ty: None,
+                                        const_: MirConst::from_bool(true),
+                                    }),
+                                    WithRetag::No,
+                                ),
                             );
                             new_body.insert_stmt(
-                                Statement { kind: assign, span },
+                                Statement {
+                                    kind: assign,
+                                    source_info: synthetic_source_info(span),
+                                },
                                 &mut source,
                                 InsertPosition::Before,
                             );
@@ -247,7 +279,7 @@ impl IntrinsicGeneratorPass {
                             *pointee_info.ty(),
                         );
                         let layout_operand =
-                            mk_layout_operand(&mut new_body, &mut statements, &mut source, &layout);
+                            mk_layout_operand(&mut new_body, &mut statements, &mut source, layout);
 
                         let terminator = Terminator {
                             kind: TerminatorKind::Call {
@@ -261,7 +293,7 @@ impl IntrinsicGeneratorPass {
                                 target: Some(0), // The current value does not matter, since it will be overwritten in add_bb.
                                 unwind: UnwindAction::Terminate,
                             },
-                            span: source.span(new_body.blocks()),
+                            source_info: synthetic_source_info(source.span(new_body.blocks())),
                         };
                         // Construct the basic block and insert it into the body.
                         new_body.insert_bb(
@@ -290,7 +322,7 @@ impl IntrinsicGeneratorPass {
                             &mut new_body,
                             &mut statements,
                             &mut source,
-                            &element_layout,
+                            element_layout,
                         );
                         let terminator = Terminator {
                             kind: TerminatorKind::Call {
@@ -304,7 +336,7 @@ impl IntrinsicGeneratorPass {
                                 target: Some(0), // The current value does not matter, since it will be overwritten in add_bb.
                                 unwind: UnwindAction::Terminate,
                             },
-                            span: source.span(new_body.blocks()),
+                            source_info: synthetic_source_info(source.span(new_body.blocks())),
                         };
                         // Construct the basic block and insert it into the body.
                         new_body.insert_bb(
@@ -314,61 +346,40 @@ impl IntrinsicGeneratorPass {
                         );
                     }
                     PointeeLayout::TraitObject => {
-                        let rvalue = Rvalue::Use(Operand::Constant(ConstOperand {
-                            const_: MirConst::from_bool(false),
-                            span: source.span(new_body.blocks()),
-                            user_ty: None,
-                        }));
-                        let result =
-                            new_body.insert_assignment(rvalue, &mut source, InsertPosition::Before);
                         let reason: &str = "Kani does not support reasoning about memory initialization of pointers to trait objects.";
 
                         new_body.insert_check(
-                            &self.check_type,
+                            &self.unsupported_check_type,
                             &mut source,
                             InsertPosition::Before,
-                            result,
-                            &reason,
+                            None,
+                            reason,
                         );
                     }
                     PointeeLayout::Union { .. } => {
-                        let rvalue = Rvalue::Use(Operand::Constant(ConstOperand {
-                            const_: MirConst::from_bool(false),
-                            span: source.span(new_body.blocks()),
-                            user_ty: None,
-                        }));
-                        let result =
-                            new_body.insert_assignment(rvalue, &mut source, InsertPosition::Before);
                         let reason: &str =
                             "Kani does not yet support using initialization predicates on unions.";
 
                         new_body.insert_check(
-                            &self.check_type,
+                            &self.unsupported_check_type,
                             &mut source,
                             InsertPosition::Before,
-                            result,
-                            &reason,
+                            None,
+                            reason,
                         );
                     }
                 };
             }
             Err(reason) => {
                 // We failed to retrieve the type layout.
-                let rvalue = Rvalue::Use(Operand::Constant(ConstOperand {
-                    const_: MirConst::from_bool(false),
-                    span: source.span(new_body.blocks()),
-                    user_ty: None,
-                }));
-                let result =
-                    new_body.insert_assignment(rvalue, &mut source, InsertPosition::Before);
                 let reason = format!(
                     "Kani currently doesn't support checking memory initialization for pointers to `{pointee_ty}. {reason}",
                 );
                 new_body.insert_check(
-                    &self.check_type,
+                    &self.unsupported_check_type,
                     &mut source,
                     InsertPosition::Before,
-                    result,
+                    None,
                     &reason,
                 );
             }
@@ -401,21 +412,15 @@ impl IntrinsicGeneratorPass {
     ///    bb1:
     ///     return
     /// ```
-    fn checked_size_of(&mut self, body: Body, instance: Instance) -> Body {
-        // Get information about the pointer passed as an argument.
-        let ptr_arg = body.arg_locals().first().expect("Expected a pointer argument");
-        let ptr_ty = ptr_arg.ty;
-        let TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) = ptr_ty.kind() else {
-            unreachable!("Expected a pointer argument, but got {ptr_ty}")
-        };
+    fn checked_size_of(
+        &mut self,
+        body: Body,
+        instance: Instance,
+        sig: CheckedIntrinsicSig,
+    ) -> Body {
+        let CheckedIntrinsicSig { pointee_ty, option_def, option_args, some_idx, none_idx } = sig;
         let pointee_layout = LayoutOf::new(pointee_ty);
-        debug!(?ptr_ty, ?pointee_layout, "checked_size_of");
-
-        // Get information about the return value (`Option<usize>`).
-        let ret_ty = body.ret_local().ty;
-        let TyKind::RigidTy(RigidTy::Adt(option_def, option_args)) = ret_ty.kind() else {
-            unreachable!("Expected `Option<usize>` as return but found `{ret_ty}`")
-        };
+        debug!(?pointee_ty, ?pointee_layout, "checked_size_of");
 
         // Modify the body according to the type of pointer.
         let mut new_body = MutableBody::from(body);
@@ -429,7 +434,7 @@ impl IntrinsicGeneratorPass {
                 UintTy::Usize,
                 span,
             );
-            let ret_val = build_some(option_def, option_args, val_op);
+            let ret_val = build_some(option_def, some_idx, option_args, val_op);
             new_body.assign_to(
                 Place::from(RETURN_LOCAL),
                 ret_val,
@@ -491,7 +496,7 @@ impl IntrinsicGeneratorPass {
                 "Expected foreign, but found `{:?}` tail instead.",
                 pointee_layout.unsized_tail()
             );
-            let ret_val = build_none(option_def, option_args);
+            let ret_val = build_none(option_def, none_idx, option_args);
             new_body.assign_to(
                 Place::from(RETURN_LOCAL),
                 ret_val,
@@ -527,21 +532,15 @@ impl IntrinsicGeneratorPass {
     /// ```
     ///
     /// For types with foreign tails, this will return `None`.
-    fn checked_align_of(&mut self, body: Body, instance: Instance) -> Body {
-        // Get information about the pointer passed as an argument.
-        let ptr_arg = body.arg_locals().first().expect("Expected a pointer argument");
-        let ptr_ty = ptr_arg.ty;
-        let TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) = ptr_ty.kind() else {
-            unreachable!("Expected a pointer argument, but got {ptr_ty}")
-        };
+    fn checked_align_of(
+        &mut self,
+        body: Body,
+        instance: Instance,
+        sig: CheckedIntrinsicSig,
+    ) -> Body {
+        let CheckedIntrinsicSig { pointee_ty, option_def, option_args, some_idx, none_idx } = sig;
         let pointee_layout = LayoutOf::new(pointee_ty);
-        debug!(?ptr_ty, "align_of_raw");
-
-        // Get information about the return value (Option).
-        let ret_ty = body.ret_local().ty;
-        let TyKind::RigidTy(RigidTy::Adt(option_def, option_args)) = ret_ty.kind() else {
-            unreachable!("Expected `Option<usize>` as return but found `{ret_ty}`")
-        };
+        debug!(?pointee_ty, "align_of_raw");
 
         // Modify the body according to the type of pointer.
         let mut new_body = MutableBody::from(body);
@@ -550,7 +549,7 @@ impl IntrinsicGeneratorPass {
         let span = source.span(new_body.blocks());
         if let Some(align) = pointee_layout.align_of() {
             let val_op = new_body.new_uint_operand(align as _, UintTy::Usize, span);
-            let ret_val = build_some(option_def, option_args, val_op);
+            let ret_val = build_some(option_def, some_idx, option_args, val_op);
             new_body.assign_to(
                 Place::from(RETURN_LOCAL),
                 ret_val,
@@ -579,7 +578,7 @@ impl IntrinsicGeneratorPass {
                 "Expected foreign, but found `{:?}` tail instead.",
                 pointee_layout.unsized_tail()
             );
-            let ret_val = build_none(option_def, option_args);
+            let ret_val = build_none(option_def, none_idx, option_args);
             new_body.assign_to(
                 Place::from(RETURN_LOCAL),
                 ret_val,
@@ -593,7 +592,7 @@ impl IntrinsicGeneratorPass {
     fn return_model(
         &mut self,
         new_body: &mut MutableBody,
-        mut source: &mut SourceInstruction,
+        source: &mut SourceInstruction,
         model: KaniModel,
         args: &GenericArgs,
         operands: Vec<Operand>,
@@ -602,7 +601,7 @@ impl IntrinsicGeneratorPass {
         let size_of_dyn = Instance::resolve(*def, args).unwrap();
         new_body.insert_call(
             &size_of_dyn,
-            &mut source,
+            source,
             InsertPosition::Before,
             operands,
             Place::from(RETURN_LOCAL),
@@ -610,20 +609,83 @@ impl IntrinsicGeneratorPass {
     }
 }
 
-/// Build an Rvalue `Some(val)`.
-/// Since the variants of `Option` are `Some(val)` and `None`, we know we've found the `Some` variant when we find the first variant with a field.
-fn build_some(option: AdtDef, args: GenericArgs, val_op: Operand) -> Rvalue {
-    let var_idx = option
-        .variants_iter()
-        .find_map(|var| (!var.fields().is_empty()).then_some(var.idx))
-        .unwrap();
-    Rvalue::Aggregate(AggregateKind::Adt(option, var_idx, args, None, None), vec![val_op])
+/// The signature pieces that the `checked_size_of` and `checked_align_of` generators consume:
+/// the pointee type of the raw-pointer argument, the definition and generic arguments of the
+/// `Option<usize>` return type, and the indices of its `Some` and `None` variants.
+struct CheckedIntrinsicSig {
+    /// The pointee type of the function's single raw-pointer argument.
+    pointee_ty: Ty,
+    /// The ADT definition of the `Option<usize>` return type.
+    option_def: AdtDef,
+    /// The generic arguments the return type instantiates `option_def` with.
+    option_args: GenericArgs,
+    /// The index of the variant whose single field is a `usize` (`Some`).
+    some_idx: VariantIdx,
+    /// The index of the field-less variant (`None`).
+    none_idx: VariantIdx,
 }
 
-/// Build an Rvalue `None`.
-/// Since the variants of `Option` are `Some(val)` and `None`, we know we've found the `None` variant when we find the first variant without fields.
-fn build_none(option: AdtDef, args: GenericArgs) -> Rvalue {
-    let var_idx =
-        option.variants_iter().find_map(|var| var.fields().is_empty().then_some(var.idx)).unwrap();
-    Rvalue::Aggregate(AggregateKind::Adt(option, var_idx, args, None, None), vec![])
+/// The only element of `slice`, or `None` unless it contains exactly one element.
+fn single<T>(slice: &[T]) -> Option<&T> {
+    slice.first().filter(|_| slice.len() == 1)
+}
+
+/// Extract the signature pieces that the `checked_size_of` and `checked_align_of` generators
+/// require from `body`, or return `None` if the function does not have the expected shape:
+/// exactly one argument that is a raw pointer, and a return type shaped exactly like
+/// `Option<usize>` (one field-less variant plus one variant whose single field is a `usize`).
+///
+/// The internal `fn_marker` attribute can be attached to an arbitrary function, so `transform`
+/// uses this extraction to emit a diagnostic instead of running a generator on a mismatched
+/// function (see issue #4589). The generators consume the extracted pieces directly, so the
+/// validated shape cannot drift from the shape they assume: any function accepted here is one
+/// for which `build_some`/`build_none` construct a well-typed return value.
+fn checked_intrinsic_sig(body: &Body) -> Option<CheckedIntrinsicSig> {
+    let ptr_arg = single(body.arg_locals())?;
+    let pointee_ty = if let TyKind::RigidTy(RigidTy::RawPtr(pointee, _)) = ptr_arg.ty.kind() {
+        Some(pointee)
+    } else {
+        None
+    }?;
+    let ret_kind = body.ret_local().ty.kind();
+    let (option_def, option_args) = if let TyKind::RigidTy(RigidTy::Adt(def, args)) = ret_kind {
+        Some((def, args))
+    } else {
+        None
+    }?;
+    // `variants_iter` yields variants in source-declaration order, so the enumeration index is
+    // the variant's `VariantIdx` (see `AdtDef::variant`). `VariantDef::idx` is no longer publicly
+    // accessible, so reconstruct it.
+    let (some_variants, none_variants): (Vec<_>, Vec<_>) = option_def
+        .variants_iter()
+        .enumerate()
+        .map(|(idx, variant)| (VariantIdx::to_val(idx), variant))
+        .partition(|(_, variant)| !variant.fields().is_empty());
+    let ((some_idx, some_variant), (none_idx, _)) =
+        single(&some_variants).zip(single(&none_variants))?;
+    let some_fields = some_variant.fields();
+    let some_field = single(&some_fields)?;
+    matches!(
+        some_field.ty_with_args(&option_args).kind(),
+        TyKind::RigidTy(RigidTy::Uint(UintTy::Usize))
+    )
+    .then_some(CheckedIntrinsicSig {
+        pointee_ty,
+        option_def,
+        option_args,
+        some_idx: *some_idx,
+        none_idx: *none_idx,
+    })
+}
+
+/// Build the Rvalue `Some(val)` for the validated `Option<usize>` return type, using the
+/// `Some`-variant index extracted by `checked_intrinsic_sig`.
+fn build_some(option: AdtDef, some_idx: VariantIdx, args: GenericArgs, val_op: Operand) -> Rvalue {
+    Rvalue::Aggregate(AggregateKind::Adt(option, some_idx, args, None, None), vec![val_op])
+}
+
+/// Build the Rvalue `None` for the validated `Option<usize>` return type, using the
+/// `None`-variant index extracted by `checked_intrinsic_sig`.
+fn build_none(option: AdtDef, none_idx: VariantIdx, args: GenericArgs) -> Rvalue {
+    Rvalue::Aggregate(AggregateKind::Adt(option, none_idx, args, None, None), vec![])
 }

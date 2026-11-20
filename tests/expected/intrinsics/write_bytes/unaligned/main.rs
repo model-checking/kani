@@ -4,6 +4,13 @@
 //! Checks that `write_bytes` fails when `dst` is not aligned.
 //! This test is a modified version of the example in
 //! https://doc.rust-lang.org/std/ptr/fn.write_bytes.html
+
+// These call the intrinsics themselves, which `core::ptr` wraps with extra debug assertions,
+// so opt in to `core_intrinsics` instead of importing them through the accidentally stabilized
+// `core::intrinsics` path (denied since rust-lang/rust#163160).
+#![feature(core_intrinsics)]
+#![allow(internal_features)]
+
 use std::intrinsics::write_bytes;
 
 #[kani::proof]

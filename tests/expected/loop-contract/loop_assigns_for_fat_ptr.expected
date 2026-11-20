@@ -1,0 +1,13 @@
+main.assigns.1\
+	 - Status: SUCCESS\
+	 - Description: "Check that a[var_15] is assignable"
+
+main.assigns.2\
+	 - Status: SUCCESS\
+	 - Description: "Check that i is assignable"
+
+main.loop_invariant_step.1\
+	 - Status: SUCCESS\
+	 - Description: "Check invariant after step for loop main.0"
+
+VERIFICATION:- SUCCESSFUL

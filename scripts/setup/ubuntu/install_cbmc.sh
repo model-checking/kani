@@ -22,7 +22,7 @@ then
 
   set -x
 
-  wget -O "$FILE" "$URL"
+  curl -L --remote-name "$URL"
   sudo dpkg -i "$FILE"
   cbmc --version
   rm $FILE

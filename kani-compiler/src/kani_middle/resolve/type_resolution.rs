@@ -6,10 +6,14 @@ use crate::kani_middle::resolve::{ResolveError, resolve_path, validate_kind};
 use quote::ToTokens;
 use rustc_hir::def::DefKind;
 use rustc_middle::ty::TyCtxt;
-use rustc_smir::rustc_internal;
+use rustc_public::CrateDef;
+use rustc_public::mir::Mutability;
+use rustc_public::rustc_internal;
+use rustc_public::ty::{
+    AdtDef, FloatTy, GenericArgKind, GenericArgs, IntTy, Region, RegionKind, RigidTy, Ty, TyKind,
+    UintTy,
+};
 use rustc_span::def_id::LocalDefId;
-use stable_mir::mir::Mutability;
-use stable_mir::ty::{FloatTy, IntTy, Region, RegionKind, RigidTy, Ty, UintTy};
 use std::str::FromStr;
 use strum_macros::{EnumString, IntoStaticStr};
 use syn::{Expr, ExprLit, Lit, Type, TypePath};
@@ -32,7 +36,9 @@ pub fn resolve_ty<'tcx>(
     #[warn(non_exhaustive_omitted_patterns)]
     match typ {
         Type::Path(TypePath { qself, path }) => {
-            assert_eq!(*qself, None, "Unexpected qualified path");
+            if (*qself).is_some() {
+                return unsupported("nested qualified paths");
+            }
             if let Some(primitive) =
                 path.get_ident().and_then(|ident| PrimitiveIdent::from_str(&ident.to_string()).ok())
             {
@@ -45,7 +51,8 @@ pub fn resolve_ty<'tcx>(
                     "type",
                     DefKind::Struct | DefKind::Union | DefKind::Enum
                 )?;
-                Ok(rustc_internal::stable(tcx.type_of(def_id)).value)
+                let ty = rustc_internal::stable(tcx.type_of(def_id)).value;
+                Ok(instantiate_path_args(tcx, current_module, path, ty))
             }
         }
         Type::Array(array) => {
@@ -76,12 +83,51 @@ pub fn resolve_ty<'tcx>(
             let elems = tuple
                 .elems
                 .iter()
-                .map(|elem| resolve_ty(tcx, current_module, &elem))
+                .map(|elem| resolve_ty(tcx, current_module, elem))
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(Ty::new_tuple(&elems))
         }
         Type::Never(_) => Ok(Ty::from_rigid_kind(RigidTy::Never)),
-        Type::BareFn(_) => unsupported("bare function"),
+        Type::BareFn(bare_fn) => {
+            // Rust-ABI, non-variadic fn pointers; lifetimes are erased like everywhere
+            // else in this resolver. A higher-ranked argument (`fn(&u8) -> u8`)
+            // therefore matches an erased impl; if a `fn(&'static u8) -> u8` sibling
+            // impl also exists, it resolves to that one instead (binding the late-bound
+            // regions is a follow-up; see https://github.com/model-checking/kani/issues/4933).
+            if bare_fn.variadic.is_some() {
+                return unsupported("variadic bare function");
+            }
+            if bare_fn
+                .abi
+                .as_ref()
+                .is_some_and(|abi| abi.name.as_ref().is_none_or(|name| name.value() != "Rust"))
+            {
+                return unsupported("non-Rust-ABI bare function");
+            }
+            let inputs = bare_fn
+                .inputs
+                .iter()
+                .map(|arg| resolve_ty(tcx, current_module, &arg.ty))
+                .collect::<Result<Vec<_>, _>>()?;
+            let output = match &bare_fn.output {
+                syn::ReturnType::Default => Ty::new_tuple(&[]),
+                syn::ReturnType::Type(_, ty) => resolve_ty(tcx, current_module, ty)?,
+            };
+            let safety = if bare_fn.unsafety.is_some() {
+                rustc_hir::Safety::Unsafe
+            } else {
+                rustc_hir::Safety::Safe
+            };
+            let sig = tcx.mk_fn_sig_rust_abi(
+                inputs.iter().map(|ty| rustc_internal::internal(tcx, *ty)),
+                rustc_internal::internal(tcx, output),
+                safety,
+            );
+            Ok(rustc_internal::stable(rustc_middle::ty::Ty::new_fn_ptr(
+                tcx,
+                rustc_middle::ty::Binder::dummy(sig),
+            )))
+        }
         Type::Macro(_) => invalid("macro"),
         Type::Group(_) => invalid("group paths"),
         Type::ImplTrait(_) => invalid("trait impl paths"),
@@ -92,6 +138,97 @@ pub fn resolve_ty<'tcx>(
             unreachable!()
         }
     }
+}
+
+/// If `path`'s final segment carries angle-bracketed generic arguments, instantiate `ty`
+/// (the definition's identity type, e.g. `Wrap<T>`) with those arguments resolved to
+/// concrete types (e.g. `Wrap<u8>`), so trait-implementation lookups can match a concrete
+/// impl. An omitted trailing parameter with a declared default is filled from the
+/// default, also when the path has no generic arguments at all (`Wrapper` for
+/// `struct Wrapper<T = u8>`). Returns `ty` unchanged when any argument cannot be
+/// resolved or a parameter without a default is missing, preserving the previous
+/// behavior for everything that resolved before.
+fn instantiate_path_args<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    current_module: LocalDefId,
+    path: &syn::Path,
+    ty: Ty,
+) -> Ty {
+    // No generic arguments (`Wrapper`) is an empty list; parenthesized args keep `ty`.
+    let syn_args: Vec<&syn::GenericArgument> = match path.segments.last().map(|seg| &seg.arguments)
+    {
+        Some(syn::PathArguments::AngleBracketed(args)) => args.args.iter().collect(),
+        Some(syn::PathArguments::None) => Vec::new(),
+        _ => return ty,
+    };
+    let TyKind::RigidTy(RigidTy::Adt(adt_def, identity_args)) = ty.kind() else {
+        return ty;
+    };
+    // Resolve the user-written type arguments; lifetimes are erased below, and anything
+    // else (const arguments, associated-type bindings) keeps the uninstantiated type.
+    let mut user_tys = Vec::new();
+    for arg in syn_args {
+        match arg {
+            syn::GenericArgument::Type(syn_ty) => match resolve_ty(tcx, current_module, syn_ty) {
+                Ok(t) => user_tys.push(t),
+                Err(_) => return ty,
+            },
+            syn::GenericArgument::Lifetime(_) => {}
+            _ => return ty,
+        }
+    }
+    // Substitute the definition's type parameters in declaration order; erase lifetime
+    // parameters; fill an omitted trailing parameter that has a declared default from
+    // that default, instantiated with the arguments so far — what rustc does for omitted
+    // arguments. A missing parameter without a default keeps the uninstantiated type.
+    let mut user_iter = user_tys.into_iter();
+    let mut new_args = Vec::new();
+    for (param_index, arg) in identity_args.0.iter().enumerate() {
+        match arg {
+            GenericArgKind::Type(_) => {
+                let filled = user_iter
+                    .next()
+                    .or_else(|| default_type_arg(tcx, &adt_def, param_index, &new_args));
+                match filled {
+                    Some(t) => new_args.push(GenericArgKind::Type(t)),
+                    None => return ty,
+                }
+            }
+            GenericArgKind::Lifetime(_) => {
+                new_args.push(GenericArgKind::Lifetime(Region { kind: RegionKind::ReErased }))
+            }
+            GenericArgKind::Const(_) => return ty,
+        }
+    }
+    if user_iter.next().is_some() {
+        return ty;
+    }
+    Ty::from_rigid_kind(RigidTy::Adt(adt_def, GenericArgs(new_args)))
+}
+
+/// The declared default of `adt_def`'s `param_index`-th generic parameter, instantiated
+/// with the arguments already substituted before it — how rustc fills an omitted trailing
+/// argument (a default may only reference earlier parameters). `None` when the parameter
+/// has no default or the default is not a type; the caller then keeps the uninstantiated
+/// type.
+fn default_type_arg<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    adt_def: &AdtDef,
+    param_index: usize,
+    args_so_far: &[GenericArgKind],
+) -> Option<Ty> {
+    let def_id = rustc_internal::internal(tcx, adt_def.def_id());
+    let default = tcx.generics_of(def_id).own_params.get(param_index)?.default_value(tcx)?;
+    let internal_args: Vec<rustc_middle::ty::GenericArg<'tcx>> = args_so_far
+        .iter()
+        .map(|arg| match arg {
+            GenericArgKind::Type(t) => Some(rustc_internal::internal(tcx, *t).into()),
+            GenericArgKind::Lifetime(_) => Some(tcx.lifetimes.re_erased.into()),
+            GenericArgKind::Const(_) => None,
+        })
+        .collect::<Option<_>>()?;
+    let filled = default.instantiate(tcx, &internal_args[..]).skip_normalization().as_type()?;
+    Some(rustc_internal::stable(filled))
 }
 
 /// Enumeration of existing primitive types that are not parametric.
@@ -191,12 +328,11 @@ pub(super) fn is_type_primitive(typ: &syn::Type) -> bool {
 /// Parse the length of the array.
 /// We currently only support a constant length.
 fn parse_len(len: &Expr) -> Result<usize, String> {
-    if let Expr::Lit(ExprLit { lit: Lit::Int(lit), .. }) = len {
-        if matches!(lit.suffix(), "" | "usize")
-            && let Ok(val) = usize::from_str(lit.base10_digits())
-        {
-            return Ok(val);
-        }
+    if let Expr::Lit(ExprLit { lit: Lit::Int(lit), .. }) = len
+        && matches!(lit.suffix(), "" | "usize")
+        && let Ok(val) = usize::from_str(lit.base10_digits())
+    {
+        return Ok(val);
     }
     Err(format!("Expected a `usize` constant, but found `{}`", len.to_token_stream()))
 }

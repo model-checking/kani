@@ -12,7 +12,7 @@
 use tokio::io::AsyncBufReadExt;
 use tokio_test::assert_ok;
 
-#[cfg(disabled)] // because it timed out after 2h
+#[cfg(disabled)] // requires memchr
 #[kani::proof]
 #[kani::unwind(2)]
 async fn lines_inherent() {

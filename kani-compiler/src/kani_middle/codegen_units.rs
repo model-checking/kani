@@ -7,35 +7,54 @@
 //! Today, only stub / contracts can affect the harness codegen. Thus, we group the harnesses
 //! according to their stub configuration.
 
-use crate::args::ReachabilityType;
+use crate::args::{Arguments, ReachabilityType};
+use crate::intrinsics::{Intrinsic, simd_mask_problem};
 use crate::kani_middle::attributes::{KaniAttributes, is_proof_harness};
-use crate::kani_middle::kani_functions::{KaniIntrinsic, KaniModel};
+use crate::kani_middle::kani_functions::{KaniHook, KaniIntrinsic, KaniModel};
 use crate::kani_middle::metadata::{
     gen_automatic_proof_metadata, gen_contracts_metadata, gen_proof_metadata,
 };
 use crate::kani_middle::reachability::filter_crate_items;
-use crate::kani_middle::resolve::expect_resolve_fn;
 use crate::kani_middle::stubbing::{check_compatibility, harness_stub_map};
+use crate::kani_middle::{
+    ArgSupport, SmartPointerModels, autoharness_supported_arg_ty, can_derive_arbitrary,
+    fmt_impl_self_ty, implements_arbitrary,
+};
 use crate::kani_queries::QueryDb;
-use kani_metadata::{ArtifactType, AssignsContract, HarnessKind, HarnessMetadata, KaniMetadata};
+use kani_metadata::{
+    ArtifactType, AssignsContract, AutoHarnessMetadata, AutoHarnessSkipReason, HarnessMetadata,
+    KaniMetadata, find_proof_harnesses,
+};
+use regex::RegexSet;
+use rustc_data_structures::fx::{FxHashMap, FxHashSet};
 use rustc_hir::def_id::DefId;
-use rustc_middle::ty::TyCtxt;
+use rustc_infer::infer::TyCtxtInferExt;
+use rustc_middle::ty::{self, TyCtxt, TypingMode};
+use rustc_public::mir::TerminatorKind;
+use rustc_public::mir::mono::Instance;
+use rustc_public::rustc_internal;
+use rustc_public::ty::{
+    FloatTy, FnDef, GenericArgKind, GenericArgs, IntTy, Region, RegionKind, RigidTy, Ty, TyConst,
+    TyKind, UintTy,
+};
+use rustc_public::{CrateDef, CrateItem};
+use rustc_public_bridge::IndexedVal;
 use rustc_session::config::OutputType;
-use rustc_smir::rustc_internal;
-use stable_mir::CrateDef;
-use stable_mir::mir::{TerminatorKind, mono::Instance};
-use stable_mir::ty::{FnDef, GenericArgKind, GenericArgs, IndexedVal, RigidTy, TyKind};
+use rustc_trait_selection::traits::{Obligation, ObligationCause, ObligationCtxt};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 use tracing::debug;
 
 /// An identifier for the harness function.
-type Harness = Instance;
+pub type Harness = Instance;
 
 /// A set of stubs.
 pub type Stubs = HashMap<FnDef, FnDef>;
+
+static AUTOHARNESS_MD: OnceLock<AutoHarnessMetadata> = OnceLock::new();
 
 /// Store some relevant information about the crate compilation.
 #[derive(Clone, Debug)]
@@ -46,9 +65,9 @@ struct CrateInfo {
 
 /// We group the harnesses that have the same stubs.
 pub struct CodegenUnits {
-    units: Vec<CodegenUnit>,
-    harness_info: HashMap<Harness, HarnessMetadata>,
     crate_info: CrateInfo,
+    harness_info: HashMap<Harness, HarnessMetadata>,
+    units: Vec<CodegenUnit>,
 }
 
 #[derive(Clone, Default, Debug)]
@@ -59,13 +78,17 @@ pub struct CodegenUnit {
 
 impl CodegenUnits {
     pub fn new(queries: &QueryDb, tcx: TyCtxt) -> Self {
-        let crate_info = CrateInfo { name: stable_mir::local_crate().name.as_str().into() };
+        let crate_info = CrateInfo { name: rustc_public::local_crate().name.as_str().into() };
         let base_filepath = tcx.output_filenames(()).path(OutputType::Object);
         let base_filename = base_filepath.as_path();
         let args = queries.args();
         match args.reachability_analysis {
             ReachabilityType::Harnesses => {
-                let all_harnesses = get_all_manual_harnesses(tcx, base_filename);
+                let all_harnesses = determine_targets(
+                    get_all_manual_harnesses(tcx, base_filename),
+                    &args.harnesses,
+                    args.exact,
+                );
                 // Even if no_stubs is empty we still need to store rustc metadata.
                 let units = group_by_stubs(tcx, &all_harnesses);
                 validate_units(tcx, &units);
@@ -73,30 +96,65 @@ impl CodegenUnits {
                 CodegenUnits { units, harness_info: all_harnesses, crate_info }
             }
             ReachabilityType::AllFns => {
-                let mut all_harnesses = get_all_manual_harnesses(tcx, base_filename);
+                let mut all_harnesses = determine_targets(
+                    get_all_manual_harnesses(tcx, base_filename),
+                    &args.harnesses,
+                    args.exact,
+                );
                 let mut units = group_by_stubs(tcx, &all_harnesses);
                 validate_units(tcx, &units);
 
                 let kani_fns = queries.kani_functions();
                 let kani_harness_intrinsic =
                     kani_fns.get(&KaniIntrinsic::AutomaticHarness.into()).unwrap();
-                let kani_any_inst = kani_fns.get(&KaniModel::Any.into()).unwrap();
 
-                let verifiable_fns = filter_crate_items(tcx, |_, instance: Instance| -> bool {
-                    // If the user specified functions to include or exclude, only allow instances matching those filters.
-                    let user_included = if !args.autoharness_included_functions.is_empty() {
-                        fn_list_contains_instance(&instance, &args.autoharness_included_functions)
-                    } else if !args.autoharness_excluded_functions.is_empty() {
-                        !fn_list_contains_instance(&instance, &args.autoharness_excluded_functions)
-                    } else {
-                        true
-                    };
-                    user_included
-                        && is_eligible_for_automatic_harness(tcx, instance, *kani_any_inst)
-                });
+                let (chosen, skipped) = automatic_harness_partition(
+                    tcx,
+                    args,
+                    &crate_info.name,
+                    *kani_fns.get(&KaniModel::Any.into()).unwrap(),
+                    *kani_fns.get(&KaniModel::BoundedAny.into()).unwrap(),
+                    SmartPointerModels::from_kani_functions(kani_fns),
+                    *kani_fns.get(&KaniHook::Assert.into()).unwrap(),
+                    // Require *all three* unbounded models: eligibility admits `&[T]`, `&mut [T]`
+                    // and `Vec<T>`, but generation resolves each model independently, so gating on
+                    // only one could report a `&mut [T]`/`Vec<T>` arg as unbounded-verified while
+                    // generation silently fell back to a bounded (or unsupported) path. They are
+                    // defined together (all present with `alloc`, all absent in `no_core`), so this
+                    // is all-or-nothing in practice; the conjunction just makes that explicit.
+                    [
+                        KaniModel::AnySliceRefUnbounded,
+                        KaniModel::AnySliceMutUnbounded,
+                        KaniModel::AnyVecUnbounded,
+                    ]
+                    .iter()
+                    .all(|m| kani_fns.contains_key(&(*m).into())),
+                    &NondetFnModels {
+                        fn0: kani_fns.get(&KaniModel::NondetFn0.into()).copied(),
+                        fn1: kani_fns.get(&KaniModel::NondetFn1.into()).copied(),
+                        fn1_ref: kani_fns.get(&KaniModel::NondetFn1Ref.into()).copied(),
+                        fn2: kani_fns.get(&KaniModel::NondetFn2.into()).copied(),
+                        fn2_ref_ref: kani_fns.get(&KaniModel::NondetFn2RefRef.into()).copied(),
+                        fn2_ref_val: kani_fns.get(&KaniModel::NondetFn2RefVal.into()).copied(),
+                        fn2_val_ref: kani_fns.get(&KaniModel::NondetFn2ValRef.into()).copied(),
+                        fn3: kani_fns.get(&KaniModel::NondetFn3.into()).copied(),
+                    },
+                );
+                AUTOHARNESS_MD
+                    .set(AutoHarnessMetadata {
+                        chosen: chosen
+                            .iter()
+                            .map(|(func, _)| {
+                                crate::kani_middle::strip_local_crate_prefix(func.name())
+                            })
+                            .collect::<BTreeSet<_>>(),
+                        skipped,
+                    })
+                    .expect("Initializing the autoharness metadata failed");
+
                 let automatic_harnesses = get_all_automatic_harnesses(
                     tcx,
-                    verifiable_fns,
+                    chosen,
                     *kani_harness_intrinsic,
                     base_filename,
                 );
@@ -111,7 +169,8 @@ impl CodegenUnits {
                         })
                         .collect::<Vec<_>>(),
                 );
-                all_harnesses.extend(automatic_harnesses);
+                all_harnesses.extend(automatic_harnesses.clone());
+
                 // No need to validate the units again because validation only checks stubs, and we haven't added any stubs.
                 debug!(?units, "CodegenUnits::new");
                 CodegenUnits { units, harness_info: all_harnesses, crate_info }
@@ -127,6 +186,10 @@ impl CodegenUnits {
         self.units.iter()
     }
 
+    pub fn is_automatic_harness(&self, harness: &Harness) -> bool {
+        self.harness_info.get(harness).is_some_and(|md| md.is_automatically_generated)
+    }
+
     /// We store which instance of modifies was generated.
     pub fn store_modifies(&mut self, harness_modifies: &[(Harness, AssignsContract)]) {
         for (harness, modifies) in harness_modifies {
@@ -139,13 +202,6 @@ impl CodegenUnits {
         for harness in harnesses {
             let metadata = self.harness_info.get_mut(harness).unwrap();
             metadata.has_loop_contracts = true;
-            // If we're generating this harness automatically and we encounter a loop contract,
-            // ensure that the HarnessKind is updated to be a contract harness
-            // targeting the function to verify.
-            if metadata.is_automatically_generated {
-                metadata.attributes.kind =
-                    HarnessKind::ProofForContract { target_fn: metadata.pretty_name.clone() }
-            }
         }
     }
 
@@ -169,13 +225,14 @@ impl CodegenUnits {
             proof_harnesses,
             unsupported_features: vec![],
             test_harnesses,
-            contracted_functions: gen_contracts_metadata(tcx),
+            contracted_functions: gen_contracts_metadata(tcx, &self.harness_info),
+            autoharness_md: AUTOHARNESS_MD.get().cloned(),
         }
     }
 }
 
 fn stub_def(tcx: TyCtxt, def_id: DefId) -> FnDef {
-    let ty_internal = tcx.type_of(def_id).instantiate_identity();
+    let ty_internal = tcx.type_of(def_id).instantiate_identity().skip_normalization();
     let ty = rustc_internal::stable(ty_internal);
     if let TyKind::RigidTy(RigidTy::FnDef(def, _)) = ty.kind() {
         def
@@ -192,7 +249,7 @@ fn group_by_stubs(
     let mut per_stubs: HashMap<_, CodegenUnit> = HashMap::default();
     for (harness, metadata) in all_harnesses {
         let stub_ids = harness_stub_map(tcx, *harness, metadata);
-        let contracts = extract_contracts(tcx, *harness, metadata);
+        let contracts = extract_contracts(tcx, *harness);
         let stub_map = stub_ids
             .iter()
             .map(|(k, v)| (tcx.def_path_hash(*k), tcx.def_path_hash(*v)))
@@ -222,22 +279,15 @@ enum ContractUsage {
 ///
 /// Note that any error interpreting the result is emitted, but we delay aborting, so we emit as
 /// many errors as possible.
-fn extract_contracts(
-    tcx: TyCtxt,
-    harness: Harness,
-    metadata: &HarnessMetadata,
-) -> BTreeSet<ContractUsage> {
+fn extract_contracts(tcx: TyCtxt, harness: Harness) -> BTreeSet<ContractUsage> {
     let def = harness.def;
     let mut result = BTreeSet::new();
-    if let HarnessKind::ProofForContract { target_fn } = &metadata.attributes.kind {
-        if let Ok(check_def) = expect_resolve_fn(tcx, def, target_fn, "proof_for_contract") {
-            result.insert(ContractUsage::Check(check_def.def_id().to_index()));
-        }
+    let attributes = KaniAttributes::for_def_id(tcx, def.def_id());
+    if let Some(target) = attributes.interpret_for_contract_attribute() {
+        result.insert(ContractUsage::Check(target.def_id().to_index()));
     }
-
-    for stub in &metadata.attributes.verified_stubs {
-        let Ok(stub_def) = expect_resolve_fn(tcx, def, stub, "stub_verified") else { continue };
-        result.insert(ContractUsage::Stub(stub_def.def_id().to_index()));
+    for stub in attributes.interpret_stub_verified_attribute() {
+        result.insert(ContractUsage::Stub(stub.def_id().to_index()));
     }
 
     result
@@ -292,7 +342,7 @@ fn apply_transitivity(tcx: TyCtxt, harness: Harness, stubs: Stubs) -> Stubs {
                     format!(
                         "Cannot stub `{}`. Stub configuration for harness `{}` has a cycle",
                         orig.name(),
-                        harness.def.name(),
+                        crate::kani_middle::strip_local_crate_prefix(harness.def.name()),
                     ),
                 );
                 break;
@@ -313,10 +363,34 @@ fn get_all_manual_harnesses(
     harnesses
         .into_iter()
         .map(|harness| {
-            let metadata = gen_proof_metadata(tcx, harness, &base_filename);
+            let metadata = gen_proof_metadata(tcx, harness, base_filename);
             (harness, metadata)
         })
         .collect::<HashMap<_, _>>()
+}
+
+/// Filter which harnesses to codegen based on user filters. Shares use of `find_proof_harnesses` with the `determine_targets` function
+/// in `kani-driver/src/metadata.rs` to ensure the filter is consistent and thus codegen is always done for the subset of harnesses we want
+/// to analyze.
+fn determine_targets(
+    all_harnesses: HashMap<Harness, HarnessMetadata>,
+    harness_filters: &[String],
+    exact_filter: bool,
+) -> HashMap<Harness, HarnessMetadata> {
+    if harness_filters.is_empty() {
+        return all_harnesses;
+    }
+
+    // If there are filters, only keep around harnesses that satisfy them.
+    let mut new_harnesses = all_harnesses.clone();
+    let valid_harnesses = find_proof_harnesses(
+        &BTreeSet::from_iter(harness_filters.iter()),
+        all_harnesses.values(),
+        exact_filter,
+    );
+
+    new_harnesses.retain(|_, metadata| valid_harnesses.contains(&&*metadata));
+    new_harnesses
 }
 
 /// For each function eligible for automatic verification,
@@ -325,13 +399,13 @@ fn get_all_manual_harnesses(
 /// the AutomaticHarnessPass will later transform the bodies of these instances to actually verify the function.
 fn get_all_automatic_harnesses(
     tcx: TyCtxt,
-    verifiable_fns: Vec<Instance>,
+    verifiable_fns: Vec<(Instance, AutoHarnessCaveats)>,
     kani_harness_intrinsic: FnDef,
     base_filename: &Path,
 ) -> HashMap<Harness, HarnessMetadata> {
     verifiable_fns
         .into_iter()
-        .map(|fn_to_verify| {
+        .map(|(fn_to_verify, caveats)| {
             // Set the generic arguments of the harness to be the function it is verifying
             // so that later, in AutomaticHarnessPass, we can retrieve the function to verify
             // and generate the harness body accordingly.
@@ -340,52 +414,1239 @@ fn get_all_automatic_harnesses(
                 &GenericArgs(vec![GenericArgKind::Type(fn_to_verify.ty())]),
             )
             .unwrap();
-            let metadata = gen_automatic_proof_metadata(tcx, &base_filename, &fn_to_verify);
+            let metadata = gen_automatic_proof_metadata(
+                tcx,
+                base_filename,
+                &fn_to_verify,
+                harness.mangled_name(),
+                caveats.is_bounded,
+                caveats.is_ctor_based,
+                caveats.has_refcount_caveat,
+            );
             (harness, metadata)
         })
         .collect::<HashMap<_, _>>()
 }
 
-/// Determine whether `instance` is eligible for automatic verification.
-fn is_eligible_for_automatic_harness(tcx: TyCtxt, instance: Instance, any_inst: FnDef) -> bool {
-    // `instance` is ineligble if it is a harness or has an nonexistent/empty body
-    if is_proof_harness(tcx, instance) || !instance.has_body() {
-        return false;
+fn make_regex_set(patterns: Vec<String>) -> Option<RegexSet> {
+    if patterns.is_empty() {
+        None
+    } else {
+        Some(RegexSet::new(patterns).unwrap_or_else(|e| {
+            panic!("Invalid regexes should have been caught during argument validation: {e}")
+        }))
     }
-    let body = instance.body().unwrap();
+}
 
-    // `instance` is ineligble if it is an associated item of a Kani trait implementation,
-    // or part of Kani contract instrumentation.
-    // FIXME -- find a less hardcoded way of checking the former condition (perhaps upstream PR to StableMIR).
-    if instance.name().contains("kani::Arbitrary")
-        || instance.name().contains("kani::Invariant")
-        || KaniAttributes::for_instance(tcx, instance)
-            .fn_marker()
-            .is_some_and(|m| m.as_str() == "kani_contract_mode")
-    {
-        return false;
-    }
+/// A function is filtered out if 1) none of the include patterns match it or 2) one of the exclude patterns matches it.
+fn autoharness_filtered_out(
+    name: &str,
+    included_set: &Option<RegexSet>,
+    excluded_set: &Option<RegexSet>,
+) -> bool {
+    // A function is included if `--include-pattern` is not provided or if at least one of its regexes matches `name`
+    let included = included_set.as_ref().is_none_or(|set| set.is_match(name));
+    // A function is excluded if `--exclude-pattern` is provided and at least one of its regexes matches `name`
+    let excluded = excluded_set.as_ref().is_some_and(|set| set.is_match(name));
+    !included || excluded
+}
 
-    // Each non-generic argument of `instance`` must implement Arbitrary.
-    body.arg_locals().iter().all(|arg| {
-        let kani_any_body =
-            Instance::resolve(any_inst, &GenericArgs(vec![GenericArgKind::Type(arg.ty)]))
-                .unwrap()
-                .body()
-                .unwrap();
-        if let TerminatorKind::Call { func, .. } = &kani_any_body.blocks[0].terminator.kind {
-            if let Some((def, args)) = func.ty(body.arg_locals()).unwrap().kind().fn_def() {
-                return Instance::resolve(def, &args).is_ok();
+/// The value used to instantiate `usize` const generic parameters of generic functions
+/// (e.g. array lengths). As with the choice of type-parameter candidates, verifying a single
+/// instantiation underapproximates the function's behaviors; the summary table shows the
+/// chosen value as part of the instantiated name.
+const AUTOHARNESS_CONST_GENERIC_VALUE: u64 = 2;
+
+/// The candidate types for instantiating the type parameters of a generic function, in the order
+/// in which we try them. We start with `i32` since that is Rust's default integer type, and
+/// primitive types satisfy the most common trait bounds (`Copy`, `Clone`, `Ord`, `Hash`,
+/// `Default`, `Debug`, etc.) as well as Kani's `Arbitrary`.
+fn generic_instantiation_candidates() -> Vec<Ty> {
+    vec![
+        Ty::from_rigid_kind(RigidTy::Int(IntTy::I32)),
+        Ty::from_rigid_kind(RigidTy::Uint(UintTy::U32)),
+        Ty::from_rigid_kind(RigidTy::Uint(UintTy::Usize)),
+        Ty::from_rigid_kind(RigidTy::Uint(UintTy::U8)),
+        Ty::from_rigid_kind(RigidTy::Int(IntTy::I64)),
+        Ty::from_rigid_kind(RigidTy::Uint(UintTy::U64)),
+        Ty::from_rigid_kind(RigidTy::Float(FloatTy::F64)),
+        Ty::from_rigid_kind(RigidTy::Float(FloatTy::F32)),
+        Ty::from_rigid_kind(RigidTy::Bool),
+        Ty::from_rigid_kind(RigidTy::Char),
+    ]
+}
+
+/// Cap on trait-solver queries per function when searching for a satisfying instantiation,
+/// so that functions with many type parameters do not blow up partitioning time.
+const GENERIC_INSTANTIATION_ATTEMPT_LIMIT: usize = 256;
+
+/// Cap on the number of trait-impl-derived candidate types collected per type parameter.
+const IMPL_DERIVED_CANDIDATE_LIMIT: usize = 16;
+
+/// For each type parameter of `def` (keyed by its index in the generic parameter list),
+/// collect concrete types that implement the parameter's trait bounds, by enumerating the
+/// non-blanket implementations of each trait the parameter is bound by. This finds candidates
+/// for parameters bound by crate-local or third-party traits (e.g. num-traits' `Float`),
+/// which no primitive candidate may satisfy.
+/// Candidates are deduplicated, restricted to fully concrete types, and sorted for
+/// determinism; each parameter's list is capped at [IMPL_DERIVED_CANDIDATE_LIMIT].
+fn impl_derived_candidates(tcx: TyCtxt, def: FnDef) -> FxHashMap<usize, Vec<Ty>> {
+    let mut candidates: FxHashMap<usize, Vec<Ty>> = FxHashMap::default();
+    // Walk the parent chain: `GenericPredicates::predicates` holds only the item's *own*
+    // predicates, so for an associated function the bounds on the impl's type parameters (e.g.
+    // `T` in `impl<T: Frob> Holder<T> { fn combine<U: Nizzle>(..) }`) live on the parent. They
+    // constrain the same argument list, and `args_satisfy_predicates` checks them (via
+    // `GenericPredicates::instantiate`, which does recurse into the parent), so missing them
+    // here would leave such a parameter with primitive candidates only.
+    let mut next = Some(rustc_internal::internal(tcx, def.def_id()));
+    while let Some(def_id) = next {
+        let generic_clauses = tcx.clauses_of(def_id);
+        next = generic_clauses.parent;
+        for (predicate, _span) in generic_clauses.clauses {
+            let Some(trait_pred) = predicate.as_trait_clause() else { continue };
+            let trait_pred = trait_pred.skip_binder();
+            let ty::Param(param_ty) = trait_pred.self_ty().kind() else { continue };
+            let slot = candidates.entry(param_ty.index as usize).or_default();
+            for impls in tcx.trait_impls_of(trait_pred.def_id()).non_blanket_impls().values() {
+                for &impl_def_id in impls {
+                    let self_ty =
+                        tcx.type_of(impl_def_id).instantiate_identity().skip_normalization();
+                    // Only fully concrete self types can be substituted directly.
+                    if rustc_middle::ty::TypeVisitableExt::has_param(&self_ty) {
+                        continue;
+                    }
+                    let stable_ty = rustc_internal::stable(self_ty);
+                    if !slot.contains(&stable_ty) {
+                        slot.push(stable_ty);
+                    }
+                }
             }
         }
-        false
+    }
+    for slot in candidates.values_mut() {
+        slot.sort_by_key(|ty| ty.to_string());
+        slot.truncate(IMPL_DERIVED_CANDIDATE_LIMIT);
+    }
+    candidates
+}
+
+/// Check whether instantiating the generic parameters of `def` with `args` satisfies all of
+/// `def`'s predicates (trait bounds and where clauses).
+/// `args` must be fully monomorphic.
+fn args_satisfy_predicates(tcx: TyCtxt, def: FnDef, args: &GenericArgs) -> bool {
+    let infcx = tcx.infer_ctxt().build(TypingMode::PostAnalysis);
+    let ocx = ObligationCtxt::new(&infcx);
+    let param_env = ty::ParamEnv::empty();
+    let cause = ObligationCause::dummy();
+
+    let def_id = rustc_internal::internal(tcx, def.def_id());
+    let args_internal = rustc_internal::internal(tcx, args);
+    let predicates = tcx.clauses_of(def_id).instantiate(tcx, args_internal);
+    for (predicate, _span) in predicates {
+        ocx.register_obligation(Obligation::new(
+            tcx,
+            cause.clone(),
+            param_env,
+            predicate.skip_normalization(),
+        ));
+    }
+    // As of nightly-2026-08-21 this returns a `TraitErrors` enum rather than a vector of errors.
+    ocx.evaluate_obligations_error_on_ambiguity().no_errors()
+}
+
+/// Bound on the number of MIR bodies [has_generic_const_precondition] inspects. Reaching it means
+/// we could not finish ruling out a const-block violation, so the candidate is rejected.
+const CONST_PRECONDITION_SEARCH_LIMIT: usize = 1024;
+
+/// Whether `args` mention a type or const generic parameter: one that autoharness substitutes.
+/// Lifetime parameters are erased and cannot decide whether a constant evaluates.
+fn args_mention_param(args: ty::GenericArgs<'_>) -> bool {
+    use rustc_middle::ty::TypeVisitableExt;
+    args.has_type_flags(ty::TypeFlags::HAS_TY_PARAM | ty::TypeFlags::HAS_CT_PARAM)
+}
+
+/// Whether `body`, instantiated with `args`, requires a constant whose evaluation may depend on
+/// the generic parameters autoharness substitutes: an anonymous `const {}` block that mentions a
+/// type or const parameter, or any other unevaluated constant that mentions a const parameter.
+///
+/// Type parameters are only considered for `const {}` blocks. A generic associated constant such
+/// as `<T as SizedTypeProperties>::IS_ZST` is required by most functions that touch a slice or a
+/// collection, so treating every such constant as a possible precondition would skip them all.
+fn body_has_generic_const_block<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &rustc_middle::mir::Body<'tcx>,
+    args: ty::GenericArgs<'tcx>,
+) -> bool {
+    use rustc_middle::ty::TypeVisitableExt;
+    body.required_consts().iter().any(|const_op| {
+        // Array lengths and other already-resolved constants come through as
+        // `Const::Ty`/`Const::Val` and cannot fail.
+        let rustc_middle::mir::Const::Unevaluated(uneval, _) = const_op.const_ else {
+            return false;
+        };
+        let uneval_args = ty::EarlyBinder::bind(tcx, uneval.args).instantiate(tcx, args);
+        let is_const_block = tcx.def_kind(uneval.def) == rustc_hir::def::DefKind::AnonConst
+            && tcx.anon_const_kind(uneval.def) == ty::AnonConstKind::NonTypeSystemInline;
+        if is_const_block {
+            args_mention_param(uneval_args.skip_normalization())
+        } else {
+            uneval_args.skip_normalization().has_type_flags(ty::TypeFlags::HAS_CT_PARAM)
+        }
     })
 }
 
-/// Return whether the name of `instance` is included in `fn_list`.
-/// If `exact = true`, then `instance`'s exact, fully-qualified name must be in `fn_list`; otherwise, `fn_list`
-/// can have a substring of `instance`'s name.
-fn fn_list_contains_instance(instance: &Instance, fn_list: &[String]) -> bool {
-    let pretty_name = instance.name();
-    fn_list.contains(&pretty_name) || fn_list.iter().any(|fn_name| pretty_name.contains(fn_name))
+/// Collects the bodies that `body`, instantiated with `args`, instantiates with arguments that
+/// still mention a type or const parameter: called functions, function items reified into
+/// pointers, and nested closures and coroutines (which inherit their parent's generics, so their
+/// arguments mention the parameters whenever the parent has any). Each callee is recorded with
+/// its instantiated arguments, so that a parameter reaching it through a type argument (e.g.
+/// `inner::<[u8; N]>`) is still visible once the walk reaches its body.
+struct GenericCalleeCollector<'a, 'tcx> {
+    tcx: TyCtxt<'tcx>,
+    args: ty::GenericArgs<'tcx>,
+    callees: &'a mut Vec<(DefId, ty::GenericArgs<'tcx>)>,
+}
+
+impl<'tcx> GenericCalleeCollector<'_, 'tcx> {
+    fn push(&mut self, def_id: DefId, callee_args: ty::GenericArgs<'tcx>) {
+        let callee_args = ty::EarlyBinder::bind(self.tcx, callee_args)
+            .instantiate(self.tcx, self.args)
+            .skip_normalization();
+        if args_mention_param(callee_args) {
+            self.callees.push((def_id, callee_args));
+        }
+    }
+}
+
+impl<'tcx> rustc_middle::mir::visit::Visitor<'tcx> for GenericCalleeCollector<'_, 'tcx> {
+    fn visit_const_operand(
+        &mut self,
+        const_op: &rustc_middle::mir::ConstOperand<'tcx>,
+        _: rustc_middle::mir::Location,
+    ) {
+        if let ty::FnDef(def_id, args) = *const_op.const_.ty().kind() {
+            self.push(def_id, args.skip_binder());
+        }
+    }
+
+    fn visit_ty(&mut self, ty: ty::Ty<'tcx>, _: rustc_middle::mir::visit::TyContext) {
+        match *ty.kind() {
+            ty::Closure(def_id, args)
+            | ty::Coroutine(def_id, args)
+            | ty::CoroutineClosure(def_id, args) => self.push(def_id, args),
+            _ => {}
+        }
+    }
+}
+
+/// Whether generating a harness for `def` could reach an anonymous `const {}` block whose
+/// evaluation depends on the generic arguments autoharness substitutes. Such a block can encode a
+/// precondition on a const parameter, as `core::escape` does with `const { assert!(N >= 4) }`, or
+/// on a type parameter, as in `const { assert!(size_of::<T>() >= 4) }`.
+///
+/// These blocks are listed in rustc's `required_consts`: rustc evaluates every entry when
+/// monomorphizing and rejects the instantiation if any fails. `args_satisfy_predicates` does not
+/// cover them, since they are not trait bounds, so autoharness would otherwise substitute its
+/// chosen arguments regardless and the violation would surface as an unrecoverable `E0080` that
+/// aborts the whole run.
+///
+/// The search is transitive, because the offending block need not be in `def`'s own body: a
+/// harness for `wrapper<const N: usize>() { guarded::<N>() }` monomorphizes `guarded::<2>` too,
+/// and that instantiation aborts the run just the same. So walk outwards from `def` through the
+/// bodies it instantiates with arguments derived from its type or const parameters — the values
+/// that autoharness' substitution decides. The walk carries each body's arguments expressed in
+/// terms of `def`'s parameters, so a parameter forwarded inside a type argument, as in
+/// `inner::<[u8; N]>`, is still recognized in `inner`'s blocks. Instantiations with *concrete*
+/// arguments are not followed: whatever they evaluate to does not depend on our choice, so a
+/// failure there is a pre-existing bug in the crate under verification that any harness over
+/// `def` would hit.
+///
+/// This deliberately does *not* evaluate the block to find out whether the chosen arguments
+/// actually violate it, because a failing evaluation reports `E0080` from inside the const-eval
+/// query itself: merely asking the question emits the error we are trying to avoid. The check is
+/// therefore conservative in two ways. It rejects a block the chosen arguments would satisfy, and,
+/// since an anonymous const inherits its parent's generics, it rejects a block that does not read
+/// the parameters at all. A block in a function with no type or const parameter is untouched.
+///
+/// Nothing in `rustc_public` exposes `required_consts`, so query rustc directly.
+/// See <https://github.com/model-checking/kani/issues/4794> and
+/// <https://github.com/model-checking/kani/issues/4826>.
+fn has_generic_const_precondition(tcx: TyCtxt, def: FnDef) -> bool {
+    use rustc_middle::mir::visit::Visitor;
+    let def_id = rustc_internal::internal(tcx, def.def_id());
+    let mut worklist = vec![(def_id, ty::GenericArgs::identity_for_item(tcx, def_id))];
+    let mut visited = FxHashSet::default();
+    let mut budget = CONST_PRECONDITION_SEARCH_LIMIT;
+    while let Some((def_id, args)) = worklist.pop() {
+        if !visited.insert((def_id, args)) {
+            continue;
+        }
+        // Without MIR there is nothing to inspect. For `def` itself, `skip_reason` reports
+        // body-less functions; for a callee, we cannot see whether it is guarded, so assume it
+        // is not rather than skipping every candidate that calls into an opaque dependency.
+        if !tcx.is_mir_available(def_id) {
+            continue;
+        }
+        let Some(remaining) = budget.checked_sub(1) else {
+            // Budget exhausted: we can no longer rule a violation out.
+            return true;
+        };
+        budget = remaining;
+        // Not `optimized_mir`: rustc's provider refuses a def whose body is a const context, and
+        // a `#[rustc_comptime]` intrinsic is one while still reporting `is_mir_available`
+        // (`core::intrinsics::size_of` and eight others), which aborted the whole run.
+        // `instance_mir` is rustc's own dispatcher between `optimized_mir` and `mir_for_ctfe`.
+        // See <https://github.com/model-checking/kani/issues/4839>.
+        let body = tcx.instance_mir(rustc_middle::ty::InstanceKind::Item(def_id));
+        if body_has_generic_const_block(tcx, body, args) {
+            return true;
+        }
+        GenericCalleeCollector { tcx, args, callees: &mut worklist }.visit_body(body);
+    }
+    false
+}
+
+/// The nondet closure-model FnDefs, keyed by input shape. By-value models fix their
+/// input regions early-bound; the ref-taking variants carry late-bound regions so their
+/// fn items satisfy HRTB bounds like `for<'a> Fn(&'a T)`.
+#[derive(Clone, Copy, Default)]
+pub struct NondetFnModels {
+    pub fn0: Option<FnDef>,
+    pub fn1: Option<FnDef>,
+    pub fn1_ref: Option<FnDef>,
+    pub fn2: Option<FnDef>,
+    pub fn2_ref_ref: Option<FnDef>,
+    pub fn2_ref_val: Option<FnDef>,
+    pub fn2_val_ref: Option<FnDef>,
+    pub fn3: Option<FnDef>,
+}
+
+/// Select the nondet model matching the (erased-region) input types' by-ref/by-value
+/// shape, returning the model and its type arguments (references peeled: the model's own
+/// signature reintroduces them with late-bound regions). Arity-3 ref shapes and deeper
+/// are not modeled (1.5% corpus tail).
+fn select_nondet_model<'tcx>(
+    models: &NondetFnModels,
+    input_tys: &[rustc_middle::ty::Ty<'tcx>],
+) -> Option<(FnDef, Vec<rustc_middle::ty::Ty<'tcx>>)> {
+    let peel = |t: rustc_middle::ty::Ty<'tcx>| match t.kind() {
+        rustc_middle::ty::TyKind::Ref(_, inner, rustc_middle::ty::Mutability::Not) => Some(*inner),
+        _ => None,
+    };
+    let shape: Vec<Option<rustc_middle::ty::Ty>> = input_tys.iter().map(|t| peel(*t)).collect();
+    match shape.as_slice() {
+        [] => models.fn0.map(|m| (m, vec![])),
+        [None] => models.fn1.map(|m| (m, vec![input_tys[0]])),
+        [Some(t)] => models.fn1_ref.map(|m| (m, vec![*t])),
+        [None, None] => models.fn2.map(|m| (m, input_tys.to_vec())),
+        [Some(a), Some(b)] => models.fn2_ref_ref.map(|m| (m, vec![*a, *b])),
+        [Some(a), None] => models.fn2_ref_val.map(|m| (m, vec![*a, input_tys[1]])),
+        [None, Some(b)] => models.fn2_val_ref.map(|m| (m, vec![input_tys[0], *b])),
+        [None, None, None] => models.fn3.map(|m| (m, input_tys.to_vec())),
+        _ => None,
+    }
+}
+
+/// An Fn-bound signature that references other generic parameters (e.g. `F: Fn(T) -> T`):
+/// its concrete form depends on the instantiation chosen for those parameters, so the
+/// candidate fn-item type is constructed per candidate choice
+/// (c.f. [resolve_deferred_fn_slots]).
+struct DeferredFnSpec<'tcx> {
+    inputs: rustc_middle::ty::Ty<'tcx>,
+    output: rustc_middle::ty::Ty<'tcx>,
+}
+
+/// For type parameters bound by `Fn`/`FnMut`/`FnOnce`, derive a candidate instantiation:
+/// the *function item type* of the matching-arity `kani::arbitrary::nondet_fn<N>` model,
+/// instantiated with the bound's argument and return types. Function items implement all
+/// three `Fn` traits and are zero-sized; the models return a fresh nondeterministic value
+/// per call, over-approximating every real closure's behavior.
+///
+/// Returns a map from parameter index (among the identity args) to candidate types.
+/// Signature types that themselves mention generic parameters are only usable if those
+/// parameters appear EARLIER in the parameter list (they are substituted with the current
+/// choice by the caller); v1 keeps it simple and only admits fully concrete signatures.
+fn fn_bound_candidates<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    def: FnDef,
+    nondet_fns: &NondetFnModels,
+) -> (FxHashMap<usize, Vec<Ty>>, FxHashMap<usize, DeferredFnSpec<'tcx>>) {
+    let def_id = rustc_internal::internal(tcx, def.def_id());
+    let mut out: FxHashMap<usize, Vec<Ty>> = FxHashMap::default();
+    let mut deferred: FxHashMap<usize, DeferredFnSpec<'tcx>> = FxHashMap::default();
+    let fn_once = tcx.lang_items().fn_once_trait();
+    let fn_mut = tcx.lang_items().fn_mut_trait();
+    let fn_tr = tcx.lang_items().fn_trait();
+    // Collect Fn-ish trait predicates keyed by the self param index, with tupled inputs.
+    let mut sig_inputs: FxHashMap<usize, rustc_middle::ty::Ty> = FxHashMap::default();
+    for (predicate, _span) in tcx.clauses_of(def_id).clauses {
+        let Some(tp) = predicate.as_trait_clause() else { continue };
+        // HRTB bounds (e.g. for<'a> FnOnce(&'a Self)) carry late-bound regions; erase them
+        // rather than skipping the binder, which would leak escaping bound vars into the
+        // trait solver (ICE: !self_ty.has_escaping_bound_vars()).
+        let tp = tcx.instantiate_bound_regions_with_erased(tp);
+        let tid = Some(tp.def_id());
+        if tid != fn_once && tid != fn_mut && tid != fn_tr {
+            continue;
+        }
+        let rustc_middle::ty::TyKind::Param(param_ty) = tp.self_ty().kind() else { continue };
+        // Second generic arg of the Fn traits is the tupled inputs.
+        let Some(inputs) = tp.trait_ref.args.get(1).and_then(|a| a.as_type()) else {
+            continue;
+        };
+        sig_inputs.insert(param_ty.index as usize, inputs);
+    }
+    if sig_inputs.is_empty() {
+        return (out, deferred);
+    }
+    // The return type comes from the FnOnce::Output projection bound.
+    let mut sig_output: FxHashMap<usize, rustc_middle::ty::Ty> = FxHashMap::default();
+    for (predicate, _span) in tcx.clauses_of(def_id).clauses {
+        let Some(proj) = predicate.as_projection_clause() else { continue };
+        let proj = tcx.instantiate_bound_regions_with_erased(proj);
+        let rustc_middle::ty::TyKind::Param(param_ty) = proj.projection_term.self_ty().kind()
+        else {
+            continue;
+        };
+        if let Some(term_ty) = proj.term.as_type() {
+            sig_output.insert(param_ty.index as usize, term_ty);
+        }
+    }
+    for (idx, inputs) in sig_inputs {
+        let rustc_middle::ty::TyKind::Tuple(input_tys) = inputs.kind() else { continue };
+        let output = sig_output.get(&idx).copied().unwrap_or(tcx.types.unit);
+        use rustc_middle::ty::TypeVisitableExt;
+        if inputs.has_param() || output.has_param() {
+            // Signature references other generic parameters: defer construction until a
+            // candidate choice for those parameters is made.
+            // SAFETY of the transmute-free 'static: clauses_of types live for the whole
+            // compilation session ('tcx); we only use them within this query's lifetime.
+            deferred.insert(idx, DeferredFnSpec { inputs, output });
+            continue;
+        }
+        // nondet_fnN<A.., R>: generic args are the inputs followed by the return type.
+        let input_vec: Vec<rustc_middle::ty::Ty> = input_tys.iter().collect();
+        let Some((model, model_tys)) = select_nondet_model(nondet_fns, &input_vec) else {
+            continue;
+        };
+        let mut args: Vec<GenericArgKind> =
+            model_tys.iter().map(|t| GenericArgKind::Type(rustc_internal::stable(t))).collect();
+        args.push(GenericArgKind::Type(rustc_internal::stable(output)));
+        let args = GenericArgs(args);
+        // Instance::resolve does not check trait bounds; the model requires R: Arbitrary
+        // (its body calls kani::any::<R>()), so verify the model's own predicates or the
+        // assert in harness generation fires (e.g. FnOnce() -> error::Error in syn).
+        if !args_satisfy_predicates(tcx, model, &args) {
+            continue;
+        }
+        let Ok(inst) = Instance::resolve(model, &args) else { continue };
+        // The function item TYPE of the resolved instance.
+        out.entry(idx).or_default().push(inst.ty());
+    }
+    (out, deferred)
+}
+
+/// Resolve deferred Fn-bound slots for a concrete candidate `choice`: substitute the
+/// chosen types into the deferred signature, construct the matching-arity nondet_fn item
+/// type, and overwrite the placeholder in `choice`. Returns false if any deferred slot
+/// cannot be resolved for this choice (skip it).
+#[allow(clippy::too_many_arguments)]
+fn resolve_deferred_fn_slots<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    identity_args: &GenericArgs,
+    type_slots: &[usize],
+    choice: &mut [Ty],
+    deferred: &FxHashMap<usize, DeferredFnSpec<'tcx>>,
+    nondet_fns: &NondetFnModels,
+) -> bool {
+    if deferred.is_empty() {
+        return true;
+    }
+    // Build a full internal substitution from the current choice (placeholders included:
+    // deferred slots hold unit, which is fine as long as no deferred signature references
+    // another Fn-bound parameter).
+    let mut next_type = 0usize;
+    let stable_args = GenericArgs(
+        identity_args
+            .0
+            .iter()
+            .map(|arg| match arg {
+                GenericArgKind::Type(_) => {
+                    let t = choice[next_type];
+                    next_type += 1;
+                    GenericArgKind::Type(t)
+                }
+                GenericArgKind::Lifetime(_) => {
+                    GenericArgKind::Lifetime(Region { kind: RegionKind::ReErased })
+                }
+                GenericArgKind::Const(_) => GenericArgKind::Const(
+                    TyConst::try_from_target_usize(AUTOHARNESS_CONST_GENERIC_VALUE).unwrap(),
+                ),
+            })
+            .collect(),
+    );
+    let args_internal = rustc_internal::internal(tcx, &stable_args);
+    for (&idx, spec) in deferred {
+        use rustc_middle::ty::TypeVisitableExt;
+        // `instantiate` yields an `Unnormalized` value on this toolchain; normalize before
+        // inspecting. The substitution may produce unnormalizable projections (e.g.
+        // <i32 as Tap>::Val for a choice that does not satisfy the bound); normalize here and
+        // skip the choice on failure, rather than letting Instance::resolve ICE on it.
+        let inputs =
+            rustc_middle::ty::EarlyBinder::bind(tcx, spec.inputs).instantiate(tcx, args_internal);
+        let output =
+            rustc_middle::ty::EarlyBinder::bind(tcx, spec.output).instantiate(tcx, args_internal);
+        let typing_env = rustc_middle::ty::TypingEnv::fully_monomorphized();
+        let Ok(inputs) = tcx.try_normalize_erasing_regions(typing_env, inputs) else {
+            return false;
+        };
+        let Ok(output) = tcx.try_normalize_erasing_regions(typing_env, output) else {
+            return false;
+        };
+        // Bail if the substitution left any generic parameter unresolved.
+        if inputs.has_param() || output.has_param() {
+            return false;
+        }
+        let rustc_middle::ty::TyKind::Tuple(input_tys) = inputs.kind() else { return false };
+        let input_vec: Vec<rustc_middle::ty::Ty> = input_tys.iter().collect();
+        let Some((model, model_tys)) = select_nondet_model(nondet_fns, &input_vec) else {
+            return false;
+        };
+        let mut margs: Vec<GenericArgKind> =
+            model_tys.iter().map(|t| GenericArgKind::Type(rustc_internal::stable(t))).collect();
+        margs.push(GenericArgKind::Type(rustc_internal::stable(output)));
+        let margs = GenericArgs(margs);
+        // As in fn_bound_candidates: enforce the model's own R: Arbitrary bound.
+        if !args_satisfy_predicates(tcx, model, &margs) {
+            return false;
+        }
+        let Ok(inst) = Instance::resolve(model, &margs) else { return false };
+        let Some(pos) = type_slots.iter().position(|&s| s == idx) else { return false };
+        choice[pos] = inst.ty();
+    }
+    true
+}
+
+/// Why this instantiation makes a SIMD intrinsic call in `instance`'s body invalid, if it does: a
+/// vector operand turned into a non-SIMD type, or a comparison whose result is not a valid mask
+/// (see [simd_mask_problem]).
+///
+/// rustc's codegen backends reject such a monomorphization with `E0511`, so the call site cannot
+/// appear in a program that `cargo build` accepts: nothing bounds the parameter of a helper like
+/// `fn imin<T: Copy>(a: T, b: T) -> T { simd_lt(a, b) }` to the SIMD types, but every real caller
+/// passes one. Autoharness picks its own instantiation, though, so it has to make that check
+/// itself, or the harness it generates is one rustc would not accept. `core` has exactly this
+/// shape in `core_arch::simd::simd_imin`, which is what blocked autoharness over the standard
+/// library: <https://github.com/model-checking/kani/issues/4919>.
+///
+/// Only `instance`'s own body is inspected. An invalid instantiation a level down (a generic
+/// function calling a generic SIMD helper) is reported by codegen against the harness that reached
+/// it, which fails that harness instead of the run; see
+/// <https://github.com/model-checking/kani/issues/4926>.
+fn invalid_simd_instantiation(tcx: TyCtxt, instance: Instance) -> Option<String> {
+    // Instantiation search runs before `automatic_harness_partition`'s eligibility check, which
+    // skips a function with an explicit tail call. Do not report it here.
+    let body = crate::kani_middle::body_without_tail_calls(tcx, instance)?;
+    body.blocks.iter().find_map(|block| {
+        let TerminatorKind::Call { func, .. } = &block.terminator.kind else {
+            return None;
+        };
+        let TyKind::RigidTy(RigidTy::FnDef(def, args)) = func.ty(body.locals()).ok()?.kind() else {
+            return None;
+        };
+        let callee = Instance::resolve(def, &args).ok()?;
+        // `try_match_simd` recognizes exactly the intrinsics named `simd_*`, so do not ask about
+        // any other: the `Intrinsic` conversion asserts on the signatures it knows, and selecting
+        // a harness should not be able to trip an assertion that codegen would not.
+        let name = callee.intrinsic_name().filter(|name| name.starts_with("simd_"))?;
+        let sig = callee.ty().kind().fn_sig()?.skip_binder();
+        let intrinsic = Intrinsic::from_instance(&callee);
+        let operand_ty = intrinsic.simd_vector_operand(sig.inputs(), sig.output())?;
+        if !operand_ty.kind().is_simd() {
+            return Some(format!(
+                "the body calls the SIMD intrinsic `{name}`, which rustc rejects for the \
+                 non-SIMD type `{operand_ty}` this instantiation gives it"
+            ));
+        }
+        if intrinsic.is_simd_comparison()
+            && let Some(problem) = simd_mask_problem(tcx, operand_ty, sig.output())
+        {
+            return Some(format!(
+                "the body calls the SIMD comparison `{name}`, which rustc rejects for the result \
+                 type `{}` ({problem})",
+                sig.output()
+            ));
+        }
+        None
+    })
+}
+
+/// Try to find a monomorphic instantiation of the generic function `fn_item` for which we can
+/// generate an automatic harness. Substitute each type parameter with the first candidate from
+/// `generic_instantiation_candidates` such that all of the function's trait bounds are satisfied
+/// (using the same candidate for every type parameter), and erase lifetime parameters.
+/// Return the reason (to be attached to [AutoHarnessSkipReason::GenericFn]) if no candidate
+/// satisfies the bounds, or if the function has const generic parameters, which we do not
+/// support instantiating yet.
+fn choose_generic_instantiation(
+    tcx: TyCtxt,
+    fn_item: CrateItem,
+    nondet_fns: &NondetFnModels,
+) -> Result<Instance, String> {
+    let TyKind::RigidTy(RigidTy::FnDef(def, identity_args)) = fn_item.ty().kind() else {
+        return Err("not a function definition".to_string());
+    };
+
+    // Const generic parameters of type usize (by far the most common case, e.g. array lengths)
+    // are instantiated with AUTOHARNESS_CONST_GENERIC_VALUE; other const parameter types are
+    // not supported yet. The check consults the internal generics (the public identity
+    // arguments do not carry the parameter's type).
+    let generics = tcx.generics_of(rustc_internal::internal(tcx, def.def_id()));
+    if generics.own_params.iter().any(|param| {
+        matches!(param.kind, rustc_middle::ty::GenericParamDefKind::Const { .. })
+            && tcx.type_of(param.def_id).skip_binder() != tcx.types.usize
+    }) {
+        return Err("non-usize const generic parameters are not supported yet".to_string());
+    }
+
+    // A `const {}` block parameterized by a type or const generic can encode a precondition that
+    // the arguments we substitute violate, which rustc reports as an unrecoverable E0080. We
+    // cannot check whether they actually do without emitting that error, so skip.
+    if has_generic_const_precondition(tcx, def) {
+        return Err("the function has a `const {}` block that may constrain its generic \
+                    parameter(s), and the arguments autoharness substitutes are not guaranteed \
+                    to satisfy it"
+            .to_string());
+    }
+
+    // Positions of the type parameters among the identity arguments, and the candidate list
+    // for each: the shared primitive candidates, plus types derived from the parameter's own
+    // trait bounds (concrete implementors of the traits it must satisfy).
+    let impl_derived = impl_derived_candidates(tcx, def);
+    let (fn_bound, deferred_fn) = fn_bound_candidates(tcx, def, nondet_fns);
+    let type_slots: Vec<usize> = identity_args
+        .0
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, arg)| matches!(arg, GenericArgKind::Type(_)).then_some(idx))
+        .collect();
+    let slot_candidates: Vec<Vec<Ty>> = type_slots
+        .iter()
+        .map(|&idx| {
+            let mut cands = generic_instantiation_candidates();
+            for ty in impl_derived.get(&idx).into_iter().flatten() {
+                if !cands.contains(ty) {
+                    cands.push(*ty);
+                }
+            }
+            // Fn-bound parameters: try the nondeterministic function items FIRST — no
+            // primitive can satisfy an Fn bound, so they would only waste solver queries.
+            if let Some(fnc) = fn_bound.get(&idx) {
+                let mut new = fnc.clone();
+                new.extend(cands);
+                cands = new;
+            } // Deferred Fn-bound slots get a single placeholder (resolved per choice by
+            // resolve_deferred_fn_slots); other candidates would be wasted solver queries.
+            if deferred_fn.contains_key(&idx) {
+                cands = vec![Ty::new_tuple(&[])];
+            }
+            cands
+        })
+        .collect();
+    let n_impl_derived: usize = impl_derived.values().map(|v| v.len()).sum();
+
+    // Build the argument list substituting `choice[i]` for the i-th type parameter.
+    let build_args = |choice: &[Ty]| {
+        let mut next_type = 0;
+        GenericArgs(
+            identity_args
+                .0
+                .iter()
+                .map(|arg| match arg {
+                    GenericArgKind::Type(_) => {
+                        let ty = choice[next_type];
+                        next_type += 1;
+                        GenericArgKind::Type(ty)
+                    }
+                    GenericArgKind::Lifetime(_) => {
+                        GenericArgKind::Lifetime(Region { kind: RegionKind::ReErased })
+                    }
+                    GenericArgKind::Const(_) => GenericArgKind::Const(
+                        TyConst::try_from_target_usize(AUTOHARNESS_CONST_GENERIC_VALUE).unwrap(),
+                    ),
+                })
+                .collect(),
+        )
+    };
+
+    let attempts = std::cell::Cell::new(0usize);
+    // The first candidate rejected for making a SIMD intrinsic call invalid, so that the skip
+    // reason names that instead of the trait bounds, which such a candidate does satisfy.
+    let simd_rejection: std::cell::Cell<Option<String>> = std::cell::Cell::new(None);
+    let try_choice = |choice: &[Ty]| -> Option<Instance> {
+        attempts.set(attempts.get() + 1);
+        let args = build_args(choice);
+        if !args_satisfy_predicates(tcx, def, &args) {
+            return None;
+        }
+        // Return the resolved instance regardless of whether it has a body: a body-less
+        // instance (e.g. a generic trait method without a default) is then reported accurately
+        // as `NoBody` by `skip_reason`, rather than falling through to a generic-function skip
+        // reason here.
+        let instance = Instance::resolve(def, &args).ok()?;
+        if let Some(reason) = invalid_simd_instantiation(tcx, instance) {
+            // Keep the first rejection: it is the one for the most common candidate.
+            let reason = simd_rejection.take().unwrap_or(reason);
+            simd_rejection.set(Some(reason));
+            return None;
+        }
+        Some(instance)
+    };
+
+    // First pass: the same primitive candidate for every type parameter (the common case,
+    // and cheap). Second pass: the cartesian product of the per-parameter candidate lists,
+    // capped at GENERIC_INSTANTIATION_ATTEMPT_LIMIT trait-solver queries, which finds
+    // instantiations for functions whose parameters need *different* types (e.g.
+    // `fn cast<T: Float, U: PrimInt>`) or types implementing non-primitive-friendly bounds.
+    for candidate in generic_instantiation_candidates() {
+        if let Some(instance) = try_choice(&vec![candidate; type_slots.len()]) {
+            return Ok(instance);
+        }
+    }
+    if !type_slots.is_empty() {
+        let mut odometer = vec![0usize; type_slots.len()];
+        'product: loop {
+            let mut choice: Vec<Ty> =
+                odometer.iter().enumerate().map(|(i, &c)| slot_candidates[i][c]).collect();
+            let deferred_ok = resolve_deferred_fn_slots(
+                tcx,
+                &identity_args,
+                &type_slots,
+                &mut choice,
+                &deferred_fn,
+                nondet_fns,
+            );
+            // Skip choices already tried in the uniform pass.
+            let uniform = choice.iter().all(|ty| *ty == choice[0])
+                && generic_instantiation_candidates().contains(&choice[0]);
+            if !uniform && deferred_ok {
+                if let Some(instance) = try_choice(&choice) {
+                    return Ok(instance);
+                }
+                if attempts.get() >= GENERIC_INSTANTIATION_ATTEMPT_LIMIT {
+                    break;
+                }
+            }
+            // Advance the odometer.
+            for i in (0..odometer.len()).rev() {
+                odometer[i] += 1;
+                if odometer[i] < slot_candidates[i].len() {
+                    continue 'product;
+                }
+                odometer[i] = 0;
+                if i == 0 {
+                    break 'product;
+                }
+            }
+        }
+    }
+    // Keep the original candidate order and search budget intact. Only after
+    // that search fails, try one additional choice with every type set to unit.
+    // This supports the tuple Extend methods without displacing existing results.
+    let search_limited = attempts.get() >= GENERIC_INSTANTIATION_ATTEMPT_LIMIT;
+    if !type_slots.is_empty()
+        && let Some(instance) = try_choice(&vec![Ty::new_tuple(&[]); type_slots.len()])
+    {
+        return Ok(instance);
+    }
+    // A candidate that satisfied the bounds but would make a SIMD intrinsic call invalid is the
+    // more specific reason, so report it ahead of the generic ones below.
+    if let Some(reason) = simd_rejection.take() {
+        return Err(reason);
+    }
+    if search_limited {
+        return Err(format!(
+            "generic instantiation search reached the limit of \
+             {GENERIC_INSTANTIATION_ATTEMPT_LIMIT} attempts{}",
+            if type_slots.is_empty() { "" } else { "; the uniform unit fallback also failed" }
+        ));
+    }
+    Err(format!(
+        "no candidate type ({}{}{}) satisfies the function's trait bounds",
+        generic_instantiation_candidates()
+            .iter()
+            .map(|ty| ty.to_string())
+            .collect::<Vec<_>>()
+            .join(", "),
+        if n_impl_derived > 0 {
+            format!(" and {n_impl_derived} types implementing the required traits")
+        } else {
+            String::new()
+        },
+        if type_slots.is_empty() { "" } else { ", or () for every parameter" }
+    ))
+}
+
+/// The caveats that apply to a generated harness, reported in the summary table and stored in
+/// its metadata. They are independent: a harness can be, e.g., both bounded and constructor-based.
+#[derive(Clone, Copy, Debug, Default)]
+struct AutoHarnessCaveats {
+    /// Some argument uses *bounded* nondeterministic values, c.f. `--bounded-arguments`.
+    is_bounded: bool,
+    /// Some value is generated through a type's public constructor, c.f. `--constructor-args`.
+    is_ctor_based: bool,
+    /// Some generated value contains an `Rc`/`Arc`, whose reference counts are modeled with
+    /// finitely many states, c.f. `contains_refcounted_ptr`. Unlike `is_bounded`, this does not
+    /// require (or depend on) `--bounded-arguments`.
+    has_refcount_caveat: bool,
+}
+
+/// Partition every function in the crate into (chosen, skipped), where `chosen` is a vector of the Instances for which we'll generate automatic harnesses,
+/// and `skipped` is a map of function names to the reason why we skipped them.
+#[allow(clippy::too_many_arguments)]
+fn automatic_harness_partition(
+    tcx: TyCtxt,
+    args: &Arguments,
+    crate_name: &str,
+    kani_any_def: FnDef,
+    kani_bounded_any_def: FnDef,
+    smart_pointer_models: SmartPointerModels,
+    kani_assert_def: FnDef,
+    unbounded_slice_available: bool,
+    nondet_fns: &NondetFnModels,
+) -> (Vec<(Instance, AutoHarnessCaveats)>, BTreeMap<String, AutoHarnessSkipReason>) {
+    let crate_fn_defs = rustc_public::local_crate().fn_defs().into_iter().collect::<FxHashSet<_>>();
+    // Filter out CrateItems that are functions, but not functions defined in the crate itself, i.e., rustc-inserted functions
+    // (c.f. https://github.com/model-checking/kani/issues/4189)
+    let crate_fns = rustc_public::all_local_items().into_iter().filter(|item| {
+        if let TyKind::RigidTy(RigidTy::FnDef(def, _)) = item.ty().kind() {
+            crate_fn_defs.contains(&def)
+        } else {
+            false
+        }
+    });
+
+    let included_set = make_regex_set(args.autoharness_included_patterns.clone());
+    let excluded_set = make_regex_set(args.autoharness_excluded_patterns.clone());
+
+    // Cache whether a type implements or can derive Arbitrary
+    let mut ty_arbitrary_cache: FxHashMap<Ty, bool> = FxHashMap::default();
+    // The constructor search needs the same predicate, but `skip_reason` borrows the cache above
+    // for the whole loop, so give the `--constructor-args` check its own.
+    let mut ty_arbitrary_cache_ctor: FxHashMap<Ty, bool> = FxHashMap::default();
+
+    // If `instance` is not eligible for an automatic harness, return the reason why (`Err`); if it
+    // is eligible, return whether its harness requires *bounded* nondeterministic arguments
+    // (`Ok(true)` iff so).
+    // Note that we only return one reason for ineligiblity, when there could be multiple;
+    // we can revisit this implementation choice in the future if users request more verbose output.
+    let mut skip_reason = |instance: Instance| -> Result<bool, AutoHarnessSkipReason> {
+        if !instance.has_body() {
+            return Err(AutoHarnessSkipReason::NoBody);
+        }
+
+        // Preprend the crate name so that users can filter out entire crates using the existing function filter flags.
+        // `instance.name()` is already crate-qualified for local items (rust-lang/rust#149401),
+        // so strip that prefix first to avoid double-qualifying (`crate::crate::fn`).
+        let name = format!(
+            "{crate_name}::{}",
+            crate::kani_middle::strip_local_crate_prefix(instance.name())
+        );
+        // Autoharness loads every local body. Skip a function whose body `rustc_public` cannot
+        // convert, rather than aborting the run for every other function.
+        if crate::kani_middle::has_explicit_tail_call(tcx, instance) {
+            return Err(AutoHarnessSkipReason::UnsupportedTailCall);
+        }
+        let body = crate::kani_middle::checked_body(tcx, instance).unwrap();
+
+        if is_proof_harness(tcx, instance)
+            || name.contains("kani::Arbitrary")
+            || name.contains("kani::BoundedArbitrary")
+            || name.contains("kani::Invariant")
+        {
+            return Err(AutoHarnessSkipReason::KaniImpl);
+        }
+
+        if autoharness_filtered_out(&name, &included_set, &excluded_set) {
+            return Err(AutoHarnessSkipReason::UserFilter);
+        }
+
+        // Report the calling convention rather than the `VaList` argument: for these functions
+        // Kani cannot model the call at all, so an `Arbitrary` implementation would not help.
+        if crate::kani_middle::is_unsupported_variadic(tcx, instance) {
+            return Err(AutoHarnessSkipReason::UnsupportedVariadic);
+        }
+
+        // Formatting trait implementations are handled specially: their `&mut Formatter`
+        // argument cannot be generated, but the generated harness formats a nondeterministic
+        // value of the self type into a discarding sink instead, c.f. `fmt_impl_self_ty`.
+        // The self type is generated with `kani::any`, so it must implement (or be able to
+        // derive) Arbitrary; argument-position-only support (raw/smart pointers, bounded types)
+        // does not apply here, and these harnesses are therefore never bounded.
+        // The `core::str::pattern` searcher types are the exception: `fmt_impl_self_ty` does not
+        // report their `fmt` methods, which are checked as ordinary functions below.
+        if let Some((_, self_ty)) = fmt_impl_self_ty(tcx, instance) {
+            return if implements_arbitrary(self_ty, kani_any_def, &mut ty_arbitrary_cache)
+                || can_derive_arbitrary(self_ty, kani_any_def, &mut ty_arbitrary_cache)
+            {
+                Ok(false)
+            } else {
+                Err(AutoHarnessSkipReason::MissingArbitraryImpl(vec![(
+                    "self".to_string(),
+                    format!("{self_ty}"),
+                )]))
+            };
+        }
+
+        // Each argument of `instance` must be supported by automatic harness generation, i.e.,
+        // implement Arbitrary (or be capable of deriving it), be a raw pointer, be a supported
+        // smart pointer (`Box`/`Rc`/`Arc` of a derivable pointee), or -- if the user opted in via
+        // --bounded-arguments -- be a supported slice/string reference or a BoundedArbitrary
+        // container type, c.f. `autoharness_supported_arg_ty`.
+        // Note that generic functions have been instantiated with concrete types at this point,
+        // so we know that each of these arguments has a concrete type.
+        let mut problematic_args = vec![];
+        let mut bounded_args = vec![];
+        for (idx, arg) in body.arg_locals().iter().enumerate() {
+            // Unbounded generation: slices (&[T], &mut [T]) and Vec<T> of primitive
+            // integer/float elements are generated as fresh allocations of nondeterministic
+            // size (results hold for *all* lengths -- unbounded, so no bound caveat), when the
+            // optional alloc-requiring models are present. This takes precedence over the
+            // bounded slice/string support classified by `autoharness_supported_arg_ty`.
+            if unbounded_slice_available {
+                let slice_ok = match arg.ty.kind() {
+                    TyKind::RigidTy(RigidTy::Ref(_, inner, _)) => match inner.kind() {
+                        TyKind::RigidTy(RigidTy::Slice(elem)) => {
+                            crate::kani_middle::slice_elem_unbounded_ok(tcx, elem)
+                        }
+                        _ => false,
+                    },
+                    _ => crate::kani_middle::vec_elem_ty(arg.ty)
+                        .is_some_and(|elem| crate::kani_middle::slice_elem_unbounded_ok(tcx, elem)),
+                };
+                if slice_ok {
+                    continue;
+                }
+            }
+            // Function items (Fn-bound instantiations, c.f. fn_bound_candidates) are
+            // zero-sized values materialized as constants; no Arbitrary impl is involved.
+            if matches!(arg.ty.kind(), TyKind::RigidTy(RigidTy::FnDef(..))) {
+                continue;
+            }
+            // Note: we deliberately do not insert the verdict into `ty_arbitrary_cache` here.
+            // The cache stores whether a type implements (or can derive) Arbitrary, which is the
+            // wrong semantics for types that are supported in argument position only (raw
+            // pointers, smart pointers of derivable pointees, slice/string references whose
+            // backing storage the harness owns, and BoundedArbitrary container types): caching the
+            // argument-position verdict under the same key would poison the cache for the
+            // ADT-field checks. `implements_arbitrary` memoizes its own recursion internally, so
+            // repeated argument types stay cheap.
+            let support = autoharness_supported_arg_ty(
+                tcx,
+                arg.ty,
+                kani_any_def,
+                kani_bounded_any_def,
+                &smart_pointer_models,
+                &mut ty_arbitrary_cache,
+            );
+
+            if support == ArgSupport::Arbitrary {
+                continue;
+            }
+            // Find the name of the argument by referencing var_debug_info.
+            // Note that enumerate() starts at 0, while rustc_public argument_index starts at 1, hence the idx+1.
+            let arg_name = body
+                .var_debug_info
+                .iter()
+                .find(|var| {
+                    var.argument_index.is_some_and(|arg_idx| idx + 1 == usize::from(arg_idx))
+                })
+                .map_or("_".to_string(), |debug_info| debug_info.name.to_string());
+            let arg_type = format!("{}", arg.ty);
+            match support {
+                ArgSupport::Arbitrary => unreachable!(),
+                ArgSupport::Bounded => bounded_args.push((arg_name, arg_type)),
+                ArgSupport::Unsupported => problematic_args.push((arg_name, arg_type)),
+            }
+        }
+        if !problematic_args.is_empty() {
+            return Err(AutoHarnessSkipReason::MissingArbitraryImpl(problematic_args));
+        }
+        if !bounded_args.is_empty() && !args.autoharness_bounded_arguments {
+            return Err(AutoHarnessSkipReason::RequiresBoundedArguments(bounded_args));
+        }
+        Ok(!bounded_args.is_empty())
+    };
+
+    let mut chosen = vec![];
+    let mut skipped = BTreeMap::new();
+
+    for func in crate_fns {
+        if KaniAttributes::for_def_id(tcx, func.def_id()).is_kani_instrumentation() {
+            skipped.insert(
+                crate::kani_middle::strip_local_crate_prefix(func.name()),
+                AutoHarnessSkipReason::KaniImpl,
+            );
+            continue;
+        }
+
+        // A `#[rustc_comptime]` function can only be called at compile time: rustc rejects any
+        // other call (`enforce_context_effects`), so a harness calling it is not a program rustc
+        // accepts. Check before instantiating, so that generic ones are skipped for this reason
+        // too, and none reaches the const-block precondition search (#4839).
+        if matches!(
+            tcx.constness(rustc_internal::internal(tcx, func.def_id())),
+            rustc_hir::Constness::Const { always: true }
+        ) {
+            skipped.insert(
+                crate::kani_middle::strip_local_crate_prefix(func.name()),
+                AutoHarnessSkipReason::Comptime,
+            );
+            continue;
+        }
+
+        // For generic functions, try to find a monomorphic instantiation whose bounds are
+        // satisfied; the generated harness verifies the function for that instantiation only,
+        // and its name (e.g. `foo::<i32>`) reflects that.
+        let instance = match Instance::try_from(func) {
+            Ok(instance) => instance,
+            Err(_) => match choose_generic_instantiation(tcx, func, nondet_fns) {
+                Ok(instance) => instance,
+                Err(detail) => {
+                    skipped.insert(
+                        crate::kani_middle::strip_local_crate_prefix(func.name()),
+                        AutoHarnessSkipReason::GenericFn(detail),
+                    );
+                    continue;
+                }
+            },
+        };
+
+        match skip_reason(instance) {
+            Err(reason) => {
+                skipped
+                    .insert(crate::kani_middle::strip_local_crate_prefix(instance.name()), reason);
+            }
+            Ok(is_bounded) => {
+                // Whether any generated value will come from a type's public constructor
+                // rather than raw field synthesis, which the summary reports as "(ctor)".
+                let is_ctor_based = args.autoharness_constructor_args
+                    && crate::kani_middle::checked_body(tcx, instance).is_some_and(|body| {
+                        body.arg_locals().iter().any(|arg| {
+                            crate::kani_middle::uses_ctor_generation(
+                                tcx,
+                                arg.ty,
+                                kani_any_def,
+                                kani_assert_def,
+                                &mut ty_arbitrary_cache_ctor,
+                                &mut vec![],
+                            )
+                        })
+                    });
+                // Whether any generated value contains an `Rc`/`Arc`, whose reference-count
+                // state is only modeled finitely, which the summary reports as "(refcount)".
+                // Formatting trait harnesses generate a value of the impl's self type rather
+                // than of the function's arguments (`&self`, `&mut Formatter`), c.f.
+                // `fmt_impl_self_ty`.
+                let has_refcount_caveat = match fmt_impl_self_ty(tcx, instance) {
+                    Some((_, self_ty)) => crate::kani_middle::contains_refcounted_ptr(
+                        tcx,
+                        self_ty,
+                        &mut FxHashSet::default(),
+                    ),
+                    None => instance.body().is_some_and(|body| {
+                        body.arg_locals().iter().any(|arg| {
+                            crate::kani_middle::contains_refcounted_ptr(
+                                tcx,
+                                arg.ty,
+                                &mut FxHashSet::default(),
+                            )
+                        })
+                    }),
+                };
+                chosen.push((
+                    instance,
+                    AutoHarnessCaveats { is_bounded, is_ctor_based, has_refcount_caveat },
+                ));
+            }
+        }
+    }
+
+    (chosen, skipped)
+}
+
+#[cfg(test)]
+mod autoharness_filter_tests {
+    use super::*;
+
+    #[test]
+    fn both_none() {
+        let included = None;
+        let excluded = None;
+        assert!(!autoharness_filtered_out("test_fn", &included, &excluded));
+    }
+
+    #[test]
+    fn only_included() {
+        let included = make_regex_set(vec!["test.*".to_string()]);
+        let excluded = None;
+
+        assert!(!autoharness_filtered_out("test_fn", &included, &excluded));
+        assert!(autoharness_filtered_out("other_fn", &included, &excluded));
+    }
+
+    #[test]
+    fn only_excluded() {
+        let included = None;
+        let excluded = make_regex_set(vec!["test.*".to_string()]);
+
+        assert!(autoharness_filtered_out("test_fn", &included, &excluded));
+        assert!(!autoharness_filtered_out("other_fn", &included, &excluded));
+    }
+
+    #[test]
+    fn both_matching() {
+        let included = make_regex_set(vec![".*_fn".to_string()]);
+        let excluded = make_regex_set(vec!["test.*".to_string()]);
+
+        assert!(autoharness_filtered_out("test_fn", &included, &excluded));
+        assert!(!autoharness_filtered_out("other_fn", &included, &excluded));
+    }
+
+    #[test]
+    fn multiple_include_patterns() {
+        let included = make_regex_set(vec!["test.*".to_string(), "other.*".to_string()]);
+        let excluded = None;
+
+        assert!(!autoharness_filtered_out("test_fn", &included, &excluded));
+        assert!(!autoharness_filtered_out("other_fn", &included, &excluded));
+        assert!(autoharness_filtered_out("different_fn", &included, &excluded));
+    }
+
+    #[test]
+    fn multiple_exclude_patterns() {
+        let included = None;
+        let excluded = make_regex_set(vec!["test.*".to_string(), "other.*".to_string()]);
+
+        assert!(autoharness_filtered_out("test_fn", &included, &excluded));
+        assert!(autoharness_filtered_out("other_fn", &included, &excluded));
+        assert!(!autoharness_filtered_out("different_fn", &included, &excluded));
+    }
+
+    #[test]
+    fn exclude_precedence_identical_patterns() {
+        let pattern = "test.*".to_string();
+        let included = make_regex_set(vec![pattern.clone()]);
+        let excluded = make_regex_set(vec![pattern]);
+
+        assert!(autoharness_filtered_out("test_fn", &included, &excluded));
+        assert!(autoharness_filtered_out("other_fn", &included, &excluded));
+    }
+
+    #[test]
+    fn exclude_precedence_overlapping_patterns() {
+        let included = make_regex_set(vec![".*_fn".to_string()]);
+        let excluded = make_regex_set(vec!["test_.*".to_string(), "other_.*".to_string()]);
+
+        assert!(autoharness_filtered_out("test_fn", &included, &excluded));
+        assert!(autoharness_filtered_out("other_fn", &included, &excluded));
+        assert!(!autoharness_filtered_out("different_fn", &included, &excluded));
+    }
+
+    #[test]
+    fn exact_match() {
+        let included = make_regex_set(vec!["^test_fn$".to_string()]);
+        let excluded = None;
+
+        assert!(!autoharness_filtered_out("test_fn", &included, &excluded));
+        assert!(autoharness_filtered_out("test_fn_extra", &included, &excluded));
+    }
+
+    #[test]
+    fn include_specific_module() {
+        let included = make_regex_set(vec!["module1::.*".to_string()]);
+        let excluded = None;
+
+        assert!(!autoharness_filtered_out("module1::test_fn", &included, &excluded));
+        assert!(!autoharness_filtered_out("crate::module1::test_fn", &included, &excluded));
+        assert!(autoharness_filtered_out("module2::test_fn", &included, &excluded));
+        assert!(autoharness_filtered_out("crate::module2::test_fn", &included, &excluded));
+    }
+
+    #[test]
+    fn exclude_specific_module() {
+        let included = None;
+        let excluded = make_regex_set(vec![".*::internal::.*".to_string()]);
+
+        assert!(autoharness_filtered_out("crate::internal::helper_fn", &included, &excluded));
+        assert!(autoharness_filtered_out("my_crate::internal::test_fn", &included, &excluded));
+        assert!(!autoharness_filtered_out("crate::public::test_fn", &included, &excluded));
+    }
+
+    #[test]
+    fn test_exact_match_with_crate() {
+        let included = make_regex_set(vec!["^lib::foo_function$".to_string()]);
+        let excluded = None;
+
+        assert!(!autoharness_filtered_out("lib::foo_function", &included, &excluded));
+        assert!(autoharness_filtered_out("lib::foo_function_extra", &included, &excluded));
+        assert!(autoharness_filtered_out("lib::other::foo_function", &included, &excluded));
+        assert!(autoharness_filtered_out("other::foo_function", &included, &excluded));
+        assert!(autoharness_filtered_out("foo_function", &included, &excluded));
+    }
+
+    #[test]
+    fn complex_path_patterns() {
+        let included = make_regex_set(vec![
+            "crate::module1::.*".to_string(),
+            "other_crate::tests::.*".to_string(),
+        ]);
+        let excluded =
+            make_regex_set(vec![".*::internal::.*".to_string(), ".*::private::.*".to_string()]);
+
+        assert!(!autoharness_filtered_out("crate::module1::test_fn", &included, &excluded));
+        assert!(!autoharness_filtered_out("other_crate::tests::test_fn", &included, &excluded));
+        assert!(autoharness_filtered_out(
+            "crate::module1::internal::test_fn",
+            &included,
+            &excluded
+        ));
+        assert!(autoharness_filtered_out(
+            "other_crate::tests::private::test_fn",
+            &included,
+            &excluded
+        ));
+        assert!(autoharness_filtered_out("crate::module2::test_fn", &included, &excluded));
+    }
+
+    #[test]
+    fn crate_specific_filtering() {
+        let included = make_regex_set(vec!["my_crate::.*".to_string()]);
+        let excluded = make_regex_set(vec!["other_crate::.*".to_string()]);
+
+        assert!(!autoharness_filtered_out("my_crate::test_fn", &included, &excluded));
+        assert!(!autoharness_filtered_out("my_crate::module::test_fn", &included, &excluded));
+        assert!(autoharness_filtered_out("other_crate::test_fn", &included, &excluded));
+        assert!(autoharness_filtered_out("third_crate::test_fn", &included, &excluded));
+    }
+
+    #[test]
+    fn root_crate_paths() {
+        let included = make_regex_set(vec!["^crate::.*".to_string()]);
+        let excluded = None;
+
+        assert!(!autoharness_filtered_out("crate::test_fn", &included, &excluded));
+        assert!(autoharness_filtered_out("other_crate::test_fn", &included, &excluded));
+        assert!(autoharness_filtered_out("test_fn", &included, &excluded));
+    }
+
+    #[test]
+    fn impl_paths_with_spaces() {
+        let included = make_regex_set(vec!["num::<impl.i8>::wrapping_.*".to_string()]);
+        let excluded = None;
+
+        assert!(!autoharness_filtered_out("num::<impl i8>::wrapping_sh", &included, &excluded));
+        assert!(!autoharness_filtered_out("num::<impl i8>::wrapping_add", &included, &excluded));
+        assert!(autoharness_filtered_out("num::<impl i16>::wrapping_sh", &included, &excluded));
+    }
 }

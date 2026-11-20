@@ -18,7 +18,7 @@ use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-#[cfg(disabled)] // because it timed out after 2h
+#[cfg(disabled)] // requires write
 #[kani::proof]
 #[kani::unwind(2)]
 async fn write_all_buf() {
@@ -62,9 +62,8 @@ async fn write_all_buf() {
     assert!(!buf.has_remaining());
 }
 
-#[cfg(disabled)] // because of missing functions
 #[kani::proof]
-#[kani::unwind(2)]
+#[kani::unwind(12)]
 async fn write_buf_err() {
     /// Error out after writing the first 4 bytes
     struct Wr {

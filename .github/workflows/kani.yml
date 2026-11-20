@@ -16,12 +16,14 @@ env:
 jobs:
   regression:
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     strategy:
       matrix:
-        os: [macos-13, ubuntu-20.04, ubuntu-22.04, ubuntu-24.04, macos-14]
+        os: [macos-15-intel, ubuntu-22.04, ubuntu-24.04, macos-15, ubuntu-24.04-arm]
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
@@ -32,10 +34,12 @@ jobs:
         run: ./scripts/kani-regression.sh
 
   benchcomp-tests:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install benchcomp dependencies
         run: |
@@ -46,7 +50,7 @@ jobs:
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
         with:
-          os: ubuntu-20.04
+          os: ubuntu-24.04
 
       - name: Build Kani using release mode
         run: cargo build-dev -- --release
@@ -55,28 +59,63 @@ jobs:
         run: pushd tools/benchcomp && PATH=$(realpath ../../scripts):$PATH test/run
 
   perf:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
+    # The full perf suite runs in ~45 min (matching main): most cases finish in
+    # seconds; the heaviest, s2n-quic-core, runs 34 harnesses in ~1500s. The
+    # per-test guardrail in scripts/kani-perf.sh (2400s) sits above that. The
+    # 180-min step timeout leaves ample headroom over that realistic runtime,
+    # and the job timeout sits above (step timeout) x (max_attempts) so a retry
+    # can still land.
+    timeout-minutes: 380
+    permissions:
+      contents: read
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Kani Dependencies
         uses: ./.github/actions/setup
         with:
-          os: ubuntu-20.04
+          os: ubuntu-24.04
 
       - name: Execute Kani performance tests
-        run: ./scripts/kani-perf.sh
+        # Retry on infra-driven failures (spot preemption / runner shutdown).
+        # The script itself bounds per-test wall time, so functional regressions
+        # surface as normal test failures and are not retried indefinitely.
+        uses: nick-fields/retry@v4
+        with:
+          timeout_minutes: 180
+          max_attempts: 2
+          command: ./scripts/kani-perf.sh
         env:
           RUST_TEST_THREADS: 1
 
+  llbc-regression:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v6
+
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/setup
+        with:
+          os: ubuntu-24.04
+
+      - name: Build Kani with Charon
+        run: cargo build-dev -- --features cprover --features llbc
+
+      - name: Run tests
+        run: ./scripts/kani-llbc-regression.sh
+
   documentation:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
       - name: Checkout Kani
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
 

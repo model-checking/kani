@@ -10,28 +10,22 @@ echo
 
 # Test for platform
 PLATFORM=$(uname -sp)
-if [[ $PLATFORM == "Linux x86_64" ]]
-then
-  TARGET="x86_64-unknown-linux-gnu"
-elif [[ $PLATFORM == "Darwin i386" ]]
-then
-  TARGET="x86_64-apple-darwin"
-elif [[ $PLATFORM == "Darwin arm" ]]
-then
-  TARGET="aarch64-apple-darwin"
-else
-  echo
-  echo "Test only works on Linux or OSX platforms, skipping..."
-  echo
-  exit 0
-fi
+case "$PLATFORM" in
+  "Linux x86_64" | "Darwin i386" | "Darwin arm") ;;
+  *)
+    echo
+    echo "Test only works on Linux or OSX platforms, skipping..."
+    echo
+    exit 0
+    ;;
+esac
 
 export RUST_BACKTRACE=1
 cd $(dirname $0)
 
 echo "Running single-file check..."
 rm -rf *.c
-kani --gen-c --enable-unstable singlefile.rs >& kani.log || \
+kani --gen-c -Z unstable-options singlefile.rs >& kani.log || \
     { ret=$?; echo "== Failed to run Kani"; cat kani.log; rm kani.log; exit 1; }
 rm -f kani.log
 if ! [ -e singlefile_*main.c ]
@@ -70,22 +64,24 @@ echo
 (cd multifile
 echo "Running multi-file check..."
 rm -rf build
-cargo kani --target-dir build --gen-c --enable-unstable >& kani.log || \
+cargo kani --target-dir build --gen-c -Z unstable-options >& kani.log || \
     { ret=$?; echo "== Failed to run Kani"; cat kani.log; rm kani.log; exit 1; }
 rm -f kani.log
-cd build/kani/${TARGET}/debug/deps/
 
-mangled=$(ls multifile*main.c)
-if ! [ -e "${mangled}" ]
+# The generated C sits next to the build artifacts, at a path under `--target-dir` that cargo
+# picks and has changed before (cargo 1.99 moved artifacts out of `debug/deps`), so search the
+# target directory rather than hardcoding the layout.
+mangled=$(find build -name 'multifile*main.c' -print -quit)
+if [ -z "${mangled}" ]
 then
-    echo "Error: no GotoC file found. Expected: build/kani/${TARGET}/debug/deps/multifile*main.c"
+    echo "Error: no GotoC file found under build/. Expected: multifile*main.c"
     exit 1
 fi
 
-demangled=$(ls multifile*main.demangled.c)
-if ! [ -e "${demangled}" ]
+demangled=$(find build -name 'multifile*main.demangled.c' -print -quit)
+if [ -z "${demangled}" ]
 then
-    echo "Error: no demangled GotoC file found. Expected build/kani/${TARGET}/debug/deps/multifile*main.demangled.c."
+    echo "Error: no demangled GotoC file found under build/. Expected: multifile*main.demangled.c"
     exit 1
 fi
 

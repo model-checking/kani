@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Zfunction-contracts
+// kani-flags: -Zfunction-contracts -Zstubbing
 //! This test checks that contracts does not havoc
 //! [promoted constants](https://github.com/rust-lang/const-eval/blob/master/promotion.md)
 //! that represents an enum variant.

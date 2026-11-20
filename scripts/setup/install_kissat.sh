@@ -30,7 +30,7 @@ URL="https://github.com/arminbiere/kissat/archive/refs/tags/$FILE"
 
 set -x
 
-wget -O "$FILE" "$URL"
+curl -L --remote-name "$URL"
 tar -xvzf $FILE
 DIR_NAME="kissat-rel-${KISSAT_VERSION}"
 cd $DIR_NAME

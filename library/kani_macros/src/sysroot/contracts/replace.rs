@@ -10,6 +10,7 @@ use syn::{Block, Stmt};
 
 use super::{
     ContractConditionsData, ContractConditionsHandler, ContractMode, INTERNAL_RESULT_IDENT,
+    INTERNAL_SELF_IDENT,
     helpers::*,
     shared::{build_ensures, split_for_remembers, try_as_result_assign},
 };
@@ -24,7 +25,7 @@ impl<'a> ContractConditionsHandler<'a> {
         // https://github.com/model-checking/kani/issues/3667
         let redefs = self.arg_redefinitions(false);
         let redefs_block: Block = syn::parse_quote!({#redefs});
-        vec![
+        [
             vec![syn::parse_quote!(
                 let #result : #return_type = kani::any_modifies();
             )],
@@ -58,6 +59,10 @@ impl<'a> ContractConditionsHandler<'a> {
     fn split_replace(&self, mut stmts: Vec<Stmt>) -> (Vec<Stmt>, Vec<Stmt>) {
         // Pop the return result since we always re-add it.
         stmts.pop();
+        // Likewise the owned-receiver move (when present); re-added at the tail.
+        if stmts.last().is_some_and(is_replace_receiver_move) {
+            stmts.pop();
+        }
 
         let idx = stmts
             .iter()
@@ -81,19 +86,34 @@ impl<'a> ContractConditionsHandler<'a> {
     /// `use_nondet_result` will only be true if this is the first time we are
     /// generating a replace function.
     fn expand_replace_body(&self, before: &[Stmt], after: &[Stmt]) -> TokenStream {
+        // `self` cannot be re-bound like the arguments in `arg_redefinitions`
+        // (it is a keyword), so the replace closure would only borrow an owned
+        // receiver, leaving the annotated function's own scope to drop it, which
+        // `const fn`s whose receiver type has a destructor reject (E0493). Move
+        // it into the closure at the tail of the body, after every borrow of
+        // `self` (preconditions, remembers, modifies havocs, postconditions), so
+        // any drop lands outside const-checking.
+        let recv_move = self.has_owned_receiver().then(|| {
+            let self_repl = Ident::new(INTERNAL_SELF_IDENT, Span::call_site());
+            quote!(let #self_repl = self;)
+        });
         match &self.condition_type {
             ContractConditionsData::Requires { attr } => {
                 let Self { attr_copy, .. } = self;
                 let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
+                let assert_bracketed =
+                    bracket_clause_stmt(quote!(kani::assert(#attr, stringify!(#attr_copy));));
                 quote!({
-                    kani::assert(#attr, stringify!(#attr_copy));
+                    #assert_bracketed
                     #(#before)*
                     #(#after)*
+                    #recv_move
                     #result
                 })
             }
             ContractConditionsData::Ensures { attr } => {
                 let (remembers, ensures_clause) = build_ensures(attr);
+                let ensures_bracketed = bracket_clause_expr(quote!(#ensures_clause));
                 let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
 
                 let (asserts, rest_of_before) = split_for_remembers(before, ContractMode::Replace);
@@ -103,16 +123,30 @@ impl<'a> ContractConditionsHandler<'a> {
                     #remembers
                     #(#rest_of_before)*
                     #(#after)*
-                    kani::assume(#ensures_clause);
+                    kani::assume(#ensures_bracketed);
+                    #recv_move
                     #result
                 })
             }
             ContractConditionsData::Modifies { attr } => {
                 let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
+                let havoc_stmts: Vec<_> = attr
+                    .iter()
+                    .map(|attr| {
+                        let bracketed =
+                            bracket_clause_expr(quote!(kani::internal::untracked_deref(&#attr)));
+                        quote!(unsafe {
+                            kani::internal::write_any(kani::internal::Pointer::assignable(
+                                #bracketed,
+                            ))
+                        };)
+                    })
+                    .collect();
                 quote!({
                     #(#before)*
-                    #(unsafe{kani::internal::write_any(kani::internal::Pointer::assignable(kani::internal::untracked_deref(&#attr)))};)*
+                    #(#havoc_stmts)*
                     #(#after)*
+                    #recv_move
                     #result
                 })
             }
@@ -128,12 +162,12 @@ impl<'a> ContractConditionsHandler<'a> {
         let sig = &self.annotated_fn.sig;
         let output = &sig.output;
         let before = self.initial_replace_stmts();
-        let body = self.expand_replace_body(&before, &vec![]);
+        let body = self.expand_replace_body(&before, &[]);
 
         quote!(
             #[kanitool::is_contract_generated(replace)]
             #[allow(dead_code, unused_variables, unused_mut)]
-            let mut #replace_ident = || #output #body;
+            let mut #replace_ident = kani_force_fn_once(|| #output #body);
         )
     }
 
@@ -144,6 +178,30 @@ impl<'a> ContractConditionsHandler<'a> {
         let stream = self.expand_replace_body(&before, &after);
         *body = syn::parse2(stream).unwrap();
     }
+}
+
+/// Is this the owned-receiver move statement (`let self_kani_internal = self;`)
+/// that [`ContractConditionsHandler::expand_replace_body`] emits at the tail of a
+/// replace body so the receiver drops inside the closure (see that method).
+fn is_replace_receiver_move(stmt: &syn::Stmt) -> bool {
+    let syn::Stmt::Local(syn::Local {
+        pat: syn::Pat::Ident(syn::PatIdent { ident, .. }),
+        init: Some(syn::LocalInit { expr, diverge: None, .. }),
+        ..
+    }) = stmt
+    else {
+        return false;
+    };
+    // Match the exact statement `expand_replace_body` emits: a bind of
+    // `self_kani_internal` to the bare receiver `self`, and nothing else.
+    ident == INTERNAL_SELF_IDENT
+        && matches!(
+            expr.as_ref(),
+            syn::Expr::Path(p)
+                if p.qself.is_none()
+                    && p.path.segments.len() == 1
+                    && p.path.segments[0].ident == "self"
+        )
 }
 
 /// Is this statement `let result_kani_internal : <...> = kani::any_modifies();`.

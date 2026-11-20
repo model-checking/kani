@@ -1,0 +1,17 @@
+func.loop_invariant_base.1\
+	 - Status: SUCCESS\
+	 - Description: "Check invariant before entry for loop func.1"
+
+func.loop_assigns.1\
+	 - Status: SUCCESS\
+	 - Description: "Check assigns clause inclusion for loop func.1"
+
+func.assigns.1\
+	 - Status: SUCCESS\
+	 - Description: "Check that i is assignable"
+
+func.loop_invariant_base.2\
+	 - Status: SUCCESS\
+	 - Description: "Check invariant before entry for loop func.0"
+
+VERIFICATION:- SUCCESSFUL

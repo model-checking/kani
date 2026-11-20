@@ -27,6 +27,6 @@ const VERBOSE_ARG: &str = "--scan-verbose";
 fn main() -> ExitCode {
     let args = std::env::args();
     let (scan_args, rustc_args): (Vec<String>, _) = args.partition(|arg| arg.starts_with("--scan"));
-    let verbose = scan_args.contains(&VERBOSE_ARG.to_string());
+    let verbose = scan_args.iter().any(|arg| arg == VERBOSE_ARG);
     run_all(rustc_args, verbose)
 }

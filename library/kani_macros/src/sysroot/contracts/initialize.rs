@@ -5,7 +5,7 @@
 
 use proc_macro::{Diagnostic, TokenStream};
 use proc_macro2::TokenStream as TokenStream2;
-use syn::ItemFn;
+use syn::ImplItemFn;
 
 use super::{
     ContractConditionsData, ContractConditionsHandler, ContractConditionsType,
@@ -19,10 +19,10 @@ impl<'a> TryFrom<&'a syn::Attribute> for ContractFunctionState {
     /// Find out if this attribute could be describing a "contract handling"
     /// state and if so return it.
     fn try_from(attribute: &'a syn::Attribute) -> Result<Self, Self::Error> {
-        if let syn::Meta::NameValue(nv) = &attribute.meta {
-            if matches_path(&nv.path, &["kanitool", "checked_with"]) {
-                return Ok(ContractFunctionState::Expanded);
-            }
+        if let syn::Meta::NameValue(nv) = &attribute.meta
+            && matches_path(&nv.path, &["kanitool", "checked_with"])
+        {
+            return Ok(ContractFunctionState::Expanded);
         }
         Err(None)
     }
@@ -49,15 +49,15 @@ impl ContractFunctionState {
 
 impl<'a> ContractConditionsHandler<'a> {
     /// Initialize the handler. Constructs the required
-    /// [`ContractConditionsType`] depending on `is_requires`.
+    /// [`ContractConditionsType`] depending on `contract_typ`.
     pub fn new(
-        is_requires: ContractConditionsType,
+        contract_typ: ContractConditionsType,
         attr: TokenStream,
-        annotated_fn: &'a mut ItemFn,
+        annotated_fn: &'a ImplItemFn,
         attr_copy: TokenStream2,
     ) -> Result<Self, syn::Error> {
         let mut output = TokenStream2::new();
-        let condition_type = match is_requires {
+        let condition_type = match contract_typ {
             ContractConditionsType::Requires => {
                 ContractConditionsData::Requires { attr: syn::parse(attr)? }
             }

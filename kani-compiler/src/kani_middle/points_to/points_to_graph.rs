@@ -9,11 +9,11 @@ use rustc_middle::{
     ty::{Instance, List, TyCtxt},
 };
 use rustc_mir_dataflow::{JoinSemiLattice, fmt::DebugWithContext};
-use rustc_smir::rustc_internal;
-use stable_mir::mir::{
+use rustc_public::mir::{
     Place as StablePlace,
     mono::{Instance as StableInstance, StaticDef},
 };
+use rustc_public::rustc_internal;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 /// A node in the points-to graph, which could be a place on the stack, a heap allocation, or a static.
@@ -154,7 +154,11 @@ impl<'tcx> PointsToGraph<'tcx> {
             HashSet::from([MemLoc::new_stack_allocation(instance, place_without_projections)]);
         for projection in place.projection {
             match projection {
-                ProjectionElem::Deref => {
+                // A `PhantomDeref` is the borrow checker's symbolic dereference of a
+                // `Reborrow` type (rust-lang/rust#159103). Treat it as a dereference: it
+                // reaches an indirect place, so following the pointer keeps the aliasing
+                // information conservative.
+                ProjectionElem::Deref | ProjectionElem::PhantomDeref => {
                     node_set = self.successors(&node_set);
                 }
                 ProjectionElem::Field(..)
@@ -163,7 +167,6 @@ impl<'tcx> PointsToGraph<'tcx> {
                 | ProjectionElem::Subslice { .. }
                 | ProjectionElem::Downcast(..)
                 | ProjectionElem::OpaqueCast(..)
-                | ProjectionElem::Subtype(..)
                 | ProjectionElem::UnwrapUnsafeBinder(..) => {
                     /* There operations are no-ops w.r.t aliasing since we are tracking it on per-object basis. */
                 }
@@ -187,7 +190,7 @@ impl<'tcx> PointsToGraph<'tcx> {
     /// Dump the graph into a file using the graphviz format for later visualization.
     pub fn dump(&self, file_path: &str) {
         let mut nodes: Vec<String> =
-            self.nodes.keys().map(|from| format!("\t\"{:?}\"", from)).collect();
+            self.nodes.keys().map(|from| format!("\t\"{from:?}\"")).collect();
         nodes.sort();
         let nodes_str = nodes.join("\n");
 
@@ -195,9 +198,9 @@ impl<'tcx> PointsToGraph<'tcx> {
             .nodes
             .iter()
             .flat_map(|(from, to)| {
-                let from = format!("\"{:?}\"", from);
+                let from = format!("\"{from:?}\"");
                 to.successors.iter().map(move |to| {
-                    let to = format!("\"{:?}\"", to);
+                    let to = format!("\"{to:?}\"");
                     format!("\t{} -> {}", from.clone(), to)
                 })
             })
@@ -205,7 +208,7 @@ impl<'tcx> PointsToGraph<'tcx> {
         edges.sort();
         let edges_str = edges.join("\n");
 
-        std::fs::write(file_path, format!("digraph {{\n{}\n{}\n}}", nodes_str, edges_str)).unwrap();
+        std::fs::write(file_path, format!("digraph {{\n{nodes_str}\n{edges_str}\n}}")).unwrap();
     }
 
     /// Find a transitive closure of the graph starting from a set of given locations; this also

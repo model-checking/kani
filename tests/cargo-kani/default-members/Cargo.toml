@@ -1,0 +1,17 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+[package]
+name = "empty-main"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+
+[workspace]
+members = [ "builds-ok","dont-build-me"]
+
+# This indicates what package to e.g. build with 'cargo build' without --workspace
+default-members = [
+  ".",
+  "builds-ok",
+]

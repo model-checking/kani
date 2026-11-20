@@ -7,30 +7,34 @@
 //! here.
 
 use crate::intrinsics::Intrinsic;
+use crate::kani_middle::codegen_units::Stubs;
 use crate::kani_middle::kani_functions::{KaniFunction, KaniModel};
 use crate::kani_middle::transform::body::{
     InsertPosition, MutMirVisitor, MutableBody, SourceInstruction,
 };
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
+use rustc_attr_ir::lang_items::LangItem;
 use rustc_middle::ty::TyCtxt;
-use rustc_smir::rustc_internal;
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{
+use rustc_public::mir::mono::Instance;
+use rustc_public::mir::{
     BasicBlockIdx, BinOp, Body, ConstOperand, LocalDecl, Operand, Rvalue, StatementKind,
     Terminator, TerminatorKind,
 };
-use stable_mir::ty::{
+use rustc_public::rustc_internal;
+use rustc_public::ty::{
     FnDef, GenericArgKind, GenericArgs, IntTy, MirConst, RigidTy, Span, Ty, TyKind, UintTy,
 };
 use std::collections::HashMap;
 use tracing::debug;
 
 /// Generate the body for a few Kani intrinsics.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RustcIntrinsicsPass {
     /// Used to cache FnDef lookups for intrinsics models.
     models: HashMap<KaniModel, FnDef>,
+    /// The functions the harness stubs. A stub takes precedence over Kani's own models.
+    stubs: Stubs,
 }
 
 impl TransformPass for RustcIntrinsicsPass {
@@ -52,17 +56,47 @@ impl TransformPass for RustcIntrinsicsPass {
     /// For every unsafe dereference or a transmute operation, we check all values are valid.
     fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         debug!(function=?instance.name(), "transform");
+
         let mut new_body = MutableBody::from(body);
-        let mut visitor =
-            ReplaceIntrinsicCallVisitor::new(&self.models, new_body.locals().to_vec());
+        let mut visitor = ReplaceIntrinsicCallVisitor::new(
+            &self.models,
+            &self.stubs,
+            new_body.locals().to_vec(),
+            tcx,
+        );
         visitor.visit_body(&mut new_body);
         let changed = self.replace_lowered_intrinsics(tcx, &mut new_body);
         (visitor.changed || changed, new_body.into())
     }
 }
 
+fn is_panic_function(tcx: &TyCtxt, def_id: rustc_public::DefId) -> bool {
+    let def_id = rustc_internal::internal(*tcx, def_id);
+    Some(def_id) == tcx.lang_items().panic_fn()
+        || tcx.is_lang_item(def_id, LangItem::PanicDisplay)
+        || Some(def_id) == tcx.lang_items().panic_fmt()
+        || Some(def_id) == tcx.lang_items().begin_panic_fn()
+}
+
+/// The Kani model of `def_id` if it is one of the `core::fmt::Formatter` helpers that
+/// `derive(Debug)` calls and that look up names with `memchr` (see the models in `kani_core`).
+fn fmt_derive_helper_model(tcx: &TyCtxt, def_id: rustc_public::DefId) -> Option<KaniModel> {
+    let def_id = rustc_internal::internal(*tcx, def_id);
+    let impl_id = tcx.impl_of_assoc(def_id)?;
+    let self_ty = tcx.type_of(impl_id).instantiate_identity().skip_normalization();
+    let rustc_middle::ty::Adt(adt, _) = self_ty.kind() else { return None };
+    if tcx.get_diagnostic_item(rustc_span::Symbol::intern("Formatter")) != Some(adt.did()) {
+        return None;
+    }
+    match tcx.item_name(def_id).as_str() {
+        "debug_struct_fields_finish" => Some(KaniModel::DebugStructFieldsFinish),
+        "debug_c_like_enum_write_str" => Some(KaniModel::DebugCLikeEnumWriteStr),
+        _ => None,
+    }
+}
+
 impl RustcIntrinsicsPass {
-    pub fn new(queries: &QueryDb) -> Self {
+    pub fn new(queries: &QueryDb, stubs: &Stubs) -> Self {
         let models = queries
             .kani_functions()
             .iter()
@@ -71,7 +105,7 @@ impl RustcIntrinsicsPass {
             })
             .collect();
         debug!(?models, "RustcIntrinsicsPass::new");
-        RustcIntrinsicsPass { models }
+        RustcIntrinsicsPass { models, stubs: stubs.clone() }
     }
 
     /// This function checks if we need to replace intrinsics that have been lowered.
@@ -107,8 +141,8 @@ impl RustcIntrinsicsPass {
         // Double check input parameters of `offset` operation.
         let offset_ty = op2.ty(body.locals()).unwrap();
         let pointer_ty = op1.ty(body.locals()).unwrap();
-        validate_offset(tcx, offset_ty, statement.span);
-        validate_raw_ptr(tcx, pointer_ty, statement.span);
+        validate_offset(tcx, offset_ty, statement.source_info.span);
+        validate_raw_ptr(tcx, pointer_ty, statement.source_info.span);
         tcx.dcx().abort_if_errors();
 
         let pointee_ty = pointer_ty.kind().builtin_deref(true).unwrap().ty;
@@ -132,19 +166,26 @@ impl RustcIntrinsicsPass {
     }
 }
 
-struct ReplaceIntrinsicCallVisitor<'a> {
+struct ReplaceIntrinsicCallVisitor<'a, 'tcx> {
     models: &'a HashMap<KaniModel, FnDef>,
+    stubs: &'a Stubs,
     locals: Vec<LocalDecl>,
+    tcx: TyCtxt<'tcx>,
     changed: bool,
 }
 
-impl<'a> ReplaceIntrinsicCallVisitor<'a> {
-    fn new(models: &'a HashMap<KaniModel, FnDef>, locals: Vec<LocalDecl>) -> Self {
-        ReplaceIntrinsicCallVisitor { models, locals, changed: false }
+impl<'a, 'tcx> ReplaceIntrinsicCallVisitor<'a, 'tcx> {
+    fn new(
+        models: &'a HashMap<KaniModel, FnDef>,
+        stubs: &'a Stubs,
+        locals: Vec<LocalDecl>,
+        tcx: TyCtxt<'tcx>,
+    ) -> Self {
+        ReplaceIntrinsicCallVisitor { models, stubs, locals, changed: false, tcx }
     }
 }
 
-impl MutMirVisitor for ReplaceIntrinsicCallVisitor<'_> {
+impl MutMirVisitor for ReplaceIntrinsicCallVisitor<'_, '_> {
     /// Replace the terminator for some rustc's intrinsics.
     ///
     /// In some cases, we replace a function call to a rustc intrinsic by a call to the
@@ -156,32 +197,57 @@ impl MutMirVisitor for ReplaceIntrinsicCallVisitor<'_> {
     /// Note that we only need to replace function calls since intrinsics must always be called
     /// directly. I.e., no need to handle function pointers.
     fn visit_terminator(&mut self, term: &mut Terminator) {
-        if let TerminatorKind::Call { func, .. } = &mut term.kind {
-            if let TyKind::RigidTy(RigidTy::FnDef(def, args)) =
+        if let TerminatorKind::Call { func, .. } = &mut term.kind
+            && let TyKind::RigidTy(RigidTy::FnDef(def, args)) =
                 func.ty(&self.locals).unwrap().kind()
-            {
-                if def.is_intrinsic() {
-                    let instance = Instance::resolve(def, &args).unwrap();
-                    let intrinsic = Intrinsic::from_instance(&instance);
-                    debug!(?intrinsic, "handle_terminator");
-                    let model = match intrinsic {
-                        Intrinsic::SizeOfVal => self.models[&KaniModel::SizeOfVal],
-                        Intrinsic::MinAlignOfVal => self.models[&KaniModel::AlignOfVal],
-                        Intrinsic::PtrOffsetFrom => self.models[&KaniModel::PtrOffsetFrom],
-                        Intrinsic::PtrOffsetFromUnsigned => self.models[&KaniModel::PtrSubPtr],
-                        // The rest is handled in codegen.
-                        _ => {
-                            return self.super_terminator(term);
-                        }
-                    };
-                    let new_instance = Instance::resolve(model, &args).unwrap();
-                    let literal = MirConst::try_new_zero_sized(new_instance.ty()).unwrap();
-                    let span = term.span;
-                    let new_func = ConstOperand { span, user_ty: None, const_: literal };
-                    *func = Operand::Constant(new_func);
-                    self.changed = true;
+        {
+            // Get the model we should use to replace this function call, if any.
+            let replacement_model = if def.is_intrinsic() {
+                let instance = Instance::resolve(def, &args).unwrap();
+                let intrinsic = Intrinsic::from_instance(&instance);
+                debug!(?intrinsic, "handle_terminator");
+                match intrinsic {
+                    Intrinsic::AlignOfVal => self.models[&KaniModel::AlignOfVal],
+                    Intrinsic::SizeOfVal => self.models[&KaniModel::SizeOfVal],
+                    Intrinsic::PtrOffsetFrom => self.models[&KaniModel::PtrOffsetFrom],
+                    Intrinsic::PtrOffsetFromUnsigned => {
+                        self.models[&KaniModel::PtrOffsetFromUnsigned]
+                    }
+                    // The rest is handled in codegen.
+                    _ => {
+                        return self.super_terminator(term);
+                    }
                 }
-            }
+            } else if is_panic_function(&self.tcx, def.0) {
+                // If we find a panic function, we replace it with our stub.
+                self.models[&KaniModel::PanicStub]
+            } else if let Some(model) = fmt_derive_helper_model(&self.tcx, def.0)
+                // A user stub of the helper replaces its body (`FnStubPass`); redirecting the
+                // call to the model would bypass it.
+                && !self.stubs.contains_key(&def)
+            {
+                // The models are free functions with no generic parameters, while the
+                // `Formatter` methods they replace have (erased) lifetime parameters.
+                let new_instance =
+                    Instance::resolve(self.models[&model], &GenericArgs(vec![])).unwrap();
+                let literal = MirConst::try_new_zero_sized(new_instance.ty()).unwrap();
+                let span = term.source_info.span;
+                *func = Operand::Constant(ConstOperand { span, user_ty: None, const_: literal });
+                self.changed = true;
+                return self.super_terminator(term);
+            } else {
+                return self.super_terminator(term);
+            };
+
+            let new_instance = Instance::resolve(replacement_model, &args).unwrap();
+
+            // Construct the wrapper types needed to insert our resolved model [Instance]
+            // back into the MIR as an operand.
+            let literal = MirConst::try_new_zero_sized(new_instance.ty()).unwrap();
+            let span = term.source_info.span;
+            let new_func = ConstOperand { span, user_ty: None, const_: literal };
+            *func = Operand::Constant(new_func);
+            self.changed = true;
         }
         self.super_terminator(term);
     }

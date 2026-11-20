@@ -2,10 +2,14 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 use crate::args::VerificationArgs;
-use crate::call_single_file::{LibConfig, to_rustc_arg};
+use crate::call_single_file::LibConfig;
 use crate::project::Artifact;
-use crate::session::{KaniSession, lib_folder, lib_no_core_folder, setup_cargo_command};
+use crate::session::{
+    KaniSession, get_cargo_path, lib_folder, lib_no_core_folder, setup_cargo_command,
+    setup_cargo_command_inner,
+};
 use crate::util;
+use crate::util::args::{CargoArg, CommandWrapper as _, KaniArg, PassTo, encode_as_rustc_arg};
 use anyhow::{Context, Result, bail};
 use cargo_metadata::diagnostic::{Diagnostic, DiagnosticLevel};
 use cargo_metadata::{
@@ -14,7 +18,6 @@ use cargo_metadata::{
 };
 use kani_metadata::{ArtifactType, CompilerArtifactStub};
 use std::collections::HashMap;
-use std::ffi::{OsStr, OsString};
 use std::fmt::{self, Display};
 use std::fs::{self, File};
 use std::io::IsTerminal;
@@ -25,15 +28,20 @@ use tracing::{debug, trace};
 
 /// The outputs of kani-compiler being invoked via cargo on a project.
 pub struct CargoOutputs {
-    /// The directory where compiler outputs should be directed.
-    /// Usually 'target/BUILD_TRIPLE/debug/deps/'
+    /// A directory holding compiler outputs for this build.
+    ///
+    /// Derived from the paths cargo reports for the artifacts it produced rather than assumed: the
+    /// layout under `target/` is cargo's to choose and has changed before. Up to cargo 1.98 every
+    /// artifact sat together in `target/kani/BUILD_TRIPLE/debug/deps/`; cargo 1.99 gives each
+    /// package its own `target/kani/BUILD_TRIPLE/debug/build/PKG/HASH/out/`.
+    ///
+    /// A multi-package build therefore no longer has a single output directory, so this names one
+    /// of them. To reach the artifacts themselves, use [`CargoOutputs::metadata`].
     pub outdir: PathBuf,
     /// The kani-metadata.json files written by kani-compiler.
     pub metadata: Vec<Artifact>,
     /// Recording the cargo metadata from the build
     pub cargo_metadata: Metadata,
-    /// For build `keep_going` mode, we collect the targets that we failed to compile.
-    pub failed_targets: Option<Vec<String>>,
 }
 
 impl KaniSession {
@@ -76,12 +84,19 @@ crate-type = ["lib"]
     pub fn cargo_build_std(&self, std_path: &Path, krate_path: &Path) -> Result<Vec<Artifact>> {
         let lib_path = lib_no_core_folder().unwrap();
         let mut rustc_args = self.kani_rustc_flags(LibConfig::new_no_core(lib_path));
-        rustc_args.push(to_rustc_arg(self.kani_compiler_flags()).into());
-        rustc_args.push(self.reachability_arg().into());
-        // Ignore global assembly, since `compiler_builtins` has some.
-        rustc_args.push(to_rustc_arg(vec!["--ignore-global-asm".to_string()]).into());
 
-        let mut cargo_args: Vec<OsString> = vec!["build".into()];
+        // In theory, these could be passed just to the local crate rather than all crates,
+        // but the `cargo build` command we use for building `std` doesn't allow you to pass `rustc`
+        // arguments, so we have to pass them through the environment variable instead.
+        rustc_args.push(encode_as_rustc_arg(&self.kani_compiler_local_flags()));
+
+        // Ignore global assembly, since `compiler_builtins` has some.
+        rustc_args.push(encode_as_rustc_arg(&[
+            KaniArg::from("--ignore-global-asm"),
+            self.reachability_arg(),
+        ]));
+
+        let mut cargo_args: Vec<CargoArg> = vec!["build".into()];
         cargo_args.append(&mut cargo_config_args());
 
         // Configuration needed to parse cargo compilation status.
@@ -101,12 +116,10 @@ crate-type = ["lib"]
 
         // Since we are verifying the standard library, we set the reachability to all crates.
         let mut cmd = setup_cargo_command()?;
-        cmd.args(&cargo_args)
+        cmd.pass_cargo_args(&cargo_args)
             .current_dir(krate_path)
             .env("RUSTC", &self.kani_compiler)
-            // Use CARGO_ENCODED_RUSTFLAGS instead of RUSTFLAGS is preferred. See
-            // https://doc.rust-lang.org/cargo/reference/environment-variables.html
-            .env("CARGO_ENCODED_RUSTFLAGS", rustc_args.join(OsStr::new("\x1f")))
+            .pass_rustc_args(&rustc_args, PassTo::AllCrates)
             .env("CARGO_TERM_PROGRESS_WHEN", "never")
             .env("__CARGO_TESTS_ONLY_SRC_ROOT", full_path.as_os_str());
 
@@ -136,7 +149,9 @@ crate-type = ["lib"]
             .unwrap_or(&metadata.target_directory.clone().into())
             .clone()
             .join("kani");
-        let outdir = target_dir.join(build_target).join("debug/deps");
+        // The directory to fall back on if the build turns out to produce no artifacts (see
+        // `CargoOutputs::outdir`). Computed here because `target_dir` is consumed below.
+        let profile_dir = target_dir.join(build_target).join("debug");
 
         if self.args.force_build && target_dir.exists() {
             fs::remove_dir_all(&target_dir)?;
@@ -144,9 +159,9 @@ crate-type = ["lib"]
 
         let lib_path = lib_folder().unwrap();
         let mut rustc_args = self.kani_rustc_flags(LibConfig::new(lib_path));
-        rustc_args.push(to_rustc_arg(self.kani_compiler_flags()).into());
+        rustc_args.push(encode_as_rustc_arg(&self.kani_compiler_dependency_flags()));
 
-        let mut cargo_args: Vec<OsString> = vec!["rustc".into()];
+        let mut cargo_args: Vec<CargoArg> = vec!["rustc".into()];
         if let Some(path) = &self.args.cargo.manifest_path {
             cargo_args.push("--manifest-path".into());
             cargo_args.push(path.into());
@@ -157,10 +172,10 @@ crate-type = ["lib"]
         if self.args.cargo.no_default_features {
             cargo_args.push("--no-default-features".into());
         }
-        let features = self.args.cargo.features();
-        if !features.is_empty() {
-            cargo_args.push(format!("--features={}", features.join(",")).into());
-        }
+        // Note: We do NOT add --features here globally. Features are filtered
+        // per-package below to handle workspaces where packages don't all
+        // declare the same features. This matches cargo's behavior.
+        let requested_features = self.args.cargo.features();
 
         cargo_args.append(&mut cargo_config_args());
 
@@ -182,30 +197,50 @@ crate-type = ["lib"]
             cargo_args.push("-v".into());
         }
 
-        // Arguments that will only be passed to the target package.
-        self.pkg_args.push(self.reachability_arg());
-        if let Some(backend_arg) = self.backend_arg() {
-            self.pkg_args.push(backend_arg);
-        }
-        if self.args.no_assert_contracts {
-            self.pkg_args.push("--no-assert-contracts".into());
-        }
+        // Arguments that will only be passed to the target package (the package under verification)
+        // and not its dependencies, c.f. https://doc.rust-lang.org/cargo/commands/cargo-rustc.html.
+        // The difference between pkg_args and rustc_args is that rustc_args are also provided when
+        // we invoke rustc on the target package's dependencies.
+        // We do not provide the `--reachability` argument to dependencies so that it has the default value `None`
+        // (c.f. kani-compiler::args::ReachabilityType) and we skip codegen for the dependency.
+        // This is the desired behavior because we only want to construct `CodegenUnits` for the target package;
+        // i.e., if some dependency has harnesses, we don't want to run them.
+
+        // If you are adding a new `kani-compiler` argument, you likely want to put it here, unless there is a specific
+        // reason it would be used in dependencies that are skipping reachability and codegen.
+        // Note that passing compiler args to dependencies is a currently no-op, since `--reachability=None` skips codegen
+        // anyway. However, this will cause unneeded recompilation of dependencies should those args change, and thus
+        // should be avoided if possible.
+        let mut kani_pkg_args = vec![self.reachability_arg()];
+        kani_pkg_args.extend(self.kani_compiler_local_flags());
 
         let mut found_target = false;
         let packages = self.packages_to_verify(&self.args, &metadata)?;
         let mut artifacts = vec![];
         let mut failed_targets = vec![];
         for package in packages {
+            // Filter requested features to only include those that this package defines.
+            // This matches cargo's behavior for `cargo test --workspace --features <feature>`
+            // where features are applied only to packages that declare them.
+            let pkg_features = filter_features_for_package(&requested_features, package);
+
             for verification_target in package_targets(&self.args, package) {
-                let mut cmd = setup_cargo_command()?;
-                cmd.args(&cargo_args)
-                    .args(vec!["-p", &package.id.to_string()])
-                    .args(verification_target.to_args())
-                    .args(&self.pkg_args)
+                let mut cmd =
+                    setup_cargo_command_inner(Some(verification_target.target().name.clone()))?;
+                cmd.pass_cargo_args(&cargo_args).args(vec!["-p", &package.id.to_string()]);
+
+                // Add filtered features for this specific package
+                if !pkg_features.is_empty() {
+                    cmd.arg(format!("--features={}", pkg_features.join(",")));
+                }
+
+                cmd.args(verification_target.to_args())
+                    .arg("--") // Add this delimiter so we start passing args to rustc and not Cargo
                     .env("RUSTC", &self.kani_compiler)
-                    // Use CARGO_ENCODED_RUSTFLAGS instead of RUSTFLAGS is preferred. See
-                    // https://doc.rust-lang.org/cargo/reference/environment-variables.html
-                    .env("CARGO_ENCODED_RUSTFLAGS", rustc_args.join(OsStr::new("\x1f")))
+                    .pass_rustc_args(&rustc_args, PassTo::AllCrates)
+                    .pass_rustc_arg(encode_as_rustc_arg(&kani_pkg_args), PassTo::OnlyLocalCrate)
+                    // This is only required for stable but is a no-op for nightly channels
+                    .env("RUSTC_BOOTSTRAP", "1")
                     .env("CARGO_TERM_PROGRESS_WHEN", "never");
 
                 match self.run_build_target(cmd, verification_target.target()) {
@@ -229,16 +264,23 @@ crate-type = ["lib"]
             bail!("No supported targets were found.");
         }
 
-        Ok(CargoOutputs {
-            outdir,
-            metadata: artifacts,
-            cargo_metadata: metadata,
-            failed_targets: keep_going.then_some(failed_targets),
-        })
+        // Report where cargo actually placed the artifacts rather than assuming a layout under
+        // `target/` (see `CargoOutputs::outdir`). With no artifacts there is no such directory to
+        // name, and the profile directory is the closest honest answer.
+        let outdir = artifacts
+            .first()
+            .and_then(|artifact| artifact.parent().map(Path::to_path_buf))
+            .unwrap_or(profile_dir);
+
+        Ok(CargoOutputs { outdir, metadata: artifacts, cargo_metadata: metadata })
     }
 
     pub fn cargo_metadata(&self, build_target: &str) -> Result<Metadata> {
         let mut cmd = MetadataCommand::new();
+
+        // Use Kani's toolchain when running `cargo metadata`
+        let cargo_path = get_cargo_path().unwrap();
+        cmd.cargo_path(cargo_path);
 
         // restrict metadata command to host platform. References:
         // https://github.com/rust-lang/rust-analyzer/issues/6908
@@ -349,7 +391,13 @@ crate-type = ["lib"]
                     && t1.doc == t2.doc)
         }
 
+        let compile_start = std::time::Instant::now();
         let artifacts = self.run_build(cargo_cmd)?;
+        if std::env::var("TIME_COMPILER").is_ok() {
+            // conditionally print the compilation time for debugging & use by `compile-timer`
+            // doesn't just use the existing `--debug` flag because the number of prints significantly affects performance
+            println!("BUILT {} IN {:?}μs", target.name, compile_start.elapsed().as_micros());
+        }
         debug!(?artifacts, "run_build_target");
 
         // We generate kani specific artifacts only for the build target. The build target is
@@ -394,14 +442,14 @@ crate-type = ["lib"]
 
     /// Extract the packages that should be verified.
     ///
-    /// The result is built following these rules:
+    /// The result is built following these rules (mimicking cargo, see
+    /// https://github.com/rust-lang/cargo/blob/master/src/cargo/core/workspace.rs):
     /// - If `--package <pkg>` is given, return the list of packages selected.
     /// - If `--exclude <pkg>` is given, return the list of packages not excluded.
     /// - If `--workspace` is given, return the list of workspace members.
-    /// - If no argument provided, return the root package if there's one or all members.
-    ///   - I.e.: Do whatever cargo does when there's no `default_members`.
-    ///   - This is because `default_members` is not available in cargo metadata.
-    ///     See <https://github.com/rust-lang/cargo/issues/8033>.
+    /// - Else obtain the set of packages from cargo's default_workspace_members (i.e., if
+    ///   `default-members` is specified in Cargo.toml, use that list; else if a root package is
+    ///   specified use that; else use all members).
     ///
     /// In addition, if either `--package <pkg>` or `--exclude <pkg>` is given,
     /// validate that `<pkg>` is a package name in the workspace, or return an error
@@ -441,18 +489,17 @@ crate-type = ["lib"]
                 .into_iter()
                 .filter(|pkg| !pkg_ids.contains_key(&pkg.id))
                 .collect()
+        } else if args.cargo.workspace {
+            metadata.workspace_packages()
         } else {
-            match (args.cargo.workspace, metadata.root_package()) {
-                (true, _) | (_, None) => metadata.workspace_packages(),
-                (_, Some(root_pkg)) => vec![root_pkg],
-            }
+            metadata.workspace_default_packages()
         };
         trace!(?packages, "packages_to_verify result");
         Ok(packages)
     }
 }
 
-pub fn cargo_config_args() -> Vec<OsString> {
+pub fn cargo_config_args() -> Vec<CargoArg> {
     [
         "--target",
         env!("TARGET"),
@@ -461,7 +508,7 @@ pub fn cargo_config_args() -> Vec<OsString> {
         "-Ztarget-applies-to-host",
         "--config=host.rustflags=[\"--cfg=kani_host\"]",
     ]
-    .map(OsString::from)
+    .map(CargoArg::from)
     .to_vec()
 }
 
@@ -635,4 +682,21 @@ fn package_targets(args: &VerificationArgs, package: &Package) -> Vec<Verificati
         }
     }
     verification_targets
+}
+
+/// Filter a list of requested features to only include those that a package defines.
+///
+/// This is necessary to support `cargo kani --workspace --features <feature>` where not all
+/// workspace members declare the same features. Without filtering, cargo would fail with
+/// "none of the selected packages contains these features" error.
+///
+/// This matches cargo's behavior for `cargo test --workspace --features <feature>` where
+/// features are applied only to packages that declare them, and silently skipped for
+/// packages that don't.
+fn filter_features_for_package(requested_features: &[String], package: &Package) -> Vec<String> {
+    requested_features
+        .iter()
+        .filter(|feature| package.features.contains_key(*feature))
+        .cloned()
+        .collect()
 }

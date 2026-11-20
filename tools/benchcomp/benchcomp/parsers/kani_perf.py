@@ -30,6 +30,28 @@ def _get_metrics():
             "pat": re.compile(r"Runtime Solver: (?P<value>[-e\d\.]+)s"),
             "parse": float,
         },
+        # CBMC solves a harness in several calls, and the number of calls is not stable across
+        # runs of the same code (https://github.com/model-checking/kani/issues/4821). Counting
+        # them, and deriving `solver_runtime_per_call` in `main`, explains a differing
+        # `solver_runtime`, which sums over all calls.
+        "solver_calls": {
+            "pat": re.compile(r"Solving with (?P<value>.+)"),
+            "parse": lambda _: 1,
+        },
+        # The size of the SAT instance CBMC hands its built-in solver. Later calls in the same
+        # harness solve that instance incrementally, one clause and variable at a time, so only
+        # the first call is recorded: it pins the instance more tightly than the VCC and step
+        # counts do, without inheriting the instability of the call count.
+        "solver_variables": {
+            "pat": re.compile(r"(?P<value>\d+) variables, \d+ clauses"),
+            "parse": int,
+            "first_only": True,
+        },
+        "solver_clauses": {
+            "pat": re.compile(r"\d+ variables, (?P<value>\d+) clauses"),
+            "parse": int,
+            "first_only": True,
+        },
         "removed_program_steps": {
             "pat": re.compile(r"slicing removed (?P<value>\d+) assignments"),
             "parse": int,
@@ -57,12 +79,16 @@ def _get_metrics():
 def get_metrics():
     metrics = dict(_get_metrics())
     for metric, info in metrics.items():
-        for field in ("pat", "parse"):
-            info.pop(field)
+        for field in ("pat", "parse", "first_only"):
+            info.pop(field, None)
 
     # This is not a metric we return; it is used to find the correct value for
     # the number_program_steps metric
     metrics.pop("removed_program_steps", None)
+
+    # Derived in `main` from `solver_runtime` and `solver_calls` rather than parsed from a line,
+    # so it has no pattern to strip.
+    metrics["solver_runtime_per_call"] = {}
 
     return metrics
 
@@ -90,13 +116,17 @@ def main(root_dir):
                         continue
 
                     parse = metric_info["parse"]
+                    bench_metrics = benchmarks[bench_name]["metrics"]
+                    if metric_info.get("first_only"):
+                        bench_metrics.setdefault(metric, parse(m["value"]))
+                        continue
                     try:
                         # CBMC prints out some metrics more than once, e.g.
                         # "Solver" and "decision procedure". Add those
                         # values together
-                        benchmarks[bench_name]["metrics"][metric] += parse(m["value"])
+                        bench_metrics[metric] += parse(m["value"])
                     except (KeyError, TypeError):
-                        benchmarks[bench_name]["metrics"][metric] = parse(m["value"])
+                        bench_metrics[metric] = parse(m["value"])
                     break
 
     for bench_name, bench_info in benchmarks.items():
@@ -106,6 +136,13 @@ def main(root_dir):
             bench_info["metrics"]["number_program_steps"] = n_steps - rm_steps
             bench_info["metrics"].pop("removed_program_steps", None)
         except KeyError:
+            pass
+
+        try:
+            calls = bench_info["metrics"]["solver_calls"]
+            runtime = bench_info["metrics"]["solver_runtime"]
+            bench_info["metrics"]["solver_runtime_per_call"] = runtime / calls
+        except (KeyError, ZeroDivisionError):
             pass
 
     return {

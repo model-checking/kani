@@ -17,6 +17,8 @@ import yaml
 import benchcomp
 import benchcomp.visualizers.utils as viz_utils
 
+from jinja2 import Environment, select_autoescape
+
 
 
 @dataclasses.dataclass
@@ -75,6 +77,23 @@ class error_on_regression:
         test: "lambda old, new: new / old > 1.1"
       - metric: passed
         test: "lambda old, new: False if not old else not new"
+    ```
+
+    A check may instead set `all_metrics: true`, in which case the test receives the two
+    variants' entire metric dicts rather than a single metric's values. `metric` is still
+    required, but is then only used to label the warning that the check prints; a benchmark
+    that lacks it is still passed to the test, which must handle missing metrics itself (e.g.
+    with `dict.get`):
+
+    ```
+    visualize:
+    - type: error_on_regression
+      variant_pairs:
+      - [variant_1, variant_2]
+      checks:
+      - metric: runtime
+        all_metrics: true
+        test: "lambda old, new: new['runtime'] / old['runtime'] > 1.1 and old['steps'] != new['steps']"
     ```
 
     This says to check whether any benchmark regressed when run under variant_2
@@ -265,12 +284,17 @@ class dump_markdown_results_table:
             Scatterplot axis ranges are {{ d["scaled_metrics"][metric]["min_value"] }} (bottom/left) to {{ d["scaled_metrics"][metric]["max_value"] }} (top/right).
 
             {% endif -%}
+            <details> <summary>Breakdown by harness</summary>
+
             | Benchmark | {% for variant in d["variants"][metric] %} {{ variant }} |{% endfor %}
             | --- |{% for variant in d["variants"][metric] %} --- |{% endfor -%}
             {% for bench_name, bench_variants in benchmarks.items () %}
             | {{ bench_name }} {% for variant in d["variants"][metric] -%}
              | {{ bench_variants[variant] }} {% endfor %}|
             {%- endfor %}
+            
+            </details>
+
             {% endfor -%}
             """)
 
@@ -414,8 +438,8 @@ class dump_markdown_results_table:
             "scaled_variants": self._get_scaled_variants(scaled),
         }
 
-        env = jinja2.Environment(
-            loader=jinja2.BaseLoader, autoescape=jinja2.select_autoescape(
+        env = Environment(
+            loader=jinja2.BaseLoader, autoescape=select_autoescape(
                 enabled_extensions=("html"),
                 default_for_string=True))
         env.filters["safe_round"] = self._safe_round

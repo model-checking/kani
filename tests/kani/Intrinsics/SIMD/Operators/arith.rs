@@ -8,8 +8,14 @@ use std::intrinsics::simd::{simd_add, simd_mul, simd_sub};
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 pub struct i8x2([i8; 2]);
+
+impl i8x2 {
+    fn into_array(self) -> [i8; 2] {
+        unsafe { std::mem::transmute(self) }
+    }
+}
 
 macro_rules! verify_no_overflow {
     ($cf: ident, $uf: ident) => {{
@@ -20,8 +26,8 @@ macro_rules! verify_no_overflow {
         let simd_a = i8x2([a, a]);
         let simd_b = i8x2([b, b]);
         let unchecked: i8x2 = unsafe { $uf(simd_a, simd_b) };
-        assert!(checked.unwrap() == unchecked.0[0]);
-        assert!(checked.unwrap() == unchecked.0[1]);
+        assert!(checked.unwrap() == unchecked.into_array()[0]);
+        assert!(checked.unwrap() == unchecked.into_array()[1]);
     }};
 }
 

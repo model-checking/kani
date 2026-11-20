@@ -24,7 +24,7 @@ function check_kani {
             2>&1 | tee "${log_file}"
     else
         cargo kani --manifest-path "${MANIFEST}" --target-dir "${OUT_DIR}" \
-            "${args}" 2>&1 | tee "${log_file}"
+            ${args} 2>&1 | tee "${log_file}"
     fi
 
     # Print information about the generated log file.
@@ -49,8 +49,16 @@ cp -r target_lib ${OUT_DIR}
 echo "Initial compilation"
 check_kani --no-assertion-reach-checks initial.log
 
-echo "Run with a new argument that affects compilation"
+# Check that most codegen flags only recompile the target crate
+echo "Run with a new argument that doesn't affect dependency compilation"
 check_kani "" enable_checks.log
+
+echo "Run with another new argument that doesn't affect dependency compilation"
+check_kani "-Z function-contracts --no-assert-contracts" no_assert_contracts.log
+
+# But ensure that specific ones recompile dependencies too
+echo "Run with a new argument that affects dependency compilation"
+check_kani "-Z unstable-options --ignore-global-asm" ignore_asm.log
 
 echo "Run after change to the source code"
 echo '

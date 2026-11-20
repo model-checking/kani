@@ -10,7 +10,6 @@ use crate::tokio_stream::support::mpsc;
 use tokio_stream::{self as stream, Stream, StreamExt};
 use tokio_test::{assert_pending, assert_ready, task};
 
-#[cfg(disabled)] // because it timed out after 2h
 #[kani::proof]
 #[kani::unwind(2)]
 async fn basic_usage_chain() {

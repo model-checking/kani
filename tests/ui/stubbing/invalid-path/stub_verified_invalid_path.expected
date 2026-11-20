@@ -1,0 +1,9 @@
+error: failed to resolve `nonexistent_function`: unable to find `nonexistent_function` inside module `stub_verified_invalid_path`\
+stub_verified_invalid_path.rs:8:1\
+|\
+| #[kani::stub_verified(nonexistent_function)]\
+| ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\
+|
+
+error: aborting due to 1 previous error
+

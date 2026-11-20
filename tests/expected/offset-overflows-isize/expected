@@ -1,0 +1,8 @@
+<usize as kani::rustc_intrinsics::ToISize>::to_isize.safety_check\
+	 - Status: FAILURE\
+	 - Description: "Offset value overflows isize"
+
+Failed Checks: Offset value overflows isize
+
+Verification failed for - test_non_zst
+Complete - 1 successfully verified harnesses, 1 failures, 2 total.

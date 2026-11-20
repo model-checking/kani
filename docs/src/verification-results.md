@@ -38,7 +38,7 @@ Check 4: success_example.assertion.4
 ```
 
 2. `FAILURE`: This indicates that the check failed (i.e., the property doesn't
-hold). In this case, please see the [concrete playback](./experimental/concrete-playback.md)
+hold). In this case, please see the [concrete playback](./reference/experimental/concrete-playback.md)
 section for more help.
 
 Example:
@@ -145,7 +145,7 @@ Check 3: cover_unreachable_example.cover.1
          - Location: src/main.rs:90:13 in function cover_unreachable_example
 ```
 
-4. `UNDETERMINED`: This is the same as the `UNDETERMINED` result for normal checks (see [check_results]).
+4. `UNDETERMINED`: This is the same as the `UNDETERMINED` result for normal checks (see [check_results][#check-results]).
 
 ## Verification summary
 
@@ -159,3 +159,30 @@ SUMMARY:
 
 VERIFICATION:- SUCCESSFUL
 ```
+
+## SARIF output
+
+Kani can emit SARIF (Static Analysis Results Interchange Format) for integration with tools such as GitHub Code Scanning.
+
+Generate a SARIF report:
+```bash
+cargo kani --sarif kani.sarif
+```
+
+In GitHub Actions, upload the SARIF file:
+```yaml
+- uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: kani.sarif
+```
+
+## JSON output
+
+Kani can write the results of a run to a JSON file:
+```bash
+cargo kani -Z export-json --export-json kani.json
+```
+
+The file describes the tool versions, the configuration and the outcome of every harness. The format is unstable and may change between releases; see [RFC 0015](https://model-checking.github.io/kani/rfc/rfcs/0015-export-json.html) for the schema. The flag requires `-Z export-json`; `-Z unstable-options` alone is no longer enough.
+
+After a successful build and harness selection, Kani replaces any earlier file with an `INCOMPLETE` marker before verification starts, and replaces the marker with the final document at the end. A killed or failed run can leave the marker. A failure before the marker is written leaves any earlier file in place; compare its `started_at` with the time of your run.

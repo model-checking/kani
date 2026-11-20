@@ -1,0 +1,9 @@
+repeated_calls_uninitialized.safety_check.\
+	 - Status: FAILURE\
+	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
+
+Checking harness repeated_calls_initialized...
+VERIFICATION:- SUCCESSFUL
+
+Verification failed for - repeated_calls_uninitialized
+Complete - 1 successfully verified harnesses, 1 failures, 2 total.

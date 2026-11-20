@@ -1,0 +1,93 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+name: Attempt Charon update
+
+on:
+  schedule:
+    - cron: "30 4 * * Wed" # Run this every Wednesday at 04:30 UTC
+  workflow_dispatch:     # Allow manual dispatching for a custom branch / tag.
+
+permissions:
+  checks: write
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  create-charon-update-pr:
+    # This workflow is restricted to the main repository (model-checking/kani) to prevent
+    # unnecessary PRs being created in forks. The Charon update action should only run in
+    # the main repository context.
+    if: github.repository == 'model-checking/kani'
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v6
+
+      - name: Setup Kani Dependencies
+        uses: ./.github/actions/setup
+        with:
+          os: ubuntu-22.04
+
+      - name: Update the Charon pin and determine next step
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/charon_update.sh
+
+      - name: Clean untracked files
+        run: git clean -f
+
+      - name: Create Pull Request
+        id: create_pr
+        if: ${{ env.next_step == 'create_pr' }}
+        uses: peter-evans/create-pull-request@v8
+        with:
+          commit-message: Upgrade Charon from ${{ env.current_charon }} to ${{ env.next_charon }}
+          branch: charon-${{ env.next_charon }}
+          delete-branch: true
+          title: 'Automatic upgrade of Charon from ${{ env.current_charon }} to ${{ env.next_charon }}'
+          body: |
+            Update the Charon pin (used by the LLBC backend) from ${{ env.current_charon }} to its
+            latest tag, ${{ env.next_charon }}. Only the `charon` submodule and `Cargo.lock` change.
+            `kani-llbc-regression.sh` passed in the
+            [automated run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+
+            ${{ env.charon_log }}
+
+      - name: Point the open failure issue to the PR
+        if: ${{ steps.create_pr.outputs.pull-request-number && env.failure_issue != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.create_pr.outputs.pull-request-number }}
+        run: |
+          gh issue comment "$failure_issue" --body \
+            "Charon $next_charon passes the LLBC regression: see #$PR_NUMBER."
+
+      - name: Create Issue
+        if: ${{ env.next_step == 'create_issue' }}
+        uses: dacbd/create-issue-action@main
+        with:
+          token: ${{ github.token }}
+          # Keep in sync with `failure_title` in scripts/charon_update.sh.
+          title: 'Automatic Charon upgrade failed'
+          body: |
+            Updating Charon from ${{ env.current_charon }} to ${{ env.next_charon }} requires
+            source changes: `kani-llbc-regression.sh` failed in the
+            [automated run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+
+            This issue stays open across Charon tags: later failing attempts add a comment here
+            rather than filing a new issue. Close it once the pin is updated.
+
+            ${{ env.charon_log }}
+
+      - name: Comment on the open failure issue
+        if: ${{ env.next_step == 'comment_issue' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BODY: |
+            Updating Charon from ${{ env.current_charon }} to ${{ env.next_charon }} failed as well:
+            [automated run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+
+            ${{ env.charon_log }}
+        run: gh issue comment "$failure_issue" --body "$BODY"

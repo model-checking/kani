@@ -16,5 +16,20 @@ pushd $OUT_DIR
 cargo run -p scanner test.rs --crate-type lib
 wc -l *csv
 
+# How to intepret these results:
+# - If the function is "truly safe," i.e., there's no unsafe in its call graph, it will not show up in the output at all.
+# - Otherwise, the count should match the rules described in scanner::call_graph::OverallStats::unsafe_distance.
+echo "Unsafe Distance Results"
+cat test_scan_unsafe_distance.csv
+
+# Names must be crate-relative, as `kani list` reports them, so the two outputs
+# can be joined by name (kani#4868). The crate is `test`, so no name may start
+# with `test::`.
+if grep -qE '(^|[^[:alnum:]_:])test::' *.csv; then
+    echo "FAIL: crate-prefixed names in the CSVs"
+else
+    echo "OK: no crate-prefixed names"
+fi
+
 popd
 rm -rf ${OUT_DIR}

@@ -1,0 +1,13 @@
+main.assigns.1\
+	 - Status: SUCCESS\
+	 - Description: "Check that i is assignable"
+
+std::ptr::write::<u8>.assigns.1\
+	 - Status: SUCCESS\
+	 - Description: "Check that *dst is assignable"
+
+std::vec::Vec::<u8>::set_len.assigns.1\
+	 - Status: SUCCESS\
+	 - Description: "Check that self->len is assignable"
+
+VERIFICATION:- SUCCESSFUL

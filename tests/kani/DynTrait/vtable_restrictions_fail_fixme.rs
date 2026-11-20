@@ -6,7 +6,7 @@
 // FIXME until the corresponding CBMC path lands: https://github.com/diffblue/cbmc/pull/6376
 
 // kani-expect-fail
-// kani-flags: --restrict-vtable
+// kani-flags: -Z restrict-vtable
 
 #![feature(core_intrinsics)]
 #![feature(ptr_metadata)]

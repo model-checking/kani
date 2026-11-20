@@ -13,14 +13,16 @@
 //! definition of custom coercions for smart pointers can be found in the
 //! [RFC 982 DST Coercion](https://rust-lang.github.io/rfcs/0982-dst-coercion.html).
 
-use rustc_hir::lang_items::LangItem;
+use rustc_attr_ir::lang_items::LangItem;
 use rustc_middle::traits::{ImplSource, ImplSourceUserDefinedData};
 use rustc_middle::ty::TraitRef;
 use rustc_middle::ty::adjustment::CustomCoerceUnsized;
 use rustc_middle::ty::{PseudoCanonicalInput, Ty, TyCtxt, TypingEnv};
-use rustc_smir::rustc_internal;
-use stable_mir::Symbol;
-use stable_mir::ty::{RigidTy, Ty as TyStable, TyKind};
+use rustc_public::CrateDefType;
+use rustc_public::Symbol;
+use rustc_public::rustc_internal;
+use rustc_public::ty::{RigidTy, Ty as TyStable, TyKind};
+use rustc_span::DUMMY_SP;
 use tracing::trace;
 
 /// Given an unsized coercion (e.g. from `&u8` to `&dyn Debug`), extract the pair of
@@ -90,14 +92,12 @@ pub fn extract_unsize_casting<'tcx>(
     .last()
     .unwrap();
     // Extract the pointee type that is being coerced.
-    let src_pointee_ty = extract_pointee(tcx, coerce_info.src_ty).expect(&format!(
-        "Expected source to be a pointer. Found {:?} instead",
-        coerce_info.src_ty
-    ));
-    let dst_pointee_ty = extract_pointee(tcx, coerce_info.dst_ty).expect(&format!(
-        "Expected destination to be a pointer. Found {:?} instead",
-        coerce_info.dst_ty
-    ));
+    let src_pointee_ty = extract_pointee(tcx, coerce_info.src_ty).unwrap_or_else(|| {
+        panic!("Expected source to be a pointer. Found {:?} instead", coerce_info.src_ty)
+    });
+    let dst_pointee_ty = extract_pointee(tcx, coerce_info.dst_ty).unwrap_or_else(|| {
+        panic!("Expected destination to be a pointer. Found {:?} instead", coerce_info.dst_ty)
+    });
     // Find the tail of the coercion that determines the type of metadata to be stored.
     let (src_base_ty, dst_base_ty) = tcx.struct_lockstep_tails_for_codegen(
         src_pointee_ty,
@@ -222,9 +222,22 @@ impl Iterator for CoerceUnsizedIterator<'_> {
                 let coerce_index = coerce_index.as_usize();
                 assert!(coerce_index < src_fields.len());
 
-                self.src_ty = Some(src_fields[coerce_index].ty_with_args(&src_args));
-                self.dst_ty = Some(dst_fields[coerce_index].ty_with_args(&dst_args));
+                self.src_ty = Some(src_fields[coerce_index].ty_with_args(src_args));
+                self.dst_ty = Some(dst_fields[coerce_index].ty_with_args(dst_args));
                 Some(src_fields[coerce_index].name.clone())
+            }
+            (
+                TyKind::RigidTy(RigidTy::Pat(src_base_ty, _)),
+                TyKind::RigidTy(RigidTy::Pat(dst_base_ty, _)),
+            ) => {
+                // A pattern type has the same layout as the type it constrains, and it is
+                // codegen'd as a struct with a single tuple-like field holding that base type.
+                // `NonNull<T>` wraps a `pattern_type!(*const T is !null)`, so the pointer that
+                // carries the metadata sits one field deeper. Traverse into it so that the base
+                // case below sees the underlying pointer.
+                self.src_ty = Some(src_base_ty);
+                self.dst_ty = Some(dst_base_ty);
+                Some("0".to_string())
             }
             _ => {
                 // Base case is always a pointer (Box, raw_pointer or reference).
@@ -247,7 +260,7 @@ fn custom_coerce_unsize_info<'tcx>(
     source_ty: Ty<'tcx>,
     target_ty: Ty<'tcx>,
 ) -> CustomCoerceUnsized {
-    let def_id = tcx.require_lang_item(LangItem::CoerceUnsized, None);
+    let def_id = tcx.require_lang_item(LangItem::CoerceUnsized, DUMMY_SP);
 
     let trait_ref = TraitRef::new(tcx, def_id, tcx.mk_args_trait(source_ty, [target_ty.into()]));
 
@@ -256,7 +269,7 @@ fn custom_coerce_unsize_info<'tcx>(
         value: trait_ref,
     }) {
         Ok(ImplSource::UserDefined(ImplSourceUserDefinedData { impl_def_id, .. })) => {
-            tcx.coerce_unsized_info(impl_def_id).unwrap().custom_kind.unwrap()
+            tcx.coerce_unsized_info(*impl_def_id).unwrap().custom_kind.unwrap()
         }
         impl_source => {
             unreachable!("invalid `CoerceUnsized` impl_source: {:?}", impl_source);

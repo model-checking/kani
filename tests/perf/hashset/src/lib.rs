@@ -35,14 +35,16 @@ fn check_contains() {
     assert!(set.contains(&first));
 }
 
-#[kani::proof]
-#[kani::stub(RandomState::new, concrete_state)]
-#[kani::unwind(5)]
-#[kani::solver(kissat)]
-fn check_contains_str() {
-    let set = HashSet::from(["s"]);
-    assert!(set.contains(&"s"));
-}
+// TODO: This test exposes a bug in CBMC 6.7.1. It should be re-enabled once a version of CBMC that
+// includes https://github.com/diffblue/cbmc/pull/8678 has been released.
+// #[kani::proof]
+// #[kani::stub(RandomState::new, concrete_state)]
+// #[kani::unwind(5)]
+// #[kani::solver(kissat)]
+// fn check_contains_str() {
+//     let set = HashSet::from(["s"]);
+//     assert!(set.contains(&"s"));
+// }
 
 // too slow so don't run in the regression for now
 #[cfg(slow)]

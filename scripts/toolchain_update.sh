@@ -26,7 +26,7 @@ echo "- next: ${next_toolchain_date}"
 echo "---------------------------"
 
 if gh issue list -S \
-  "Toolchain upgrade to nightly-$next_toolchain_date failed" \
+  "\"Toolchain upgrade to nightly-$next_toolchain_date failed\"" \
   --json number,title | grep title
 then
   echo "Skip update: Found existing issue"
@@ -50,13 +50,15 @@ then
   EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
   echo "git_log<<$EOF" >> $GITHUB_ENV
 
-  git log --oneline $current_toolchain_hash..$next_toolchain_hash | \
+  git log --oneline --ancestry-path $current_toolchain_hash..$next_toolchain_hash | \
     sed 's#^#https://github.com/rust-lang/rust/commit/#' >> $GITHUB_ENV
   echo "$EOF" >> $GITHUB_ENV
 
   cd ..
   rm -rf rust.git
-  if ! ./scripts/kani-regression.sh ; then
+  # `kani-regression.sh` does not build the LLBC backend (and with it Charon), so a toolchain that
+  # only breaks the LLBC backend would otherwise go unnoticed until the PR's LLBC job.
+  if ! ./scripts/kani-regression.sh || ! ./scripts/kani-llbc-regression.sh ; then
     echo "next_step=create_issue" >> $GITHUB_ENV
   fi
 else

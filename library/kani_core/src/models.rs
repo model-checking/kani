@@ -32,6 +32,89 @@ macro_rules! generate_models {
                 }
             }
 
+            #[kanitool::fn_marker = "PanicStub"]
+            pub fn panic_stub(t: &str) -> ! {
+                // Using an infinite loop here to have the function return the never (`!`) type.
+                // We could also use `exit()` / `abort()` but both require depending on std::process.
+                loop {}
+            }
+
+            /// Model of `core::fmt::Formatter::debug_struct_fields_finish`, which `derive(Debug)`
+            /// uses for structs and tuple structs (directly, or through the
+            /// `debug_struct_field{1..5}_finish` helpers).
+            ///
+            /// Since rust-lang/rust#164726, the derive passes all names as one string separated
+            /// by spaces, `"Point x y"` for `Point { x, y }` or `"Point"` for a tuple struct, and
+            /// the helper finds the names with `memchr`. `memchr` reads the bytes a word at a time
+            /// with a loop whose bounds depend on the pointer's alignment, which CBMC cannot fold,
+            /// so verifying any derived `Debug` became orders of magnitude slower. This model
+            /// splits the names with a byte-by-byte loop over the same string and builds the same
+            /// output through the same public builders.
+            #[kanitool::fn_marker = "DebugStructFieldsFinishModel"]
+            pub fn debug_struct_fields_finish(
+                f: &mut core::fmt::Formatter<'_>,
+                names: &str,
+                values: &[&dyn core::fmt::Debug],
+            ) -> core::fmt::Result {
+                let bytes = names.as_bytes();
+                let mut end = next_space(bytes, 0);
+                if end == bytes.len() {
+                    // No space: a tuple struct, `names` is its name.
+                    let mut builder = f.debug_tuple(names);
+                    for value in values {
+                        builder.field(value);
+                    }
+                    return builder.finish();
+                }
+                let mut builder = f.debug_struct(&names[..end]);
+                for value in values {
+                    let start = end + 1;
+                    end = next_space(bytes, start);
+                    builder.field(&names[start..end], value);
+                }
+                builder.finish()
+            }
+
+            /// Model of `core::fmt::Formatter::debug_c_like_enum_write_str`, which
+            /// `derive(Debug)` uses for enums of at least five variants that have no fields:
+            /// `names` holds every variant name separated by spaces, and the variant's name starts
+            /// at `start_index`. It writes the same string as the standard library.
+            ///
+            /// The model walks the names in order and writes the one that starts at `start_index`,
+            /// so each write is of a constant slice of `names`, as with the `match` on variants the
+            /// derive generated before rust-lang/rust#164726. Slicing at a nondeterministic
+            /// `start_index` instead, as the standard library does, writes a string of
+            /// nondeterministic length, which is far more expensive to verify.
+            #[kanitool::fn_marker = "DebugCLikeEnumWriteStrModel"]
+            pub fn debug_c_like_enum_write_str(
+                f: &mut core::fmt::Formatter<'_>,
+                names: &str,
+                start_index: usize,
+            ) -> core::fmt::Result {
+                let bytes = names.as_bytes();
+                let mut start = 0;
+                while start <= bytes.len() {
+                    let end = next_space(bytes, start);
+                    if start == start_index {
+                        return f.write_str(&names[start..end]);
+                    }
+                    start = end + 1;
+                }
+                // `start_index` is not the start of a name, which `derive(Debug)` never passes. Do
+                // what the standard library does: write from `start_index` to the next space,
+                // panicking if `start_index` is out of bounds.
+                f.write_str(&names[start_index..next_space(bytes, start_index)])
+            }
+
+            /// The index of the first space in `bytes` at or after `start`, or `bytes.len()`.
+            fn next_space(bytes: &[u8], start: usize) -> usize {
+                let mut i = start;
+                while i < bytes.len() && bytes[i] != b' ' {
+                    i += 1;
+                }
+                i
+            }
+
             #[kanitool::fn_marker = "AlignOfValRawModel"]
             pub fn align_of_val_raw<T: ?Sized>(ptr: *const T) -> usize {
                 if let Some(size) = kani::mem::checked_align_of_raw(ptr) {
@@ -78,7 +161,9 @@ macro_rules! generate_models {
                         "Offset result and original pointer should point to the same allocation",
                     );
                     // The offset must fit in isize since this represents the same allocation.
-                    let offset_bytes = ptr1.addr().wrapping_sub(ptr2.addr()) as isize;
+                    let offset_bytes = kani::mem::pointer_offset(ptr1)
+                        .wrapping_sub(kani::mem::pointer_offset(ptr2))
+                        as isize;
                     let t_size = size_of::<T>() as isize;
                     kani::safety_check(
                         offset_bytes % t_size == 0,
@@ -89,8 +174,8 @@ macro_rules! generate_models {
                 }
             }
 
-            #[kanitool::fn_marker = "PtrSubPtrModel"]
-            pub unsafe fn ptr_sub_ptr<T>(ptr1: *const T, ptr2: *const T) -> usize {
+            #[kanitool::fn_marker = "PtrOffsetFromUnsignedModel"]
+            pub unsafe fn ptr_offset_from_unsigned<T>(ptr1: *const T, ptr2: *const T) -> usize {
                 let offset = ptr_offset_from(ptr1, ptr2);
                 kani::safety_check(offset >= 0, "Expected non-negative distance between pointers");
                 offset as usize
@@ -99,29 +184,62 @@ macro_rules! generate_models {
             /// An offset model that checks UB.
             #[kanitool::fn_marker = "OffsetModel"]
             pub fn offset<T, P: Ptr<T>, O: ToISize>(ptr: P, offset: O) -> P {
-                let offset = offset.to_isize();
                 let t_size = core::mem::size_of::<T>() as isize;
-                if offset == 0 || t_size == 0 {
-                    // It's always safe to perform an offset of length 0.
-                    ptr
-                } else {
-                    let (byte_offset, overflow) = offset.overflowing_mul(t_size);
-                    kani::safety_check(!overflow, "Offset in bytes overflows isize");
-                    let orig_ptr = ptr.to_const_ptr();
-                    // NOTE: For CBMC, using the pointer addition can have unexpected behavior
-                    // when the offset is higher than the object bits since it will wrap around.
-                    // See for more details: https://github.com/model-checking/kani/issues/1150
-                    //
-                    // However, when I tried implementing this using usize operation, we got some
-                    // unexpected failures that still require further debugging.
-                    // let new_ptr = orig_ptr.addr().wrapping_add_signed(byte_offset) as *const T;
-                    let new_ptr = orig_ptr.wrapping_byte_offset(byte_offset);
-                    kani::safety_check(
-                        kani::mem::same_allocation_internal(orig_ptr, new_ptr),
-                        "Offset result and original pointer must point to the same allocation",
-                    );
-                    P::from_const_ptr(new_ptr)
+                if t_size == 0 {
+                    // It's always safe to perform an offset on a ZST.
+                    return ptr;
                 }
+
+                // Note that this check must come after the t_size check, c.f. https://github.com/model-checking/kani/issues/3896
+                let offset = offset.to_isize();
+                if offset == 0 {
+                    // It's always safe to perform an offset of length 0.
+                    return ptr;
+                }
+
+                let (byte_offset, overflow) = offset.overflowing_mul(t_size);
+                kani::safety_check(!overflow, "Offset in bytes overflows isize");
+                let orig_ptr = ptr.to_const_ptr();
+                // The equation below asserts Rust's semantic contract for `offset`:
+                // the address of the result must equal the address of the original
+                // pointer plus the byte offset, in full-width (2^64) integer
+                // arithmetic.
+                //
+                // Besides documenting that contract, it guards against CBMC's
+                // pointer encoding wrapping offsets at
+                // 2^(pointer_width - object_bits) rather than 2^pointer_width: for
+                // symbolic offsets that are multiples of 2^(64 - object_bits) the
+                // pointer addition below aliases back into the allocation, so the
+                // same-allocation check alone would pass spuriously and hide
+                // genuine UB (https://github.com/model-checking/kani/issues/1150).
+                // CBMC fixed this in https://github.com/diffblue/cbmc/pull/9134 by
+                // directing out-of-range results to the invalid object at a
+                // nondeterministic address (which makes the equation below
+                // refutable, so this safety check still fails; the two mechanisms
+                // agree); the guard remains necessary for CBMC versions without
+                // that fix, and remains correct with it.
+                //
+                // Implementation notes:
+                // * `addr()` (a pointer-to-integer transmute) is deliberately used
+                //   here rather than `kani::mem::pointer_offset`: CBMC's simplifier
+                //   rewrites `POINTER_OFFSET(p + k)` to `POINTER_OFFSET(p) + k` in
+                //   full-width arithmetic, which would make a pointer_offset-based
+                //   equation trivially true and hide the wrap again.
+                // * This formulation keeps all operations in the pointer domain (no
+                //   integer-to-pointer casts, which make the solver case-split the
+                //   address over every object and blow up, e.g., on harnesses using
+                //   `sort()`).
+                let new_ptr = orig_ptr.wrapping_byte_offset(byte_offset);
+                let no_wrap = new_ptr.addr() == orig_ptr.addr().wrapping_add_signed(byte_offset);
+                kani::safety_check(
+                    no_wrap,
+                    "Offset result address must equal original pointer address plus offset",
+                );
+                kani::safety_check(
+                    kani::mem::same_allocation_internal(orig_ptr, new_ptr),
+                    "Offset result and original pointer must point to the same allocation",
+                );
+                P::from_const_ptr(new_ptr)
             }
 
             pub trait Ptr<T> {

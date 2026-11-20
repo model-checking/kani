@@ -22,8 +22,8 @@ use super::source_region::SourceRegion;
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::InternedString;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
-use stable_mir::mir::{Place, ProjectionElem};
-use stable_mir::ty::{Span as SpanStable, Ty};
+use rustc_public::mir::{Place, ProjectionElem};
+use rustc_public::ty::{Span as SpanStable, Ty};
 use strum_macros::{AsRefStr, EnumString};
 use tracing::debug;
 
@@ -101,14 +101,13 @@ pub enum PropertyClass {
     Unreachable,
 }
 
-#[allow(dead_code)]
 impl PropertyClass {
     pub fn as_str(&self) -> &str {
         self.as_ref()
     }
 }
 
-impl GotocCtx<'_> {
+impl GotocCtx<'_, '_> {
     /// Generates a CBMC assertion. Note: Does _NOT_ assume.
     pub fn codegen_assert(
         &self,
@@ -134,11 +133,18 @@ impl GotocCtx<'_> {
         message: &str,
         loc: Location,
     ) -> Stmt {
-        let property_name = property_class.as_str();
-        Stmt::block(
-            vec![Stmt::assert(cond.clone(), property_name, message, loc), Stmt::assume(cond, loc)],
-            loc,
-        )
+        if property_class == PropertyClass::Assertion && self.queries.args().prove_safety_only {
+            Stmt::assume(cond, loc)
+        } else {
+            let property_name = property_class.as_str();
+            Stmt::block(
+                vec![
+                    Stmt::assert(cond.clone(), property_name, message, loc),
+                    Stmt::assume(cond, loc),
+                ],
+                loc,
+            )
+        }
     }
 
     /// Generate code to cover the given condition at the current location
@@ -339,6 +345,7 @@ impl GotocCtx<'_> {
         place: &Place,
         place_ref: Expr,
         place_ref_ty: Ty,
+        is_reference: bool,
         loc: &Location,
     ) -> Option<(Stmt, Stmt)> {
         if let Some(ProjectionElem::Deref) = place.projection.last() {
@@ -375,11 +382,18 @@ impl GotocCtx<'_> {
 
                 // Then, generate a __CPROVER_r_ok check.
                 let raw_ptr_read_ok_expr =
-                    Expr::read_ok(ptr.cast_to(Type::void_pointer()), sz.clone())
+                    Expr::read_ok(ptr.clone().cast_to(Type::void_pointer()), sz.clone())
                         .cast_to(Type::Bool);
-                // __CPROVER_r_ok fails if size == 0, so need to explicitly avoid the check.
+                // __CPROVER_r_ok fails if size == 0, so need to explicitly avoid the check. A
+                // reference must still be non-null when nothing behind it can be read (a ZST, or
+                // a struct that is only an `extern type`); a raw pointer need not be.
                 let sz_typ = sz.typ().clone();
-                let raw_ptr_read_ok_expr = sz.eq(sz_typ.zero()).or(raw_ptr_read_ok_expr);
+                let zero_size_ok = if is_reference {
+                    sz.eq(sz_typ.zero()).and(ptr.is_nonnull())
+                } else {
+                    sz.eq(sz_typ.zero())
+                };
+                let raw_ptr_read_ok_expr = zero_size_ok.or(raw_ptr_read_ok_expr);
                 // Finally, assert that the pointer points to a valid memory location.
                 let raw_ptr_read_ok = self.codegen_assert(
                     raw_ptr_read_ok_expr,

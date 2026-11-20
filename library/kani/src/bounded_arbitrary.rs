@@ -1,0 +1,113 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! This module introduces implementations for some std containers.
+
+use kani::{Arbitrary, BoundedArbitrary};
+
+impl<T: Arbitrary> BoundedArbitrary for Box<[T]> {
+    fn bounded_any<const N: usize>() -> Self {
+        let len: usize = kani::any_where(|l| *l <= N);
+        // The following is equivalent to:
+        // ```
+        // (0..len).map(|_| T::any()).collect()
+        // ```
+        // but leads to more efficient verification
+        let mut b = Box::<[T]>::new_uninit_slice(len);
+        for i in 0..len {
+            b[i] = std::mem::MaybeUninit::new(T::any());
+        }
+        unsafe { b.assume_init() }
+    }
+}
+
+// This implementation overlaps with `kani::any_vec` in `kani/library/kani/src/vec.rs`.
+// This issue `https://github.com/model-checking/kani/issues/4027` tracks deprecating
+// `kani::any_vec` in favor of this implementation.
+impl<T: Arbitrary> BoundedArbitrary for Vec<T> {
+    fn bounded_any<const N: usize>() -> Self {
+        let real_length = kani::any_where(|&size| size <= N);
+        let array: [T; N] = kani::any();
+        let mut vec = Vec::from(array);
+        vec.truncate(real_length);
+        vec
+    }
+}
+
+impl BoundedArbitrary for String {
+    fn bounded_any<const N: usize>() -> Self {
+        let bytes: [u8; N] = kani::any();
+
+        if let Some(s) = bytes.utf8_chunks().next() { s.valid().into() } else { String::new() }
+    }
+}
+
+impl<K, V> BoundedArbitrary
+    for std::collections::HashMap<K, V, std::hash::BuildHasherDefault<std::hash::DefaultHasher>>
+where
+    K: Arbitrary + std::cmp::Eq + std::hash::Hash,
+    V: Arbitrary,
+{
+    fn bounded_any<const N: usize>() -> Self {
+        let mut hash_map = std::collections::HashMap::default();
+        for _ in 0..N {
+            // this check seems to perform better than 0..kany::any_where(|l| *l <= N)
+            if bool::any() {
+                hash_map.insert(K::any(), V::any());
+            }
+        }
+        hash_map
+    }
+}
+
+impl<V> BoundedArbitrary
+    for std::collections::HashSet<V, std::hash::BuildHasherDefault<std::hash::DefaultHasher>>
+where
+    V: Arbitrary + std::cmp::Eq + std::hash::Hash,
+{
+    fn bounded_any<const N: usize>() -> Self {
+        let mut hash_set = std::collections::HashSet::default();
+        for _ in 0..N {
+            // this check seems to perform better than 0..kany::any_where(|l| *l <= N)
+            if bool::any() {
+                hash_set.insert(V::any());
+            }
+        }
+        hash_set
+    }
+}
+
+impl<K, V> BoundedArbitrary for std::collections::BTreeMap<K, V>
+where
+    K: Arbitrary + std::cmp::Ord,
+    V: Arbitrary,
+{
+    // duplicate `K::any()` values overwrite earlier entries, so the reachable
+    // map sizes are `0..=N` rather than always equal to the number of insert branches taken
+    fn bounded_any<const N: usize>() -> Self {
+        let mut btree_map = std::collections::BTreeMap::new();
+        for _ in 0..N {
+            if bool::any() {
+                btree_map.insert(K::any(), V::any());
+            }
+        }
+        btree_map
+    }
+}
+
+impl<V> BoundedArbitrary for std::collections::BTreeSet<V>
+where
+    V: Arbitrary + std::cmp::Ord,
+{
+    // duplicate `V::any()` values collapse into one entry, so the reachable
+    // set sizes are `0..=N` rather than always equal to the number of insert branches taken
+    fn bounded_any<const N: usize>() -> Self {
+        let mut btree_set = std::collections::BTreeSet::new();
+        for _ in 0..N {
+            if bool::any() {
+                btree_set.insert(V::any());
+            }
+        }
+        btree_set
+    }
+}

@@ -17,30 +17,34 @@ use crate::args::ExtraChecks;
 use crate::kani_middle::transform::body::{
     CheckType, InsertPosition, MutableBody, SourceInstruction,
 };
-use crate::kani_middle::transform::check_values::SourceOp::UnsupportedCheck;
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::{Const, TyCtxt};
-use rustc_smir::rustc_internal;
-use stable_mir::CrateDef;
-use stable_mir::abi::{FieldsShape, Scalar, TagEncoding, ValueAbi, VariantsShape, WrappingRange};
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::visit::{Location, PlaceContext, PlaceRef};
-use stable_mir::mir::{
-    AggregateKind, BasicBlockIdx, BinOp, Body, CastKind, ConstOperand, FieldIdx, Local, LocalDecl,
-    MirVisitor, Mutability, NonDivergingIntrinsic, Operand, Place, ProjectionElem, RawPtrKind,
-    Rvalue, Statement, StatementKind, Terminator, TerminatorKind,
+use rustc_public::CrateDef;
+use rustc_public::CrateDefType;
+use rustc_public::abi::{
+    FieldsShape, Scalar, TagEncoding, ValueRepr, VariantsShape, WrappingRange,
 };
-use stable_mir::target::{MachineInfo, MachineSize};
-use stable_mir::ty::{AdtKind, IndexedVal, MirConst, RigidTy, Span, Ty, TyKind, UintTy};
+use rustc_public::mir::mono::Instance;
+use rustc_public::mir::visit::{Location, PlaceContext, PlaceRef};
+use rustc_public::mir::{
+    AggregateKind, BasicBlockIdx, BinOp, Body, BorrowKind, CastKind, FieldIdx, Local, LocalDecl,
+    MirVisitor, Mutability, NonDivergingIntrinsic, Operand, Place, ProjectionElem, RawPtrKind,
+    Rvalue, Statement, StatementKind, Terminator, TerminatorKind, WithRetag,
+};
+use rustc_public::rustc_internal;
+use rustc_public::target::{MachineInfo, MachineSize};
+use rustc_public::ty::{AdtKind, GenericArgs, RigidTy, Span, Ty, TyKind, UintTy, VariantDef};
+use rustc_public_bridge::IndexedVal;
 use std::fmt::Debug;
 use strum_macros::AsRefStr;
 use tracing::{debug, trace};
 
 /// Instrument the code with checks for invalid values.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ValidValuePass {
-    pub check_type: CheckType,
+    pub safety_check_type: CheckType,
+    pub unsupported_check_type: CheckType,
 }
 
 impl TransformPass for ValidValuePass {
@@ -92,10 +96,10 @@ impl ValidValuePass {
                         let msg =
                             format!("Undefined Behavior: Invalid value of type `{target_ty}`",);
                         body.insert_check(
-                            &self.check_type,
+                            &self.safety_check_type,
                             &mut source,
                             InsertPosition::Before,
-                            result,
+                            Some(result),
                             &msg,
                         );
                     }
@@ -106,10 +110,10 @@ impl ValidValuePass {
                         let msg =
                             format!("Undefined Behavior: Invalid value of type `{pointee_ty}`",);
                         body.insert_check(
-                            &self.check_type,
+                            &self.safety_check_type,
                             &mut source,
                             InsertPosition::Before,
-                            result,
+                            Some(result),
                             &msg,
                         );
                     }
@@ -130,14 +134,13 @@ impl ValidValuePass {
         source: &mut SourceInstruction,
         reason: &str,
     ) {
-        let span = source.span(body.blocks());
-        let rvalue = Rvalue::Use(Operand::Constant(ConstOperand {
-            const_: MirConst::from_bool(false),
-            span,
-            user_ty: None,
-        }));
-        let result = body.insert_assignment(rvalue, source, InsertPosition::Before);
-        body.insert_check(&self.check_type, source, InsertPosition::Before, result, reason);
+        body.insert_check(
+            &self.unsupported_check_type,
+            source,
+            InsertPosition::Before,
+            None,
+            reason,
+        );
     }
 }
 
@@ -185,13 +188,16 @@ enum ValidityRange {
 // 3- Ranges intersection is a combination of two new ranges.
 // 4- Intersection is empty.
 impl ValidValueReq {
-    /// Only a type with `ValueAbi::Scalar` and `ValueAbi::ScalarPair` can be directly assigned an
+    /// Only a type with `ValueRepr::Scalar` and `ValueRepr::ScalarPair` can be directly assigned an
     /// invalid value directly.
     ///
     /// It's not possible to define a `rustc_layout_scalar_valid_range_*` to any other structure.
     /// Note that this annotation only applies to the first scalar in the layout.
-    pub fn try_from_ty(machine_info: &MachineInfo, ty: Ty) -> Option<ValidValueReq> {
-        if ty.kind().is_char() {
+    pub fn try_from_ty(tcx: TyCtxt, machine_info: &MachineInfo, ty: Ty) -> Option<ValidValueReq> {
+        // The `char` special case below is skipped for pattern types (whose
+        // stable `Ty::kind()` may panic); `ty_validity_per_offset` rejects
+        // pattern types over `char`, so it cannot be needed here.
+        if !is_pattern_type(tcx, ty) && ty.kind().is_char() {
             Some(ValidValueReq {
                 offset: 0,
                 size: MachineSize::from_bits(size_of::<char>() * 8),
@@ -202,20 +208,20 @@ impl ValidValueReq {
             })
         } else {
             let shape = ty.layout().unwrap().shape();
-            match shape.abi {
-                ValueAbi::Scalar(Scalar::Initialized { value, valid_range })
-                | ValueAbi::ScalarPair(Scalar::Initialized { value, valid_range }, _) => {
+            match shape.value_repr {
+                ValueRepr::Scalar(Scalar::Initialized { value, valid_range })
+                | ValueRepr::ScalarPair { a: Scalar::Initialized { value, valid_range }, .. } => {
                     Some(ValidValueReq {
                         offset: 0,
                         size: value.size(machine_info),
                         valid_range: ValidityRange::Single(valid_range),
                     })
                 }
-                ValueAbi::Scalar(_)
-                | ValueAbi::ScalarPair(_, _)
-                | ValueAbi::Uninhabited
-                | ValueAbi::Vector { .. }
-                | ValueAbi::Aggregate { .. } => None,
+                ValueRepr::Scalar(_)
+                | ValueRepr::ScalarPair { .. }
+                | ValueRepr::Vector { .. }
+                | ValueRepr::ScalableVector { .. }
+                | ValueRepr::Aggregate { .. } => None,
             }
         }
     }
@@ -320,6 +326,19 @@ struct UnsafeInstruction {
     operations: Vec<SourceOp>,
 }
 
+/// How a place is used.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PlaceAccessKind {
+    /// Keep the existing checks for operations not yet classified here.
+    Conservative,
+    Drop,
+    MutableBorrow,
+    RawAddress,
+    Read,
+    SharedBorrow,
+    Store,
+}
+
 /// Extract any source that may potentially trigger UB due to the generation of an invalid value.
 ///
 /// Generating an invalid value requires an unsafe operation, however, in MIR, it
@@ -332,6 +351,7 @@ struct UnsafeInstruction {
 ///   - MemCopy
 ///   - Cast
 struct CheckValueVisitor<'a, 'b> {
+    access: PlaceAccessKind,
     tcx: TyCtxt<'b>,
     locals: &'a [LocalDecl],
     /// Whether we should skip the next instruction, since it might've been instrumented already.
@@ -357,6 +377,7 @@ impl<'a, 'b> CheckValueVisitor<'a, 'b> {
         skip_first: bool,
     ) -> Option<UnsafeInstruction> {
         let mut visitor = CheckValueVisitor {
+            access: PlaceAccessKind::Conservative,
             tcx,
             locals: body.locals(),
             skip_next: skip_first,
@@ -374,6 +395,89 @@ impl<'a, 'b> CheckValueVisitor<'a, 'b> {
             .target
             .get_or_insert_with(|| UnsafeInstruction { source: self.current, operations: vec![] });
         target.operations.push(op);
+    }
+
+    fn with_access(&mut self, access: PlaceAccessKind, visit: impl FnOnce(&mut Self)) {
+        let previous = self.access;
+        self.access = access;
+        visit(self);
+        self.access = previous;
+    }
+
+    /// Narrow checks only for an optional leading dereference and ordinary struct/tuple fields.
+    /// Other projections retain the existing conservative checks.
+    fn supports_precise_access(&self, place: &Place) -> bool {
+        let mut ty = self.locals[place.local].ty;
+        for (idx, elem) in place.projection.iter().enumerate() {
+            match elem {
+                ProjectionElem::Deref if idx == 0 => {}
+                ProjectionElem::Field(_, field_ty) => {
+                    // Avoid stable kind conversion for pattern parents.
+                    if is_pattern_type(self.tcx, ty) {
+                        return false;
+                    }
+                    let ordinary_field = match ty.kind() {
+                        TyKind::RigidTy(RigidTy::Adt(def, _)) => def.kind() == AdtKind::Struct,
+                        TyKind::RigidTy(RigidTy::Tuple(_)) => true,
+                        _ => false,
+                    };
+                    if !ordinary_field {
+                        return false;
+                    }
+                    // Pattern fields are not unions; avoid converting their stable kind.
+                    if !is_pattern_type(self.tcx, *field_ty) && field_ty.kind().is_union() {
+                        return false;
+                    }
+                }
+                ProjectionElem::Deref
+                | ProjectionElem::Downcast(_)
+                | ProjectionElem::OpaqueCast(_)
+                | ProjectionElem::Index(_)
+                | ProjectionElem::ConstantIndex { .. }
+                | ProjectionElem::Subslice { .. } => return false,
+            }
+            ty = elem.ty(ty).unwrap();
+        }
+        true
+    }
+
+    /// Form an address, rather than loading an aggregate to extract the field being checked.
+    fn check_place_value(&mut self, place: Place) {
+        let ty = place.ty(self.locals).unwrap();
+        match ty_validity_per_offset(self.tcx, &self.machine, ty, 0) {
+            Ok(ranges) if !ranges.is_empty() => {
+                self.push_target(SourceOp::DerefValidity {
+                    pointee_ty: ty,
+                    rvalue: Rvalue::AddressOf(RawPtrKind::Const, place),
+                    ranges,
+                });
+            }
+            Err(_) => self.push_target(SourceOp::UnsupportedCheck {
+                check: "raw pointer dereference".to_string(),
+                ty,
+            }),
+            _ => {}
+        }
+    }
+
+    /// Called only for places accepted by `supports_precise_access`.
+    ///
+    /// For `**ptr = value` or `&raw const **ptr`, rustc emits a separate load of the intermediate
+    /// pointer before the final store/address operation. `visit_operand` (or `CopyForDeref`)
+    /// classifies that load as Read, independently of the final operation's access kind.
+    fn check_place_access(&mut self, place: &Place) {
+        let through_raw_pointer = matches!(place.projection.first(), Some(ProjectionElem::Deref))
+            && self.locals[place.local].ty.kind().is_raw_ptr();
+        if through_raw_pointer {
+            match self.access {
+                PlaceAccessKind::Drop
+                | PlaceAccessKind::MutableBorrow
+                | PlaceAccessKind::Read
+                | PlaceAccessKind::SharedBorrow => self.check_place_value(place.clone()),
+                PlaceAccessKind::RawAddress | PlaceAccessKind::Store => {}
+                PlaceAccessKind::Conservative => unreachable!(),
+            }
+        }
     }
 }
 
@@ -394,9 +498,13 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                 }
                 StatementKind::Assign(place, rvalue) => {
                     // First check rvalue.
-                    self.super_statement(stmt, location);
+                    // The destination is a store; rvalues and operands override this context.
+                    self.with_access(PlaceAccessKind::Store, |visitor| {
+                        visitor.super_statement(stmt, location);
+                    });
                     // Then check the destination place.
                     let ranges = assignment_check_points(
+                        self.tcx,
                         &self.machine,
                         self.locals,
                         place,
@@ -412,10 +520,8 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                 }
                 StatementKind::FakeRead(_, _)
                 | StatementKind::SetDiscriminant { .. }
-                | StatementKind::Deinit(_)
                 | StatementKind::StorageLive(_)
                 | StatementKind::StorageDead(_)
-                | StatementKind::Retag(_, _)
                 | StatementKind::PlaceMention(_)
                 | StatementKind::AscribeUserType { .. }
                 | StatementKind::Coverage(_)
@@ -436,7 +542,10 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                 TerminatorKind::Call { func, args, .. } => {
                     // Note: For transmute, both Src and Dst must be valid type.
                     // In this case, we need to save the Dst, and invoke super_terminator.
-                    self.super_terminator(term, location);
+                    // The return destination is a store; argument operands are reads.
+                    self.with_access(PlaceAccessKind::Store, |visitor| {
+                        visitor.super_terminator(term, location);
+                    });
                     match intrinsic_name(self.locals, func).as_deref() {
                         Some("write_bytes") => {
                             // The write bytes intrinsic may trigger UB in safe code.
@@ -454,7 +563,8 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                             else {
                                 unreachable!()
                             };
-                            let validity = ty_validity_per_offset(&self.machine, target_ty, 0);
+                            let validity =
+                                ty_validity_per_offset(self.tcx, &self.machine, target_ty, 0);
                             match validity {
                                 Ok(ranges) if ranges.is_empty() => {}
                                 Ok(ranges) => {
@@ -480,13 +590,17 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                         _ => {}
                     }
                 }
+                TerminatorKind::Drop { .. } => {
+                    self.with_access(PlaceAccessKind::Drop, |visitor| {
+                        visitor.super_terminator(term, location);
+                    });
+                }
                 TerminatorKind::Goto { .. }
                 | TerminatorKind::SwitchInt { .. }
                 | TerminatorKind::Resume
                 | TerminatorKind::Abort
                 | TerminatorKind::Return
                 | TerminatorKind::Unreachable
-                | TerminatorKind::Drop { .. }
                 | TerminatorKind::Assert { .. }
                 | TerminatorKind::InlineAsm { .. } => self.super_terminator(term, location),
             }
@@ -494,6 +608,11 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
     }
 
     fn visit_place(&mut self, place: &Place, ptx: PlaceContext, location: Location) {
+        if self.access != PlaceAccessKind::Conservative && self.supports_precise_access(place) {
+            self.check_place_access(place);
+            self.super_place(place, ptx, location);
+            return;
+        }
         for (idx, elem) in place.projection.iter().enumerate() {
             let place_ref = PlaceRef { local: place.local, projection: &place.projection[..idx] };
             match elem {
@@ -501,7 +620,8 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                     let ptr_ty = place_ref.ty(self.locals).unwrap();
                     if ptr_ty.kind().is_raw_ptr() {
                         let target_ty = elem.ty(ptr_ty).unwrap();
-                        let validity = ty_validity_per_offset(&self.machine, target_ty, 0);
+                        let validity =
+                            ty_validity_per_offset(self.tcx, &self.machine, target_ty, 0);
                         match validity {
                             Ok(ranges) if !ranges.is_empty() => {
                                 self.push_target(SourceOp::DerefValidity {
@@ -512,6 +632,7 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                                             projection: place_ref.projection.to_vec(),
                                         })
                                         .clone(),
+                                        WithRetag::No,
                                     ),
                                     ranges,
                                 })
@@ -525,18 +646,24 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                     }
                 }
                 ProjectionElem::Field(idx, target_ty) => {
-                    if target_ty.kind().is_union()
+                    // Pattern fields are not unions; avoid converting their stable kind.
+                    if !is_pattern_type(self.tcx, *target_ty)
+                        && target_ty.kind().is_union()
                         && (!ptx.is_mutating() || place.projection.len() > idx + 1)
                     {
-                        let validity = ty_validity_per_offset(&self.machine, *target_ty, 0);
+                        let validity =
+                            ty_validity_per_offset(self.tcx, &self.machine, *target_ty, 0);
                         match validity {
                             Ok(ranges) if !ranges.is_empty() => {
                                 self.push_target(SourceOp::BytesValidity {
                                     target_ty: *target_ty,
-                                    rvalue: Rvalue::Use(Operand::Copy(Place {
-                                        local: place_ref.local,
-                                        projection: place_ref.projection.to_vec(),
-                                    })),
+                                    rvalue: Rvalue::Use(
+                                        Operand::Copy(Place {
+                                            local: place_ref.local,
+                                            projection: place_ref.projection.to_vec(),
+                                        }),
+                                        WithRetag::No,
+                                    ),
                                     ranges,
                                 })
                             }
@@ -550,13 +677,18 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                 }
                 ProjectionElem::Downcast(_) => {}
                 ProjectionElem::OpaqueCast(_) => {}
-                ProjectionElem::Subtype(_) => {}
                 ProjectionElem::Index(_)
                 | ProjectionElem::ConstantIndex { .. }
                 | ProjectionElem::Subslice { .. } => { /* safe */ }
             }
         }
         self.super_place(place, ptx, location)
+    }
+
+    fn visit_operand(&mut self, operand: &Operand, location: Location) {
+        self.with_access(PlaceAccessKind::Read, |visitor| {
+            visitor.super_operand(operand, location);
+        });
     }
 
     fn visit_rvalue(&mut self, rvalue: &Rvalue, location: Location) {
@@ -594,11 +726,11 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                     }
 
                     if let Ok(src_validity) =
-                        ty_validity_per_offset(&self.machine, src_pointee_ty, 0)
+                        ty_validity_per_offset(self.tcx, &self.machine, src_pointee_ty, 0)
                     {
                         if !src_validity.is_empty() {
                             if let Ok(dest_validity) =
-                                ty_validity_per_offset(&self.machine, dest_pointee_ty, 0)
+                                ty_validity_per_offset(self.tcx, &self.machine, dest_pointee_ty, 0)
                             {
                                 if dest_validity != src_validity {
                                     self.push_target(SourceOp::UnsupportedCheck {
@@ -620,12 +752,14 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                         })
                     }
                 }
-                CastKind::Transmute => {
+                CastKind::Transmute | CastKind::BoxDerefTransmute | CastKind::Subtype => {
                     debug!(?dest_ty, "transmute");
                     // For transmute, we care about the destination type only.
                     // This could be optimized to only add a check if the requirements of the
                     // destination type are stricter than the source.
-                    if let Ok(dest_validity) = ty_validity_per_offset(&self.machine, *dest_ty, 0) {
+                    if let Ok(dest_validity) =
+                        ty_validity_per_offset(self.tcx, &self.machine, *dest_ty, 0)
+                    {
                         trace!(?dest_validity, "transmute");
                         if !dest_validity.is_empty() {
                             self.push_target(SourceOp::BytesValidity {
@@ -641,12 +775,6 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                         })
                     }
                 }
-                // `DynStar` is not currently supported in Kani.
-                // TODO: https://github.com/model-checking/kani/issues/1784
-                CastKind::DynStar => self.push_target(UnsupportedCheck {
-                    check: "Dyn*".to_string(),
-                    ty: (rvalue.ty(self.locals).unwrap()),
-                }),
                 CastKind::PointerExposeAddress
                 | CastKind::PointerWithExposedProvenance
                 | CastKind::PointerCoercion(_)
@@ -656,10 +784,6 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                 | CastKind::IntToFloat
                 | CastKind::FnPtrToPtr => {}
             },
-            Rvalue::ShallowInitBox(_, _) => {
-                // The contents of the box is considered uninitialized.
-                // This should already be covered by the Assign detection.
-            }
             Rvalue::Aggregate(kind, operands) => match kind {
                 // If the aggregated structure has invalid value, this could generate invalid value.
                 // But only if the operands don't have the exact same restrictions.
@@ -671,7 +795,8 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                 AggregateKind::Adt(def, _variant, args, _, _) => {
                     if def.kind() == AdtKind::Struct {
                         let dest_ty = Ty::from_rigid_kind(RigidTy::Adt(*def, args.clone()));
-                        if let Some(req) = ValidValueReq::try_from_ty(&self.machine, dest_ty)
+                        if let Some(req) =
+                            ValidValueReq::try_from_ty(self.tcx, &self.machine, dest_ty)
                             && !req.is_full()
                         {
                             let dest_layout = dest_ty.layout().unwrap().shape();
@@ -680,11 +805,12 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                             let first_ty = first_op.ty(self.locals).unwrap();
                             // Rvalue must have same Abi layout except for range.
                             if !req.contains(
-                                &ValidValueReq::try_from_ty(&self.machine, first_ty).unwrap(),
+                                &ValidValueReq::try_from_ty(self.tcx, &self.machine, first_ty)
+                                    .unwrap(),
                             ) {
                                 self.push_target(SourceOp::BytesValidity {
                                     target_ty: dest_ty,
-                                    rvalue: Rvalue::Use(first_op),
+                                    rvalue: Rvalue::Use(first_op, WithRetag::No),
                                     ranges: vec![req],
                                 })
                             }
@@ -694,7 +820,7 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                 // Only aggregate value.
                 AggregateKind::Array(_)
                 | AggregateKind::Closure(_, _)
-                | AggregateKind::Coroutine(_, _, _)
+                | AggregateKind::Coroutine(_, _)
                 | AggregateKind::CoroutineClosure(_, _)
                 | AggregateKind::RawPtr(_, _)
                 | AggregateKind::Tuple => {}
@@ -705,14 +831,22 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
             | Rvalue::CopyForDeref(_)
             | Rvalue::Discriminant(_)
             | Rvalue::Len(_)
+            | Rvalue::Reborrow(..)
             | Rvalue::Ref(_, _, _)
             | Rvalue::Repeat(_, _)
             | Rvalue::ThreadLocalRef(_)
-            | Rvalue::NullaryOp(_, _)
             | Rvalue::UnaryOp(_, _)
-            | Rvalue::Use(_) => {}
+            | Rvalue::Use(..) => {}
         }
-        self.super_rvalue(rvalue, location);
+        let access = match rvalue {
+            Rvalue::AddressOf(_, _) => PlaceAccessKind::RawAddress,
+            Rvalue::Ref(_, BorrowKind::Mut { .. }, _) => PlaceAccessKind::MutableBorrow,
+            Rvalue::Ref(_, BorrowKind::Shared, _) => PlaceAccessKind::SharedBorrow,
+            Rvalue::CopyForDeref(_) => PlaceAccessKind::Read,
+            // Unclassified rvalues must not inherit Store from the assignment.
+            _ => PlaceAccessKind::Conservative,
+        };
+        self.with_access(access, |visitor| visitor.super_rvalue(rvalue, location));
     }
 }
 
@@ -749,13 +883,14 @@ fn first_sized_field_idx(ty: Ty, shape: &FieldsShape) -> Option<FieldIdx> {
 /// This can only happen to the first in memory sized field of a struct, and only if the field
 /// type invalid range is a valid value for the rvalue type.
 fn assignment_check_points(
+    tcx: TyCtxt,
     machine_info: &MachineInfo,
     locals: &[LocalDecl],
     place: &Place,
     rvalue_ty: Ty,
 ) -> Vec<ValidValueReq> {
     let mut ty = locals[place.local].ty;
-    let Some(rvalue_range) = ValidValueReq::try_from_ty(machine_info, rvalue_ty) else {
+    let Some(rvalue_range) = ValidValueReq::try_from_ty(tcx, machine_info, rvalue_ty) else {
         // Rvalue Abi must be Scalar / ScalarPair since destination must be Scalar / ScalarPair.
         return vec![];
     };
@@ -765,7 +900,7 @@ fn assignment_check_points(
             ProjectionElem::Field(field_idx, field_ty) => {
                 let shape = ty.layout().unwrap().shape();
                 if first_sized_field_idx(ty, &shape.fields) == Some(*field_idx)
-                    && let Some(dest_valid) = ValidValueReq::try_from_ty(machine_info, ty)
+                    && let Some(dest_valid) = ValidValueReq::try_from_ty(tcx, machine_info, ty)
                     && !dest_valid.is_full()
                     && dest_valid.size == rvalue_range.size
                 {
@@ -784,8 +919,7 @@ fn assignment_check_points(
             | ProjectionElem::ConstantIndex { .. }
             | ProjectionElem::Subslice { .. }
             | ProjectionElem::Downcast(_)
-            | ProjectionElem::OpaqueCast(_)
-            | ProjectionElem::Subtype(_) => ty = proj.ty(ty).unwrap(),
+            | ProjectionElem::OpaqueCast(_) => ty = proj.ty(ty).unwrap(),
         };
     }
     invalid_ranges
@@ -830,7 +964,7 @@ pub fn build_limits(
         ));
         let offset_const = body.new_uint_operand(req.offset as _, UintTy::Usize, span);
         let offset = move_local(body.insert_assignment(
-            Rvalue::Use(offset_const),
+            Rvalue::Use(offset_const, WithRetag::No),
             source,
             InsertPosition::Before,
         ));
@@ -913,15 +1047,41 @@ fn build_single_limit(
 
 /// Traverse the type and find all invalid values and their location in memory.
 ///
+/// A pattern type (e.g. `NonNull`) may use a `PatternKind` (such as `NotNull`)
+/// that `rustc_public` cannot convert to its stable representation yet, so
+/// calling the stable `Ty::kind()` on it panics. Detect such types via the
+/// internal representation instead, where inspecting the kind is always safe.
+fn is_pattern_type(tcx: TyCtxt, ty: Ty) -> bool {
+    matches!(rustc_internal::internal(tcx, ty).kind(), rustc_middle::ty::TyKind::Pat(..))
+}
+
+/// Whether all validity requirements of the fields of `variant` (the untagged variant of a
+/// scalar niche-encoded enum) are single ranges, which the enum's own scalar `valid_range` then
+/// subsumes. Returns `false` if any requirement is not a single range (e.g. for `char`) or cannot
+/// be computed.
+fn niche_payload_is_single_range(
+    tcx: TyCtxt,
+    machine_info: &MachineInfo,
+    variant: &VariantDef,
+    args: &GenericArgs,
+) -> bool {
+    variant.fields().iter().all(|field| {
+        ty_validity_per_offset(tcx, machine_info, field.ty_with_args(args), 0).is_ok_and(|reqs| {
+            reqs.iter().all(|req| matches!(req.valid_range, ValidityRange::Single(_)))
+        })
+    })
+}
+
 /// Not all values are currently supported. For those not supported, we return Error.
 pub fn ty_validity_per_offset(
+    tcx: TyCtxt,
     machine_info: &MachineInfo,
     ty: Ty,
     current_offset: usize,
 ) -> Result<Vec<ValidValueReq>, String> {
     let layout = ty.layout().unwrap().shape();
     let ty_req = || {
-        if let Some(mut req) = ValidValueReq::try_from_ty(machine_info, ty)
+        if let Some(mut req) = ValidValueReq::try_from_ty(tcx, machine_info, ty)
             && !req.is_full()
         {
             req.offset = current_offset;
@@ -930,11 +1090,37 @@ pub fn ty_validity_per_offset(
             vec![]
         }
     };
+    // A pattern type's validity is fully captured by the valid_range of its
+    // layout's first scalar (see `try_from_ty`): integer bases add no
+    // requirements of their own, and the `NotNull` constraint is part of the
+    // range. This holds for a `Scalar` base and for a `ScalarPair` base (a
+    // pattern over a wide pointer, whose first scalar is the data pointer).
+    // Patterns over `char` are rejected below. Handle it here without
+    // inspecting the stable kind, which would panic for kinds `rustc_public`
+    // cannot yet convert (e.g. `PatternKind::NotNull` for `NonNull`).
+    if let rustc_middle::ty::TyKind::Pat(base_ty, _) = rustc_internal::internal(tcx, ty).kind() {
+        // `char`'s validity (two intervals around the surrogate gap) exceeds
+        // what a single scalar range can express, and the `char` special case
+        // in `try_from_ty` is not applied to pattern types; reject instead of
+        // under-checking.
+        if base_ty.is_char() {
+            return Err("Unsupported pattern type over `char`".to_string());
+        }
+        // A pattern over a wide pointer (e.g. `NonNull<[u8]>`'s `*const [u8] is !null`, which
+        // every allocation reaches since nightly-2026-03-21) has a `ScalarPair` ABI whose
+        // first scalar is the data pointer, so `try_from_ty` checks it like `&[u8]`. Any other
+        // ABI is reported as unsupported rather than asserted on, so `-Z valid-value-checks`
+        // never ICEs.
+        if !matches!(layout.value_repr, ValueRepr::Scalar(..) | ValueRepr::ScalarPair { .. }) {
+            return Err(format!("Unsupported pattern type over a non-scalar type: {ty}"));
+        }
+        return Ok(ty_req());
+    }
     match layout.fields {
         FieldsShape::Primitive => Ok(ty_req()),
         FieldsShape::Array { stride, count } if count > 0 => {
             let TyKind::RigidTy(RigidTy::Array(elem_ty, _)) = ty.kind() else { unreachable!() };
-            let elem_validity = ty_validity_per_offset(machine_info, elem_ty, current_offset)?;
+            let elem_validity = ty_validity_per_offset(tcx, machine_info, elem_ty, current_offset)?;
             let mut result = vec![];
             if !elem_validity.is_empty() {
                 for idx in 0..count {
@@ -954,7 +1140,7 @@ pub fn ty_validity_per_offset(
             Ok(result)
         }
         FieldsShape::Arbitrary { ref offsets } => {
-            match ty.kind().rigid().expect(&format!("unexpected type: {ty:?}")) {
+            match ty.kind().rigid().unwrap_or_else(|| panic!("unexpected type: {ty:?}")) {
                 RigidTy::Adt(def, args) => {
                     match def.kind() {
                         AdtKind::Enum => {
@@ -968,14 +1154,42 @@ pub fn ty_validity_per_offset(
                                     let mut fields_validity = vec![];
                                     for idx in layout.fields.fields_by_offset_order() {
                                         let field_offset = offsets[idx].bytes();
-                                        let field_ty = fields[idx].ty_with_args(&args);
+                                        let field_ty = fields[idx].ty_with_args(args);
                                         fields_validity.append(&mut ty_validity_per_offset(
+                                            tcx,
                                             machine_info,
                                             field_ty,
                                             field_offset + current_offset,
                                         )?);
                                     }
                                     Ok(fields_validity)
+                                }
+                                VariantsShape::Multiple {
+                                    tag_encoding: TagEncoding::Niche { untagged_variant, .. },
+                                    ref variants,
+                                    ..
+                                } if matches!(layout.value_repr, ValueRepr::Scalar(_))
+                                    && variants.iter().enumerate().all(|(index, variant)| {
+                                        index == untagged_variant.to_index()
+                                            || variant.offsets.is_empty()
+                                    })
+                                    && niche_payload_is_single_range(
+                                        tcx,
+                                        machine_info,
+                                        &ty_variants[untagged_variant.to_index()],
+                                        args,
+                                    ) =>
+                                {
+                                    // A niche-optimized enum like `Option<NonNull<T>>`,
+                                    // `Option<&T>` or `Option<NonZero<u32>>`: its layout is a single
+                                    // scalar, every variant except the untagged one is fieldless and
+                                    // thus encoded purely by niche values of that scalar, and the
+                                    // untagged variant's payload is that same scalar. The enum's own
+                                    // scalar `valid_range` is the payload's valid range widened by
+                                    // the niche values, so it describes exactly the enum's valid
+                                    // values, provided the payload's validity is itself a single
+                                    // range (checked above; e.g. `char`'s is not).
+                                    Ok(ty_req())
                                 }
                                 VariantsShape::Multiple {
                                     tag_encoding: TagEncoding::Niche { .. },
@@ -988,10 +1202,11 @@ pub fn ty_validity_per_offset(
                                     let mut fields_validity = vec![];
                                     for (index, variant) in variants.iter().enumerate() {
                                         let fields = ty_variants[index].fields();
-                                        for field_idx in variant.fields.fields_by_offset_order() {
-                                            let field_offset = offsets[field_idx].bytes();
-                                            let field_ty = fields[field_idx].ty_with_args(&args);
+                                        for field_idx in variant.fields_by_offset_order() {
+                                            let field_offset = variant.offsets[field_idx].bytes();
+                                            let field_ty = fields[field_idx].ty_with_args(args);
                                             fields_validity.append(&mut ty_validity_per_offset(
+                                                tcx,
                                                 machine_info,
                                                 field_ty,
                                                 field_offset + current_offset,
@@ -1016,8 +1231,9 @@ pub fn ty_validity_per_offset(
                             let fields = def.variants_iter().next().unwrap().fields();
                             for idx in layout.fields.fields_by_offset_order() {
                                 let field_offset = offsets[idx].bytes();
-                                let field_ty = fields[idx].ty_with_args(&args);
+                                let field_ty = fields[idx].ty_with_args(args);
                                 struct_validity.append(&mut ty_validity_per_offset(
+                                    tcx,
                                     machine_info,
                                     field_ty,
                                     field_offset + current_offset,
@@ -1027,11 +1243,10 @@ pub fn ty_validity_per_offset(
                         }
                     }
                 }
-                RigidTy::Pat(base_ty, ..) => {
-                    // This is similar to a structure with one field and with niche defined.
-                    let mut pat_validity = ty_req();
-                    pat_validity.append(&mut ty_validity_per_offset(machine_info, *base_ty, 0)?);
-                    Ok(pat_validity)
+                // Pattern types are fully handled before the match on the
+                // layout's field shape, so this arm can never be reached.
+                RigidTy::Pat(..) => {
+                    unreachable!("pattern types are handled before the field-shape match")
                 }
                 RigidTy::Tuple(tys) => {
                     let mut tuple_validity = vec![];
@@ -1039,6 +1254,7 @@ pub fn ty_validity_per_offset(
                         let field_offset = offsets[idx].bytes();
                         let field_ty = tys[idx];
                         tuple_validity.append(&mut ty_validity_per_offset(
+                            tcx,
                             machine_info,
                             field_ty,
                             field_offset + current_offset,
@@ -1064,11 +1280,11 @@ pub fn ty_validity_per_offset(
                 RigidTy::FnDef(_, _)
                 | RigidTy::FnPtr(_)
                 | RigidTy::Closure(_, _)
-                | RigidTy::Coroutine(_, _, _)
+                | RigidTy::Coroutine(_, _)
                 | RigidTy::CoroutineClosure(_, _)
                 | RigidTy::CoroutineWitness(_, _)
                 | RigidTy::Foreign(_)
-                | RigidTy::Dynamic(_, _, _) => Err(format!("Unsupported {ty:?}")),
+                | RigidTy::Dynamic(_, _) => Err(format!("Unsupported {ty:?}")),
             }
         }
         FieldsShape::Union(_) | FieldsShape::Array { .. } => {

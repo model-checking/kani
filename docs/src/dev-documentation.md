@@ -15,6 +15,7 @@ developers (including external contributors):
  4. [Development setup recommendations for working with `rustc`](./rustc-hacks.md).
  5. [Guide for testing in Kani](./testing.md).
  6. [Transition to StableMIR](./stable-mir.md).
+ 7. [Profiling Kani's performance](./profiling.md)
 
 > **NOTE**: The developer documentation is intended for Kani developers and not
 users. At present, the project is under heavy development and some items

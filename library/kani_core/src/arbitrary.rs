@@ -14,11 +14,10 @@ mod slice;
 #[macro_export]
 #[allow(clippy::crate_in_macro_def)]
 macro_rules! generate_arbitrary {
-    ($core:path) => {
+    () => {
         use core_path::marker::{PhantomData, PhantomPinned};
         use core_path::mem::MaybeUninit;
         use core_path::ptr::{self, addr_of_mut};
-        use $core as core_path;
 
         pub trait Arbitrary
         where
@@ -170,6 +169,291 @@ macro_rules! generate_arbitrary {
             fn any() -> Self {
                 if crate::kani::any() { MaybeUninit::new(T::any()) } else { MaybeUninit::uninit() }
             }
+        }
+
+        /// Generate a raw pointer in a nondeterministic allocation state, pointing to `storage`
+        /// in the valid case. The states are:
+        /// - null,
+        /// - out of bounds of the allocation (one past the end of `storage`, aligned and
+        ///   non-null, but not valid for reads or writes),
+        /// - valid, i.e., pointing to `storage`, which the caller keeps alive for as long as the
+        ///   returned pointer is in use.
+        ///
+        /// This model is used by the compiler to generate nondeterministic raw pointer values for
+        /// automatic harnesses (`kani autoharness`). Note that the returned pointer is aligned in
+        /// all states and has valid provenance, so that memory predicates such as
+        /// `kani::mem::can_dereference` can reason about it (they do not support pointers cast
+        /// from arbitrary integer addresses).
+        /// We do not generate pointers to deallocated objects, since Kani's memory predicates
+        /// cannot reason about those either ("Kani does not support reasoning about pointer to
+        /// unallocated memory"), which would break harnesses for functions with contracts over
+        /// their pointer arguments.
+        #[kanitool::fn_marker = "AnyPtrModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_ptr<T>(storage: &mut T) -> *mut T {
+            match crate::kani::any::<u8>() {
+                0 => ptr::null_mut(),
+                1 => (storage as *mut T).wrapping_add(1),
+                _ => storage as *mut T,
+            }
+        }
+
+        /// Generate a slice of nondeterministic length (at most `N`) referring to a prefix of
+        /// `storage`, a nondeterministic array that the caller keeps alive for as long as the
+        /// returned slice is in use.
+        ///
+        /// This model is used by the compiler to generate nondeterministic `&[T]` / `&mut [T]`
+        /// arguments for automatic harnesses (`kani autoharness`). Note that any verification
+        /// result obtained with a bounded value like this one is valid only up to the bound.
+        #[kanitool::fn_marker = "AnySliceRefModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_slice_ref<T, const N: usize>(storage: &mut [T; N]) -> &mut [T] {
+            let len: usize = crate::kani::any();
+            crate::kani::assume(len <= N);
+            &mut storage[..len]
+        }
+
+        /// Generate a string slice referring to the longest valid-UTF-8 prefix of `storage`, a
+        /// nondeterministic byte array (at most `N` bytes) that the caller keeps alive for as
+        /// long as the returned slice is in use. This is the same approach as `String`'s
+        /// `BoundedArbitrary` implementation: computing the valid prefix is a deterministic
+        /// function of the nondeterministic bytes, which symbolic execution handles well,
+        /// whereas *assuming* `str::from_utf8(..).is_ok()` over nondeterministic bytes and
+        /// length is intractable even for a handful of bytes. All string contents up to length
+        /// `N` are covered: a string of length `k < N` arises from storage whose byte at index
+        /// `k` starts an invalid sequence.
+        ///
+        /// This model is used by the compiler to generate nondeterministic `&str` arguments for
+        /// automatic harnesses (`kani autoharness`). Note that any verification result obtained
+        /// with a bounded value like this one is valid only up to the bound.
+        #[kanitool::fn_marker = "AnyStrRefModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_str_ref<const N: usize>(storage: &mut [u8; N]) -> &str {
+            let valid_len = match core_path::str::from_utf8(storage) {
+                Ok(_) => N,
+                // `valid_up_to` is always a character boundary.
+                Err(e) => e.valid_up_to(),
+            };
+            // SAFETY: `storage[..valid_len]` is the longest valid UTF-8 prefix of `storage`.
+            unsafe { core_path::str::from_utf8_unchecked(&storage[..valid_len]) }
+        }
+
+        /// Generate a C string referring to the bytes of `storage` up to its first NUL, where
+        /// `storage` is a nondeterministic byte array (at most `N` bytes; the driver rejects a
+        /// bound of 0, so `N` is at least 1) whose
+        /// last byte is set to NUL so that one always exists. As with `any_str_ref`, the result
+        /// is a deterministic function of the nondeterministic bytes: every C string of length
+        /// `k < N` arises from storage whose first NUL is at index `k`.
+        ///
+        /// This model is used by the compiler to generate nondeterministic `&CStr` arguments for
+        /// automatic harnesses (`kani autoharness`). Note that any verification result obtained
+        /// with a bounded value like this one is valid only up to the bound.
+        #[kanitool::fn_marker = "AnyCStrRefModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_c_str_ref<const N: usize>(storage: &mut [u8; N]) -> &core_path::ffi::CStr {
+            storage[N - 1] = 0;
+            // `storage` ends in NUL, so one is always found.
+            core_path::ffi::CStr::from_bytes_until_nul(storage).unwrap()
+        }
+
+        /// Generate a byte string referring to a prefix of `storage` of nondeterministic length
+        /// (at most `N`), as `any_slice_ref` does for `&[u8]`: a `ByteStr` is a `[u8]` with no
+        /// further invariant.
+        ///
+        /// This model is used by the compiler to generate nondeterministic `&ByteStr` arguments
+        /// for automatic harnesses (`kani autoharness`). Note that any verification result
+        /// obtained with a bounded value like this one is valid only up to the bound.
+        #[kanitool::fn_marker = "AnyByteStrRefModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_byte_str_ref<const N: usize>(
+            storage: &mut [u8; N],
+        ) -> &core_path::byte_str::ByteStr {
+            core_path::byte_str::ByteStr::new(any_slice_ref(storage))
+        }
+
+        /// Generate a WTF-8 string referring to the longest well-formed WTF-8 prefix of `storage`,
+        /// a nondeterministic byte array (at most `N` bytes), as `any_str_ref` does for UTF-8.
+        /// WTF-8 is UTF-8 that also admits the three-byte encodings of surrogate code points
+        /// (`ED A0..=BF 80..=BF`), except that a lead surrogate may not be directly followed by a
+        /// trail surrogate: that pair is written as the four-byte encoding of one supplementary
+        /// code point instead. All WTF-8 contents up to length `N` are covered, unpaired
+        /// surrogates included.
+        ///
+        /// This model is used by the compiler to generate nondeterministic `&Wtf8` arguments for
+        /// automatic harnesses (`kani autoharness`). Note that any verification result obtained
+        /// with a bounded value like this one is valid only up to the bound.
+        #[kanitool::fn_marker = "AnyWtf8RefModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        // `std` does not re-export `core::wtf8`, so the type is named through `core` in both arms.
+        pub fn any_wtf8_ref<const N: usize>(storage: &mut [u8; N]) -> &core::wtf8::Wtf8 {
+            let mut valid_len = 0;
+            // Whether the last code point of `storage[..valid_len]` is a lead surrogate.
+            let mut after_lead = false;
+            while valid_len < N {
+                let rest = &storage[valid_len..];
+                if rest[0] < 0x80 {
+                    after_lead = false;
+                    valid_len += 1;
+                    continue;
+                }
+                // The sequence width and the range of its second byte, as in UTF-8, except that
+                // `ED` also accepts `A0..=BF`, the surrogates.
+                let (width, second) = match rest[0] {
+                    0xC2..=0xDF => (2, 0x80..=0xBF),
+                    0xE0 => (3, 0xA0..=0xBF),
+                    0xE1..=0xEF => (3, 0x80..=0xBF),
+                    0xF0 => (4, 0x90..=0xBF),
+                    0xF1..=0xF3 => (4, 0x80..=0xBF),
+                    0xF4 => (4, 0x80..=0x8F),
+                    _ => break,
+                };
+                // Continuation bytes are `80..=BF`. They are checked by index, which leaves no
+                // loop over a slice of nondeterministic length for symbolic execution to unwind.
+                let is_cont = |b: u8| b & 0xC0 == 0x80;
+                if rest.len() < width
+                    || !second.contains(&rest[1])
+                    || (width > 2 && !is_cont(rest[2]))
+                    || (width > 3 && !is_cont(rest[3]))
+                {
+                    break;
+                }
+                let is_surrogate = rest[0] == 0xED && rest[1] >= 0xA0;
+                if after_lead && is_surrogate && rest[1] >= 0xB0 {
+                    break;
+                }
+                after_lead = is_surrogate && rest[1] < 0xB0;
+                valid_len += width;
+            }
+            // SAFETY: `storage[..valid_len]` is well-formed WTF-8, checked above.
+            unsafe { core::wtf8::Wtf8::from_bytes_unchecked(&storage[..valid_len]) }
+        }
+
+        /// Advance `searcher` a nondeterministic number of steps, up to `N`, from the front with
+        /// `next`, and then up to `N` steps from the back with `next_back`. Shared by the
+        /// `core::str::pattern` searcher models below, whose haystack is at most `N` bytes, hence
+        /// at most `N` chars, long, so these steps reach every state the public API can reach.
+        /// `N` is a const generic so that each loop keeps a constant bound.
+        fn advance_nondet<'a, S, const N: usize>(searcher: &mut S)
+        where
+            S: core_path::str::pattern::ReverseSearcher<'a>,
+        {
+            let mut i = 0;
+            while i < N {
+                if !crate::kani::any::<bool>() {
+                    break;
+                }
+                let _ = core_path::str::pattern::Searcher::next(searcher);
+                i += 1;
+            }
+            let mut j = 0;
+            while j < N {
+                if !crate::kani::any::<bool>() {
+                    break;
+                }
+                let _ = core_path::str::pattern::ReverseSearcher::next_back(searcher);
+                j += 1;
+            }
+        }
+
+        /// Generate a `CharArraySearcher<'_, M>` (the associated searcher for `[char; M]` as a
+        /// `Pattern`) over the haystack `any_str_ref` produces from `storage`, a nondeterministic
+        /// byte array (at most `N` bytes) that the caller keeps alive for as long as the returned
+        /// searcher is in use, searching for a nondeterministic array of `M` needle chars.
+        ///
+        /// The searcher is then advanced to a nondeterministic reachable state. Its state is
+        /// determined by the window of the haystack it has not consumed yet, and `next` and
+        /// `next_back` are the only two operations that change it. The haystack is at most `N`
+        /// bytes, hence at most `N` chars, long, so up to `N` steps from each end reach every
+        /// reachable state. The state is still established through the safe public API only.
+        ///
+        /// This model is used by the compiler to generate nondeterministic
+        /// `CharArraySearcher<'_, M>` arguments for automatic harnesses (`kani autoharness`).
+        /// Note that any verification result obtained with a bounded value like this one is
+        /// valid only up to the bound.
+        #[kanitool::fn_marker = "AnyCharArraySearcherModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_char_array_searcher<const N: usize, const M: usize>(
+            storage: &mut [u8; N],
+        ) -> core_path::str::pattern::CharArraySearcher<'_, M> {
+            let haystack = crate::kani::any_str_ref(storage);
+            let needle: [char; M] = crate::kani::any();
+            let mut searcher = core_path::str::pattern::Pattern::into_searcher(needle, haystack);
+            advance_nondet::<_, N>(&mut searcher);
+            searcher
+        }
+
+        /// Generate a `CharArrayRefSearcher<'a, 'b, M>` (the associated searcher for
+        /// `&'b [char; M]` as a `Pattern`) over the haystack `any_str_ref` produces from
+        /// `storage`, a nondeterministic byte array (at most `N` bytes), searching for a
+        /// nondeterministic array of `M` needle chars written into `needle_storage`. Unlike
+        /// `any_char_array_searcher`, the needle is borrowed rather than owned by the searcher,
+        /// so the caller supplies its own storage for it (`needle_storage`) and keeps both
+        /// `storage` and `needle_storage` alive for as long as the returned searcher is in use.
+        ///
+        /// The searcher is then advanced to a nondeterministic reachable state. Its state is
+        /// determined by the window of the haystack it has not consumed yet, and `next` and
+        /// `next_back` are the only two operations that change it. The haystack is at most `N`
+        /// bytes, hence at most `N` chars, long, so up to `N` steps from each end reach every
+        /// reachable state. The state is still established through the safe public API only.
+        ///
+        /// This model is used by the compiler to generate nondeterministic
+        /// `CharArrayRefSearcher<'a, 'b, M>` arguments for automatic harnesses (`kani
+        /// autoharness`). Note that any verification result obtained with a bounded value like
+        /// this one is valid only up to the bound.
+        #[kanitool::fn_marker = "AnyCharArrayRefSearcherModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_char_array_ref_searcher<'a, 'b, const N: usize, const M: usize>(
+            storage: &'a mut [u8; N],
+            needle_storage: &'b mut [char; M],
+        ) -> core_path::str::pattern::CharArrayRefSearcher<'a, 'b, M> {
+            let haystack = crate::kani::any_str_ref(storage);
+            *needle_storage = crate::kani::any();
+            let mut searcher =
+                core_path::str::pattern::Pattern::into_searcher(&*needle_storage, haystack);
+            advance_nondet::<_, N>(&mut searcher);
+            searcher
+        }
+
+        /// Generate a `CharSliceSearcher<'a, 'b>` (the associated searcher for `&'b [char]` as a
+        /// `Pattern`) over the haystack `any_str_ref` produces from `storage`, a nondeterministic
+        /// byte array (at most `N` bytes), searching for a nondeterministic-length prefix (`0..=M`
+        /// chars) of a nondeterministic array of `M` chars written into `needle_storage`. As with
+        /// `any_char_array_ref_searcher`, the caller supplies `needle_storage` and keeps both it
+        /// and `storage` alive for as long as the returned searcher is in use.
+        ///
+        /// The searcher is then advanced to a nondeterministic reachable state. Its state is
+        /// determined by the window of the haystack it has not consumed yet, and `next` and
+        /// `next_back` are the only two operations that change it. The haystack is at most `N`
+        /// bytes, hence at most `N` chars, long, so up to `N` steps from each end reach every
+        /// reachable state. The state is still established through the safe public API only.
+        ///
+        /// This model is used by the compiler to generate nondeterministic
+        /// `CharSliceSearcher<'a, 'b>` arguments for automatic harnesses (`kani autoharness`).
+        /// Note that any verification result obtained with a bounded value like this one is
+        /// valid only up to the bound.
+        #[kanitool::fn_marker = "AnyCharSliceSearcherModel"]
+        #[inline(never)]
+        #[doc(hidden)]
+        pub fn any_char_slice_searcher<'a, 'b, const N: usize, const M: usize>(
+            storage: &'a mut [u8; N],
+            needle_storage: &'b mut [char; M],
+        ) -> core_path::str::pattern::CharSliceSearcher<'a, 'b> {
+            let haystack = crate::kani::any_str_ref(storage);
+            *needle_storage = crate::kani::any();
+            let len: usize = crate::kani::any();
+            crate::kani::assume(len <= M);
+            let mut searcher =
+                core_path::str::pattern::Pattern::into_searcher(&needle_storage[..len], haystack);
+            advance_nondet::<_, N>(&mut searcher);
+            searcher
         }
 
         arbitrary_tuple!(A);

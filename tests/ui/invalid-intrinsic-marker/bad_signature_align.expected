@@ -1,0 +1,1 @@
+error: the `CheckedAlignOfIntrinsic` intrinsic marker can only be applied to a function with a single raw-pointer argument that returns `Option<usize>`

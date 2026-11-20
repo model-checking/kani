@@ -13,7 +13,6 @@ DEPS=(
   cmake3
   gcc10-c++
   git
-  wget
 )
 
 set -x

@@ -96,7 +96,7 @@ fn cargo_locate_project(input_args: &[OsString]) -> Result<PathBuf> {
 /// - "package.metadata.kani"
 /// - "kani"
 fn toml_to_args(tomldata: &str) -> Result<(Vec<OsString>, Vec<OsString>)> {
-    let config = tomldata.parse::<Value>()?;
+    let config = tomldata.parse::<Table>()?;
     // To make testing easier, our function contract is to produce a stable ordering of flags for a given input.
     // Consequently, we use BTreeMap instead of HashMap here.
     let mut map: BTreeMap<String, Value> = BTreeMap::new();
@@ -105,21 +105,21 @@ fn toml_to_args(tomldata: &str) -> Result<(Vec<OsString>, Vec<OsString>)> {
 
     for table in tables {
         if let Some(table) = get_table(&config, table) {
-            if let Some(entry) = table.get("flags") {
-                if let Some(val) = entry.as_table() {
-                    map.extend(val.iter().map(|(x, y)| (x.to_owned(), y.to_owned())));
-                }
+            if let Some(entry) = table.get("flags")
+                && let Some(val) = entry.as_table()
+            {
+                map.extend(val.iter().map(|(x, y)| (x.to_owned(), y.to_owned())));
             }
 
-            if let Some(entry) = table.get("unstable") {
-                if let Some(val) = entry.as_table() {
-                    args.append(
-                        &mut val
-                            .iter()
-                            .filter_map(|(k, v)| unstable_entry(k, v).transpose())
-                            .collect::<Result<Vec<_>>>()?,
-                    );
-                }
+            if let Some(entry) = table.get("unstable")
+                && let Some(val) = entry.as_table()
+            {
+                args.append(
+                    &mut val
+                        .iter()
+                        .filter_map(|(k, v)| unstable_entry(k, v).transpose())
+                        .collect::<Result<Vec<_>>>()?,
+                );
             }
         }
     }
@@ -210,12 +210,12 @@ fn cbmc_arg_from_toml(value: &Value) -> Result<Vec<OsString>> {
 }
 
 /// Take 'a.b.c' and turn it into 'start['a']['b']['c']' reliably, and interpret the result as a table
-fn get_table<'a>(start: &'a Value, table: &str) -> Option<&'a Table> {
-    let mut current = start;
+fn get_table<'a>(start: &'a Table, table: &str) -> Option<&'a Table> {
+    let mut current = Some(start);
     for key in table.split('.') {
-        current = current.get(key)?;
+        current = current.and_then(|t| t.get(key).and_then(|v| v.as_table()));
     }
-    current.as_table()
+    current
 }
 
 #[cfg(test)]

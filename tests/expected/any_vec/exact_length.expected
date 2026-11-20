@@ -1,11 +1,11 @@
 Checking harness check_access_length_17...
 
-Failed Checks: assumption failed\
+Failed Checks: Rust intrinsic assumption failed\
 in <usize as std::slice::SliceIndex<[u8]>>::get_unchecked
 
 Checking harness check_access_length_zero...
 
-Failed Checks: assumption failed\
+Failed Checks: Rust intrinsic assumption failed\
 in <usize as std::slice::SliceIndex<[u8]>>::get_unchecked
 
 Verification failed for - check_access_length_17

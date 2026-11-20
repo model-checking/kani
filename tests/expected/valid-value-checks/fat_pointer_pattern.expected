@@ -1,0 +1,4 @@
+Failed Checks: Undefined Behavior: Invalid value of type `std::ptr::NonNull<[u8]>`
+
+Verification failed for - null_data_pointer
+Complete - 1 successfully verified harnesses, 1 failures, 2 total.

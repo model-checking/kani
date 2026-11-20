@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //
 // Test that the automatic harness generation feature selects functions correctly
-// when --include-function is provided.
+// when --include-pattern is provided.
 
 // Each function inside this module matches the filter.
 mod include {
@@ -10,7 +10,7 @@ mod include {
         x
     }
 
-    // Doesn't implement Arbitrary, so still should not be included.
+    // Generic functions get instantiated with a concrete type (e.g. `i32`).
     fn generic<T>(x: u32, _y: T) -> u32 {
         x
     }

@@ -12,6 +12,12 @@ pub struct SymbolTable {
 }
 
 /// Constructors
+impl Default for SymbolTable {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SymbolTable {
     pub fn new() -> SymbolTable {
         SymbolTable { symbol_table: BTreeMap::new() }

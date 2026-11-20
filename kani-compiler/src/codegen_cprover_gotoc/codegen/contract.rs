@@ -1,18 +1,21 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-use crate::codegen_cprover_gotoc::{GotocCtx, codegen::ty_stable::pointee_type_stable};
+use crate::codegen_cprover_gotoc::{
+    GotocCtx,
+    codegen::{ty_stable::pointee_type_stable, typ},
+};
 use crate::kani_middle::attributes::KaniAttributes;
 use cbmc::goto_program::FunctionContract;
-use cbmc::goto_program::{Expr, Lambda, Location, Type};
+use cbmc::goto_program::{Expr, Lambda, Location};
 use kani_metadata::AssignsContract;
 use rustc_hir::def_id::DefId as InternalDefId;
-use rustc_smir::rustc_internal;
-use stable_mir::CrateDef;
-use stable_mir::mir::mono::{Instance, MonoItem};
-use stable_mir::mir::{Local, VarDebugInfoContents};
-use stable_mir::ty::{FnDef, RigidTy, TyKind};
+use rustc_public::CrateDef;
+use rustc_public::mir::mono::{Instance, MonoItem};
+use rustc_public::mir::{Local, VarDebugInfoContents};
+use rustc_public::rustc_internal;
+use rustc_public::ty::{FnDef, RigidTy, TyKind};
 
-impl GotocCtx<'_> {
+impl GotocCtx<'_, '_> {
     /// Given the `proof_for_contract` target `function_under_contract` and the reachable `items`,
     /// find or create the `AssignsContract` that needs to be enforced and attach it to the symbol
     /// for which it needs to be enforced.
@@ -63,16 +66,21 @@ impl GotocCtx<'_> {
         // Return item tagged with `#[kanitool::recursion_tracker]`
         let mut recursion_trackers = items.iter().filter_map(|item| {
             let MonoItem::Static(static_item) = item else { return None };
-            if !static_item
-                .attrs_by_path(&["kanitool".into(), "recursion_tracker".into()])
-                .is_empty()
+            if !static_item.tool_attrs(&["kanitool".into(), "recursion_tracker".into()]).is_empty()
             {
                 let span = static_item.span();
                 let loc = self.codegen_span_stable(span);
                 Some(format!(
                     "{}:{}",
                     loc.filename().expect("recursion location wrapper should have a file name"),
-                    static_item.name(),
+                    // The `--nondet-static-exclude` value must match the static's
+                    // pretty name in the goto model. Since rust-lang/rust#149401,
+                    // `name()` is crate-qualified for local items, but the pretty
+                    // name is kept crate-relative (see `readable_name`), so strip
+                    // the crate prefix here too; otherwise the recursion tracker
+                    // `REENTRY` is not excluded from `--nondet-static` and gets
+                    // havocked, breaking contract-recursion checking.
+                    crate::kani_middle::strip_local_crate_prefix(static_item.name()),
                 ))
             } else {
                 None
@@ -93,7 +101,7 @@ impl GotocCtx<'_> {
         let contract_attrs =
             KaniAttributes::for_instance(self.tcx, instance).contract_attributes()?;
         let mut find_closure = |inside: Instance, name: &str| {
-            let body = self.transformer.body(self.tcx, inside);
+            let body = self.transformer.body_ref(self.tcx, inside);
             body.var_debug_info.iter().find_map(|var_info| {
                 if var_info.name.as_str() == name {
                     let ty = match &var_info.value {
@@ -131,26 +139,36 @@ impl GotocCtx<'_> {
             .typ
             .clone();
 
-        let shadow_memory_assign = self
-            .tcx
-            .all_diagnostic_items(())
-            .name_to_id
-            .get(&rustc_span::symbol::Symbol::intern("KaniMemoryInitializationState"))
-            .map(|attr_id| {
-                self.tcx
-                    .symbol_name(rustc_middle::ty::Instance::mono(self.tcx, *attr_id))
-                    .name
-                    .to_string()
-            })
-            .and_then(|shadow_memory_table| self.symbol_table.lookup(&shadow_memory_table).cloned())
-            .map(|shadow_memory_symbol| {
-                vec![Lambda::as_contract_for(
-                    &goto_annotated_fn_typ,
-                    None,
-                    shadow_memory_symbol.to_expr(),
-                )]
-            })
-            .unwrap_or_default();
+        // Find the memory-initialization shadow-memory static. It is tagged with the
+        // `KaniMemoryInitializationState` `fn_marker` (a `#[rustc_diagnostic_item]`
+        // can no longer be applied to statics). Its goto symbol is named after the
+        // static's mangled name, matching `codegen_static`.
+        let shadow_memory_assign = {
+            let mut crates = rustc_public::find_crates("kani");
+            if crates.is_empty() {
+                // In case we are using `kani_core`.
+                crates.extend(rustc_public::find_crates("core"));
+            }
+            crates
+                .into_iter()
+                .flat_map(|krate| krate.statics())
+                .find(|static_def| {
+                    crate::kani_middle::attributes::fn_marker(*static_def).as_deref()
+                        == Some("KaniMemoryInitializationState")
+                })
+                .map(|static_def| Instance::from(static_def).mangled_name())
+                .and_then(|shadow_memory_table| {
+                    self.symbol_table.lookup(&shadow_memory_table).cloned()
+                })
+                .map(|shadow_memory_symbol| {
+                    vec![Lambda::as_contract_for(
+                        &goto_annotated_fn_typ,
+                        None,
+                        shadow_memory_symbol.to_expr(),
+                    )]
+                })
+                .unwrap_or_default()
+        };
 
         // The last argument is a tuple with addresses that can be modified.
         let modifies_local = Local::from(modifies.fn_abi().unwrap().args.len());
@@ -162,7 +180,7 @@ impl GotocCtx<'_> {
         };
 
         for ty in &modifies_tys {
-            assert!(ty.kind().is_any_ptr(), "Expected pointer, but found {}", ty);
+            assert!(ty.kind().is_any_ptr(), "Expected pointer, but found {ty}");
         }
 
         let assigns: Vec<_> = modifies_tys
@@ -177,41 +195,33 @@ impl GotocCtx<'_> {
                         TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) => pointee_ty,
                         kind => unreachable!("Expected a raw pointer, but found {:?}", kind),
                     };
+                    // The pointee spans `len` elements for slices and `str`, and the size the
+                    // vtable records for trait objects.
+                    let len = || ptr.clone().member("len", &self.symbol_table);
                     let size = match unref.kind() {
                         TyKind::RigidTy(RigidTy::Slice(elt_type)) => {
-                            elt_type.layout().unwrap().shape().size.bytes()
+                            let elt_size = elt_type.layout().unwrap().shape().size.bytes();
+                            len().mul(Expr::size_constant(
+                                elt_size.try_into().unwrap(),
+                                &self.symbol_table,
+                            ))
                         }
-                        TyKind::RigidTy(RigidTy::Str) => 1,
+                        TyKind::RigidTy(RigidTy::Str) => len(),
+                        TyKind::RigidTy(RigidTy::Dynamic(..)) => ptr
+                            .clone()
+                            .member("vtable", &self.symbol_table)
+                            .dereference()
+                            .member(typ::VTABLE_SIZE_FIELD, &self.symbol_table),
                         // For adt, see https://rust-lang.zulipchat.com/#narrow/stream/182449-t-compiler.2Fhelp
                         TyKind::RigidTy(RigidTy::Adt(..)) => {
                             todo!("Adt fat pointers not implemented")
                         }
-                        kind => unreachable!("Generating a slice fat pointer to {:?}", kind),
+                        kind => unreachable!("Generating a fat pointer to {:?}", kind),
                     };
                     Lambda::as_contract_for(
                         &goto_annotated_fn_typ,
                         None,
-                        Expr::symbol_expression(
-                            "__CPROVER_object_upto",
-                            Type::code(
-                                vec![
-                                    Type::empty()
-                                        .to_pointer()
-                                        .as_parameter(None, Some("ptr".into())),
-                                    Type::size_t().as_parameter(None, Some("size".into())),
-                                ],
-                                Type::empty(),
-                            ),
-                        )
-                        .call(vec![
-                            ptr.clone()
-                                .member("data", &self.symbol_table)
-                                .cast_to(Type::empty().to_pointer()),
-                            ptr.member("len", &self.symbol_table).mul(Expr::size_constant(
-                                size.try_into().unwrap(),
-                                &self.symbol_table,
-                            )),
-                        ]),
+                        self.codegen_object_upto(ptr.member("data", &self.symbol_table), size),
                     )
                 } else {
                     Lambda::as_contract_for(&goto_annotated_fn_typ, None, ptr.dereference())

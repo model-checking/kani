@@ -24,8 +24,9 @@ impl<'a> ContractConditionsHandler<'a> {
         let Self { attr_copy, .. } = self;
         match &self.condition_type {
             ContractConditionsData::Requires { attr } => {
+                let assume_bracketed = bracket_clause_stmt(quote!(kani::assume(#attr);));
                 quote!({
-                    kani::assume(#attr);
+                    #assume_bracketed
                     #(#body_stmts)*
                 })
             }
@@ -34,8 +35,9 @@ impl<'a> ContractConditionsHandler<'a> {
 
                 // The code that enforces the postconditions and cleans up the shallow
                 // argument copies (with `mem::forget`).
+                let ensures_bracketed = bracket_clause_expr(quote!(#ensures_clause));
                 let exec_postconditions = quote!(
-                    kani::assert(#ensures_clause, stringify!(#attr_copy));
+                    kani::assert(#ensures_bracketed, stringify!(#attr_copy));
                 );
 
                 let return_expr = body_stmts.pop();
@@ -67,8 +69,8 @@ impl<'a> ContractConditionsHandler<'a> {
                 });
                 if let Some(Expr::Tuple(values)) = wrapper_tuple {
                     values.elems.extend(attr.iter().map(|attr| {
-                        let expr: Expr = parse_quote!(#attr
-                        as *const _);
+                        let bracketed = bracket_clause_expr(quote!(#attr as *const _));
+                        let expr: Expr = parse_quote!(#bracketed);
                         expr
                     }));
                 } else {
@@ -114,7 +116,7 @@ impl<'a> ContractConditionsHandler<'a> {
         quote!(
             #[kanitool::is_contract_generated(check)]
             #[allow(dead_code, unused_variables, unused_mut)]
-            let mut #check_ident = || #output #body;
+            let mut #check_ident = kani_force_fn_once(|| #output #body);
         )
     }
 
@@ -123,9 +125,10 @@ impl<'a> ContractConditionsHandler<'a> {
     /// First find the modifies body and expand that. Then expand the rest of the body.
     pub fn expand_check(&self, closure: &mut Stmt) {
         let body = closure_body(closure);
-        self.expand_modifies(find_contract_closure(&mut body.block.stmts, "wrapper").expect(
-            &format!("Internal Failure: Expected to find `wrapper` closure, but found none"),
-        ));
+        self.expand_modifies(
+            find_contract_closure(&mut body.block.stmts, "wrapper")
+                .expect("Internal Failure: Expected to find `wrapper` closure, but found none"),
+        );
         *body = syn::parse2(self.make_check_body(mem::take(&mut body.block.stmts))).unwrap();
     }
 
@@ -143,10 +146,10 @@ impl<'a> ContractConditionsHandler<'a> {
         quote!(
             #[kanitool::is_contract_generated(wrapper)]
             #[allow(dead_code, unused_variables, unused_mut)]
-            let mut #modifies_ident = |#wrapper_ident: _| #output {
+            let mut #modifies_ident = kani_force_fn_once_with_args(|#wrapper_ident: _| #output {
                 #redefs
                 #(#stmts)*
-            };
+            });
         )
     }
 
@@ -156,7 +159,13 @@ impl<'a> ContractConditionsHandler<'a> {
             let Stmt::Local(Local { init: Some(LocalInit { expr, .. }), .. }) = closure_stmt else {
                 unreachable!()
             };
-            let Expr::Closure(closure) = expr.as_ref() else { unreachable!() };
+            // The closure is wrapped into `kani_force_fn_once_with_args`
+            let Expr::Call(call) = expr.as_ref() else { unreachable!() };
+            if call.args.len() != 1 {
+                unreachable!()
+            }
+            let expr = call.args.first().unwrap();
+            let Expr::Closure(closure) = expr else { unreachable!() };
             let Expr::Block(body) = closure.body.as_ref() else { unreachable!() };
             let stream = self.modifies_closure(&closure.output, &body.block, TokenStream2::new());
             *closure_stmt = syn::parse2(stream).unwrap();
@@ -173,6 +182,15 @@ impl<'a> ContractConditionsHandler<'a> {
                     FnArg::Receiver(syn::Receiver { mutability: Some(_), reference: None, .. },)
                 )
             })
+            .unwrap_or(false)
+    }
+
+    /// Return whether the original function takes `self` by value (an owned
+    /// receiver), e.g. `fn into_inner(self)`.
+    pub fn has_owned_receiver(&self) -> bool {
+        let first_arg = self.annotated_fn.sig.inputs.first();
+        first_arg
+            .map(|arg| matches!(arg, FnArg::Receiver(syn::Receiver { reference: None, .. },)))
             .unwrap_or(false)
     }
 

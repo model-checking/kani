@@ -5,7 +5,8 @@
 //! uninitialized memory via raw pointers.
 
 use crate::args::ExtraChecks;
-use crate::kani_middle::kani_functions::{KaniFunction, KaniModel};
+use crate::kani_middle::attributes::attrs_by_path;
+use crate::kani_middle::kani_functions::{KaniFunction, KaniIntrinsic, KaniModel};
 use crate::kani_middle::transform::{
     TransformPass, TransformationType,
     body::{CheckType, InsertPosition, MutableBody, SourceInstruction},
@@ -13,8 +14,8 @@ use crate::kani_middle::transform::{
 };
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
-use rustc_smir::rustc_internal;
-use stable_mir::{
+use rustc_public::rustc_internal;
+use rustc_public::{
     CrateDef,
     mir::{Body, Mutability, Place, mono::Instance},
     ty::{FnDef, GenericArgs, Ty},
@@ -28,9 +29,10 @@ mod uninit_visitor;
 
 /// Top-level pass that instruments the code with checks for uninitialized memory access through raw
 /// pointers.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UninitPass {
-    pub check_type: CheckType,
+    pub safety_check_type: CheckType,
+    pub unsupported_check_type: CheckType,
     pub mem_init_fn_cache: HashMap<KaniFunction, FnDef>,
 }
 
@@ -66,7 +68,8 @@ impl TransformPass for UninitPass {
         let (instrumentation_added, body) = UninitInstrumenter::run(
             new_body.into(),
             instance,
-            self.check_type.clone(),
+            self.safety_check_type.clone(),
+            self.unsupported_check_type.clone(),
             &mut self.mem_init_fn_cache,
             CheckUninitVisitor::new(),
         );
@@ -77,6 +80,13 @@ impl TransformPass for UninitPass {
 
 /// Checks if the instance is a harness -- an entry point of Kani analysis.
 fn is_harness(instance: Instance, tcx: TyCtxt) -> bool {
+    // Automatic harnesses have a generated wrapper body but retain the intrinsic DefId.
+    if matches!(
+        KaniFunction::try_from(instance),
+        Ok(KaniFunction::Intrinsic(KaniIntrinsic::AutomaticHarness))
+    ) {
+        return true;
+    }
     let harness_identifiers = [
         vec![
             rustc_span::symbol::Symbol::intern("kanitool"),
@@ -88,7 +98,9 @@ fn is_harness(instance: Instance, tcx: TyCtxt) -> bool {
         ],
     ];
     harness_identifiers.iter().any(|attr_path| {
-        tcx.has_attrs_with_path(rustc_internal::internal(tcx, instance.def.def_id()), attr_path)
+        attrs_by_path(tcx, rustc_internal::internal(tcx, instance.def.def_id()), attr_path)
+            .next()
+            .is_some()
     })
 }
 

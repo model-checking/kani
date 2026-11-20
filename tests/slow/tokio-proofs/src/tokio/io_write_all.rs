@@ -18,9 +18,8 @@ use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-#[cfg(disabled)] // because it timed out after 2h
 #[kani::proof]
-#[kani::unwind(2)]
+#[kani::unwind(12)]
 async fn write_all() {
     struct Wr {
         buf: BytesMut,

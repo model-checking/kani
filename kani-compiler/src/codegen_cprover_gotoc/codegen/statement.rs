@@ -1,26 +1,243 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
+use super::ty_stable::pointee_type_stable;
 use super::typ::FN_RETURN_VOID_VAR_NAME;
 use super::typ::TypeExt;
 use super::{PropertyClass, bb_label};
-use crate::codegen_cprover_gotoc::codegen::function::rustc_smir::region_from_coverage_opaque;
+use crate::codegen_cprover_gotoc::codegen::function::rustc_public_bridge::region_from_coverage_opaque;
+use crate::codegen_cprover_gotoc::context::LoopDecreases;
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
+use rustc_abi::Size;
 use rustc_abi::{FieldsShape, Primitive, TagEncoding, Variants};
 use rustc_middle::ty::layout::LayoutOf;
 use rustc_middle::ty::{List, TypingEnv};
-use rustc_smir::rustc_internal;
-use stable_mir::abi::{ArgAbi, FnAbi, PassMode};
-use stable_mir::mir::mono::{Instance, InstanceKind};
-use stable_mir::mir::{
-    AssertMessage, BasicBlockIdx, CopyNonOverlapping, NonDivergingIntrinsic, Operand, Place,
-    RETURN_LOCAL, Statement, StatementKind, SwitchTargets, Terminator, TerminatorKind,
+use rustc_public::CrateDef;
+use rustc_public::abi::{ArgAbi, FnAbi, PassMode};
+use rustc_public::mir::mono::{Instance, InstanceKind};
+use rustc_public::mir::{
+    AssertMessage, BasicBlockIdx, CopyNonOverlapping, Local, NonDivergingIntrinsic, Operand, Place,
+    ProjectionElem, RETURN_LOCAL, Rvalue, Statement, StatementKind, SwitchTargets, Terminator,
+    TerminatorKind,
 };
-use stable_mir::ty::{Abi, RigidTy, Span, Ty, TyKind, VariantIdx};
+use rustc_public::rustc_internal;
+use rustc_public::ty::{Abi, RigidTy, Span, Ty, TyKind, VariantIdx};
 use tracing::{debug, debug_span, trace};
 
-impl GotocCtx<'_> {
+impl GotocCtx<'_, '_> {
+    pub fn ty_to_assign_target(&self, ty: Ty, expr: &Expr) -> Expr {
+        match ty.kind() {
+            TyKind::RigidTy(RigidTy::Ref(_, unref_ty, _))
+            | TyKind::RigidTy(RigidTy::RawPtr(unref_ty, _)) => match unref_ty.kind() {
+                TyKind::RigidTy(RigidTy::Slice(slice_ty)) => {
+                    let size = slice_ty.layout().unwrap().shape().size.bytes();
+                    self.codegen_object_upto(
+                        expr.clone().member("data", &self.symbol_table),
+                        expr.clone()
+                            .member("len", &self.symbol_table)
+                            .mul(Expr::size_constant(size.try_into().unwrap(), &self.symbol_table)),
+                    )
+                }
+                _ => expr.clone().dereference(),
+            },
+            _ => expr.clone().dereference(),
+        }
+    }
+
+    /// Generate the assigns target `__CPROVER_object_upto(ptr, size)` for the `size` bytes
+    /// starting at `ptr`.
+    ///
+    /// CBMC requires the pointer of such a target to be null or writable up to `size` bytes,
+    /// even when `size` is zero. The data pointer of an empty slice is often dangling (e.g., the
+    /// one of an empty `Vec`), which CBMC does not consider writable. A zero-sized target covers
+    /// no memory, so we use a null pointer for it instead: CBMC neither havocs a null target nor
+    /// allows writes through it.
+    pub fn codegen_object_upto(&self, ptr: Expr, size: Expr) -> Expr {
+        let void_ptr = Type::empty().to_pointer();
+        let effective_ptr =
+            size.clone().is_zero().ternary(void_ptr.null(), ptr.cast_to(void_ptr.clone()));
+        Expr::symbol_expression(
+            "__CPROVER_object_upto",
+            Type::code(
+                vec![
+                    void_ptr.as_parameter(None, Some("ptr".into())),
+                    Type::size_t().as_parameter(None, Some("size".into())),
+                ],
+                Type::empty(),
+            ),
+        )
+        .call(vec![effective_ptr, size])
+    }
+
+    /// The assigns targets of a loop modifies clause, given the right-hand side of its binding:
+    /// a tuple of pointers to the targets (see `loop_modifies_binding` in `kani_macros`), or a
+    /// reference to a local of zero size for an empty clause.
+    pub fn rvalue_to_assign_targets(&mut self, rvalue: &Rvalue, location: Location) -> Vec<Expr> {
+        match rvalue {
+            // Generate each operand on its own, rather than the tuple: the fields of the
+            // generated tuple are in the order of its layout, which can differ from the order of
+            // the operands.
+            Rvalue::Aggregate(_agg_kind, operands) => operands
+                .iter()
+                .filter_map(|operand| {
+                    let operand_ty = self.operand_ty_stable(operand);
+                    // Do not emit an assigns target for a pointer to a ZST. Havocking a
+                    // zero-sized location is a no-op (a ZST has a single inhabitant and
+                    // occupies zero bytes), so dropping it preserves soundness, while
+                    // keeping it makes CBMC abort with `l2_rename_rvalues case 'struct'
+                    // not handled` when the target is a zero-sized struct (e.g. a
+                    // capture-free closure). This mirrors the function-contract handling
+                    // in `codegen_modifies_target`.
+                    if pointee_type_stable(operand_ty).is_some_and(|ty| self.is_zst_stable(ty)) {
+                        return None;
+                    }
+                    let expr = self.codegen_operand_stable(operand);
+                    Some(self.ty_to_assign_target(operand_ty, &expr))
+                })
+                .collect(),
+            // A single target. Like above, a pointer to a ZST is not a target, and neither is
+            // the reference to a local of zero size of an empty clause.
+            _ => {
+                let rvalue_ty = self.rvalue_ty_stable(rvalue);
+                if self.is_zst_stable(rvalue_ty)
+                    || pointee_type_stable(rvalue_ty).is_some_and(|ty| self.is_zst_stable(ty))
+                {
+                    vec![]
+                } else {
+                    let assigns = self.codegen_rvalue_stable(rvalue, location);
+                    vec![self.ty_to_assign_target(rvalue_ty, &assigns)]
+                }
+            }
+        }
+    }
+
+    /// Whether `stmt` contains at least one dereference and every dereference
+    /// in it is a load of a by-reference closure capture in a contract-clause
+    /// closure (see [crate::codegen_cprover_gotoc::context::CurrentFnCtx::is_capture_ref_local]).
+    /// For such statements pointer-validity checks are vacuous by construction.
+    ///
+    /// This is deliberately conservative: any dereference that is not
+    /// *directly* a capture load — including further dereferences of the
+    /// captured value performed by the user-written clause expression — makes
+    /// this function return `false`, keeping full checking in place.
+    fn stmt_derefs_only_capture_refs(&self, stmt: &Statement) -> bool {
+        if !self.current_fn().has_capture_ref_locals() {
+            return false;
+        }
+        let StatementKind::Assign(lhs, rhs) = &stmt.kind else {
+            return false;
+        };
+        let mut places: Vec<&Place> = vec![lhs];
+        collect_rvalue_places(rhs, &mut places);
+        let mut has_deref = false;
+        for place in places {
+            for (idx, elem) in place.projection.iter().enumerate() {
+                if matches!(elem, ProjectionElem::Deref) {
+                    // After the `Derefer` MIR pass, `Deref` only appears as the
+                    // first projection element; treat anything else as unknown.
+                    if idx == 0 && self.current_fn().is_capture_ref_local(place.local) {
+                        has_deref = true;
+                    } else {
+                        return false;
+                    }
+                }
+            }
+        }
+        has_deref
+    }
+
+    /// Whether `local` is the binding of a `#[kani::loop_decreases]` clause (see `loop_decreases`
+    /// in `kani_macros`).
+    fn is_loop_decreases_binding(&self, local: Local) -> bool {
+        self.current_fn().local_name(local).is_some_and(|name| name == "kani_loop_decreases")
+    }
+
+    /// Whether CBMC can evaluate `rvalue`, the right-hand side of the binding of a decreases
+    /// clause, before and after each iteration of the loop: it must only read user variables and
+    /// arguments, and not temporaries, whose values are computed before the loop. A constant is
+    /// not evaluated at each iteration either.
+    fn is_live_loop_decreases_measure(&self, rvalue: &Rvalue) -> bool {
+        let mut places = vec![];
+        collect_rvalue_places(rvalue, &mut places);
+        if places.is_empty() {
+            return false;
+        }
+        let arg_count = self.current_fn().arg_count();
+        places.iter().all(|place| {
+            let index_locals = place.projection.iter().filter_map(|elem| match elem {
+                ProjectionElem::Index(local) => Some(*local),
+                _ => None,
+            });
+            std::iter::once(place.local)
+                .chain(index_locals)
+                .all(|local| (1..=arg_count).contains(&local) || self.is_user_variable(&local))
+        })
+    }
+
+    /// Record `measure` as the measure of the decreases clause with binding `binding`, which is
+    /// attached to the first loop head generated after it (see `codegen_block`). If the measure
+    /// is `computed_once`, before the loop, the decreases check fails.
+    fn record_loop_decreases(
+        &mut self,
+        binding: Local,
+        measure: Expr,
+        computed_once: bool,
+        span: Span,
+    ) {
+        let decreases = LoopDecreases { binding, measure, computed_once, span };
+        let pending = self.current_fn_mut().loop_decreases_mut().pending.replace(decreases);
+        match pending {
+            Some(pending) if pending.binding == binding => {
+                // Another assignment of the same binding: report it once.
+                if computed_once && !pending.computed_once {
+                    self.report_loop_decreases_computed_once(span);
+                }
+            }
+            pending => {
+                if let Some(pending) = pending {
+                    self.report_ignored_loop_decreases(pending.span);
+                }
+                if computed_once {
+                    self.report_loop_decreases_computed_once(span);
+                }
+            }
+        }
+    }
+
+    /// Warn that the measure of the decreases clause with the binding at `span` is computed once,
+    /// before the loop, so that the decreases check fails.
+    fn report_loop_decreases_computed_once(&self, span: Span) {
+        let msg = "the measure of this `#[kani::loop_decreases]` clause is computed once, before \
+                   the loop, so the decreases check will fail even if the measure decreases";
+        self.tcx
+            .dcx()
+            .struct_span_warn(rustc_internal::internal(self.tcx, span), msg)
+            .with_note(
+                "Kani evaluates a measure at each iteration of the loop only if it reads \
+                 variables directly (e.g. `x`, `s.field` or `*p`). Other measures, such as \
+                 arithmetic with overflow checks, casts, indexing, function calls, `if` \
+                 expressions and constants, are computed before the loop.",
+            )
+            .with_note("see https://github.com/model-checking/kani/issues/4585")
+            .emit();
+    }
+
+    /// Warn that the decreases clause with the binding at `span` is ignored, since loop contracts
+    /// are not enabled.
+    fn report_loop_decreases_without_loop_contracts(&self, span: Span) {
+        let msg = "found `#[kani::loop_decreases]` without `-Z loop-contracts`. The decreases \
+                   clause will be ignored.";
+        self.tcx.dcx().span_warn(rustc_internal::internal(self.tcx, span), msg);
+    }
+
+    /// Warn that the decreases clause with the binding at `span` is not attached to a loop.
+    pub fn report_ignored_loop_decreases(&self, span: Span) {
+        let msg = "found `#[kani::loop_decreases]` that is not attached to a loop with \
+                   `#[kani::loop_invariant]`. The decreases clause will be ignored.";
+        self.tcx.dcx().span_warn(rustc_internal::internal(self.tcx, span), msg);
+    }
+
     /// Generate Goto-C for MIR [Statement]s.
     /// This does not cover all possible "statements" because MIR distinguishes between ordinary
     /// statements and [Terminator]s, which can exclusively appear at the end of a basic block.
@@ -29,11 +246,64 @@ impl GotocCtx<'_> {
     pub fn codegen_statement(&mut self, stmt: &Statement) -> Stmt {
         let _trace_span = debug_span!("CodegenStatement", statement = ?stmt).entered();
         debug!(?stmt, kind=?stmt.kind, "handling_statement");
-        let location = self.codegen_span_stable(stmt.span);
+        let location = if self.stmt_derefs_only_capture_refs(stmt) {
+            // Every dereference in this statement only loads a by-reference
+            // closure capture of a contract-clause closure, which is valid by
+            // construction (see `CurrentFnCtx::is_capture_ref_local`), so tell
+            // CBMC not to generate pointer-validity checks for it.
+            self.codegen_span_stable_with_pragmas(stmt.source_info.span, &["disable:pointer-check"])
+        } else {
+            self.codegen_span_stable(stmt.source_info.span)
+        };
+        self.current_stmt_loc = location;
         match &stmt.kind {
             StatementKind::Assign(lhs, rhs) => {
                 let lty = self.place_ty_stable(lhs);
                 let rty = self.rvalue_ty_stable(rhs);
+                let instance = self.current_fn().instance_stable();
+                if lhs.projection.is_empty()
+                    && let Some(register_fn) =
+                        self.transformer.loop_of_modifies_binding(instance, lhs.local)
+                {
+                    // The binding of the loop modifies clause of the loop that the loop contract
+                    // pass determined (see `LoopContractPass::find_loop_modifies_bindings`).
+                    // Record the clause for that loop, even if no target is left (e.g. an empty
+                    // clause, or only targets of zero size).
+                    let assigns = self.rvalue_to_assign_targets(rhs, location);
+                    self.loop_modifies.insert((instance, register_fn), assigns);
+                    return Stmt::skip(location);
+                }
+                if self.is_loop_decreases_binding(lhs.local) {
+                    if !self
+                        .queries
+                        .args()
+                        .unstable_features
+                        .iter()
+                        .any(|arg| arg == "loop-contracts")
+                    {
+                        self.report_loop_decreases_without_loop_contracts(stmt.source_info.span);
+                        return Stmt::skip(location);
+                    }
+                    let pending_binding =
+                        self.current_fn().loop_decreases().pending.as_ref().map(|d| d.binding);
+                    if pending_binding != Some(lhs.local)
+                        && self.is_live_loop_decreases_measure(rhs)
+                    {
+                        // CBMC evaluates the right-hand side of the binding before and after each
+                        // iteration of the loop.
+                        let measure = self.codegen_rvalue_stable(rhs, location);
+                        let span = stmt.source_info.span;
+                        self.record_loop_decreases(lhs.local, measure, false, span);
+                        return Stmt::skip(location);
+                    }
+                    // The right-hand side is a constant or reads values computed before the loop
+                    // (e.g. a temporary holding the result of checked arithmetic), or the binding
+                    // is assigned more than once (e.g. the measure is an `if` expression). Use the
+                    // value of the binding as the measure instead, and assign it below. Since that
+                    // value does not change in the loop, the decreases check fails.
+                    let measure = self.codegen_local(lhs.local, location);
+                    self.record_loop_decreases(lhs.local, measure, true, stmt.source_info.span);
+                }
                 // we ignore assignment for all zero size types
                 if self.is_zst_stable(lty) {
                     Stmt::skip(location)
@@ -66,7 +336,6 @@ impl GotocCtx<'_> {
                     .assign(self.codegen_rvalue_stable(rhs, location), location)
                 }
             }
-            StatementKind::Deinit(place) => self.codegen_deinit(place, location),
             StatementKind::SetDiscriminant { place, variant_index } => {
                 let dest_ty = self.place_ty_stable(place);
                 let dest_expr = unwrap_or_return_codegen_unimplemented_stmt!(
@@ -147,15 +416,18 @@ impl GotocCtx<'_> {
                 // Pack the operands and their types, then call `codegen_copy`
                 let fargs =
                     operands.iter().map(|op| self.codegen_operand_stable(op)).collect::<Vec<_>>();
-                let farg_types = operands.map(|op| self.operand_ty_stable(&op));
+                let farg_types = operands.map(|op| self.operand_ty_stable(op));
                 self.codegen_copy("copy_nonoverlapping", true, fargs, &farg_types, None, location)
             }
-            StatementKind::Intrinsic(NonDivergingIntrinsic::Assume(ref op)) => {
+            // https://doc.rust-lang.org/beta/nightly-rustc/rustc_middle/mir/enum.NonDivergingIntrinsic.html#variant.Assume
+            // Informs the optimizer that a condition is always true.
+            // If the condition is false, the behavior is undefined.
+            StatementKind::Intrinsic(NonDivergingIntrinsic::Assume(op)) => {
                 let cond = self.codegen_operand_stable(op).cast_to(Type::bool());
                 self.codegen_assert_assume(
                     cond,
                     PropertyClass::Assume,
-                    "assumption failed",
+                    "Rust intrinsic assumption failed",
                     location,
                 )
             }
@@ -164,10 +436,14 @@ impl GotocCtx<'_> {
                 let instance = self.current_fn().instance_stable();
                 let counter_data = format!("{coverage_opaque:?} ${function_name}$");
                 let maybe_source_region =
-                    region_from_coverage_opaque(self.tcx, &coverage_opaque, instance);
+                    region_from_coverage_opaque(self.tcx, coverage_opaque, instance);
                 if let Some((source_region, file_name)) = maybe_source_region {
-                    let coverage_stmt =
-                        self.codegen_coverage(&counter_data, stmt.span, source_region, &file_name);
+                    let coverage_stmt = self.codegen_coverage(
+                        &counter_data,
+                        stmt.source_info.span,
+                        source_region,
+                        &file_name,
+                    );
                     // TODO: Avoid single-statement blocks when conversion of
                     // standalone statements to the irep format is fixed.
                     // More details in <https://github.com/model-checking/kani/issues/3012>
@@ -178,7 +454,6 @@ impl GotocCtx<'_> {
             }
             StatementKind::PlaceMention(_) => todo!(),
             StatementKind::FakeRead(..)
-            | StatementKind::Retag(_, _)
             | StatementKind::AscribeUserType { .. }
             | StatementKind::Nop
             | StatementKind::ConstEvalCounter => Stmt::skip(location),
@@ -192,7 +467,8 @@ impl GotocCtx<'_> {
     ///
     /// See also [`GotocCtx::codegen_statement`] for ordinary [Statement]s.
     pub fn codegen_terminator(&mut self, term: &Terminator) -> Stmt {
-        let loc = self.codegen_span_stable(term.span);
+        let loc = self.codegen_span_stable(term.source_info.span);
+        self.current_stmt_loc = loc;
         let _trace_span = debug_span!("CodegenTerminator", statement = ?term.kind).entered();
         debug!("handling terminator {:?}", term);
         //TODO: Instead of doing location::none(), and updating, just putit in when we make the stmt.
@@ -243,7 +519,27 @@ impl GotocCtx<'_> {
                 self.codegen_drop(place, target, loc)
             }
             TerminatorKind::Call { func, args, destination, target, .. } => {
-                self.codegen_funcall(func, args, destination, target, term.span)
+                if self.is_loop_decreases_binding(destination.local) {
+                    let span = term.source_info.span;
+                    if self
+                        .queries
+                        .args()
+                        .unstable_features
+                        .iter()
+                        .any(|arg| arg == "loop-contracts")
+                    {
+                        // The measure of a decreases clause is the result of a call, which is
+                        // only computed before the loop. Use the value of the binding as the
+                        // measure. Since that value does not change in the loop, the decreases
+                        // check fails.
+                        let measure =
+                            self.codegen_local(destination.local, self.codegen_span_stable(span));
+                        self.record_loop_decreases(destination.local, measure, true, span);
+                    } else {
+                        self.report_loop_decreases_without_loop_contracts(span);
+                    }
+                }
+                self.codegen_funcall(func, args, destination, target, term.source_info.span)
             }
             TerminatorKind::Assert { cond, expected, msg, target, .. } => {
                 let cond = {
@@ -251,30 +547,48 @@ impl GotocCtx<'_> {
                     if *expected { r } else { Expr::not(r) }
                 };
 
-                let msg = if let AssertMessage::BoundsCheck { .. } = msg {
-                    // For bounds check the following panic message is generated at runtime:
-                    // "index out of bounds: the length is {len} but the index is {index}",
-                    // but CBMC only accepts static messages so we don't add values to the message.
-                    "index out of bounds: the length is less than or equal to the given index"
-                } else if let AssertMessage::MisalignedPointerDereference { .. } = msg {
-                    // Misaligned pointer dereference check messages is also a runtime messages.
-                    // Generate a generic one here.
-                    "misaligned pointer dereference: address must be a multiple of its type's \
-                    alignment"
-                } else {
+                // Generate the message to print to the user and property class.
+                // For `msg`s with runtime values, replace them with static messages,
+                // since that's all that CBMC accepts.
+                let (msg, property_class) = match msg {
+                    AssertMessage::BoundsCheck { .. } => (
+                        "index out of bounds: the length is less than or equal to the given index",
+                        PropertyClass::Assertion,
+                    ),
+                    AssertMessage::InvalidEnumConstruction { .. } => (
+                        "invalid enum construction: value is not a valid discriminant for this enum",
+                        PropertyClass::SafetyCheck,
+                    ),
+                    AssertMessage::MisalignedPointerDereference { .. } => (
+                        "misaligned pointer dereference: address must be a multiple of its type's \
+                    alignment",
+                        PropertyClass::SafetyCheck,
+                    ),
                     // For all other assert kind we can get the static message.
-                    msg.description().unwrap()
+                    AssertMessage::NullPointerDereference
+                    | AssertMessage::NullReferenceConstructed => {
+                        (msg.description().unwrap(), PropertyClass::SafetyCheck)
+                    }
+                    AssertMessage::Overflow { .. }
+                    | AssertMessage::OverflowNeg { .. }
+                    | AssertMessage::DivisionByZero { .. }
+                    | AssertMessage::RemainderByZero { .. }
+                    | AssertMessage::ResumedAfterReturn { .. }
+                    | AssertMessage::ResumedAfterDrop { .. }
+                    | AssertMessage::ResumedAfterPanic { .. } => {
+                        (msg.description().unwrap(), PropertyClass::Assertion)
+                    }
                 };
 
                 let (msg_str, reach_stmt) =
-                    self.codegen_reachability_check(msg.to_owned(), term.span);
+                    self.codegen_reachability_check(msg.to_owned(), term.source_info.span);
 
                 Stmt::block(
                     vec![
                         reach_stmt,
                         self.codegen_assert_assume(
                             cond.cast_to(Type::bool()),
-                            PropertyClass::Assertion,
+                            property_class,
                             &msg_str,
                             loc,
                         ),
@@ -332,14 +646,16 @@ impl GotocCtx<'_> {
                 }
                 TagEncoding::Niche { untagged_variant, niche_variants, niche_start } => {
                     if *untagged_variant != variant_index_internal {
-                        let offset = match &layout.fields {
-                            FieldsShape::Arbitrary { offsets, .. } => offsets[0usize.into()],
+                        let offset: Size = match &layout.fields {
+                            FieldsShape::Arbitrary { offsets, .. } => {
+                                offsets[rustc_abi::FieldIdx::from_usize(0)]
+                            }
                             _ => unreachable!("niche encoding must have arbitrary fields"),
                         };
                         let discr_ty = self.codegen_enum_discr_typ(dest_ty_internal);
                         let discr_ty = self.codegen_ty(discr_ty);
                         let niche_value =
-                            variant_index_internal.as_u32() - niche_variants.start().as_u32();
+                            variant_index_internal.as_u32() - niche_variants.start.as_u32();
                         let niche_value = (niche_value as u128).wrapping_add(*niche_start);
                         trace!(val=?niche_value, typ=?discr_ty, "codegen_set_discriminant niche");
                         let value = if niche_value == 0
@@ -356,27 +672,6 @@ impl GotocCtx<'_> {
                     }
                 }
             },
-        }
-    }
-
-    /// From rustc doc: "This writes `uninit` bytes to the entire place."
-    /// Our model of GotoC has a similar statement, which is later lowered
-    /// to assigning a Nondet in CBMC, with a comment specifying that it
-    /// corresponds to a Deinit.
-    fn codegen_deinit(&mut self, place: &Place, loc: Location) -> Stmt {
-        let dst_mir_ty = self.place_ty_stable(place);
-        let dst_type = self.codegen_ty_stable(dst_mir_ty);
-        let layout = self.layout_of_stable(dst_mir_ty);
-        if layout.is_zst() || dst_type.sizeof_in_bits(&self.symbol_table) == 0 {
-            // We ignore assignment for all zero size types
-            Stmt::skip(loc)
-        } else {
-            unwrap_or_return_codegen_unimplemented_stmt!(
-                self,
-                self.codegen_place_stable(place, loc)
-            )
-            .goto_expr
-            .deinit(loc)
         }
     }
 
@@ -437,13 +732,6 @@ impl GotocCtx<'_> {
                         // The only argument should be a self reference
                         let args = vec![place_ref];
 
-                        // We have a known issue where nested Arc and Mutex objects result in
-                        // drop_in_place call implementations that fail to typecheck. Skipping
-                        // drop entirely causes unsound verification results in common cases
-                        // like vector extend, so for now, add a sound special case workaround
-                        // for calls that fail the typecheck.
-                        // https://github.com/model-checking/kani/issues/426
-                        // Unblocks: https://github.com/model-checking/kani/issues/435
                         func.call(args).as_stmt(loc)
                     }
                 }
@@ -471,32 +759,39 @@ impl GotocCtx<'_> {
         let switch_ty = v.typ().clone();
 
         // Switches with empty branches should've been eliminated already.
-        assert!(targets.len() > 1);
-        if targets.len() == 2 {
-            // Translate to a guarded goto
-            let (case, first_target) = targets.branches().next().unwrap();
-            Stmt::block(
-                vec![
-                    v.eq(Expr::int_constant(case, switch_ty)).if_then_else(
-                        Stmt::goto(bb_label(first_target), loc),
-                        None,
-                        loc,
-                    ),
-                    Stmt::goto(bb_label(targets.otherwise()), loc),
-                ],
-                loc,
-            )
-        } else {
-            let cases = targets
-                .branches()
-                .map(|(c, bb)| {
-                    Expr::int_constant(c, switch_ty.clone())
-                        .with_location(loc)
-                        .switch_case(Stmt::goto(bb_label(bb), loc))
-                })
-                .collect();
-            let default = Stmt::goto(bb_label(targets.otherwise()), loc);
-            v.switch(cases, Some(default), loc)
+        match targets.len() {
+            0 => unreachable!("switches have at least one target"),
+            1 => {
+                // Trivial switch.
+                Stmt::goto(bb_label(targets.otherwise()), loc)
+            }
+            2 => {
+                // Translate to a guarded goto
+                let (case, first_target) = targets.branches().next().unwrap();
+                Stmt::block(
+                    vec![
+                        v.eq(Expr::int_constant(case, switch_ty)).if_then_else(
+                            Stmt::goto(bb_label(first_target), loc),
+                            None,
+                            loc,
+                        ),
+                        Stmt::goto(bb_label(targets.otherwise()), loc),
+                    ],
+                    loc,
+                )
+            }
+            3.. => {
+                let cases = targets
+                    .branches()
+                    .map(|(c, bb)| {
+                        Expr::int_constant(c, switch_ty.clone())
+                            .with_location(loc)
+                            .switch_case(Stmt::goto(bb_label(bb), loc))
+                    })
+                    .collect();
+                let default = Stmt::goto(bb_label(targets.otherwise()), loc);
+                v.switch(cases, Some(default), loc)
+            }
         }
     }
 
@@ -542,12 +837,41 @@ impl GotocCtx<'_> {
     /// Generate Goto-C for each argument to a function call.
     ///
     /// N.B. public only because instrinsics use this directly, too.
-    pub(crate) fn codegen_funcall_args(&mut self, fn_abi: &FnAbi, args: &[Operand]) -> Vec<Expr> {
+    pub(crate) fn codegen_funcall_args_for_quantifiers(
+        &mut self,
+        fn_abi: &FnAbi,
+        args: &[Operand],
+    ) -> Vec<Expr> {
         let fargs: Vec<Expr> = args
             .iter()
             .enumerate()
             .filter_map(|(i, op)| {
                 // Functions that require caller info will have an extra parameter.
+                let arg_abi = &fn_abi.args.get(i);
+                let ty = self.operand_ty_stable(op);
+                if ty.kind().is_bool() {
+                    Some(self.codegen_operand_stable(op).cast_to(Type::c_bool()))
+                } else if ty.kind().is_closure()
+                    || (arg_abi.is_none_or(|abi| abi.mode != PassMode::Ignore))
+                {
+                    Some(self.codegen_operand_stable(op))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        debug!(?fargs, args_abi=?fn_abi.args, "codegen_funcall_args");
+        fargs
+    }
+
+    /// Generate Goto-C for each argument to a function call.
+    ///
+    /// N.B. public only because instrinsics use this directly, too.
+    pub(crate) fn codegen_funcall_args(&mut self, fn_abi: &FnAbi, args: &[Operand]) -> Vec<Expr> {
+        let fargs: Vec<Expr> = args
+            .iter()
+            .enumerate()
+            .filter_map(|(i, op)| {
                 let arg_abi = &fn_abi.args.get(i);
                 let ty = self.operand_ty_stable(op);
                 if ty.kind().is_bool() {
@@ -586,23 +910,32 @@ impl GotocCtx<'_> {
         debug!(?func, ?args, ?destination, ?span, "codegen_funcall");
         let instance_opt = self.get_instance(func);
         if let Some(instance) = instance_opt
-            && matches!(instance.kind, InstanceKind::Intrinsic)
+            && matches!(instance.kind, InstanceKind::LlvmIntrinsic)
         {
-            let TyKind::RigidTy(RigidTy::FnDef(def, _)) = instance.ty().kind() else {
-                unreachable!("Expected function type for intrinsic: {instance:?}")
-            };
-            // The compiler is currently transitioning how to handle intrinsic fallback body.
-            // Until https://github.com/rust-lang/project-stable-mir/issues/79 is implemented
-            // we have to check `must_be_overridden` and `has_body`.
-            if def.as_intrinsic().unwrap().must_be_overridden() || !instance.has_body() {
-                return self.codegen_funcall_of_intrinsic(
-                    instance,
-                    &args,
-                    &destination,
-                    target.map(|bb| bb),
-                    span,
-                );
-            }
+            // An LLVM intrinsic -- an `extern "unadjusted"` declaration whose symbol starts with
+            // `llvm.` -- has no Rust body, and rustc refuses to compute a `FnAbi` for one, so we
+            // cannot codegen the call or even its arguments. Kani has no model for these either,
+            // so report the call as unsupported. As of nightly-2026-08-21 these resolve to their
+            // own `InstanceKind`; before that they were foreign items, and this reports the same
+            // unsupported-construct check that the FFI shim did, so reaching one still fails
+            // verification rather than silently succeeding.
+            return self.codegen_unimplemented_stmt(
+                &format!("call to LLVM intrinsic `{}`", instance.mangled_name()),
+                self.codegen_span_stable(span),
+                "https://github.com/model-checking/kani/issues/4770",
+            );
+        }
+        if let Some(instance) = instance_opt
+            && matches!(instance.kind, InstanceKind::Intrinsic)
+            && crate::intrinsics::uses_kani_model(&instance)
+        {
+            return self.codegen_funcall_of_intrinsic(
+                instance,
+                args,
+                destination,
+                target.map(|bb| bb),
+                span,
+            );
         }
 
         let loc = self.codegen_span_stable(span);
@@ -610,14 +943,28 @@ impl GotocCtx<'_> {
         match fn_ty.kind() {
             fn_def @ TyKind::RigidTy(RigidTy::FnDef(..)) => {
                 let instance = instance_opt.unwrap();
+                if self.is_unsupported_variadic(instance) {
+                    return self.codegen_unimplemented_stmt(
+                        "Variadic function with a non-C calling convention",
+                        loc,
+                        "https://github.com/model-checking/kani/issues/4817",
+                    );
+                }
                 let fn_abi = instance.fn_abi().unwrap();
                 let mut fargs = if args.is_empty()
                     || fn_def.fn_sig().unwrap().value.abi != Abi::RustCall
                 {
-                    self.codegen_funcall_args(&fn_abi, &args)
+                    let fn_def_name = instance.def.name();
+                    if fn_def_name == "kani::internal::kani_forall"
+                        || (fn_def_name == "kani::internal::kani_exists")
+                    {
+                        self.codegen_funcall_args_for_quantifiers(&fn_abi, args)
+                    } else {
+                        self.codegen_funcall_args(&fn_abi, args)
+                    }
                 } else {
                     let (untupled, first_args) = args.split_last().unwrap();
-                    let mut fargs = self.codegen_funcall_args(&fn_abi, &first_args);
+                    let mut fargs = self.codegen_funcall_args(&fn_abi, first_args);
                     fargs.append(
                         &mut self.codegen_untupled_args(untupled, &fn_abi.args[first_args.len()..]),
                     );
@@ -639,6 +986,11 @@ impl GotocCtx<'_> {
                         self.codegen_virtual_funcall(self_ty, idx, destination, &mut fargs, loc)
                     }
                     // Normal, non-virtual function calls
+                    InstanceKind::LlvmIntrinsic => {
+                        unreachable!(
+                            "Kani reports LLVM intrinsic calls as unsupported before codegen"
+                        )
+                    }
                     InstanceKind::Item | InstanceKind::Intrinsic | InstanceKind::Shim => {
                         // We need to handle FnDef items in a special way because `codegen_operand` compiles them to dummy structs.
                         // (cf. the function documentation)
@@ -659,22 +1011,29 @@ impl GotocCtx<'_> {
             }
             // Function call through a pointer
             TyKind::RigidTy(RigidTy::FnPtr(fn_sig)) => {
+                if self.is_unsupported_variadic_fn_ptr(fn_sig.clone()) {
+                    return self.codegen_unimplemented_stmt(
+                        "Variadic function with a non-C calling convention",
+                        loc,
+                        "https://github.com/model-checking/kani/issues/4817",
+                    );
+                }
                 let fn_sig_internal = rustc_internal::internal(self.tcx, fn_sig);
                 let fn_ptr_abi = rustc_internal::stable(
                     self.tcx
                         .fn_abi_of_fn_ptr(
                             TypingEnv::fully_monomorphized()
-                                .as_query_input((fn_sig_internal, &List::empty())),
+                                .as_query_input((fn_sig_internal, List::empty())),
                         )
                         .unwrap(),
                 );
-                let fargs = self.codegen_funcall_args(&fn_ptr_abi, &args);
+                let fargs = self.codegen_funcall_args(&fn_ptr_abi, args);
                 let func_expr = self.codegen_operand_stable(func).dereference();
                 // Actually generate the function call and return.
                 Stmt::block(
                     vec![
                         self.codegen_expr_to_place_stable(destination, func_expr.call(fargs), loc),
-                        Stmt::goto(bb_label(target.unwrap()), loc),
+                        self.codegen_end_call(*target, loc),
                     ],
                     loc,
                 )
@@ -740,7 +1099,12 @@ impl GotocCtx<'_> {
         fargs[0] = if self_ty.kind().is_adt() {
             // Generate a temp variable and assign its inner pointer to the fat_ptr.data.
             match fn_ptr.typ() {
-                Type::Pointer { typ: box Type::Code { parameters, .. } } => {
+                // `box` patterns were removed in nightly-2026-09-22, so match the pointer and
+                // then look through it.
+                Type::Pointer { typ } => {
+                    let Type::Code { parameters, .. } = typ.as_ref() else {
+                        unreachable!("Unexpected virtual function type: {:?}", fn_ptr.typ())
+                    };
                     let param_typ = parameters.first().unwrap().typ();
                     let (tmp, decl) = self.decl_temp_variable(param_typ.clone(), None, loc);
                     debug!(?tmp,
@@ -801,5 +1165,36 @@ impl GotocCtx<'_> {
             .goto_expr
             .assign(expr, loc)
         }
+    }
+}
+
+/// Collect all places appearing in `rvalue` (directly or inside operands).
+fn collect_rvalue_places<'a>(rvalue: &'a Rvalue, places: &mut Vec<&'a Place>) {
+    let push_operand = |op: &'a Operand, places: &mut Vec<&'a Place>| {
+        if let Operand::Copy(place) | Operand::Move(place) = op {
+            places.push(place);
+        }
+    };
+    match rvalue {
+        Rvalue::Use(op, _)
+        | Rvalue::Repeat(op, _)
+        | Rvalue::Cast(_, op, _)
+        | Rvalue::UnaryOp(_, op) => push_operand(op, places),
+        Rvalue::BinaryOp(_, op1, op2) | Rvalue::CheckedBinaryOp(_, op1, op2) => {
+            push_operand(op1, places);
+            push_operand(op2, places);
+        }
+        Rvalue::Ref(_, _, place)
+        | Rvalue::AddressOf(_, place)
+        | Rvalue::Len(place)
+        | Rvalue::CopyForDeref(place)
+        | Rvalue::Discriminant(place)
+        | Rvalue::Reborrow(_, _, place) => places.push(place),
+        Rvalue::Aggregate(_, operands) => {
+            for op in operands {
+                push_operand(op, places);
+            }
+        }
+        Rvalue::ThreadLocalRef(..) => {}
     }
 }

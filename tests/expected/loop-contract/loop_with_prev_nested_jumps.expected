@@ -1,0 +1,16 @@
+Checking harness closure_return_in_body...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness fn_item_in_body...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness labeled_block_break...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness nested_labeled_continue_and_break...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness nested_unlabeled_break...
+VERIFICATION:- SUCCESSFUL
+
+Complete - 5 successfully verified harnesses, 0 failures, 5 total.

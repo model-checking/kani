@@ -2,17 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0 OR MIT
 
 # Run rustfmt with this config (it should be picked up automatically).
-edition = "2021"
+edition = "2024"
 style_edition = "2024"
 use_small_heuristics = "Max"
 merge_derives = false
-
-ignore = [
-    "**/build/",
-    "**/target/",
-
-    # Do not format submodules
-    # For some reason, this is not working without the directory wildcard.
-    "**/firecracker",
-    "**/tests/perf/s2n-quic/",
-]

@@ -11,7 +11,7 @@
 use tokio::time::{Duration, Instant, sleep_until};
 use tokio_test::block_on;
 
-#[cfg(disabled)] // because epoll is missing
+#[cfg(disabled)] // CBMC takes more than 15 minutes
 #[kani::proof]
 #[kani::unwind(2)]
 fn async_block() {
@@ -22,7 +22,7 @@ async fn five() -> u8 {
     5
 }
 
-#[cfg(disabled)] // because epoll is missing
+#[cfg(disabled)] // CBMC takes more than 15 minutes
 #[kani::proof]
 #[kani::unwind(2)]
 fn async_fn() {

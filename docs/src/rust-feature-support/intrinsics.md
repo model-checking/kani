@@ -20,6 +20,7 @@ if your code depends on an unsupported intrinsic.
 Name | Support | Notes |
 --- | --- | --- |
 abort | Yes | |
+abort_immediate | Yes | |
 add_with_overflow | Yes | |
 arith_offset | Yes | |
 assert_inhabited | Yes | |
@@ -152,11 +153,10 @@ exp2f32 | Partial | Results are overapproximated |
 exp2f64 | Partial | Results are overapproximated |
 expf32 | Partial | Results are overapproximated |
 expf64 | Partial | Results are overapproximated |
-fabsf32 | Yes | |
-fabsf64 | Yes | |
+fabs | Yes | |
 fadd_fast | Yes | |
 fdiv_fast | Partial | [#809](https://github.com/model-checking/kani/issues/809) |
-float_to_int_unchecked | Partial | [#3629](https://github.com/model-checking/kani/issues/3629) |
+float_to_int_unchecked | Yes | |
 floorf32 | Yes | |
 floorf64 | Yes | |
 fmaf32 | Partial | Results are overapproximated |
@@ -172,16 +172,14 @@ log2f32 | Partial | Results are overapproximated |
 log2f64 | Partial | Results are overapproximated |
 logf32 | Partial | Results are overapproximated |
 logf64 | Partial | Results are overapproximated |
-maxnumf32 | Yes | |
-maxnumf64 | Yes | |
-min_align_of | Yes | |
-min_align_of_val | Yes | |
-minnumf32 | Yes | |
-minnumf64 | Yes | |
+maximum_number_nsz_f32 | Yes | |
+maximum_number_nsz_f64 | Yes | |
+align_of | Yes | |
+align_of_val | Yes | |
+minimum_number_nsz_f32 | Yes | |
+minimum_number_nsz_f64 | Yes | |
 move_val_init | No | |
 mul_with_overflow | Yes | |
-nearbyintf32 | Yes | |
-nearbyintf64 | Yes | |
 needs_drop | Yes | |
 nontemporal_store | No | |
 offset | Partial | Doesn't check [all UB conditions](https://doc.rust-lang.org/std/primitive.pointer.html#safety-2) |
@@ -189,7 +187,6 @@ powf32 | Partial | Results are overapproximated |
 powf64 | Partial | Results are overapproximated |
 powif32 | Partial | Results are overapproximated |
 powif64 | Partial | Results are overapproximated |
-pref_align_of | Yes | |
 prefetch_read_data | No | |
 prefetch_read_instruction | No | |
 prefetch_write_data | No | |
@@ -198,8 +195,10 @@ ptr_guaranteed_eq | Yes | |
 ptr_guaranteed_ne | Yes | |
 ptr_offset_from | Partial | Doesn't check [all UB conditions](https://doc.rust-lang.org/std/primitive.pointer.html#safety-4) |
 raw_eq | Partial | Cannot detect [uninitialized memory](#uninitialized-memory) |
-rintf32 | Yes | |
-rintf64 | Yes | |
+round_ties_even_f16 | No | |
+round_ties_even_f32 | Yes | |
+round_ties_even_f64 | Yes | |
+round_ties_even_f128 | No | |
 rotate_left | Yes | |
 rotate_right | Yes | |
 roundf32 | Yes | |
@@ -221,8 +220,8 @@ try | No | [#267](https://github.com/model-checking/kani/issues/267) |
 type_id | Yes | |
 type_name | Yes | |
 typed_swap_nonoverlapping | Yes | |
-unaligned_volatile_load | No | See [Notes - Concurrency](#concurrency) |
-unaligned_volatile_store | No | See [Notes - Concurrency](#concurrency) |
+unaligned_volatile_load | Partial | See [Notes - Concurrency](#concurrency) |
+unaligned_volatile_store | Partial | See [Notes - Concurrency](#concurrency) |
 unchecked_add | Yes | |
 unchecked_div | Yes | |
 unchecked_mul | Yes | |
@@ -232,11 +231,11 @@ unchecked_shr | Yes | |
 unchecked_sub | Yes | |
 unlikely | Yes | |
 unreachable | Yes | |
-variant_count | No | |
-volatile_copy_memory | No | See [Notes - Concurrency](#concurrency) |
-volatile_copy_nonoverlapping_memory | No | See [Notes - Concurrency](#concurrency) |
+variant_count | Yes | |
+volatile_copy_memory | Partial | See [Notes - Concurrency](#concurrency) |
+volatile_copy_nonoverlapping_memory | Partial | See [Notes - Concurrency](#concurrency) |
 volatile_load | Partial | See [Notes - Concurrency](#concurrency) |
-volatile_set_memory | No | See [Notes - Concurrency](#concurrency) |
+volatile_set_memory | Partial | See [Notes - Concurrency](#concurrency) |
 volatile_store | Partial | See [Notes - Concurrency](#concurrency) |
 wrapping_add | Yes | |
 wrapping_mul | Yes | |
@@ -270,6 +269,8 @@ Name | Support | Notes |
 `simd_mul`  | Yes | |
 `simd_ne`  | Yes | |
 `simd_or`  | Yes | |
+`simd_reduce_max`  | Yes | Integer lanes, the only lanes the intrinsic accepts |
+`simd_reduce_min`  | Yes | Integer lanes, the only lanes the intrinsic accepts |
 `simd_rem`  | Yes | Doesn't check for floating point overflow [#2669](https://github.com/model-checking/kani/issues/2669) |
 `simd_shl`  | Yes | |
 `simd_shr`  | Yes | |

@@ -1,28 +1,28 @@
-union_update_should_fail.assertion.1\
+union_update_should_fail.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u32`"
 
-union_complex_subfields_should_fail.assertion.1\
+union_complex_subfields_should_fail.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u16`"
 
-basic_union_should_fail.assertion.1\
+basic_union_should_fail.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u32`"
 
-cross_function_union_should_fail::helper.assertion.1\
+cross_function_union_should_fail::helper.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u32`"
 
-cross_function_multi_union_should_fail::helper.assertion.1\
+cross_function_multi_union_should_fail::helper.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u32`"
 
-multi_cross_function_union_should_fail::sub_helper.assertion.1\
+multi_cross_function_union_should_fail::sub_helper.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u32`"
 
-basic_multifield_union_should_fail.assertion.7\
+basic_multifield_union_should_fail.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
 

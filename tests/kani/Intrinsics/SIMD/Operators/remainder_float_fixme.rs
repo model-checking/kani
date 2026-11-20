@@ -7,16 +7,25 @@ use std::intrinsics::simd::simd_rem;
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq, kani::Arbitrary)]
-pub struct f32x2(f32, f32);
+#[derive(Clone, Copy, kani::Arbitrary)]
+pub struct f32x2([f32; 2]);
+
+impl f32x2 {
+    fn into_array(self) -> [f32; 2] {
+        unsafe { std::mem::transmute(self) }
+    }
+}
 
 impl f32x2 {
     fn new_with(f: impl Fn() -> f32) -> Self {
-        f32x2(f(), f())
+        f32x2([f(), f()])
     }
 
     fn non_simd_rem(self, divisors: Self) -> Self {
-        f32x2(self.0 % divisors.0, self.1 % divisors.1)
+        f32x2([
+            self.into_array()[0] % divisors.into_array()[0],
+            self.into_array()[1] % divisors.into_array()[1],
+        ])
     }
 }
 
@@ -32,5 +41,5 @@ fn test_simd_rem() {
     });
     let normal_results = dividends.non_simd_rem(divisors);
     let simd_results = unsafe { simd_rem(dividends, divisors) };
-    assert_eq!(normal_results, simd_results);
+    assert_eq!(normal_results.into_array(), simd_results.into_array());
 }

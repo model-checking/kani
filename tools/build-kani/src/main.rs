@@ -24,7 +24,7 @@ fn main() -> Result<()> {
         parser::Commands::BuildDev(build_parser) => {
             let bin_folder = &build_bin(&build_parser.args)?;
             if !build_parser.skip_libs {
-                build_lib(&bin_folder)?;
+                build_lib(bin_folder)?;
             }
             Ok(())
         }
@@ -105,8 +105,8 @@ fn bundle_kani(dir: &Path) -> Result<()> {
 
     // 4. Pre-compiled library files
     cp_dir(&kani_sysroot_lib(), dir)?;
-    cp_dir(&kani_playback_lib().parent().unwrap(), dir)?;
-    cp_dir(&kani_no_core_lib().parent().unwrap(), dir)?;
+    cp_dir(kani_playback_lib().parent().unwrap(), dir)?;
+    cp_dir(kani_no_core_lib().parent().unwrap(), dir)?;
 
     // 5. Record the exact toolchain and rustc version we use
     std::fs::write(dir.join("rust-toolchain-version"), env!("RUSTUP_TOOLCHAIN"))?;

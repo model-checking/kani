@@ -10,21 +10,20 @@
 
 #![feature(rustc_private)]
 
-mod analysis;
+pub mod analysis;
+pub mod call_graph;
 
 extern crate rustc_driver;
 extern crate rustc_interface;
 extern crate rustc_middle;
+extern crate rustc_public;
 extern crate rustc_session;
-#[macro_use]
-extern crate rustc_smir;
-extern crate stable_mir;
 
 use crate::analysis::OverallStats;
 use rustc_middle::ty::TyCtxt;
+use rustc_public::CompilerError;
+use rustc_public::run_with_tcx;
 use rustc_session::config::OutputType;
-use rustc_smir::{run_with_tcx, rustc_internal};
-use stable_mir::CompilerError;
 use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -35,6 +34,14 @@ use strum_macros::{AsRefStr, EnumIter};
 // Use a static variable for simplicity.
 static VERBOSE: AtomicBool = AtomicBool::new(false);
 
+/// The name of a local item as `kani list` reports it: `def_path_str` prefixes
+/// the local crate name (rust-lang/rust#149401), and the compiler strips it with
+/// this same function, so every name the scanner writes goes through here and
+/// the two outputs can be joined by name (kani#4868).
+pub(crate) fn item_name<T: rustc_public::CrateDef>(def: &T) -> String {
+    kani_metadata::strip_crate_prefix(&def.name(), &rustc_public::local_crate().name)
+}
+
 pub fn run_all(rustc_args: Vec<String>, verbose: bool) -> ExitCode {
     run_analyses(rustc_args, &Analysis::iter().collect::<Vec<_>>(), verbose)
 }
@@ -42,7 +49,7 @@ pub fn run_all(rustc_args: Vec<String>, verbose: bool) -> ExitCode {
 /// Executes a compilation and run the analysis that were requested.
 pub fn run_analyses(rustc_args: Vec<String>, analyses: &[Analysis], verbose: bool) -> ExitCode {
     VERBOSE.store(verbose, Ordering::Relaxed);
-    let result = run_with_tcx!(rustc_args, |tcx| analyze_crate(tcx, analyses));
+    let result = run_with_tcx!(&rustc_args, |tcx| analyze_crate(tcx, analyses));
     if result.is_ok() || matches!(result, Err(CompilerError::Skipped)) {
         ExitCode::SUCCESS
     } else {
@@ -65,21 +72,28 @@ pub enum Analysis {
     FnLoops,
     /// Collect information about recursion via direct calls.
     Recursion,
+    /// Collect information about transitive usage of unsafe.
+    UnsafeDistance,
+    /// Collect information about function visibility.
+    PublicFns,
 }
 
 fn info(msg: String) {
     if VERBOSE.load(Ordering::Relaxed) {
-        eprintln!("[INFO] {}", msg);
+        eprintln!("[INFO] {msg}");
     }
 }
 
 /// This function invoke the required analyses in the given order.
 fn analyze_crate(tcx: TyCtxt, analyses: &[Analysis]) -> ControlFlow<()> {
+    if rustc_public::local_crate().name == "build_script_build" {
+        return ControlFlow::Continue(());
+    }
     let object_file = tcx.output_filenames(()).path(OutputType::Object);
     let base_path = object_file.as_path().to_path_buf();
     // Use name for now to make it more friendly. Change to base_path.file_stem() to avoid conflict.
     // let file_stem = base_path.file_stem().unwrap();
-    let file_stem = format!("{}_scan", stable_mir::local_crate().name);
+    let file_stem = format!("{}_scan", rustc_public::local_crate().name);
     let mut crate_stats = OverallStats::new();
     for analysis in analyses {
         let filename = format!("{}_{}", file_stem, analysis.as_ref());
@@ -93,9 +107,11 @@ fn analyze_crate(tcx: TyCtxt, analyses: &[Analysis]) -> ControlFlow<()> {
                 crate_stats.safe_fns(out_path);
             }
             Analysis::InputTys => crate_stats.supported_inputs(out_path),
-            Analysis::UnsafeOps => crate_stats.unsafe_operations(out_path),
+            Analysis::UnsafeOps => crate_stats.unsafe_operations(out_path, &tcx),
             Analysis::FnLoops => crate_stats.loops(out_path),
             Analysis::Recursion => crate_stats.recursion(out_path),
+            Analysis::UnsafeDistance => crate_stats.unsafe_distance(out_path, &tcx),
+            Analysis::PublicFns => crate_stats.public_fns(&tcx),
         }
     }
     crate_stats.store_csv(base_path, &file_stem);

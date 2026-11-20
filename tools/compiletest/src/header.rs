@@ -24,6 +24,12 @@ pub struct TestProps {
     pub kani_panic_step: Option<KaniFailStep>,
 }
 
+impl Default for TestProps {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TestProps {
     pub fn new() -> Self {
         TestProps {

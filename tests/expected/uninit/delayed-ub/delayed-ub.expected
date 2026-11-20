@@ -1,40 +1,40 @@
-delayed_ub_trigger_copy.assertion.\
+delayed_ub_trigger_copy.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"\
 
-delayed_ub_structs.assertion.\
+delayed_ub_structs.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `U`"
 
-delayed_ub_double_copy.assertion.\
+delayed_ub_double_copy.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"\
 
-delayed_ub_copy.assertion.\
+delayed_ub_copy.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
 
-delayed_ub_closure_capture_laundered.assertion.\
+delayed_ub_closure_capture_laundered.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
 
-delayed_ub_closure_laundered.assertion.\
+delayed_ub_closure_laundered.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
 
-delayed_ub_laundered.assertion.\
+delayed_ub_laundered.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
 
-delayed_ub_static.assertion.\
+delayed_ub_static.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
 
-delayed_ub_transmute.assertion.\
+delayed_ub_transmute.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
 
-delayed_ub.assertion.\
+delayed_ub.safety_check.\
 	 - Status: FAILURE\
 	 - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u128`"
 

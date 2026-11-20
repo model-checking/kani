@@ -11,3 +11,7 @@ pub fn delegate_use_struct() -> i32 {
     let foo = dependency3::give_foo();
     dependency3::take_foo(&foo)
 }
+
+pub fn create_struct() -> dependency3::ReprCStruct {
+    dependency3::ReprCStruct { field: dependency3::Field::Case1 }
+}

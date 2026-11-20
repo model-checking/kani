@@ -1,20 +1,23 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 use crate::codegen_cprover_gotoc::GotocCtx;
+use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::utils::slice_fat_ptr;
+use crate::kani_middle::is_anon_static;
 use crate::unwrap_or_return_codegen_unimplemented;
 use cbmc::goto_program::{DatatypeComponent, Expr, ExprValue, Location, Symbol, Type};
 use rustc_middle::ty::Const as ConstInternal;
-use rustc_smir::rustc_internal;
-use rustc_span::Span as SpanInternal;
-use stable_mir::mir::alloc::{AllocId, GlobalAlloc};
-use stable_mir::mir::mono::{Instance, StaticDef};
-use stable_mir::mir::{Mutability, Operand};
-use stable_mir::ty::{
+use rustc_public::CrateDefType;
+use rustc_public::mir::alloc::{AllocId, GlobalAlloc};
+use rustc_public::mir::mono::{Instance, StaticDef};
+use rustc_public::mir::{Mutability, Operand, RuntimeChecks};
+use rustc_public::rustc_internal;
+use rustc_public::ty::{
     Allocation, ConstantKind, FloatTy, FnDef, GenericArgs, IntTy, MirConst, RigidTy, Size, Ty,
     TyConst, TyConstKind, TyKind, UintTy,
 };
-use stable_mir::{CrateDef, CrateItem};
+use rustc_public::{CrateDef, CrateItem};
+use rustc_span::Span as SpanInternal;
 use tracing::{debug, trace};
 
 #[derive(Clone, Debug)]
@@ -26,7 +29,7 @@ enum AllocData<'a> {
     Expr(Expr),
 }
 
-impl<'tcx> GotocCtx<'tcx> {
+impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     /// Generate a goto expression from a MIR operand.
     ///
     /// A MIR operand is either a constant (literal or `const` declaration) or a place
@@ -42,18 +45,27 @@ impl<'tcx> GotocCtx<'tcx> {
                     self,
                     self.codegen_place_stable(place, Location::none())
                 );
-                // If the operand itself is a Dynamic (like when passing a boxed closure),
-                // we need to pull off the fat pointer. In that case, the rustc kind() on
-                // both the operand and the inner type are Dynamic.
-                // Consider moving this check elsewhere in:
-                // https://github.com/model-checking/kani/issues/277
+                // If the operand is itself an unsized value passed by value (a `Dynamic` boxed
+                // closure, or a slice/`str` via `unsized_fn_params`), the value is the fat
+                // pointer, so pull it off the projection rather than the (pointee) goto_expr.
                 match self.operand_ty_stable(operand).kind() {
-                    TyKind::RigidTy(RigidTy::Dynamic(..)) => projection.fat_ptr_goto_expr.unwrap(),
+                    TyKind::RigidTy(RigidTy::Dynamic(..))
+                    | TyKind::RigidTy(RigidTy::Slice(..))
+                    | TyKind::RigidTy(RigidTy::Str) => projection.fat_ptr_goto_expr.unwrap(),
                     _ => projection.goto_expr,
                 }
             }
             Operand::Constant(constant) => {
                 self.codegen_const(&constant.const_, self.codegen_span_stable(constant.span))
+            }
+            // Kani turns off the standard library's UB and contract checks (it inserts its own): a
+            // `ub_checks()` or `contract_checks()` call that reaches codegen evaluates to `false`.
+            // `overflow_checks()` follows `-Coverflow-checks=on`, which Kani requires.
+            Operand::RuntimeChecks(RuntimeChecks::OverflowChecks) => {
+                Expr::c_bool_constant(self.tcx.sess.overflow_checks())
+            }
+            Operand::RuntimeChecks(RuntimeChecks::UbChecks | RuntimeChecks::ContractChecks) => {
+                Expr::c_false()
             }
         }
     }
@@ -130,7 +142,7 @@ impl<'tcx> GotocCtx<'tcx> {
         // First try to generate the constant without allocating memory.
         let expr = self.try_codegen_constant(alloc, ty, loc).unwrap_or_else(|| {
             debug!("codegen_allocation try_fail");
-            let mem_var = self.codegen_const_allocation(alloc, None, loc);
+            let mem_var = self.codegen_const_allocation(alloc, None, loc, true);
             mem_var
                 .cast_to(Type::unsigned_int(8).to_pointer())
                 .cast_to(self.codegen_ty_stable(ty).to_pointer())
@@ -173,9 +185,31 @@ impl<'tcx> GotocCtx<'tcx> {
                     UintTy::U128 => Expr::int_constant(val, Type::unsigned_int(128)),
                 })
             }
-            TyKind::RigidTy(RigidTy::Bool) => {
-                Some(Expr::c_bool_constant(alloc.read_bool().unwrap()))
-            }
+            TyKind::RigidTy(RigidTy::Bool) => match alloc.read_bool() {
+                Ok(val) => Some(Expr::c_bool_constant(val)),
+                // MIR optimizations (e.g. GVN at `-Zmir-opt-level=2`) can fold a transmute that
+                // produces an invalid `bool` into a constant. Reaching it is UB, so report it.
+                Err(_) => {
+                    // Such a constant has a dummy span, which reports no line or line 0, so
+                    // report the check at the statement that uses the constant instead.
+                    let loc = if matches!(loc.start_line(), None | Some(0)) {
+                        self.current_stmt_loc
+                    } else {
+                        loc
+                    };
+                    let typ = self.codegen_ty_stable(ty);
+                    let check = self.codegen_assert_assume_false(
+                        PropertyClass::SafetyCheck,
+                        "Undefined Behavior: Invalid value of type `bool`",
+                        loc,
+                    );
+                    Some(Expr::statement_expression(
+                        vec![check, typ.nondet().as_stmt(loc)],
+                        typ,
+                        loc,
+                    ))
+                }
+            },
             TyKind::RigidTy(RigidTy::Char) => {
                 Some(Expr::int_constant(alloc.read_int().unwrap(), Type::signed_int(32)))
             }
@@ -203,6 +237,13 @@ impl<'tcx> GotocCtx<'tcx> {
                 Some(self.codegen_const_ptr(alloc, ty, inner_ty, loc))
             }
             TyKind::RigidTy(RigidTy::Adt(adt, args)) if adt.kind().is_struct() => {
+                //Special struct that is used to handle type_id function
+                if adt.name().contains("any::TypeId") {
+                    let val = alloc.read_uint().unwrap();
+                    let u128_expr = Expr::int_constant(val, Type::unsigned_int(128));
+                    let typ = self.codegen_ty_stable(ty);
+                    return Some(u128_expr.transmute_to(typ, &self.symbol_table));
+                }
                 // Structs only have one variant.
                 let variant = adt.variants_iter().next().unwrap();
                 // There must be at least one field associated with the scalar data.
@@ -218,24 +259,28 @@ impl<'tcx> GotocCtx<'tcx> {
                     // We could eventually expand this, but keep it simple for now. See:
                     // https://github.com/model-checking/kani/issues/2936
                     let overall_type = self.codegen_ty_stable(ty);
-                    let field_values: Vec<Expr> = field_types
-                        .iter()
-                        .map(|t| {
-                            if self.is_zst_stable(*t) {
-                                Some(Expr::init_unit(
-                                    self.codegen_ty_stable(*t),
-                                    &self.symbol_table,
-                                ))
-                            } else {
-                                self.try_codegen_constant(alloc, *t, loc)
-                            }
-                        })
-                        .collect::<Option<Vec<_>>>()?;
-                    Some(Expr::struct_expr_from_values(
-                        overall_type,
-                        field_values,
-                        &self.symbol_table,
-                    ))
+                    // Pair values with their field names: the goto struct type is in
+                    // LAYOUT order, which may differ from declaration order (e.g. layout
+                    // optimization reordering a (T, u16) pair), so the positional
+                    // struct_expr_from_values would mismatch.
+                    let field_values: std::collections::BTreeMap<cbmc::InternedString, Expr> =
+                        variant
+                            .fields()
+                            .iter()
+                            .zip(field_types.iter())
+                            .map(|(field, t)| {
+                                let value = if self.is_zst_stable(*t) {
+                                    Some(Expr::init_unit(
+                                        self.codegen_ty_stable(*t),
+                                        &self.symbol_table,
+                                    ))
+                                } else {
+                                    self.try_codegen_constant(alloc, *t, loc)
+                                };
+                                value.map(|v| (field.name.clone().into(), v))
+                            })
+                            .collect::<Option<_>>()?;
+                    Some(Expr::struct_expr(overall_type, field_values, &self.symbol_table))
                 } else {
                     // Structures with more than one non-ZST element are handled with an extra
                     // allocation.
@@ -260,21 +305,45 @@ impl<'tcx> GotocCtx<'tcx> {
         loc: Location,
     ) -> Expr {
         debug!(?ty, ?alloc, "codegen_const_ptr");
+        // The data offset, and a slice's length, come from the pointer itself: a constant
+        // reference or subslice can point into the middle of another constant's allocation.
+        let pointer_size = self.symbol_table.machine_model().pointer_width_in_bytes();
+        let offset = alloc
+            .read_partial_uint(0..pointer_size)
+            .unwrap_or_else(|e| panic!("no pointer offset in constant of type `{ty}`: {e:?}"));
         if self.use_fat_pointer_stable(inner_ty) {
+            let len = alloc
+                .read_partial_uint(pointer_size..2 * pointer_size)
+                .unwrap_or_else(|e| panic!("no slice length in constant of type `{ty}`: {e:?}"));
             match inner_ty.kind() {
                 TyKind::RigidTy(RigidTy::Str) => {
+                    let typ = self.codegen_ty_stable(ty);
+                    let len_expr = Expr::int_constant(len, Type::size_t());
+                    assert!(
+                        alloc.provenance.ptrs.len() <= 1,
+                        "Expected `&str` to point to at most one buffer"
+                    );
+                    let Some(&(_, prov)) = alloc.provenance.ptrs.first() else {
+                        // A pointer with no provenance (an empty slice or `&str` from a dangling
+                        // pointer, for example) holds its address in the offset.
+                        let data_expr = Expr::size_constant(offset, &self.symbol_table)
+                            .cast_to(Type::unsigned_int(8).to_pointer());
+                        return slice_fat_ptr(typ, data_expr, len_expr, &self.symbol_table);
+                    };
                     // a string literal
                     // Create a static variable that holds its value
-                    assert_eq!(
-                        alloc.provenance.ptrs.len(),
-                        1,
-                        "Expected `&str` to point to a str buffer"
-                    );
-                    let alloc_id = alloc.provenance.ptrs[0].1.0;
-                    let GlobalAlloc::Memory(data) = GlobalAlloc::from(alloc_id) else {
+                    let GlobalAlloc::Memory(data) = GlobalAlloc::from(prov.0) else {
                         unreachable!()
                     };
-                    let mem_var = self.codegen_const_allocation(&data, None, loc);
+                    let mem_var = self.codegen_const_allocation(&data, None, loc, false);
+                    if offset != 0 || len != data.bytes.len() as u128 {
+                        // A substring of another constant records no literal, and the offset,
+                        // even when zero, keeps `extract_const_message` from matching it.
+                        let data_expr = mem_var
+                            .cast_to(Type::unsigned_int(8).to_pointer())
+                            .plus(Expr::int_constant(offset, Type::size_t()));
+                        return slice_fat_ptr(typ, data_expr, len_expr, &self.symbol_table);
+                    }
 
                     // Extract identifier for static variable.
                     // codegen_allocation_auto_imm_name returns the *address* of
@@ -296,29 +365,26 @@ impl<'tcx> GotocCtx<'tcx> {
 
                     // Codegen as a fat pointer
                     let data_expr = mem_var.cast_to(Type::unsigned_int(8).to_pointer());
-                    let len_expr = Expr::int_constant(bytes.len(), Type::size_t());
-                    slice_fat_ptr(
-                        self.codegen_ty_stable(ty),
-                        data_expr,
-                        len_expr,
-                        &self.symbol_table,
-                    )
+                    slice_fat_ptr(typ, data_expr, len_expr, &self.symbol_table)
                 }
                 TyKind::RigidTy(RigidTy::Slice(inner_ty)) => {
-                    // Create a static variable that holds its value
-                    assert_eq!(
-                        alloc.provenance.ptrs.len(),
-                        1,
-                        "Expected `&[T]` to point to a single buffer"
-                    );
-                    let alloc_id = alloc.provenance.ptrs[0].1.0;
-                    let GlobalAlloc::Memory(data) = GlobalAlloc::from(alloc_id) else {
-                        unreachable!()
-                    };
-                    let mem_var = self.codegen_const_allocation(&data, None, loc);
                     let inner_typ = self.codegen_ty_stable(inner_ty);
-                    let len = data.bytes.len() / inner_typ.sizeof(&self.symbol_table) as usize;
-                    let data_expr = mem_var.cast_to(inner_typ.to_pointer());
+                    assert!(
+                        alloc.provenance.ptrs.len() <= 1,
+                        "Expected `&[T]` to point to at most one buffer"
+                    );
+                    let data_addr = if let Some(&(_, prov)) = alloc.provenance.ptrs.first() {
+                        // Create a static variable that holds its value
+                        let GlobalAlloc::Memory(data) = GlobalAlloc::from(prov.0) else {
+                            unreachable!()
+                        };
+                        self.codegen_const_allocation(&data, None, loc, false)
+                            .cast_to(Type::unsigned_int(8).to_pointer())
+                            .plus(Expr::int_constant(offset, Type::size_t()))
+                    } else {
+                        Expr::size_constant(offset, &self.symbol_table)
+                    };
+                    let data_expr = data_addr.cast_to(inner_typ.to_pointer());
                     let len_expr = Expr::int_constant(len, Type::size_t());
                     slice_fat_ptr(
                         self.codegen_ty_stable(ty),
@@ -334,21 +400,36 @@ impl<'tcx> GotocCtx<'tcx> {
                     let typ = self.codegen_ty_stable(ty);
                     let operation_name = "C string literal";
                     self.codegen_unimplemented_expr(
-                        &operation_name,
+                        operation_name,
                         typ,
                         loc,
                         "https://github.com/model-checking/kani/issues/2549",
                     )
                 }
-                _ => unreachable!("{inner_ty:?}"),
+                _ => {
+                    // E.g. a constant fat pointer to a custom slice-tailed DST such as
+                    // zerovec's `&ZeroSlice<T>`: representing these requires computing the
+                    // metadata for the unsized tail, which is not implemented yet. Degrade to
+                    // an unsupported-construct check rather than crashing the compiler, so
+                    // that only harnesses that actually reach this constant fail.
+                    let typ = self.codegen_ty_stable(ty);
+                    self.codegen_unimplemented_expr(
+                        &format!("constant fat pointer to unsized type {inner_ty}"),
+                        typ,
+                        loc,
+                        "https://github.com/model-checking/kani/issues/new/choose",
+                    )
+                }
             }
         } else if !alloc.provenance.ptrs.is_empty() {
             // Codegen the provenance pointer.
             trace!("codegen_const_ptr with_prov");
-            let ptr = alloc.provenance.ptrs[0];
-            let alloc_id = ptr.1.0;
+            let alloc_id = alloc.provenance.ptrs[0].1.0;
             let typ = self.codegen_ty_stable(ty);
-            self.codegen_alloc_pointer(typ, alloc_id, ptr.0, loc)
+            let offset = offset.try_into().unwrap_or_else(|_| {
+                panic!("pointer offset {offset} of constant `{ty}` does not fit in `usize`")
+            });
+            self.codegen_alloc_pointer(typ, alloc_id, offset, loc)
         } else {
             // If there's no provenance, just codegen the pointer address.
             trace!("codegen_const_ptr no_prov");
@@ -372,13 +453,21 @@ impl<'tcx> GotocCtx<'tcx> {
                 // We want to return the function pointer (not to be confused with function item)
                 self.codegen_func_expr(instance, loc).address_of()
             }
-            GlobalAlloc::Static(def) => self.codegen_static_pointer(def),
+            GlobalAlloc::Static(def) => {
+                if is_anon_static(self.tcx, def.def_id()) {
+                    let alloc = def.eval_initializer().unwrap();
+                    let name = format!("{}::{alloc_id:?}", self.full_crate_name());
+                    self.codegen_nested_static_allocation(&alloc, name, loc)
+                } else {
+                    self.codegen_static_pointer(def)
+                }
+            }
             GlobalAlloc::Memory(alloc) => {
                 // Full (mangled) crate name added so that allocations from different
                 // crates do not conflict. The name alone is insufficient because Rust
                 // allows different versions of the same crate to be used.
                 let name = format!("{}::{alloc_id:?}", self.full_crate_name());
-                self.codegen_const_allocation(&alloc, Some(name), loc)
+                self.codegen_const_allocation(&alloc, Some(name), loc, false)
             }
             alloc @ GlobalAlloc::VTable(..) => {
                 // This is similar to GlobalAlloc::Memory but the type is opaque to rust and it
@@ -388,8 +477,9 @@ impl<'tcx> GotocCtx<'tcx> {
                     unreachable!()
                 };
                 let name = format!("{}::{alloc_id:?}", self.full_crate_name());
-                self.codegen_const_allocation(&alloc, Some(name), loc)
+                self.codegen_const_allocation(&alloc, Some(name), loc, false)
             }
+            GlobalAlloc::TypeId { ty: _ } => todo!(),
         };
         assert!(res_t.is_pointer() || res_t.is_transparent_type(&self.symbol_table));
         let offset_addr = base_addr
@@ -469,6 +559,7 @@ impl<'tcx> GotocCtx<'tcx> {
         alloc: &Allocation,
         name: Option<String>,
         loc: Location,
+        is_definitely_const: bool,
     ) -> Expr {
         debug!(?name, ?alloc, "codegen_const_allocation");
         let alloc_name = match self.alloc_map.get(alloc) {
@@ -480,7 +571,11 @@ impl<'tcx> GotocCtx<'tcx> {
                     alloc_name.clone(),
                     loc,
                     has_interior_mutabity,
+                    is_definitely_const,
                 );
+                // Only constant allocations may be shared. Statics have their own storage
+                // and must never be reused for a constant with the same bytes.
+                self.alloc_map.insert(alloc.clone(), alloc_name.clone());
                 alloc_name
             }
             Some(name) => name.clone(),
@@ -488,6 +583,21 @@ impl<'tcx> GotocCtx<'tcx> {
 
         let mem_place = self.symbol_table.lookup(alloc_name).unwrap().to_expr();
         mem_place.address_of()
+    }
+
+    /// Generate an expression that represents the address of a nested static allocation.
+    fn codegen_nested_static_allocation(
+        &mut self,
+        alloc: &Allocation,
+        name: String,
+        loc: Location,
+    ) -> Expr {
+        // The memory behind this allocation isn't constant. codegen_alloc_in_memory uses alloc's
+        // mutability field to set the const-ness of the allocation in CBMC's symbol table.
+        if self.symbol_table.lookup(&name).is_none() {
+            self.codegen_alloc_in_memory(alloc.clone(), name.clone(), loc, false, false);
+        }
+        self.symbol_table.lookup(name).unwrap().to_expr().address_of()
     }
 
     /// Insert an allocation into the goto symbol table, and generate an init value.
@@ -500,6 +610,7 @@ impl<'tcx> GotocCtx<'tcx> {
         name: String,
         loc: Location,
         has_interior_mutabity: bool,
+        is_definitely_const: bool,
     ) {
         debug!(?name, ?alloc, "codegen_alloc_in_memory");
         let struct_name = &format!("{name}::struct");
@@ -553,13 +664,11 @@ impl<'tcx> GotocCtx<'tcx> {
         let _var = self.ensure_global_var_init(
             &name,
             false, //TODO is this correct?
-            alloc.mutability == Mutability::Not && !has_interior_mutabity,
+            (is_definitely_const || alloc.mutability == Mutability::Not) && !has_interior_mutabity,
             alloc_typ_ref.clone(),
             loc,
             init_fn,
         );
-
-        self.alloc_map.insert(alloc, name);
     }
 
     /// This is an internal helper function for `codegen_alloc_in_memory`.
@@ -629,7 +738,7 @@ impl<'tcx> GotocCtx<'tcx> {
 
     /// Ensure that the given instance is in the symbol table, returning the symbol.
     fn codegen_func_symbol(&mut self, instance: Instance) -> &Symbol {
-        let sym = if instance.is_foreign_item() && !instance.has_body() {
+        if instance.is_foreign_item() && !instance.has_body() {
             // Get the symbol that represents a foreign instance.
             self.codegen_foreign_fn(instance)
         } else {
@@ -639,8 +748,7 @@ impl<'tcx> GotocCtx<'tcx> {
             self.symbol_table
                 .lookup(&func)
                 .unwrap_or_else(|| panic!("Function `{func}` should've been declared before usage"))
-        };
-        sym
+        }
     }
 
     /// Generate a goto expression that references the function identified by `instance`.

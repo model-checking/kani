@@ -1,0 +1,10 @@
+Failed Checks: Undefined Behavior: Invalid value of type `[char; 2]`
+
+Failed Checks: Undefined Behavior: Invalid value of type `char`
+
+Failed Checks: Undefined Behavior: Invalid value of type `bool`
+
+Verification failed for - cast_to_invalid_offset
+Verification failed for - cast_to_invalid_char
+Verification failed for - transmute_invalid_bool
+Complete - 3 successfully verified harnesses, 3 failures, 6 total.

@@ -4,13 +4,15 @@
 // Test that the automatic harness generation feature filters functions correctly,
 // i.e., that it generates harnesses for a function iff:
 //   - It is not itself a harness
-//   - All of its arguments implement Arbitrary, either trivially or through a user-provided implementation
+//   - All of its arguments implement Arbitrary, either trivially,
+// through a user-provided implementation, or compiler-derived implementation.
 // The bodies of these functions are purposefully left as simple as possible;
 // the point is not to test the generated harnesses themselves,
 // but only that we generate the harnesses in the first place.
 
 #![feature(f16)]
 #![feature(f128)]
+#![allow(dead_code)]
 
 extern crate kani;
 use kani::Arbitrary;
@@ -31,14 +33,16 @@ impl Arbitrary for ManuallyImplementsArbitrary {
         Self { x: kani::any(), y: kani::any() }
     }
 }
-
-struct DoesntImplementArbitrary {
+struct CompilerDerivesArbitrary {
     x: u8,
     y: u32,
 }
-
+struct DoesntImplementArbitrary<'a> {
+    x: &'a u8,
+    y: u32,
+}
 mod yes_harness {
-    use crate::{DerivesArbitrary, ManuallyImplementsArbitrary};
+    use crate::{CompilerDerivesArbitrary, DerivesArbitrary, ManuallyImplementsArbitrary};
     use std::marker::{PhantomData, PhantomPinned};
     use std::mem::MaybeUninit;
     use std::num::NonZero;
@@ -164,6 +168,11 @@ mod yes_harness {
     fn f_derives_arbitrary(x: DerivesArbitrary) -> DerivesArbitrary {
         x
     }
+
+    fn f_compiler_derives_arbitrary(x: CompilerDerivesArbitrary) -> CompilerDerivesArbitrary {
+        x
+    }
+
     fn f_manually_implements_arbitrary(
         x: ManuallyImplementsArbitrary,
     ) -> ManuallyImplementsArbitrary {
@@ -179,22 +188,26 @@ mod yes_harness {
     }
 
     fn empty_body(_x: u8, _y: u16) {}
+
+    fn f_ref(x: u32, _y: &i32) -> u32 {
+        x
+    }
+
+    fn f_const_pointer(x: u32, _y: *const i32) -> u32 {
+        x
+    }
+
+    fn f_mut_pointer(x: u32, _y: *mut i32) -> u32 {
+        x
+    }
+
+    fn f_generic<T>(x: u32, _y: T) -> u32 {
+        x
+    }
 }
 
 mod no_harness {
     use crate::{DerivesArbitrary, DoesntImplementArbitrary};
-    fn unsupported_generic<T>(x: u32, _y: T) -> u32 {
-        x
-    }
-    fn unsupported_ref(x: u32, _y: &i32) -> u32 {
-        x
-    }
-    fn unsupported_const_pointer(x: u32, _y: *const i32) -> u32 {
-        x
-    }
-    fn unsupported_mut_pointer(x: u32, _y: *mut i32) -> u32 {
-        x
-    }
     fn unsupported_vec(x: u32, _y: Vec<u8>) -> u32 {
         x
     }
@@ -207,4 +220,7 @@ mod no_harness {
     ) -> DoesntImplementArbitrary {
         x
     }
+    // Test that we correctly render the name of the argument "_" in the table of skipped functions
+    // (this argument will have no var_debug_info from rustc_public, unlike arguments with names)
+    fn unsupported_no_arg_name(_: Vec<u8>) {}
 }

@@ -18,4 +18,18 @@ then
     exit 1
 fi
 
-exec -a cargo-kani "${KANI_DRIVER}" "$@"
+FLAMEGRAPH_DIR="flamegraphs"
+FLAMEGRAPH_SAMPLING_RATE=8000 # in Hz
+
+FLAMEGRAPH_DRIVER=0
+if [[ ( -n "${FLAMEGRAPH:-}" ) && ( "${FLAMEGRAPH}" == "driver" ) ]]; then
+    FLAMEGRAPH_DRIVER=1
+fi
+
+if (( FLAMEGRAPH_DRIVER == 0 )); then 
+    exec -a cargo-kani "${KANI_DRIVER}" "$@"
+else 
+    mkdir -p "${FLAMEGRAPH_DIR}"
+    DATE_POSTFIX=$(date +"%Y-%m-%dT%H:%M:%S")
+    exec -a cargo-kani samply record -r $FLAMEGRAPH_SAMPLING_RATE -o "${FLAMEGRAPH_DIR}/driver-${DATE_POSTFIX}.json.gz" --save-only "${KANI_DRIVER}" "$@"
+fi

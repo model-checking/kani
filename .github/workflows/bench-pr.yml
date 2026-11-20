@@ -1,0 +1,40 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+#
+# Run the performance benchmark workflows for pull requests that carry the
+# corresponding Z-*BenchCI label (applied automatically by the labeler in
+# extra_jobs.yml based on the changed files, or manually).
+#
+# This runs on `pull_request` (not `pull_request_target`) on purpose: the
+# benchmark workflows build and execute the code proposed in the pull
+# request, which must not happen in the trusted `pull_request_target`
+# context (actions/checkout v6.1.0/v5.1.0/v4.4.0 refuse to do so; see
+# https://github.blog/changelog/2026-06-18-safer-pull_request_target-defaults-for-github-actions-checkout/).
+#
+# Note on the `labeled` trigger: labels added by the auto-labeler do not
+# re-trigger this workflow (events created with the default GITHUB_TOKEN
+# never trigger new workflow runs), so on freshly opened pull requests the
+# benchmarks only start with the next push to the pull request. Manually
+# adding the label triggers them immediately.
+
+name: Kani Benchmarks
+permissions:
+  contents: read
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  end-to-end-bench:
+    name: End-to-End Benchmarks
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'Z-EndToEndBenchCI') }}
+    uses: ./.github/workflows/bench-e2e.yml
+
+  compiler-bench:
+    name: Compiler Benchmarks
+    if: ${{ contains(github.event.pull_request.labels.*.name, 'Z-CompilerBenchCI') }}
+    uses: ./.github/workflows/bench-compiler.yml

@@ -1,10 +1,11 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-#![feature(let_chains)]
 use std::ffi::OsString;
 use std::process::ExitCode;
+use std::time::Instant;
 
 use anyhow::Result;
+use autoharness::{autoharness_cargo, autoharness_standalone};
 use time::{OffsetDateTime, format_description};
 
 use args::{CargoKaniSubcommand, check_is_valid};
@@ -21,7 +22,6 @@ use tracing::debug;
 
 mod args;
 mod args_toml;
-mod assess;
 mod autoharness;
 mod call_cargo;
 mod call_cbmc;
@@ -35,8 +35,13 @@ mod concrete_playback;
 mod coverage;
 mod harness_runner;
 mod list;
+mod log_file;
 mod metadata;
+mod progress_indicator;
 mod project;
+
+mod frontend;
+mod sarif;
 mod session;
 mod util;
 mod version;
@@ -45,6 +50,13 @@ mod version;
 /// The driver can be invoked via `cargo kani` and `kani` commands, which determines what kind of
 /// project should be verified.
 fn main() -> ExitCode {
+    // Set GLIBC_TUNABLES for child processes (CBMC, etc.) if not already set
+    // This enables THP for subprocesses even if the parent didn't have it set at startup
+    if std::env::var("GLIBC_TUNABLES").is_err() {
+        // SAFETY: Called at start of main before any threads are spawned
+        unsafe { std::env::set_var("GLIBC_TUNABLES", "glibc.malloc.hugetlb=1") };
+    }
+
     let invocation_type = determine_invocation_type(Vec::from_iter(std::env::args_os()));
 
     let result = match invocation_type {
@@ -66,67 +78,69 @@ fn main() -> ExitCode {
 /// The main function for the `cargo kani` command.
 fn cargokani_main(input_args: Vec<OsString>) -> Result<()> {
     let input_args = join_args(input_args)?;
-    let args = args::CargoKaniArgs::parse_from(&input_args);
+    let mut args = args::CargoKaniArgs::parse_from(&input_args);
+    // Apply the autoharness defaults before validating, so that validation sees the options the
+    // run will actually use (e.g. `--jobs=N` must not be rejected for lacking
+    // `--output-format=terse` when autoharness supplies exactly that default).
+    if let Some(CargoKaniSubcommand::Autoharness(autoharness_args)) = &mut args.command {
+        autoharness_args.verify_opts.apply_autoharness_parallel_defaults();
+    }
     check_is_valid(&args);
 
-    if let Some(CargoKaniSubcommand::List(list_args)) = args.command {
-        return list_cargo(*list_args, args.verify_opts);
+    // Handle version flag
+    if args.version {
+        print_kani_version(
+            InvocationType::CargoKani(input_args),
+            args.verify_opts.common_args.verbose,
+        );
+        return Ok(());
     }
 
     let mut session = match args.command {
-        Some(CargoKaniSubcommand::Assess(assess_args)) => {
-            let sess = session::KaniSession::new(args.verify_opts)?;
-            return assess::run_assess(sess, *assess_args);
+        Some(CargoKaniSubcommand::Autoharness(autoharness_args)) => {
+            return autoharness_cargo(*autoharness_args);
         }
-        Some(CargoKaniSubcommand::Autoharness(args)) => {
-            let mut sess = session::KaniSession::new(args.verify_opts)?;
-            sess.enable_autoharness();
-            sess.add_auto_harness_args(
-                args.common_autoharness_args.include_function,
-                args.common_autoharness_args.exclude_function,
-            );
-
-            sess
+        Some(CargoKaniSubcommand::List(list_args)) => {
+            return list_cargo(*list_args, args.verify_opts);
         }
         Some(CargoKaniSubcommand::Playback(args)) => {
             return playback_cargo(*args);
         }
-        Some(CargoKaniSubcommand::List(_)) => unreachable!(),
         None => session::KaniSession::new(args.verify_opts)?,
     };
 
     if !session.args.common_args.quiet {
-        print_kani_version(InvocationType::CargoKani(input_args));
-    }
-
-    if session.args.assess {
-        return assess::run_assess(session, assess::AssessArgs::default());
+        print_kani_version(InvocationType::CargoKani(input_args), session.args.common_args.verbose);
     }
 
     let project = project::cargo_project(&mut session, false)?;
-    if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
+    if session.args.only_codegen {
+        Ok(())
+    } else if session.args.uses_llbc_backend() {
+        codegen_llbc_only(&project, &session)
+    } else {
+        verify_project(project, session)
+    }
 }
 
 /// The main function for the `kani` command.
 fn standalone_main() -> Result<()> {
-    let args = args::StandaloneArgs::parse();
+    let mut args = args::StandaloneArgs::parse();
+    // See the comment in `cargokani_main`.
+    if let Some(StandaloneSubcommand::Autoharness(autoharness_args)) = &mut args.command {
+        autoharness_args.verify_opts.apply_autoharness_parallel_defaults();
+    }
     check_is_valid(&args);
+
+    // Handle version flag
+    if args.version {
+        print_kani_version(InvocationType::Standalone, args.verify_opts.common_args.verbose);
+        return Ok(());
+    }
 
     let (session, project) = match args.command {
         Some(StandaloneSubcommand::Autoharness(args)) => {
-            let mut session = KaniSession::new(args.verify_opts)?;
-            session.enable_autoharness();
-            session.add_auto_harness_args(
-                args.common_autoharness_args.include_function,
-                args.common_autoharness_args.exclude_function,
-            );
-
-            if !session.args.common_args.quiet {
-                print_kani_version(InvocationType::Standalone);
-            }
-
-            let project = project::standalone_project(&args.input, args.crate_name, &session)?;
-            (session, project)
+            return autoharness_standalone(*args);
         }
         Some(StandaloneSubcommand::Playback(args)) => return playback_standalone(*args),
         Some(StandaloneSubcommand::List(list_args)) => {
@@ -135,7 +149,7 @@ fn standalone_main() -> Result<()> {
         Some(StandaloneSubcommand::VerifyStd(args)) => {
             let session = KaniSession::new(args.verify_opts)?;
             if !session.args.common_args.quiet {
-                print_kani_version(InvocationType::Standalone);
+                print_kani_version(InvocationType::Standalone, session.args.common_args.verbose);
             }
 
             let project = project::std_project(&args.std_path, &session)?;
@@ -144,7 +158,7 @@ fn standalone_main() -> Result<()> {
         None => {
             let session = KaniSession::new(args.verify_opts)?;
             if !session.args.common_args.quiet {
-                print_kani_version(InvocationType::Standalone);
+                print_kani_version(InvocationType::Standalone, session.args.common_args.verbose);
             }
 
             let project =
@@ -152,14 +166,32 @@ fn standalone_main() -> Result<()> {
             (session, project)
         }
     };
-    if session.args.only_codegen { Ok(()) } else { verify_project(project, session) }
+    if session.args.only_codegen {
+        Ok(())
+    } else if session.args.uses_llbc_backend() {
+        codegen_llbc_only(&project, &session)
+    } else {
+        verify_project(project, session)
+    }
+}
+
+/// Finish a run of the LLBC backend (`-Z lean`), which stops after codegen: there is nothing to
+/// link or verify. Still reject `--harness` filters that match nothing, as `verify_project` does:
+/// the compiler only filters its metadata and would silently translate no harness.
+pub(crate) fn codegen_llbc_only(project: &Project, session: &KaniSession) -> Result<()> {
+    session.determine_targets(project.get_all_harnesses())?;
+    Ok(())
 }
 
 /// Run verification on the given project.
 fn verify_project(project: Project, session: KaniSession) -> Result<()> {
     debug!(?project, "verify_project");
-    let harnesses = session.determine_targets(&project.get_all_harnesses())?;
+    let started_at = OffsetDateTime::now_utc();
+    let start_instant = Instant::now();
+
+    let harnesses = session.determine_targets(project.get_all_harnesses())?;
     debug!(n = harnesses.len(), ?harnesses, "verify_project");
+    let export_context = session.begin_export_json(&harnesses, started_at)?;
 
     // Verification
     let runner = harness_runner::HarnessRunner { sess: &session, project: &project };
@@ -175,14 +207,23 @@ fn verify_project(project: Project, session: KaniSession) -> Result<()> {
         // users in a proof debugging session, who are usually interested in the
         // most recent results.
         let time_now = OffsetDateTime::now_utc();
-        let format = format_description::parse("[year]-[month]-[day]_[hour]-[minute]").unwrap();
+        let format =
+            format_description::parse_borrowed::<3>("[year]-[month]-[day]_[hour]-[minute]")
+                .unwrap();
         let timestamp = time_now.format(&format).unwrap();
 
         session.save_coverage_metadata(&project, &timestamp)?;
         session.save_coverage_results(&project, &results, &timestamp)?;
     }
 
-    session.print_final_summary(&results)
+    if let Some(pending) = export_context {
+        session.write_export_json(&results, pending, start_instant.elapsed())?;
+    }
+    session.write_sarif(&results)?;
+    if !session.args.common_args.quiet {
+        session.print_final_summary(&results)?;
+    }
+    session.conclude(&results)
 }
 
 #[derive(Debug, PartialEq, Eq)]

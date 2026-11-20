@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! Check that Kani correctly verifies the contract that modifies slices.
 //!
+//! This started failing with the 2025-04-05 toolchain upgrade
+//! Tracking issue: https://github.com/model-checking/kani/issues/4029
+//! Was fixed with https://github.com/model-checking/kani/pull/4233
+//!
 //! Note that this test used to crash while parsing the annotations.
 // kani-flags: -Zfunction-contracts
 extern crate kani;

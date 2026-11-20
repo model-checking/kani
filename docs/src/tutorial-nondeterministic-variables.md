@@ -44,7 +44,7 @@ The assertion we wrote in this harness was just an extra check we added to demon
 While `kani::any()` is the only method Kani provides to inject non-determinism into a proof harness, Kani only ships with implementations for a few `std` types where we can guarantee safety.
 When you need nondeterministic variables of types that don't have a `kani::any()` implementation available, you have the following options:
 
-1. Implement the `kani::Arbitrary` trait for your type, so you and downstream crates can use `kani::any()` with your type.
+1. Implement the `kani::Arbitrary` trait for your type, so you and downstream crates can use `kani::any()` with your type. See [the Arbitrary trait documentation](./reference/arbitrary.md) for details.
 2. Implement the [`bolero_generator::TypeGenerator` trait](https://docs.rs/bolero-generator/0.8.0/bolero_generator/trait.TypeGenerator.html).
 This will enable you and downstream crates to use Kani via [Bolero](https://camshaft.github.io/bolero/).
 3. Write a function that builds an object from non-deterministic variables.
@@ -100,7 +100,7 @@ The `kani::any()` function does not have any arguments, and so cannot be given a
 
 This does not mean you cannot have a nondeterministic vector.
 It just means you have to construct one.
-Our example proof harness above constructs a nondeterministic `Inventory` of size `1`, simply by starting with the empty `Inventory` and inserting a nondeterministic entry.
+Our example proof harness above constructs a nondeterministic `Inventory` of size `1`, simply by starting with the empty `Inventory` and inserting a nondeterministic entry. Alternatively, you can implement or derive `BoundedArbitrary` for your type, which behaves like `Arbitrary`, except it accepts a fixed bound for the collection. See the [bounded arbitrary](./reference/bounded_arbitrary.md) documentation for details.
 
 ### Exercise
 

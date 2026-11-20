@@ -3,12 +3,15 @@
 
 use crate::CbmcSolver;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::{borrow::Borrow, collections::BTreeSet, path::PathBuf};
+use strum_macros::Display;
+use tracing::{debug, trace};
 
 /// A CBMC-level `assigns` contract that needs to be enforced on a function.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct AssignsContract {
-    /// The target of the contract
+    /// Mangled symbol of the generated closure that carries the contract.
+    /// The function the contract is for is in `HarnessKind::ProofForContract::target_fn`.
     pub contracted_function_name: String,
     /// A static global variable used to track recursion that must not be havocked.
     /// This is only needed if the function is tagged with `#[kani::recursive]`
@@ -40,6 +43,24 @@ pub struct HarnessMetadata {
     pub has_loop_contracts: bool,
     /// If the harness was automatically generated or manually written.
     pub is_automatically_generated: bool,
+    /// Whether the (automatically generated) harness uses *bounded* nondeterministic values
+    /// for some arguments (e.g. slice references), in which case its verification result only
+    /// holds up to the bounds, c.f. the autoharness --bounded-arguments option.
+    #[serde(default)]
+    pub is_bounded: bool,
+    /// Whether the (automatically generated) harness generates some values through a type's
+    /// public constructor (c.f. the autoharness --constructor-args option), in which case its
+    /// verification result only covers constructor-reachable values.
+    #[serde(default)]
+    pub is_ctor_based: bool,
+    /// Whether some nondeterministic value of the (automatically generated) harness contains an
+    /// `Rc` or `Arc`, whose reference-count state Kani models with only finitely many
+    /// representatives. Its verification result therefore does not cover every reference
+    /// count a caller could produce, even though `Rc`/`Arc` arguments need no
+    /// `--bounded-arguments` and do not set `is_bounded`
+    /// (<https://github.com/model-checking/kani/issues/4752>).
+    #[serde(default)]
+    pub has_refcount_caveat: bool,
 }
 
 /// The attributes added by the user to control how a harness is executed.
@@ -59,13 +80,16 @@ pub struct HarnessAttributes {
     pub verified_stubs: Vec<String>,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Display, Serialize, Deserialize)]
 pub enum HarnessKind {
     /// Function was annotated with `#[kani::proof]`.
+    #[strum(serialize = "#[kani::proof]")]
     Proof,
     /// Function was annotated with `#[kani::proof_for_contract(target_fn)]`.
+    #[strum(serialize = "#[kani::proof_for_contract]")]
     ProofForContract { target_fn: String },
     /// This is a test harness annotated with `#[test]`.
+    #[strum(serialize = "#[test]")]
     Test,
 }
 
@@ -107,4 +131,48 @@ impl HarnessMetadata {
             &self.pretty_name
         }
     }
+}
+
+/// Search for a proof harness with a particular name.
+/// At the present time, we use `no_mangle` so collisions shouldn't happen,
+/// but this function is written to be robust against that changing in the future.
+pub fn find_proof_harnesses<'a, I>(
+    targets: &BTreeSet<&String>,
+    all_harnesses: I,
+    exact_filter: bool,
+) -> Vec<&'a HarnessMetadata>
+where
+    I: IntoIterator,
+    I::Item: Borrow<&'a HarnessMetadata>,
+{
+    debug!(?targets, "find_proof_harness");
+    let mut result = vec![];
+    for md in all_harnesses.into_iter() {
+        let md: &'a HarnessMetadata = md.borrow();
+
+        // --harnesses should not select automatic harnesses
+        if md.is_automatically_generated {
+            continue;
+        }
+        if exact_filter {
+            // Check for exact match only
+            if targets.contains(&md.pretty_name) {
+                // if exact match found, stop searching
+                result.push(md);
+            } else {
+                trace!(skip = md.pretty_name, "find_proof_harnesses");
+            }
+        } else {
+            // Either an exact match, or a substring match. We check the exact first since it's cheaper.
+            if targets.contains(&md.pretty_name)
+                || targets.contains(&md.get_harness_name_unqualified().to_string())
+                || targets.iter().any(|target| md.pretty_name.contains(*target))
+            {
+                result.push(md);
+            } else {
+                trace!(skip = md.pretty_name, "find_proof_harnesses");
+            }
+        }
+    }
+    result
 }

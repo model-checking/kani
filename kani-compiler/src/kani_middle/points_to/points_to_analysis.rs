@@ -35,19 +35,25 @@ use crate::{
 use rustc_middle::{
     mir::{
         BasicBlock, BinOp, Body, CallReturnPlaces, Location, NonDivergingIntrinsic, Operand, Place,
-        ProjectionElem, Rvalue, Statement, StatementKind, Terminator, TerminatorEdges,
-        TerminatorKind,
+        ProjectionElem, Rvalue, Statement, StatementKind, Terminator, TerminatorKind,
     },
     ty::{Instance, InstanceKind, List, TyCtxt, TyKind, TypingEnv},
 };
 use rustc_mir_dataflow::{Analysis, Forward, JoinSemiLattice};
-use rustc_smir::rustc_internal;
-use rustc_span::{DUMMY_SP, source_map::Spanned};
-use stable_mir::mir::{Body as StableBody, mono::Instance as StableInstance};
+use rustc_public::mir::{
+    Body as StableBody,
+    mono::{Instance as StableInstance, InstanceKind as StableInstanceKind},
+};
+use rustc_public::rustc_internal;
+use rustc_public::ty::{RigidTy as StableRigidTy, Ty as StableTy, TyKind as StableTyKind};
+use rustc_span::{DUMMY_SP, Spanned};
+use std::cell::RefCell;
 use std::collections::HashSet;
 
 /// Main points-to analysis object.
 struct PointsToAnalysis<'a, 'tcx> {
+    /// Function instances whose points-to analysis is currently in progress.
+    active_calls: &'a RefCell<HashSet<Instance<'tcx>>>,
     instance: Instance<'tcx>,
     body: &'a Body<'tcx>,
     tcx: TyCtxt<'tcx>,
@@ -72,12 +78,14 @@ pub fn run_points_to_analysis<'tcx>(
     // conversion.
     let internal_instance = rustc_internal::internal(tcx, instance);
     let internal_body = body.internal_mir(tcx);
+    let active_calls = RefCell::new(HashSet::new());
     PointsToAnalysis::run(
         &internal_body,
         tcx,
         internal_instance,
         call_graph,
         PointsToGraph::empty(),
+        &active_calls,
     )
 }
 
@@ -90,8 +98,10 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         instance: Instance<'tcx>,
         call_graph: &'a CallGraph,
         initial_graph: PointsToGraph<'tcx>,
+        active_calls: &'a RefCell<HashSet<Instance<'tcx>>>,
     ) -> PointsToGraph<'tcx> {
-        let analysis = Self { body, tcx, instance, call_graph, initial_graph };
+        active_calls.borrow_mut().insert(instance);
+        let analysis = Self { active_calls, body, tcx, instance, call_graph, initial_graph };
         // This creates a fixpoint solver using the initial graph, the body, and extra information
         // and solves the dataflow problem, producing the cursor, which contains dataflow state for
         // each instruction in the body.
@@ -110,6 +120,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
                 results.join(&cursor.get().clone());
             }
         }
+        active_calls.borrow_mut().remove(&instance);
         results
     }
 }
@@ -137,7 +148,7 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
     /// Update current dataflow state based on the information we can infer from the given
     /// statement.
     fn apply_primary_statement_effect(
-        &mut self,
+        &self,
         state: &mut Self::Domain,
         statement: &Statement<'tcx>,
         _location: Location,
@@ -171,10 +182,8 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
             }
             StatementKind::FakeRead(..)
             | StatementKind::SetDiscriminant { .. }
-            | StatementKind::Deinit(..)
             | StatementKind::StorageLive(..)
             | StatementKind::StorageDead(..)
-            | StatementKind::Retag(..)
             | StatementKind::PlaceMention(..)
             | StatementKind::AscribeUserType(..)
             | StatementKind::Coverage(..)
@@ -184,22 +193,19 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
         }
     }
 
-    fn apply_primary_terminator_effect<'mir>(
-        &mut self,
+    fn apply_primary_terminator_effect(
+        &self,
         state: &mut Self::Domain,
-        terminator: &'mir Terminator<'tcx>,
+        terminator: &Terminator<'tcx>,
         location: Location,
-    ) -> TerminatorEdges<'mir, 'tcx> {
+    ) {
         if let TerminatorKind::Call { func, args, destination, .. } = &terminator.kind {
-            // Attempt to resolve callee. For now, we panic if the callee cannot be resolved (e.g.,
-            // if a function pointer call is used), but we could leverage the call graph to resolve
-            // it.
-            let instance = match try_resolve_instance(self.body, func, self.tcx) {
-                Ok(instance) => instance,
-                Err(reason) => {
-                    unimplemented!("{reason}")
-                }
-            };
+            // Calls the analysis cannot follow add no edges here: the instrumentation guards each
+            // of them with an unsupported check, which stops execution before the call.
+            if unsupported_call(rustc_internal::stable(func.ty(self.body, self.tcx))).is_some() {
+                return;
+            }
+            let instance = try_resolve_instance(self.body, func, self.tcx);
             match instance.def {
                 // Intrinsics could introduce aliasing edges we care about, so need to handle them.
                 InstanceKind::Intrinsic(_) => {
@@ -218,7 +224,7 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
                         }
                         // All `atomic_cxchg` intrinsics take `dst, old, src` as arguments.
                         // This is equivalent to `destination = *dst; *dst = src`.
-                        Intrinsic::AtomicCxchg(_) | Intrinsic::AtomicCxchgWeak(_) => {
+                        Intrinsic::AtomicCxchg | Intrinsic::AtomicCxchgWeak => {
                             let src_set = self.successors_for_operand(state, args[2].node.clone());
                             let dst_set = self.successors_for_deref(state, args[0].node.clone());
                             let destination_set = state.resolve_place(*destination, self.instance);
@@ -227,31 +233,31 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
                         }
                         // All `atomic_load` intrinsics take `src` as an argument.
                         // This is equivalent to `destination = *src`.
-                        Intrinsic::AtomicLoad(_) => {
+                        Intrinsic::AtomicLoad => {
                             let src_set = self.successors_for_deref(state, args[0].node.clone());
                             let destination_set = state.resolve_place(*destination, self.instance);
                             state.extend(&destination_set, &state.successors(&src_set));
                         }
                         // All `atomic_store` intrinsics take `dst, val` as arguments.
                         // This is equivalent to `*dst = val`.
-                        Intrinsic::AtomicStore(_) => {
+                        Intrinsic::AtomicStore => {
                             let dst_set = self.successors_for_deref(state, args[0].node.clone());
                             let val_set = self.successors_for_operand(state, args[1].node.clone());
                             state.extend(&dst_set, &val_set);
                         }
                         // All other `atomic` intrinsics take `dst, src` as arguments.
                         // This is equivalent to `destination = *dst; *dst = src`.
-                        Intrinsic::AtomicAnd(_)
-                        | Intrinsic::AtomicMax(_)
-                        | Intrinsic::AtomicMin(_)
-                        | Intrinsic::AtomicNand(_)
-                        | Intrinsic::AtomicOr(_)
-                        | Intrinsic::AtomicUmax(_)
-                        | Intrinsic::AtomicUmin(_)
-                        | Intrinsic::AtomicXadd(_)
-                        | Intrinsic::AtomicXchg(_)
-                        | Intrinsic::AtomicXor(_)
-                        | Intrinsic::AtomicXsub(_) => {
+                        Intrinsic::AtomicAnd
+                        | Intrinsic::AtomicMax
+                        | Intrinsic::AtomicMin
+                        | Intrinsic::AtomicNand
+                        | Intrinsic::AtomicOr
+                        | Intrinsic::AtomicUmax
+                        | Intrinsic::AtomicUmin
+                        | Intrinsic::AtomicXadd
+                        | Intrinsic::AtomicXchg
+                        | Intrinsic::AtomicXor
+                        | Intrinsic::AtomicXsub => {
                             let src_set = self.successors_for_operand(state, args[1].node.clone());
                             let dst_set = self.successors_for_deref(state, args[0].node.clone());
                             let destination_set = state.resolve_place(*destination, self.instance);
@@ -291,7 +297,7 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
                             state.extend(&lvalue_set, &state.successors(&rvalue_set));
                         }
                         // Semantically equivalent *a = b.
-                        Intrinsic::VolatileStore => {
+                        Intrinsic::VolatileStore | Intrinsic::UnalignedVolatileStore => {
                             let lvalue_set = self.successors_for_deref(state, args[0].node.clone());
                             let rvalue_set =
                                 self.successors_for_operand(state, args[1].node.clone());
@@ -328,17 +334,23 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
                         }
                     } else {
                         // Otherwise, handle this as a regular function call.
+                        if self.active_calls.borrow().contains(&instance) {
+                            self.tcx.dcx().span_err(
+                                terminator.source_info.span,
+                                "Kani does not support memory initialization checks across recursive calls.",
+                            );
+                            self.tcx.dcx().abort_if_errors();
+                        }
                         self.apply_regular_call_effect(state, instance, args, destination);
                     }
                 }
             }
         };
-        terminator.edges()
     }
 
     /// We don't care about this and just need to implement this to implement the trait.
     fn apply_call_return_effect(
-        &mut self,
+        &self,
         _state: &mut Self::Domain,
         _block: BasicBlock,
         _return_places: CallReturnPlaces<'_, 'tcx>,
@@ -346,29 +358,44 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
     }
 }
 
-/// Try retrieving instance for the given function operand.
+/// Why the analysis cannot follow a call to a callee of type `func_ty`, if it cannot: the callee of
+/// a call through a function pointer or a vtable is not known statically. Callers that rely on the
+/// analysis must guard such calls with an unsupported check.
+pub fn unsupported_call(func_ty: StableTy) -> Option<String> {
+    let reason = match func_ty.kind() {
+        StableTyKind::RigidTy(StableRigidTy::FnDef(def, args)) => {
+            match StableInstance::resolve(def, &args) {
+                Ok(instance) if !matches!(instance.kind, StableInstanceKind::Virtual { .. }) => {
+                    return None;
+                }
+                _ => "trait object method calls",
+            }
+        }
+        _ => "calls through function pointers",
+    };
+    Some(format!(
+        "Kani does not support memory initialization checks across {reason}. For more information about planned support, see https://github.com/model-checking/kani/issues/3300."
+    ))
+}
+
+/// The instance a call operand refers to, which `unsupported_call` has checked is a function item.
 fn try_resolve_instance<'tcx>(
     body: &Body<'tcx>,
     func: &Operand<'tcx>,
     tcx: TyCtxt<'tcx>,
-) -> Result<Instance<'tcx>, String> {
-    let ty = func.ty(body, tcx);
-    match ty.kind() {
-        TyKind::FnDef(def, args) => {
-            // Span here is used for error-reporting, which we don't expect to encounter anyway, so
-            // it is ok to use a dummy.
-            Ok(Instance::expect_resolve(
-                tcx,
-                TypingEnv::fully_monomorphized(),
-                *def,
-                &args,
-                DUMMY_SP,
-            ))
-        }
-        _ => Err(format!(
-            "Kani was not able to resolve the instance of the function operand `{ty:?}`. Currently, memory initialization checks in presence of function pointers and vtable calls are not supported. For more information about planned support, see https://github.com/model-checking/kani/issues/3300."
-        )),
-    }
+) -> Instance<'tcx> {
+    let TyKind::FnDef(def, args) = func.ty(body, tcx).kind() else {
+        unreachable!("`unsupported_call` rejects callees that are not function items")
+    };
+    // Span here is used for error-reporting, which we don't expect to encounter anyway, so it is ok
+    // to use a dummy.
+    Instance::expect_resolve(
+        tcx,
+        TypingEnv::fully_monomorphized(),
+        *def,
+        args.skip_binder(),
+        DUMMY_SP,
+    )
 }
 
 impl<'tcx> PointsToAnalysis<'_, 'tcx> {
@@ -403,6 +430,8 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
                     HashSet::new()
                 }
             }
+            // Runtime-check operands (rust-lang/rust#148766) reference no place or static.
+            Operand::RuntimeChecks(..) => HashSet::new(),
         }
     }
 
@@ -425,12 +454,14 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
                     HashSet::new()
                 }
             }
+            // Runtime-check operands (rust-lang/rust#148766) reference no place or static.
+            Operand::RuntimeChecks(..) => HashSet::new(),
         }
     }
 
     /// Update the analysis state according to the regular function call.
     fn apply_regular_call_effect(
-        &mut self,
+        &self,
         state: &mut PointsToGraph<'tcx>,
         instance: Instance<'tcx>,
         args: &[Spanned<Operand<'tcx>>],
@@ -439,7 +470,7 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
         // Here we simply call another function, so need to retrieve internal body for it.
         let new_body = {
             let stable_instance = rustc_internal::stable(instance);
-            let stable_body = stable_instance.body().unwrap();
+            let stable_body = crate::kani_middle::checked_body(self.tcx, stable_instance).unwrap();
             stable_body.internal_mir(self.tcx)
         };
 
@@ -453,6 +484,7 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
                         .join(&state.transitive_closure(state.resolve_place(place, self.instance)));
                 }
                 Operand::Constant(_) => {}
+                Operand::RuntimeChecks(_) => {}
             }
         }
 
@@ -499,8 +531,14 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
         }
 
         // Run the analysis.
-        let new_result =
-            PointsToAnalysis::run(&new_body, self.tcx, instance, self.call_graph, initial_graph);
+        let new_result = PointsToAnalysis::run(
+            &new_body,
+            self.tcx,
+            instance,
+            self.call_graph,
+            initial_graph,
+            self.active_calls,
+        );
         // Merge the results into the current state.
         state.join(&new_result);
 
@@ -522,12 +560,14 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
         match rvalue {
             // Using the operand unchanged requires determining where it could point, which
             // `successors_for_operand` does.
-            Rvalue::Use(operand)
-            | Rvalue::ShallowInitBox(operand, _)
+            Rvalue::Use(operand, _)
             | Rvalue::Cast(_, operand, _)
             | Rvalue::Repeat(operand, ..)
             | Rvalue::WrapUnsafeBinder(operand, _) => self.successors_for_operand(state, operand),
-            Rvalue::Ref(_, _, ref_place) | Rvalue::RawPtr(_, ref_place) => {
+            // A `Reborrow` bitwise-copies the place, so it can point wherever that place does.
+            Rvalue::Reborrow(_, _, ref_place)
+            | Rvalue::Ref(_, _, ref_place)
+            | Rvalue::RawPtr(_, ref_place) => {
                 // Here, a reference to a place is created, which leaves the place
                 // unchanged.
                 state.resolve_place(ref_place, self.instance)
@@ -582,7 +622,7 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
                 // The same story from BinOp applies here, too. Need to track those things.
                 self.successors_for_operand(state, operand)
             }
-            Rvalue::NullaryOp(..) | Rvalue::Discriminant(..) | Rvalue::Len(_) => {
+            Rvalue::Discriminant(..) => {
                 // All of those should yield a constant.
                 HashSet::new()
             }
@@ -611,6 +651,7 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
 fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
     match intrinsic {
         Intrinsic::AddWithOverflow
+        | Intrinsic::AlignOfVal
         | Intrinsic::ArithOffset
         | Intrinsic::AssertInhabited
         | Intrinsic::AssertMemUninitializedValid
@@ -638,6 +679,8 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::Exp2F64
         | Intrinsic::ExpF32
         | Intrinsic::ExpF64
+        | Intrinsic::FabsF128
+        | Intrinsic::FabsF16
         | Intrinsic::FabsF32
         | Intrinsic::FabsF64
         | Intrinsic::FaddFast
@@ -659,30 +702,24 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::LogF64
         | Intrinsic::MaxNumF32
         | Intrinsic::MaxNumF64
-        | Intrinsic::MinAlignOf
-        | Intrinsic::MinAlignOfVal
         | Intrinsic::MinNumF32
         | Intrinsic::MinNumF64
         | Intrinsic::MulWithOverflow
-        | Intrinsic::NearbyIntF32
-        | Intrinsic::NearbyIntF64
-        | Intrinsic::NeedsDrop
         | Intrinsic::PowF32
         | Intrinsic::PowF64
         | Intrinsic::PowIF32
         | Intrinsic::PowIF64
-        | Intrinsic::PrefAlignOf
         | Intrinsic::PtrGuaranteedCmp
         | Intrinsic::PtrOffsetFrom
         | Intrinsic::PtrOffsetFromUnsigned
         | Intrinsic::RawEq
         | Intrinsic::RetagBoxToRaw
-        | Intrinsic::RintF32
-        | Intrinsic::RintF64
         | Intrinsic::RotateLeft
         | Intrinsic::RotateRight
         | Intrinsic::RoundF32
         | Intrinsic::RoundF64
+        | Intrinsic::RoundTiesEvenF32
+        | Intrinsic::RoundTiesEvenF64
         | Intrinsic::SaturatingAdd
         | Intrinsic::SaturatingSub
         | Intrinsic::SinF32
@@ -694,11 +731,12 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::Transmute
         | Intrinsic::TruncF32
         | Intrinsic::TruncF64
-        | Intrinsic::TypeId
-        | Intrinsic::TypeName
         | Intrinsic::UncheckedDiv
         | Intrinsic::UncheckedRem
         | Intrinsic::Unlikely
+        // Same argument shape/semantics as `WriteBytes` below (volatility is not
+        // an aliasing concern), so it is likewise identity-aliasing.
+        | Intrinsic::VolatileSetMemory
         | Intrinsic::VtableSize
         | Intrinsic::VtableAlign
         | Intrinsic::WrappingAdd
@@ -712,6 +750,9 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::SimdAnd
         | Intrinsic::SimdDiv
         | Intrinsic::SimdRem
+        | Intrinsic::SimdReduceAll
+        | Intrinsic::SimdReduceMax
+        | Intrinsic::SimdReduceMin
         | Intrinsic::SimdEq
         | Intrinsic::SimdExtract
         | Intrinsic::SimdGe
@@ -725,12 +766,13 @@ fn is_identity_aliasing_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::SimdShl
         | Intrinsic::SimdShr
         | Intrinsic::SimdShuffle(_)
+        | Intrinsic::SimdSplat
         | Intrinsic::SimdSub
         | Intrinsic::SimdXor => {
             /* SIMD operations */
             true
         }
-        Intrinsic::AtomicFence(_) | Intrinsic::AtomicSingleThreadFence(_) => {
+        Intrinsic::AtomicFence | Intrinsic::AtomicSingleThreadFence => {
             /* Atomic fences */
             true
         }

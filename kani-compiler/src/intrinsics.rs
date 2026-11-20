@@ -3,9 +3,11 @@
 
 //! Single source of truth about which intrinsics we support.
 
-use stable_mir::{
+use rustc_middle::ty::TyCtxt;
+use rustc_public::{
     mir::{Mutability, mono::Instance},
-    ty::{FloatTy, IntTy, RigidTy, TyKind, UintTy},
+    rustc_internal,
+    ty::{FloatTy, FnSig, IntTy, RigidTy, Ty, TyKind, UintTy},
 };
 
 // Enumeration of all intrinsics we support right now, with the last option being a catch-all. This
@@ -14,28 +16,30 @@ use stable_mir::{
 #[derive(Clone, Debug)]
 pub enum Intrinsic {
     AddWithOverflow,
+    AlignOf,
+    AlignOfVal,
     ArithOffset,
     AssertInhabited,
     AssertMemUninitializedValid,
     AssertZeroValid,
     Assume,
-    AtomicAnd(String),
-    AtomicCxchg(String),
-    AtomicCxchgWeak(String),
-    AtomicFence(String),
-    AtomicLoad(String),
-    AtomicMax(String),
-    AtomicMin(String),
-    AtomicNand(String),
-    AtomicOr(String),
-    AtomicSingleThreadFence(String),
-    AtomicStore(String),
-    AtomicUmax(String),
-    AtomicUmin(String),
-    AtomicXadd(String),
-    AtomicXchg(String),
-    AtomicXor(String),
-    AtomicXsub(String),
+    AtomicAnd,
+    AtomicCxchg,
+    AtomicCxchgWeak,
+    AtomicFence,
+    AtomicLoad,
+    AtomicMax,
+    AtomicMin,
+    AtomicNand,
+    AtomicOr,
+    AtomicSingleThreadFence,
+    AtomicStore,
+    AtomicUmax,
+    AtomicUmin,
+    AtomicXadd,
+    AtomicXchg,
+    AtomicXor,
+    AtomicXsub,
     Bitreverse,
     BlackBox,
     Breakpoint,
@@ -59,6 +63,8 @@ pub enum Intrinsic {
     Exp2F64,
     ExpF32,
     ExpF64,
+    FabsF128,
+    FabsF16,
     FabsF32,
     FabsF64,
     FaddFast,
@@ -81,30 +87,24 @@ pub enum Intrinsic {
     LogF64,
     MaxNumF32,
     MaxNumF64,
-    MinAlignOf,
-    MinAlignOfVal,
     MinNumF32,
     MinNumF64,
     MulWithOverflow,
-    NearbyIntF32,
-    NearbyIntF64,
-    NeedsDrop,
     PowF32,
     PowF64,
     PowIF32,
     PowIF64,
-    PrefAlignOf,
     PtrGuaranteedCmp,
     PtrOffsetFrom,
     PtrOffsetFromUnsigned,
     RawEq,
     RetagBoxToRaw,
-    RintF32,
-    RintF64,
     RotateLeft,
     RotateRight,
     RoundF32,
     RoundF64,
+    RoundTiesEvenF32,
+    RoundTiesEvenF64,
     SaturatingAdd,
     SaturatingSub,
     SinF32,
@@ -112,6 +112,9 @@ pub enum Intrinsic {
     SimdAdd,
     SimdAnd,
     SimdDiv,
+    SimdReduceAll,
+    SimdReduceMax,
+    SimdReduceMin,
     SimdRem,
     SimdEq,
     SimdExtract,
@@ -126,8 +129,10 @@ pub enum Intrinsic {
     SimdShl,
     SimdShr,
     SimdShuffle(String),
+    SimdSplat,
     SimdSub,
     SimdXor,
+    SizeOf,
     SizeOfVal,
     SqrtF32,
     SqrtF64,
@@ -135,16 +140,16 @@ pub enum Intrinsic {
     Transmute,
     TruncF32,
     TruncF64,
-    TypeId,
-    TypeName,
     TypedSwap,
     UnalignedVolatileLoad,
+    UnalignedVolatileStore,
     UncheckedDiv,
     UncheckedRem,
     Unlikely,
     VolatileCopyMemory,
     VolatileCopyNonOverlappingMemory,
     VolatileLoad,
+    VolatileSetMemory,
     VolatileStore,
     VtableSize,
     VtableAlign,
@@ -175,6 +180,65 @@ macro_rules! assert_sig_matches {
 }
 
 impl Intrinsic {
+    /// The operand that must be a SIMD vector for this intrinsic to have a meaning, given the
+    /// monomorphized argument and return types of a call to it; `None` for a non-SIMD intrinsic.
+    ///
+    /// rustc's codegen backends reject a violation with `E0511` (`invalid monomorphization of
+    /// `simd_lt` intrinsic: expected SIMD input type, found non-SIMD `i32``). Kani replaces the
+    /// backend, so it sees such calls: from a harness that calls `imin::<i32>` directly, and from
+    /// instantiations that `-Z autoharness` picks for a helper like
+    /// `fn imin<T: Copy>(a: T, b: T) -> T` whose body calls `simd_lt`, since nothing bounds `T` to
+    /// the SIMD types. See <https://github.com/model-checking/kani/issues/4919>.
+    pub fn simd_vector_operand(&self, arg_tys: &[Ty], ret_ty: Ty) -> Option<Ty> {
+        match self {
+            // `simd_splat<T, U>(value: U) -> T` broadcasts a scalar, so its vector is the return
+            // type. Every other SIMD intrinsic takes a vector first, including the ones that take
+            // a scalar or an index later (`simd_insert`, `simd_extract`, `simd_shuffle`).
+            Intrinsic::SimdSplat => Some(ret_ty),
+            Intrinsic::SimdAdd
+            | Intrinsic::SimdAnd
+            | Intrinsic::SimdDiv
+            | Intrinsic::SimdEq
+            | Intrinsic::SimdExtract
+            | Intrinsic::SimdGe
+            | Intrinsic::SimdGt
+            | Intrinsic::SimdInsert
+            | Intrinsic::SimdLe
+            | Intrinsic::SimdLt
+            | Intrinsic::SimdMul
+            | Intrinsic::SimdNe
+            | Intrinsic::SimdOr
+            | Intrinsic::SimdReduceAll
+            | Intrinsic::SimdReduceMax
+            | Intrinsic::SimdReduceMin
+            | Intrinsic::SimdRem
+            | Intrinsic::SimdShl
+            | Intrinsic::SimdShr
+            | Intrinsic::SimdShuffle(_)
+            | Intrinsic::SimdSub
+            | Intrinsic::SimdXor => arg_tys.first().copied(),
+            // Listing the non-SIMD intrinsics would not make a new SIMD one any harder to miss:
+            // `try_match_simd` is where they are added, and it sits next to this match.
+            _ => None,
+        }
+    }
+
+    /// Whether this is a SIMD lane-wise comparison. Its result is a mask: a vector with as many
+    /// lanes as the operands, whose lanes are integers (all ones for true, zero for false). rustc
+    /// rejects any other result type with `E0511`, and Kani's codegen relies on the same shape;
+    /// see [simd_mask_problem].
+    pub fn is_simd_comparison(&self) -> bool {
+        matches!(
+            self,
+            Intrinsic::SimdEq
+                | Intrinsic::SimdGe
+                | Intrinsic::SimdGt
+                | Intrinsic::SimdLe
+                | Intrinsic::SimdLt
+                | Intrinsic::SimdNe
+        )
+    }
+
     /// Create an intrinsic enum from a given intrinsic instance, shallowly validating the argument types.
     pub fn from_instance(intrinsic_instance: &Instance) -> Self {
         let intrinsic_str = intrinsic_instance.intrinsic_name().unwrap();
@@ -183,6 +247,14 @@ impl Intrinsic {
             "add_with_overflow" => {
                 assert_sig_matches!(sig, _, _ => RigidTy::Tuple(_));
                 Self::AddWithOverflow
+            }
+            "align_of" => {
+                Self::AlignOf
+                //"Expected `core::intrinsics::align_of` to be handled by NullOp::SizeOf"
+            }
+            "align_of_val" => {
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => RigidTy::Uint(UintTy::Usize));
+                Self::AlignOfVal
             }
             "arith_offset" => {
                 assert_sig_matches!(sig,
@@ -231,7 +303,11 @@ impl Intrinsic {
                 }
             }
             "catch_unwind" => {
-                assert_sig_matches!(sig, RigidTy::FnPtr(_), RigidTy::RawPtr(_, Mutability::Mut), RigidTy::FnPtr(_) => RigidTy::Int(IntTy::I32));
+                // Don't assert the return type: rustc changed it from `i32` to `bool`
+                // (rust-lang/rust#156867) and the stale assertion ICEd in Kani 0.68.0
+                // (https://github.com/model-checking/kani/issues/4813). It is never
+                // used here, the intrinsic is unimplemented.
+                assert_sig_matches!(sig, RigidTy::FnPtr(_), RigidTy::RawPtr(_, Mutability::Mut), RigidTy::FnPtr(_) => _);
                 Self::Unimplemented {
                     name: intrinsic_str,
                     issue_link: "https://github.com/model-checking/kani/issues/267".into(),
@@ -312,30 +388,18 @@ impl Intrinsic {
                 assert_sig_matches!(sig, RigidTy::Bool => RigidTy::Bool);
                 Self::Likely
             }
-            "min_align_of" => {
-                assert_sig_matches!(sig, => RigidTy::Uint(UintTy::Usize));
-                Self::MinAlignOf
-            }
-            "min_align_of_val" => {
-                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => RigidTy::Uint(UintTy::Usize));
-                Self::MinAlignOfVal
-            }
             "mul_with_overflow" => {
                 assert_sig_matches!(sig, _, _ => RigidTy::Tuple(_));
                 Self::MulWithOverflow
             }
-            "needs_drop" => {
-                assert_sig_matches!(sig, => RigidTy::Bool);
-                Self::NeedsDrop
-            }
+            // For const eval of nullary intrinsics, see https://github.com/rust-lang/rust/pull/142839
+            "needs_drop" => unreachable!(
+                "Expected nullary intrinsic `core::intrinsics::needs_drop` to be const-evaluated before codegen"
+            ),
             // As of https://github.com/rust-lang/rust/pull/110822 the `offset` intrinsic is lowered to `mir::BinOp::Offset`
             "offset" => unreachable!(
                 "Expected `core::intrinsics::unreachable` to be handled by `BinOp::OffSet`"
             ),
-            "pref_align_of" => {
-                assert_sig_matches!(sig, => RigidTy::Uint(UintTy::Usize));
-                Self::PrefAlignOf
-            }
             "ptr_guaranteed_cmp" => {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not), RigidTy::RawPtr(_, Mutability::Not) => RigidTy::Uint(UintTy::U8));
                 Self::PtrGuaranteedCmp
@@ -368,7 +432,7 @@ impl Intrinsic {
                 assert_sig_matches!(sig, _, _ => _);
                 Self::SaturatingSub
             }
-            "size_of" => unreachable!(),
+            "size_of" => Self::SizeOf,
             "size_of_val" => {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => RigidTy::Uint(UintTy::Usize));
                 Self::SizeOfVal
@@ -381,14 +445,12 @@ impl Intrinsic {
                 assert_sig_matches!(sig, _ => _);
                 Self::Transmute
             }
-            "type_id" => {
-                assert_sig_matches!(sig, => RigidTy::Uint(UintTy::U128));
-                Self::TypeId
-            }
-            "type_name" => {
-                assert_sig_matches!(sig, => RigidTy::Ref(_, _, Mutability::Not));
-                Self::TypeName
-            }
+            "type_id" => unreachable!(
+                "Expected nullary intrinsic `core::intrinsics::reflection::type_id` to be const-evaluated before codegen"
+            ),
+            "type_name" => unreachable!(
+                "Expected nullary intrinsic `core::intrinsics::type_name` to be const-evaluated before codegen"
+            ),
             "typed_swap_nonoverlapping" => {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), RigidTy::RawPtr(_, Mutability::Mut) => RigidTy::Tuple(_));
                 Self::TypedSwap
@@ -396,6 +458,10 @@ impl Intrinsic {
             "unaligned_volatile_load" => {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => _);
                 Self::UnalignedVolatileLoad
+            }
+            "unaligned_volatile_store" => {
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => RigidTy::Tuple(_));
+                Self::UnalignedVolatileStore
             }
             "unchecked_add" | "unchecked_mul" | "unchecked_shl" | "unchecked_shr"
             | "unchecked_sub" => {
@@ -416,6 +482,9 @@ impl Intrinsic {
             "unreachable" => unreachable!(
                 "Expected `std::intrinsics::unreachable` to be handled by `TerminatorKind::Unreachable`"
             ),
+            "variant_count" => unreachable!(
+                "Expected nullary intrinsic `core::intrinsics::variant_count` to be const-evaluated before codegen"
+            ),
             "volatile_copy_memory" => {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), RigidTy::RawPtr(_, Mutability::Not), RigidTy::Uint(UintTy::Usize) => RigidTy::Tuple(_));
                 Self::VolatileCopyMemory
@@ -427,6 +496,10 @@ impl Intrinsic {
             "volatile_load" => {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => _);
                 Self::VolatileLoad
+            }
+            "volatile_set_memory" => {
+                assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), RigidTy::Uint(UintTy::U8), RigidTy::Uint(UintTy::Usize) => RigidTy::Tuple(_));
+                Self::VolatileSetMemory
             }
             "volatile_store" => {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => RigidTy::Tuple(_));
@@ -456,6 +529,21 @@ impl Intrinsic {
                 assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), RigidTy::Uint(UintTy::U8), RigidTy::Uint(UintTy::Usize) => RigidTy::Tuple(_));
                 Self::WriteBytes
             }
+            // `fabs` is generic over the float type as of nightly-2026-03-21, where it used to be
+            // one intrinsic per width (`fabsf32` and friends). Recover the width from the signature
+            // so that codegen can keep using the width-specific CBMC builtins.
+            "fabs" => match sig.inputs()[0].kind() {
+                TyKind::RigidTy(RigidTy::Float(FloatTy::F16)) => Self::FabsF16,
+                TyKind::RigidTy(RigidTy::Float(FloatTy::F32)) => Self::FabsF32,
+                TyKind::RigidTy(RigidTy::Float(FloatTy::F64)) => Self::FabsF64,
+                TyKind::RigidTy(RigidTy::Float(FloatTy::F128)) => Self::FabsF128,
+                other => unreachable!("Unexpected `fabs` argument type: {other:?}"),
+            },
+            name if GENERIC_FLOAT_INTRINSICS.contains(&name) => generic_float_intrinsic(name, &sig)
+                .unwrap_or(Self::Unimplemented {
+                    name: intrinsic_str,
+                    issue_link: "https://github.com/model-checking/kani/issues/new/choose".into(),
+                }),
             _ => try_match_atomic(intrinsic_instance)
                 .or_else(|| try_match_simd(intrinsic_instance))
                 .or_else(|| try_match_f32(intrinsic_instance))
@@ -473,59 +561,76 @@ impl Intrinsic {
 fn try_match_atomic(intrinsic_instance: &Instance) -> Option<Intrinsic> {
     let intrinsic_str = intrinsic_instance.intrinsic_name().unwrap();
     let sig = intrinsic_instance.ty().kind().fn_sig().unwrap().skip_binder();
-    if let Some(suffix) = intrinsic_str.strip_prefix("atomic_and_") {
-        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-        Some(Intrinsic::AtomicAnd(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_cxchgweak_") {
-        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _, _ => RigidTy::Tuple(_));
-        Some(Intrinsic::AtomicCxchgWeak(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_cxchg_") {
-        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _, _ => RigidTy::Tuple(_));
-        Some(Intrinsic::AtomicCxchg(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_fence_") {
-        assert_sig_matches!(sig, => RigidTy::Tuple(_));
-        Some(Intrinsic::AtomicFence(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_load_") {
-        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => _);
-        Some(Intrinsic::AtomicLoad(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_max_") {
-        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-        Some(Intrinsic::AtomicMax(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_min_") {
-        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-        Some(Intrinsic::AtomicMin(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_nand_") {
-        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-        Some(Intrinsic::AtomicNand(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_or_") {
-        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-        Some(Intrinsic::AtomicOr(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_singlethreadfence_") {
-        assert_sig_matches!(sig, => RigidTy::Tuple(_));
-        Some(Intrinsic::AtomicSingleThreadFence(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_store_") {
-        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => RigidTy::Tuple(_));
-        Some(Intrinsic::AtomicStore(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_umax_") {
-        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-        Some(Intrinsic::AtomicUmax(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_umin_") {
-        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-        Some(Intrinsic::AtomicUmin(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_xadd_") {
-        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-        Some(Intrinsic::AtomicXadd(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_xchg_") {
-        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-        Some(Intrinsic::AtomicXchg(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_xor_") {
-        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-        Some(Intrinsic::AtomicXor(suffix.into()))
-    } else if let Some(suffix) = intrinsic_str.strip_prefix("atomic_xsub_") {
-        assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
-        Some(Intrinsic::AtomicXsub(suffix.into()))
-    } else {
-        None
+    match intrinsic_str.as_str() {
+        "atomic_and" => {
+            assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+            Some(Intrinsic::AtomicAnd)
+        }
+        "atomic_cxchgweak" => {
+            assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _, _ => RigidTy::Tuple(_));
+            Some(Intrinsic::AtomicCxchgWeak)
+        }
+        "atomic_cxchg" => {
+            assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _, _ => RigidTy::Tuple(_));
+            Some(Intrinsic::AtomicCxchg)
+        }
+        "atomic_fence" => {
+            assert_sig_matches!(sig, => RigidTy::Tuple(_));
+            Some(Intrinsic::AtomicFence)
+        }
+        "atomic_load" => {
+            assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Not) => _);
+            Some(Intrinsic::AtomicLoad)
+        }
+        "atomic_max" => {
+            assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+            Some(Intrinsic::AtomicMax)
+        }
+        "atomic_min" => {
+            assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+            Some(Intrinsic::AtomicMin)
+        }
+        "atomic_nand" => {
+            assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+            Some(Intrinsic::AtomicNand)
+        }
+        "atomic_or" => {
+            assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+            Some(Intrinsic::AtomicOr)
+        }
+        "atomic_singlethreadfence" => {
+            assert_sig_matches!(sig, => RigidTy::Tuple(_));
+            Some(Intrinsic::AtomicSingleThreadFence)
+        }
+        "atomic_store" => {
+            assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => RigidTy::Tuple(_));
+            Some(Intrinsic::AtomicStore)
+        }
+        "atomic_umax" => {
+            assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+            Some(Intrinsic::AtomicUmax)
+        }
+        "atomic_umin" => {
+            assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+            Some(Intrinsic::AtomicUmin)
+        }
+        "atomic_xadd" => {
+            assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+            Some(Intrinsic::AtomicXadd)
+        }
+        "atomic_xchg" => {
+            assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+            Some(Intrinsic::AtomicXchg)
+        }
+        "atomic_xor" => {
+            assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+            Some(Intrinsic::AtomicXor)
+        }
+        "atomic_xsub" => {
+            assert_sig_matches!(sig, RigidTy::RawPtr(_, Mutability::Mut), _ => _);
+            Some(Intrinsic::AtomicXsub)
+        }
+        _ => None,
     }
 }
 
@@ -546,6 +651,18 @@ fn try_match_simd(intrinsic_instance: &Instance) -> Option<Intrinsic> {
         "simd_div" => {
             assert_sig_matches!(sig, _, _ => _);
             Some(Intrinsic::SimdDiv)
+        }
+        "simd_reduce_all" => {
+            assert_sig_matches!(sig, _ => RigidTy::Bool);
+            Some(Intrinsic::SimdReduceAll)
+        }
+        "simd_reduce_max" => {
+            assert_sig_matches!(sig, _ => _);
+            Some(Intrinsic::SimdReduceMax)
+        }
+        "simd_reduce_min" => {
+            assert_sig_matches!(sig, _ => _);
+            Some(Intrinsic::SimdReduceMin)
         }
         "simd_rem" => {
             assert_sig_matches!(sig, _, _ => _);
@@ -599,6 +716,10 @@ fn try_match_simd(intrinsic_instance: &Instance) -> Option<Intrinsic> {
             assert_sig_matches!(sig, _, _ => _);
             Some(Intrinsic::SimdShr)
         }
+        "simd_splat" => {
+            assert_sig_matches!(sig, _ => _);
+            Some(Intrinsic::SimdSplat)
+        }
         "simd_sub" => {
             assert_sig_matches!(sig, _, _ => _);
             Some(Intrinsic::SimdSub)
@@ -616,6 +737,148 @@ fn try_match_simd(intrinsic_instance: &Instance) -> Option<Intrinsic> {
             }
         }
     }
+}
+
+/// Float intrinsics that rustc made generic over the float type in nightly-2026-10-24
+/// (rust-lang/rust#162395), where each used to be one intrinsic per width (`ceilf32` and friends).
+///
+/// Each now has a fallback body that calls a per-width libm function. Some of those have no CBMC
+/// model (e.g. `__powisf2` for `powi`), so Kani keeps its own model for the widths it has one for;
+/// see [`uses_kani_model`].
+pub const GENERIC_FLOAT_INTRINSICS: &[&str] = &[
+    "ceil",
+    "copysign",
+    "floor",
+    "fma",
+    "maximum_number_nsz",
+    "minimum_number_nsz",
+    "powf",
+    "powi",
+    "round",
+    "round_ties_even",
+    "sqrt",
+    "trunc",
+];
+
+/// The Kani model of the generic float intrinsic `name` for the float type of its first argument,
+/// if Kani has one for that width (f32 and f64).
+fn generic_float_intrinsic(name: &str, sig: &FnSig) -> Option<Intrinsic> {
+    use Intrinsic::*;
+    let width = match sig.inputs().first()?.kind() {
+        TyKind::RigidTy(RigidTy::Float(width)) => width,
+        _ => return None,
+    };
+    let f32 = matches!(width, FloatTy::F32);
+    if !f32 && !matches!(width, FloatTy::F64) {
+        return None;
+    }
+    Some(match name {
+        "ceil" => {
+            if f32 {
+                CeilF32
+            } else {
+                CeilF64
+            }
+        }
+        "copysign" => {
+            if f32 {
+                CopySignF32
+            } else {
+                CopySignF64
+            }
+        }
+        "maximum_number_nsz" => {
+            if f32 {
+                MaxNumF32
+            } else {
+                MaxNumF64
+            }
+        }
+        "minimum_number_nsz" => {
+            if f32 {
+                MinNumF32
+            } else {
+                MinNumF64
+            }
+        }
+        "floor" => {
+            if f32 {
+                FloorF32
+            } else {
+                FloorF64
+            }
+        }
+        "fma" => {
+            if f32 {
+                FmafF32
+            } else {
+                FmafF64
+            }
+        }
+        "powf" => {
+            if f32 {
+                PowF32
+            } else {
+                PowF64
+            }
+        }
+        "powi" => {
+            if f32 {
+                PowIF32
+            } else {
+                PowIF64
+            }
+        }
+        "round" => {
+            if f32 {
+                RoundF32
+            } else {
+                RoundF64
+            }
+        }
+        "round_ties_even" => {
+            if f32 {
+                RoundTiesEvenF32
+            } else {
+                RoundTiesEvenF64
+            }
+        }
+        "sqrt" => {
+            if f32 {
+                SqrtF32
+            } else {
+                SqrtF64
+            }
+        }
+        "trunc" => {
+            if f32 {
+                TruncF32
+            } else {
+                TruncF64
+            }
+        }
+        _ => return None,
+    })
+}
+
+/// Whether a call to the intrinsic `instance` uses Kani's model instead of the fallback body.
+///
+/// An intrinsic without a fallback body always uses Kani's model. One with a fallback body uses it,
+/// except for the generic float intrinsics, where Kani's model is used for the widths it has one
+/// for: that is what Kani did before rustc made them generic.
+pub fn uses_kani_model(instance: &Instance) -> bool {
+    let TyKind::RigidTy(RigidTy::FnDef(def, _)) = instance.ty().kind() else {
+        unreachable!("Expected function type for intrinsic: {instance:?}")
+    };
+    // The compiler is currently transitioning how to handle intrinsic fallback body.
+    // Until https://github.com/rust-lang/project-stable-mir/issues/79 is implemented
+    // we have to check `must_be_overridden` and `has_body`.
+    if def.as_intrinsic().unwrap().must_be_overridden() || !instance.has_body() {
+        return true;
+    }
+    let name = instance.intrinsic_name().unwrap();
+    GENERIC_FLOAT_INTRINSICS.contains(&name.as_str())
+        && !matches!(Intrinsic::from_instance(instance), Intrinsic::Unimplemented { .. })
 }
 
 /// Match f32 arithmetic intrinsics by instance, returning an instance of the intrinsics enum if the match
@@ -644,10 +907,6 @@ fn try_match_f32(intrinsic_instance: &Instance) -> Option<Intrinsic> {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
             Some(Intrinsic::ExpF32)
         }
-        "fabsf32" => {
-            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
-            Some(Intrinsic::FabsF32)
-        }
         "floorf32" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
             Some(Intrinsic::FloorF32)
@@ -668,17 +927,13 @@ fn try_match_f32(intrinsic_instance: &Instance) -> Option<Intrinsic> {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
             Some(Intrinsic::LogF32)
         }
-        "maxnumf32" => {
+        "maximum_number_nsz_f32" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
             Some(Intrinsic::MaxNumF32)
         }
-        "minnumf32" => {
+        "minimum_number_nsz_f32" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
             Some(Intrinsic::MinNumF32)
-        }
-        "nearbyintf32" => {
-            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
-            Some(Intrinsic::NearbyIntF32)
         }
         "powf32" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
@@ -688,13 +943,13 @@ fn try_match_f32(intrinsic_instance: &Instance) -> Option<Intrinsic> {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32), RigidTy::Int(IntTy::I32) => RigidTy::Float(FloatTy::F32));
             Some(Intrinsic::PowIF32)
         }
-        "rintf32" => {
-            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
-            Some(Intrinsic::RintF32)
-        }
         "roundf32" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
             Some(Intrinsic::RoundF32)
+        }
+        "round_ties_even_f32" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
+            Some(Intrinsic::RoundTiesEvenF32)
         }
         "sinf32" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F32) => RigidTy::Float(FloatTy::F32));
@@ -738,10 +993,6 @@ fn try_match_f64(intrinsic_instance: &Instance) -> Option<Intrinsic> {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
             Some(Intrinsic::ExpF64)
         }
-        "fabsf64" => {
-            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
-            Some(Intrinsic::FabsF64)
-        }
         "floorf64" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
             Some(Intrinsic::FloorF64)
@@ -762,17 +1013,13 @@ fn try_match_f64(intrinsic_instance: &Instance) -> Option<Intrinsic> {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
             Some(Intrinsic::LogF64)
         }
-        "maxnumf64" => {
+        "maximum_number_nsz_f64" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
             Some(Intrinsic::MaxNumF64)
         }
-        "minnumf64" => {
+        "minimum_number_nsz_f64" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
             Some(Intrinsic::MinNumF64)
-        }
-        "nearbyintf64" => {
-            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
-            Some(Intrinsic::NearbyIntF64)
         }
         "powf64" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
@@ -782,13 +1029,13 @@ fn try_match_f64(intrinsic_instance: &Instance) -> Option<Intrinsic> {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64), RigidTy::Int(IntTy::I32) => RigidTy::Float(FloatTy::F64));
             Some(Intrinsic::PowIF64)
         }
-        "rintf64" => {
-            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
-            Some(Intrinsic::RintF64)
-        }
         "roundf64" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
             Some(Intrinsic::RoundF64)
+        }
+        "round_ties_even_f64" => {
+            assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
+            Some(Intrinsic::RoundTiesEvenF64)
         }
         "sinf64" => {
             assert_sig_matches!(sig, RigidTy::Float(FloatTy::F64) => RigidTy::Float(FloatTy::F64));
@@ -804,4 +1051,28 @@ fn try_match_f64(intrinsic_instance: &Instance) -> Option<Intrinsic> {
         }
         _ => None,
     }
+}
+
+/// Why `ret_ty` cannot be the result of a SIMD comparison over the SIMD type `operand_ty`, if it
+/// cannot, as a phrase for a diagnostic. A comparison's result is a mask: a vector with integer
+/// lanes and as many lanes as the operands. rustc's codegen backends reject anything else with
+/// `E0511`; Kani has to check it itself, because it replaces the backend.
+///
+/// Both autoharness (which rejects candidate instantiations that break the rule) and codegen
+/// (which reports the ones it is handed anyway as unsupported) call this, so they cannot disagree
+/// on what a valid mask is. See <https://github.com/model-checking/kani/issues/4950>.
+///
+/// `rustc_public` does not expose a SIMD type's lane count or lane type, so ask rustc for them.
+pub fn simd_mask_problem(tcx: TyCtxt, operand_ty: Ty, ret_ty: Ty) -> Option<String> {
+    let ret = rustc_internal::internal(tcx, ret_ty);
+    if !ret.is_simd() {
+        return Some("not a SIMD type".to_string());
+    }
+    let (operand_lanes, _) = rustc_internal::internal(tcx, operand_ty).simd_size_and_type(tcx);
+    let (ret_lanes, ret_lane_ty) = ret.simd_size_and_type(tcx);
+    if !ret_lane_ty.is_integral() {
+        return Some(format!("non-integer `{ret_lane_ty}` lanes"));
+    }
+    (ret_lanes != operand_lanes)
+        .then(|| format!("{ret_lanes} lanes for a {operand_lanes}-lane comparison"))
 }
