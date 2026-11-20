@@ -78,7 +78,12 @@ impl KaniSession {
                 let base = self.resolved_solver(&harness.attributes.solver);
                 (
                     effective_solver(&self.args.cbmc_args, base),
-                    resolve_effective_unwind(&self.args, harness, &self.args.cbmc_args),
+                    resolve_effective_unwind(
+                        &self.args,
+                        harness,
+                        self.autoharness_default_unwind,
+                        &self.args.cbmc_args,
+                    ),
                 )
             },
             ctx,
@@ -116,7 +121,13 @@ impl KaniSession {
                 ),
                 matched_count: matched_harnesses.len(),
             },
-            harness_timeout_s: self.args.harness_timeout.map(|t| Duration::from(t).as_secs_f64()),
+            // In an autoharness run without `--harness-timeout`, report the timeout automatic
+            // harnesses get (as before #5103); manual harnesses in that run have none.
+            harness_timeout_s: self
+                .args
+                .harness_timeout
+                .or(self.autoharness_harness_timeout)
+                .map(|t| Duration::from(t).as_secs_f64()),
             configuration: configuration_from(&self.args),
             started_at,
         }
@@ -280,9 +291,10 @@ fn effective_solver(cbmc_args: &[OsString], base: &CbmcSolver) -> Option<String>
 fn resolve_effective_unwind(
     args: &VerificationArgs,
     harness: &HarnessMetadata,
+    autoharness_default_unwind: Option<u32>,
     cbmc_args: &[OsString],
 ) -> Option<u32> {
-    if let Some(native) = resolve_unwind_value(args, harness) {
+    if let Some(native) = resolve_unwind_value(args, harness, autoharness_default_unwind) {
         return Some(native);
     }
     let mut cbmc_args = cbmc_args.iter();
@@ -458,6 +470,11 @@ struct HarnessExport {
     is_automatically_generated: bool,
     has_loop_contracts: bool,
     is_bounded: bool,
+    /// Whether some generated value contains an `Rc`/`Arc` whose reference counts Kani models
+    /// with only finitely many states, c.f. `HarnessMetadata::has_refcount_caveat`. Independent
+    /// of `is_bounded`: a harness can report `is_bounded == false` and still not cover every
+    /// reference count.
+    has_refcount_caveat: bool,
     attributes: HarnessAttributes,
     outcome: Outcome,
     resolved_solver: Option<String>,
@@ -809,6 +826,7 @@ impl HarnessExport {
             is_automatically_generated: harness.is_automatically_generated,
             has_loop_contracts: harness.has_loop_contracts,
             is_bounded: harness.is_bounded,
+            has_refcount_caveat: harness.has_refcount_caveat,
             attributes: harness.attributes.clone(),
             outcome,
             resolved_solver,
@@ -854,6 +872,7 @@ mod tests {
             is_automatically_generated: false,
             is_bounded: false,
             is_ctor_based: false,
+            has_refcount_caveat: false,
         }
     }
 
@@ -1249,6 +1268,7 @@ mod tests {
         assert!(hj["is_automatically_generated"].is_boolean(), "is_automatically_generated: {hj}");
         assert!(hj["has_loop_contracts"].is_boolean(), "has_loop_contracts: {hj}");
         assert!(hj["is_bounded"].is_boolean(), "is_bounded: {hj}");
+        assert!(hj["has_refcount_caveat"].is_boolean(), "has_refcount_caveat: {hj}");
         assert!(hj["attributes"].is_object(), "attributes: {hj}");
         assert!(hj.get("resolved_solver").is_some(), "resolved_solver: {hj}");
         assert!(hj.get("resolved_unwind").is_some(), "resolved_unwind: {hj}");
@@ -1827,6 +1847,7 @@ mod tests {
             is_automatically_generated: false,
             has_loop_contracts: false,
             is_bounded: false,
+            has_refcount_caveat: false,
             attributes: h2.attributes.clone(),
             outcome: Outcome::Timeout,
             resolved_solver: None,
@@ -2359,15 +2380,19 @@ mod tests {
         #[test]
         fn raw_only_cbmc_args_unwind_applies_when_no_native_bound() {
             let h = mock_proof_harness("check_one", None, None, None);
-            let resolved =
-                resolve_effective_unwind(&verify_opts(&[]), &h, &cbmc_args(&["--unwind", "7"]));
+            let resolved = resolve_effective_unwind(
+                &verify_opts(&[]),
+                &h,
+                None,
+                &cbmc_args(&["--unwind", "7"]),
+            );
             assert_eq!(resolved, Some(7));
         }
 
         #[test]
         fn no_native_bound_and_no_raw_unwind_is_null() {
             let h = mock_proof_harness("check_one", None, None, None);
-            let resolved = resolve_effective_unwind(&verify_opts(&[]), &h, &cbmc_args(&[]));
+            let resolved = resolve_effective_unwind(&verify_opts(&[]), &h, None, &cbmc_args(&[]));
             assert_eq!(resolved, None);
         }
 
@@ -2377,6 +2402,7 @@ mod tests {
             let resolved = resolve_effective_unwind(
                 &verify_opts(&["--unwind", "3", "--harness", "check_one"]),
                 &h,
+                None,
                 &cbmc_args(&["--unwind", "99"]),
             );
             assert_eq!(resolved, Some(3));
@@ -2388,12 +2414,14 @@ mod tests {
             let resolved = resolve_effective_unwind(
                 &verify_opts(&[]),
                 &h,
+                None,
                 &cbmc_args(&["--unwind", "10", "--unwind", "3"]),
             );
             assert_eq!(resolved, Some(10));
             let resolved = resolve_effective_unwind(
                 &verify_opts(&[]),
                 &h,
+                None,
                 &cbmc_args(&["--unwind", "3", "--unwind", "10"]),
             );
             assert_eq!(resolved, Some(3));
@@ -2402,9 +2430,44 @@ mod tests {
         #[test]
         fn harness_attribute_bound_counts_as_native() {
             let h = mock_proof_harness("check_one", Some(4), None, None);
-            let resolved =
-                resolve_effective_unwind(&verify_opts(&[]), &h, &cbmc_args(&["--unwind", "99"]));
+            let resolved = resolve_effective_unwind(
+                &verify_opts(&[]),
+                &h,
+                None,
+                &cbmc_args(&["--unwind", "99"]),
+            );
             assert_eq!(resolved, Some(4));
+        }
+
+        /// The autoharness default is reported for automatic harnesses only (#5103); a manual
+        /// harness in the same run falls through to `--cbmc-args`, as CBMC itself does.
+        #[test]
+        fn autoharness_default_unwind_is_reported_for_automatic_harnesses_only() {
+            let manual = mock_proof_harness("check_one", None, None, None);
+            let mut automatic = mock_proof_harness("check_one", None, None, None);
+            automatic.is_automatically_generated = true;
+            let raw = cbmc_args(&["--unwind", "7"]);
+            assert_eq!(
+                resolve_effective_unwind(&verify_opts(&[]), &manual, Some(20), &raw),
+                Some(7)
+            );
+            assert_eq!(
+                resolve_effective_unwind(&verify_opts(&[]), &manual, Some(20), &cbmc_args(&[])),
+                None
+            );
+            assert_eq!(
+                resolve_effective_unwind(&verify_opts(&[]), &automatic, Some(20), &raw),
+                Some(20)
+            );
+            assert_eq!(
+                resolve_effective_unwind(
+                    &verify_opts(&["--default-unwind", "5"]),
+                    &manual,
+                    Some(20),
+                    &raw
+                ),
+                Some(5)
+            );
         }
 
         #[test]
@@ -2413,6 +2476,7 @@ mod tests {
             let resolved = resolve_effective_unwind(
                 &verify_opts(&[]),
                 &h,
+                None,
                 &cbmc_args(&["--unwind", "not-a-number"]),
             );
             assert_eq!(resolved, None);
@@ -2454,6 +2518,53 @@ mod tests {
         let hr_unbounded = HarnessResult { harness: &h_unbounded, result: success_result(vec![]) };
         let v_unbounded = serde_json::to_value(export_one(hr_unbounded)).unwrap();
         assert_eq!(v_unbounded["harnesses"][0]["is_bounded"], false);
+    }
+
+    /// `has_refcount_caveat` is exported as its own field, independent of `is_bounded`: an
+    /// autoharness with an `Rc`/`Arc` argument needs no `--bounded-arguments` (so it is not
+    /// `is_bounded`), yet does not cover every reference count (#4752).
+    #[test]
+    fn export_has_refcount_caveat_independent_of_is_bounded() {
+        let mut h_rc = harness("rc_autoharness");
+        h_rc.is_automatically_generated = true;
+        h_rc.has_refcount_caveat = true;
+        let v_rc = serde_json::to_value(export_one(HarnessResult {
+            harness: &h_rc,
+            result: success_result(vec![]),
+        }))
+        .unwrap();
+        assert_eq!(v_rc["harnesses"][0]["has_refcount_caveat"], true);
+        assert_eq!(v_rc["harnesses"][0]["is_bounded"], false);
+
+        let mut h_both = harness("bounded_rc_autoharness");
+        h_both.is_automatically_generated = true;
+        h_both.is_bounded = true;
+        h_both.has_refcount_caveat = true;
+        let v_both = serde_json::to_value(export_one(HarnessResult {
+            harness: &h_both,
+            result: success_result(vec![]),
+        }))
+        .unwrap();
+        assert_eq!(v_both["harnesses"][0]["has_refcount_caveat"], true);
+        assert_eq!(v_both["harnesses"][0]["is_bounded"], true);
+
+        let h_manual = harness("manual_harness");
+        let v_manual = serde_json::to_value(export_one(HarnessResult {
+            harness: &h_manual,
+            result: success_result(vec![]),
+        }))
+        .unwrap();
+        assert_eq!(v_manual["harnesses"][0]["has_refcount_caveat"], false);
+    }
+
+    /// Metadata written before `has_refcount_caveat` existed (e.g. by an older compiler)
+    /// deserializes with the caveat unset rather than failing.
+    #[test]
+    fn harness_metadata_without_has_refcount_caveat_deserializes() {
+        let mut v = serde_json::to_value(harness("legacy")).unwrap();
+        v.as_object_mut().unwrap().remove("has_refcount_caveat");
+        let h: HarnessMetadata = serde_json::from_value(v).unwrap();
+        assert!(!h.has_refcount_caveat);
     }
 
     #[test]

@@ -24,6 +24,30 @@ use kani_metadata::{AutoHarnessSkipReason, HarnessMetadata, KaniMetadata};
 const AUTOHARNESS_TIMEOUT: &str = "60s";
 const LOOP_UNWIND_DEFAULT: u32 = 20;
 
+/// Printed after the summary table if some harness is marked "(refcount)", c.f.
+/// `HarnessMetadata::has_refcount_caveat`. Deliberately states only that the modeled counts are
+/// finite, not which ones: the representatives are an implementation detail of the `Rc`/`Arc`
+/// generators (<https://github.com/model-checking/kani/issues/4752>).
+const REFCOUNT_NOTE: &str = "Note: harnesses marked \"(refcount)\" generate Rc/Arc values whose reference counts are modeled with only finitely many states\n\
+     (this needs no --bounded-arguments). Their verification results do not cover every reference count a caller could produce,\n\
+     e.g. code that compares strong_count/weak_count against specific values may not be fully verified.";
+
+/// The "Kind of Automatic Harness" column of the summary table: the harness kind, followed by a
+/// marker for each caveat that restricts which inputs its verification result covers.
+fn harness_kind_label(harness: &HarnessMetadata) -> String {
+    let mut kind = harness.attributes.kind.to_string();
+    if harness.is_bounded {
+        kind.push_str(" (bounded)");
+    }
+    if harness.is_ctor_based {
+        kind.push_str(" (ctor)");
+    }
+    if harness.has_refcount_caveat {
+        kind.push_str(" (refcount)");
+    }
+    kind
+}
+
 pub fn autoharness_cargo(args: CargoAutoharnessArgs) -> Result<()> {
     let mut session = KaniSession::new(args.verify_opts)?;
     setup_session(&mut session, &args.common_autoharness_args);
@@ -62,7 +86,7 @@ fn setup_session(session: &mut KaniSession, common_autoharness_args: &CommonAuto
     session.add_default_bounds();
     let bounds = common_autoharness_args.bounds();
     if common_autoharness_args.bounded_arguments {
-        warn_if_bounds_reach_unwind(bounds, &session.args);
+        warn_if_bounds_reach_unwind(bounds, &session.args, session.autoharness_default_unwind);
     }
     session.add_auto_harness_args(
         &common_autoharness_args.include_pattern,
@@ -77,11 +101,18 @@ fn setup_session(session: &mut KaniSession, common_autoharness_args: &CommonAuto
 /// Warn about a bound that reaches the effective unwinding bound. A loop iterating over such an
 /// argument is not fully unwound, so the result does not hold up to the bound after all.
 ///
-/// Called after `add_default_bounds`, so the unwinding bound is resolved by this point.
-fn warn_if_bounds_reach_unwind(bounds: AutoharnessBounds, args: &VerificationArgs) {
-    // `--unwind` takes precedence over `--default-unwind`, c.f. `resolve_unwind_value`. Automatic
-    // harnesses carry no `#[kani::unwind]` attribute, so those two are the whole precedence here.
-    let Some(unwind) = args.unwind.or(args.default_unwind) else { return };
+/// Called after `add_default_bounds`, so the autoharness unwinding default is known by this point.
+fn warn_if_bounds_reach_unwind(
+    bounds: AutoharnessBounds,
+    args: &VerificationArgs,
+    autoharness_default_unwind: Option<u32>,
+) {
+    // `--unwind` takes precedence over `--default-unwind`, which takes precedence over the
+    // autoharness default, c.f. `resolve_unwind_value`. Automatic harnesses carry no
+    // `#[kani::unwind]` attribute, so those three are the whole precedence here.
+    let Some(unwind) = args.unwind.or(args.default_unwind).or(autoharness_default_unwind) else {
+        return;
+    };
     for (option, value) in [
         ("--slice-bound", bounds.slice),
         ("--string-bound", bounds.string),
@@ -245,16 +276,18 @@ impl KaniSession {
         self.autoharness_bounds = bounds;
     }
 
-    /// Add global harness timeout and loop unwinding bounds if not provided.
+    /// Set the harness timeout and loop unwinding bound that automatic harnesses fall back to.
     /// These prevent automatic harnesses from hanging.
+    ///
+    /// They are deliberately not written into `self.args.harness_timeout` /
+    /// `self.args.default_unwind`: those apply to every harness in the run, including the manual
+    /// harnesses `autoharness` also verifies, which must behave as they do under plain
+    /// `kani`/`cargo kani` (#5103). An explicit `--harness-timeout`, `--default-unwind` or
+    /// `--unwind` still takes precedence for every harness, c.f. `resolve_unwind_value` and
+    /// `resolve_harness_timeout`.
     pub fn add_default_bounds(&mut self) {
-        if self.args.harness_timeout.is_none() {
-            let timeout = Timeout::from_str(AUTOHARNESS_TIMEOUT).unwrap();
-            self.args.harness_timeout = Some(timeout);
-        }
-        if self.args.default_unwind.is_none() {
-            self.args.default_unwind = Some(LOOP_UNWIND_DEFAULT);
-        }
+        self.autoharness_harness_timeout = Some(Timeout::from_str(AUTOHARNESS_TIMEOUT).unwrap());
+        self.autoharness_default_unwind = Some(LOOP_UNWIND_DEFAULT);
     }
 
     /// Prints the results from running the `autoharness` subcommand.
@@ -277,26 +310,18 @@ impl KaniSession {
             "Verification Result",
         ]);
 
-        let harness_kind = |harness: &HarnessMetadata| {
-            let mut kind = harness.attributes.kind.to_string();
-            if harness.is_bounded {
-                kind.push_str(" (bounded)");
-            }
-            if harness.is_ctor_based {
-                kind.push_str(" (ctor)");
-            }
-            kind
-        };
         let mut any_bounded = false;
         let mut any_ctor = false;
+        let mut any_refcount = false;
 
         for success in successes {
             any_bounded |= success.harness.is_bounded;
             any_ctor |= success.harness.is_ctor_based;
+            any_refcount |= success.harness.has_refcount_caveat;
             verified_fns.add_row(vec![
                 success.harness.crate_name.clone(),
                 success.harness.pretty_name.clone(),
-                harness_kind(success.harness),
+                harness_kind_label(success.harness),
                 success.result.status.to_string(),
             ]);
         }
@@ -304,10 +329,11 @@ impl KaniSession {
         for failure in failures {
             any_bounded |= failure.harness.is_bounded;
             any_ctor |= failure.harness.is_ctor_based;
+            any_refcount |= failure.harness.has_refcount_caveat;
             verified_fns.add_row(vec![
                 failure.harness.crate_name.clone(),
                 failure.harness.pretty_name.clone(),
-                harness_kind(failure.harness),
+                harness_kind_label(failure.harness),
                 failure.result.status.to_string(),
             ]);
         }
@@ -332,10 +358,13 @@ impl KaniSession {
                  their verification results only cover values reachable through that constructor."
             );
         }
+        if any_refcount {
+            println!("{REFCOUNT_NOTE}");
+        }
 
         if failing > 0 {
             println!(
-                "Note that `kani autoharness` sets default --harness-timeout of {AUTOHARNESS_TIMEOUT} and --default-unwind of {LOOP_UNWIND_DEFAULT}."
+                "Note that `kani autoharness` sets default --harness-timeout of {AUTOHARNESS_TIMEOUT} and --default-unwind of {LOOP_UNWIND_DEFAULT} for automatic harnesses."
             );
             println!(
                 "If verification failed because of timing out or too low of an unwinding bound, try passing larger values for these arguments (or, if possible, writing a loop contract)."
@@ -349,5 +378,42 @@ impl KaniSession {
         } else {
             println!("No functions were eligible for automatic verification.");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{REFCOUNT_NOTE, harness_kind_label};
+    use crate::metadata::tests::mock_proof_harness;
+
+    /// Each caveat adds its own marker; "(refcount)" is independent of "(bounded)", since
+    /// `Rc`/`Arc` arguments need no --bounded-arguments (#4752).
+    #[test]
+    fn harness_kind_label_marks_each_caveat() {
+        let mut h = mock_proof_harness("f", None, None, None);
+        assert_eq!(harness_kind_label(&h), "#[kani::proof]");
+        h.has_refcount_caveat = true;
+        assert_eq!(harness_kind_label(&h), "#[kani::proof] (refcount)");
+        h.is_bounded = true;
+        h.is_ctor_based = true;
+        assert_eq!(harness_kind_label(&h), "#[kani::proof] (bounded) (ctor) (refcount)");
+    }
+
+    /// The marker fits the summary table's "Kind of Automatic Harness" header, so marking a
+    /// proof harness does not widen the column (and shift every row) of existing tables.
+    #[test]
+    fn refcount_label_fits_kind_column_header() {
+        let mut h = mock_proof_harness("f", None, None, None);
+        h.has_refcount_caveat = true;
+        assert!(harness_kind_label(&h).len() <= "Kind of Automatic Harness".len());
+    }
+
+    /// The note names the marker, says it needs no --bounded-arguments, and does not claim
+    /// complete coverage.
+    #[test]
+    fn refcount_note_states_the_caveat() {
+        assert!(REFCOUNT_NOTE.contains("\"(refcount)\""));
+        assert!(REFCOUNT_NOTE.contains("no --bounded-arguments"));
+        assert!(REFCOUNT_NOTE.contains("do not cover every reference count"));
     }
 }

@@ -1,0 +1,6 @@
+ - Status: FAILURE\
+ - Description: "Undefined Behavior: Reading from an uninitialized pointer
+VERIFICATION:- FAILED
+Complete - 0 successfully verified functions, 1 failures, 1 total.
+VERIFICATION:- SUCCESSFUL
+Complete - 1 successfully verified functions, 0 failures, 1 total.
