@@ -10,7 +10,7 @@
 use crate::args::{Arguments, ReachabilityType};
 use crate::intrinsics::{Intrinsic, simd_mask_problem};
 use crate::kani_middle::attributes::{KaniAttributes, is_proof_harness};
-use crate::kani_middle::kani_functions::{KaniHook, KaniIntrinsic, KaniModel};
+use crate::kani_middle::kani_functions::{KaniIntrinsic, KaniModel};
 use crate::kani_middle::metadata::{
     gen_automatic_proof_metadata, gen_contracts_metadata, gen_proof_metadata,
 };
