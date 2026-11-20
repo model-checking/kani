@@ -994,18 +994,7 @@ impl ValidateArgs for VerificationArgs {
             );
         }
 
-        if let Some(out_dir) = &self.target_dir
-            && out_dir.exists()
-            && !out_dir.is_dir()
-        {
-            return Err(Error::raw(
-                ErrorKind::InvalidValue,
-                format!(
-                    "Invalid argument: `--target-dir` argument `{}` is not a directory",
-                    out_dir.display()
-                ),
-            ));
-        }
+        validate_target_dir(self.target_dir.as_deref())?;
         reject_existing_dir("--sarif", self.sarif.as_deref())?;
         reject_existing_dir("--export-json", self.export_json.as_deref())?;
 
@@ -1059,6 +1048,23 @@ pub(crate) fn validate_std_path(std_path: &Path) -> Result<(), Error> {
             Ok(())
         }
     }
+}
+
+/// Reject a `--target-dir` value that exists but is not a directory.
+pub fn validate_target_dir(target_dir: Option<&Path>) -> Result<(), Error> {
+    if let Some(out_dir) = target_dir
+        && out_dir.exists()
+        && !out_dir.is_dir()
+    {
+        return Err(Error::raw(
+            ErrorKind::InvalidValue,
+            format!(
+                "Invalid argument: `--target-dir` argument `{}` is not a directory",
+                out_dir.display()
+            ),
+        ));
+    }
+    Ok(())
 }
 
 /// clap parser for `CbmcSolver`

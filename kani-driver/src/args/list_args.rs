@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use crate::args::{CommonArgs, ValidateArgs, validate_std_path};
+use crate::args::{CommonArgs, ValidateArgs, validate_std_path, validate_target_dir};
 use clap::{Error, Parser, ValueEnum, error::ErrorKind};
 
 /// List information relevant to verification
@@ -17,7 +17,7 @@ pub struct CargoListArgs {
     #[clap(long, default_value = "pretty")]
     pub format: Format,
 
-    /// Directory for all generated artifacts.
+    /// Directory for all generated artifacts. Overrides a `--target-dir` given before `list`.
     #[arg(long)]
     pub target_dir: Option<PathBuf>,
 }
@@ -60,6 +60,7 @@ pub enum Format {
 impl ValidateArgs for CargoListArgs {
     fn validate(&self) -> Result<(), Error> {
         self.common_args.validate()?;
+        validate_target_dir(self.target_dir.as_deref())?;
 
         if self.format == Format::Pretty && self.common_args.quiet {
             return Err(Error::raw(
