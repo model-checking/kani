@@ -1320,8 +1320,19 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                     } else {
                         let pad =
                             DatatypeComponent::Padding { name: pad_name.into(), bits: *padding };
-                        ctx.ensure_struct(struct_name, pretty_struct_name, |_ctx, _| {
-                            vec![DatatypeComponent::field(name, ty.clone()), pad.clone()]
+                        ctx.ensure_struct(struct_name, pretty_struct_name, |ctx, _| {
+                            // Keep the logical arm type in `unionfield` below, but represent
+                            // its zero-sized payload with an empty struct. CBMC's `bits2expr`
+                            // cannot rebuild an array of zero-width elements from this padded
+                            // struct's bitvector (diffblue/cbmc#9487).
+                            // Padding and union size both come from rustc layout. Avoid
+                            // walking GOTO types: a recursive arm may still be incomplete.
+                            let payload = if *padding == union_size as u64 {
+                                ctx.codegen_ty_unit()
+                            } else {
+                                ty.clone()
+                            };
+                            vec![DatatypeComponent::field(name, payload), pad.clone()]
                         })
                     };
                     DatatypeComponent::unionfield(name, ty.clone(), padded_typ)
