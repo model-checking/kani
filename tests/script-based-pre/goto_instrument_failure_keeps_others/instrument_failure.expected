@@ -1,0 +1,2 @@
+SUCCESS: a goto-instrument failure fails its harness only
+SUCCESS: --fail-fast stops after a goto-instrument failure
