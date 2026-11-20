@@ -66,6 +66,12 @@ const KANI_EXIT_CONTRACT_CLAUSE: KaniFunction = KaniFunction::Model(KaniModel::E
 const KANI_IN_CONTRACT_CLAUSE: KaniFunction = KaniFunction::Model(KaniModel::InContractClause);
 const KANI_RESET_CONTRACT_CLAUSE_DEPTH: KaniFunction =
     KaniFunction::Model(KaniModel::ResetContractClauseDepth);
+// The panic-permission functions access verifier-internal statics, like the
+// contract-clause-depth functions above.
+const KANI_SET_PANICS_ONLY_IF: KaniFunction = KaniFunction::Model(KaniModel::SetPanicsOnlyIf);
+const KANI_SET_PANICS_IF: KaniFunction = KaniFunction::Model(KaniModel::SetPanicsIf);
+const KANI_RESTORE_PANIC_PERMISSION: KaniFunction =
+    KaniFunction::Model(KaniModel::RestorePanicPermission);
 
 // Function bodies of those functions will not be instrumented as not to cause infinite recursion.
 const SKIPPED_ITEMS: &[KaniFunction] = &[
@@ -85,6 +91,9 @@ const SKIPPED_ITEMS: &[KaniFunction] = &[
     KANI_EXIT_CONTRACT_CLAUSE,
     KANI_IN_CONTRACT_CLAUSE,
     KANI_RESET_CONTRACT_CLAUSE_DEPTH,
+    KANI_SET_PANICS_ONLY_IF,
+    KANI_SET_PANICS_IF,
+    KANI_RESTORE_PANIC_PERMISSION,
 ];
 
 /// Instruments the code with checks for uninitialized memory, agnostic to the source of targets.

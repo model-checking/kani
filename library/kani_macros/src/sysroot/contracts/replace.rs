@@ -111,13 +111,47 @@ impl<'a> ContractConditionsHandler<'a> {
                     #result
                 })
             }
-            ContractConditionsData::PanicsIf { attr } => {
+            ContractConditionsData::PanicsOnlyIf { attr } => {
+                // After checking the preconditions, the replacement may panic if the condition
+                // holds. The panic is a panic of the caller, checked against the caller's own
+                // contract.
                 let Self { attr_copy, .. } = self;
                 let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
+                let cond = bracket_clause_expr(quote!(#attr));
+                let fn_name = &self.annotated_fn.sig.ident;
+                let (asserts, rest_of_before) = split_for_remembers(before, ContractMode::Replace);
                 quote!({
-                    kani::assert(!(#attr), concat!("Panic: ", stringify!(#attr_copy)));
-                    #(#before)*
+                    #(#asserts)*
+                    if #cond && kani::any::<bool>() {
+                        kani::panic(concat!(
+                            "`", stringify!(#fn_name), "` may panic: `panics_only_if(",
+                            stringify!(#attr_copy), ")` held"
+                        ));
+                    }
+                    #(#rest_of_before)*
                     #(#after)*
+                    #recv_move
+                    #result
+                })
+            }
+            ContractConditionsData::PanicsIf { attr } => {
+                // After checking the preconditions, the replacement panics if the condition holds.
+                let Self { attr_copy, .. } = self;
+                let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
+                let cond = bracket_clause_expr(quote!(#attr));
+                let fn_name = &self.annotated_fn.sig.ident;
+                let (asserts, rest_of_before) = split_for_remembers(before, ContractMode::Replace);
+                quote!({
+                    #(#asserts)*
+                    if #cond {
+                        kani::panic(concat!(
+                            "`", stringify!(#fn_name), "` panics: `panics_if(",
+                            stringify!(#attr_copy), ")` held"
+                        ));
+                    }
+                    #(#rest_of_before)*
+                    #(#after)*
+                    #recv_move
                     #result
                 })
             }

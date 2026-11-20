@@ -143,6 +143,25 @@ impl GotocCtx<'_, '_> {
     ) -> Stmt {
         if property_class == PropertyClass::Panic && self.queries.args().prove_safety_only {
             Stmt::assume(cond, loc)
+        } else if property_class == PropertyClass::Panic
+            && let Some(permitted) = self.panic_permitted_flag()
+        {
+            // The function under contract verification has a `panics_only_if` or `panics_if`
+            // clause: the panic is a failure only if those clauses do not permit it. The path
+            // ends at the panic either way.
+            let message = format!("{message} (not permitted by the contract)");
+            Stmt::block(
+                vec![
+                    Stmt::assert(
+                        cond.clone().or(permitted),
+                        property_class.as_str(),
+                        &message,
+                        loc,
+                    ),
+                    Stmt::assume(cond, loc),
+                ],
+                loc,
+            )
         } else {
             let property_name = property_class.as_str();
             Stmt::block(
@@ -152,6 +171,20 @@ impl GotocCtx<'_, '_> {
                 ],
                 loc,
             )
+        }
+    }
+
+    /// The flag that says whether a panic is permitted by the `panics_only_if` / `panics_if`
+    /// clauses of the function under contract verification (see `kani::internal`), if this
+    /// codegen unit uses those clauses, i.e., if the functions that record them are reachable.
+    fn panic_permitted_flag(&self) -> Option<Expr> {
+        const SETTERS: [&str; 2] =
+            ["__VERIFIER_kani_set_panics_only_if", "__VERIFIER_kani_set_panics_if"];
+        const FLAG: &str = "__CPROVER_kani_panic_permitted";
+        if SETTERS.iter().any(|setter| self.symbol_table.contains((*setter).into())) {
+            self.symbol_table.lookup(FLAG).map(|flag| flag.to_expr().cast_to(Type::bool()))
+        } else {
+            None
         }
     }
 

@@ -61,6 +61,9 @@ impl<'a> ContractConditionsHandler<'a> {
             ContractConditionsType::Requires => {
                 ContractConditionsData::Requires { attr: syn::parse(attr)? }
             }
+            ContractConditionsType::PanicsOnlyIf => {
+                ContractConditionsData::PanicsOnlyIf { attr: syn::parse(attr)? }
+            }
             ContractConditionsType::PanicsIf => {
                 ContractConditionsData::PanicsIf { attr: syn::parse(attr)? }
             }

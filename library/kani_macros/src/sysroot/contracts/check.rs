@@ -30,10 +30,41 @@ impl<'a> ContractConditionsHandler<'a> {
                     #(#body_stmts)*
                 })
             }
-            ContractConditionsData::PanicsIf { attr } => {
+            ContractConditionsData::PanicsOnlyIf { attr } => {
+                // Record on entry, after the preconditions are assumed, whether a panic is
+                // permitted, so that Kani checks every panic of the body against it. The
+                // permission is restored when the function returns.
+                let cond = bracket_clause_expr(quote!(#attr));
+                let return_expr = body_stmts.pop();
+                let (assumes, rest_of_body) =
+                    split_for_remembers(&body_stmts[..], ContractMode::SimpleCheck);
                 quote!({
-                    kani::assume(!(#attr));
-                    #(#body_stmts)*
+                    #(#assumes)*
+                    let __kani_panics_only_if_prev = kani::internal::set_panics_only_if(#cond);
+                    #(#rest_of_body)*
+                    kani::internal::restore_panic_permission(__kani_panics_only_if_prev);
+                    #return_expr
+                })
+            }
+            ContractConditionsData::PanicsIf { attr } => {
+                // As for `panics_only_if`, and additionally check on return that the condition
+                // did not hold: if it held, the function must have panicked.
+                let cond = bracket_clause_expr(quote!(#attr));
+                let return_expr = body_stmts.pop();
+                let (assumes, rest_of_body) =
+                    split_for_remembers(&body_stmts[..], ContractMode::SimpleCheck);
+                quote!({
+                    #(#assumes)*
+                    let __kani_panics_if_cond: bool = #cond;
+                    let __kani_panics_if_prev =
+                        kani::internal::set_panics_if(__kani_panics_if_cond);
+                    #(#rest_of_body)*
+                    kani::assert(
+                        !__kani_panics_if_cond,
+                        concat!("returned although `panics_if(", stringify!(#attr_copy), ")` held"),
+                    );
+                    kani::internal::restore_panic_permission(__kani_panics_if_prev);
+                    #return_expr
                 })
             }
             ContractConditionsData::Ensures { attr } => {

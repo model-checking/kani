@@ -364,20 +364,55 @@ pub fn requires(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::requires(attr, item)
 }
 
-/// Add a panic-freedom precondition to this function.
+/// State the only condition under which this function may panic.
 ///
 /// This is part of the function contract API, for more general information see
 /// the [module-level documentation](../kani/contracts/index.html).
 ///
 /// The contents of the attribute is a condition over the input values to the
-/// annotated function. All Rust syntax is supported, even calling other
-/// functions, but the computations must be side effect free, e.g. it cannot
-/// perform I/O or use mutable memory.
+/// annotated function, with the same restrictions as a
+/// [`requires`][macro@requires] condition. It is evaluated on entry, after the
+/// preconditions.
 ///
-/// Kani requires each function that uses a contract (this attribute or
-/// [`requires`][macro@requires] or [`ensures`][macro@ensures]) to have at least one designated
-/// [`proof_for_contract`][macro@proof_for_contract] harness for checking the
-/// contract.
+/// A `proof_for_contract` harness checks that the function panics only if the
+/// condition held on entry: a panic when it did not hold is a verification
+/// failure. Undefined behavior is still checked on every path, including paths
+/// that panic, and postconditions are checked whenever the function returns.
+/// The condition is necessary for a panic, not sufficient: to require that the
+/// function panics, use [`panics_if`][macro@panics_if].
+///
+/// When the function is replaced by its contract (`stub_verified`), the
+/// replacement may panic whenever the condition holds, so callers have to
+/// account for that panic.
+///
+/// A function may have at most one `panics_only_if` clause.
+#[proc_macro_attribute]
+pub fn panics_only_if(attr: TokenStream, item: TokenStream) -> TokenStream {
+    attr_impl::panics_only_if(attr, item)
+}
+
+/// State a condition under which this function must panic.
+///
+/// This is part of the function contract API, for more general information see
+/// the [module-level documentation](../kani/contracts/index.html).
+///
+/// The contents of the attribute is a condition over the input values to the
+/// annotated function, with the same restrictions as a
+/// [`requires`][macro@requires] condition. It is evaluated on entry, after the
+/// preconditions.
+///
+/// A `proof_for_contract` harness checks that the function does not return when
+/// the condition held on entry. Without a [`panics_only_if`][macro@panics_only_if]
+/// clause, the function may also panic only if the condition held, so
+/// `panics_if(cond)` states that the function panics if and only if `cond` holds.
+/// With a `panics_only_if(c)` clause, the function may panic only if `c` held, so
+/// `cond` must imply `c`: the inputs where `c` holds but `cond` does not are those
+/// where the function may or may not panic.
+///
+/// When the function is replaced by its contract (`stub_verified`), the
+/// replacement panics whenever the condition holds.
+///
+/// A function may have at most one `panics_if` clause.
 #[proc_macro_attribute]
 pub fn panics_if(attr: TokenStream, item: TokenStream) -> TokenStream {
     attr_impl::panics_if(attr, item)
@@ -486,7 +521,7 @@ mod sysroot {
     mod loop_contracts;
 
     pub use contracts::{
-        ensures, modifies, panics_if, proof_for_contract, requires, stub_verified,
+        ensures, modifies, panics_if, panics_only_if, proof_for_contract, requires, stub_verified,
     };
     pub use loop_contracts::{loop_decreases, loop_invariant, loop_modifies};
 
@@ -706,6 +741,7 @@ mod regular {
     no_op!(unstable);
     no_op!(unwind);
     no_op!(requires);
+    no_op!(panics_only_if);
     no_op!(panics_if);
     no_op!(ensures);
     no_op!(modifies);

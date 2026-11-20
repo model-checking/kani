@@ -171,6 +171,12 @@ pub enum KaniModel {
     PtrOffsetFromUnsigned,
     #[strum(serialize = "ResetContractClauseDepthModel")]
     ResetContractClauseDepth,
+    #[strum(serialize = "SetPanicsOnlyIfModel")]
+    SetPanicsOnlyIf,
+    #[strum(serialize = "SetPanicsIfModel")]
+    SetPanicsIf,
+    #[strum(serialize = "RestorePanicPermissionModel")]
+    RestorePanicPermission,
     #[strum(serialize = "RunContractModel")]
     RunContract,
     #[strum(serialize = "RunLoopContractModel")]
