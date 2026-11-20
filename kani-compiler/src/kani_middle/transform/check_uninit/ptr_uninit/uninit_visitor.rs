@@ -120,10 +120,55 @@ impl CheckUninitVisitor {
             .map(|(idx, arg)| (idx, arg.clone()))
             .collect();
         for (idx, operand) in union_args {
+            if let Operand::Constant(_) = operand {
+                // A constant has no place to point the argument buffer at. The callee marks an
+                // argument it finds no state for as initialized, which is right exactly when every
+                // byte of the constant is.
+                if !constant_init_mask(&operand).is_some_and(|mask| mask.iter().all(|byte| *byte)) {
+                    self.push_target(MemoryInitOp::Unsupported {
+                        reason: "Kani does not support passing a constant with uninitialized \
+                                 bytes in a union to a function."
+                            .to_string(),
+                    });
+                }
+                continue;
+            }
             self.push_target(MemoryInitOp::StoreArgument {
                 operand,
                 argument_no: idx + 1, // since arguments are 1-indexed
             })
+        }
+    }
+
+    /// Give `*dst` the state of the value `src`, whose type contains a union.
+    fn store_union_value(&mut self, dst: &Operand, src: &Operand) {
+        let (Operand::Copy(dst_ptr) | Operand::Move(dst_ptr)) = dst else {
+            self.push_target(MemoryInitOp::Unsupported {
+                reason: "Kani does not support storing a union through a constant pointer."
+                    .to_string(),
+            });
+            return;
+        };
+        let mut lvalue = dst_ptr.clone();
+        lvalue.projection.push(ProjectionElem::Deref);
+        match src {
+            Operand::Constant(_) => self.set_from_constant(&lvalue, src),
+            _ => self.push_target(MemoryInitOp::AssignUnion { lvalue, rvalue: src.clone() }),
+        }
+    }
+
+    /// The operation that gives the place `lvalue` the state of the constant `operand`: its
+    /// bytes' state is known, or the assignment is unsupported.
+    fn set_from_constant(&mut self, lvalue: &Place, operand: &Operand) {
+        match constant_init_mask(operand) {
+            Some(mask) => self.push_target(MemoryInitOp::SetMasked {
+                operand: Operand::Copy(lvalue.clone()),
+                mask,
+            }),
+            None => self.push_target(MemoryInitOp::Unsupported {
+                reason: "Kani does not support assigning this constant containing a union."
+                    .to_string(),
+            }),
         }
     }
 }
@@ -158,6 +203,56 @@ impl CheckUninitVisitor {
             self.push_target(MemoryInitOp::AssignUnion { lvalue: field, rvalue: operand.clone() });
         }
     }
+}
+
+/// Which bytes of the constant `operand` are initialized, if it is a constant whose bytes are
+/// known.
+fn constant_init_mask(operand: &Operand) -> Option<Vec<bool>> {
+    let Operand::Constant(constant) = operand else { return None };
+    match constant.const_.kind() {
+        ConstantKind::Allocated(allocation) => {
+            Some(allocation.bytes.iter().map(Option::is_some).collect())
+        }
+        ConstantKind::ZeroSized => Some(vec![]),
+        _ => None,
+    }
+}
+
+/// Whether `ty` contains a reference, e.g. `&T` or a struct with a `&T` field.
+fn contains_reference(ty: Ty) -> bool {
+    contains_ty(ty, |kind| matches!(kind, RigidTy::Ref(..)))
+}
+
+/// Whether `ty` contains a raw pointer, e.g. a union with a `*const T` field.
+fn contains_raw_pointer(ty: Ty) -> bool {
+    contains_ty(ty, |kind| matches!(kind, RigidTy::RawPtr(..)))
+}
+
+/// Whether `ty` or a type nested in it (an element or a field, for every variant of an enum and
+/// every field of a union) satisfies `is_match`. Deeply nested or recursive types count as a
+/// match, which is the conservative answer for both callers.
+fn contains_ty(ty: Ty, is_match: impl Fn(&RigidTy) -> bool + Copy) -> bool {
+    fn walk(ty: Ty, depth: usize, is_match: impl Fn(&RigidTy) -> bool + Copy) -> bool {
+        if depth > 16 {
+            return true;
+        }
+        let Some(kind) = ty.kind().rigid().cloned() else { return false };
+        if is_match(&kind) {
+            return true;
+        }
+        match kind {
+            RigidTy::Array(elem, _) | RigidTy::Slice(elem) => walk(elem, depth + 1, is_match),
+            RigidTy::Tuple(elems) => elems.iter().any(|elem| walk(*elem, depth + 1, is_match)),
+            RigidTy::Adt(def, args) => def.variants_iter().any(|variant| {
+                variant
+                    .fields()
+                    .iter()
+                    .any(|field| walk(field.ty_with_args(&args), depth + 1, is_match))
+            }),
+            _ => false,
+        }
+    }
+    walk(ty, 0, is_match)
 }
 
 /// Whether `ty` is a union or contains one (see `UnionMask`).
@@ -222,6 +317,9 @@ impl MirVisitor for CheckUninitVisitor {
                                 lvalue: place.clone(),
                                 rvalue: operand.clone(),
                             }),
+                        Rvalue::Use(operand @ Operand::Constant(_), _) => {
+                            self.set_from_constant(place, operand)
+                        }
                         _ => {
                             // Reset before the write: operations inserted after an instruction do
                             // not run in the order they are pushed, and the copies below must
@@ -310,10 +408,14 @@ impl MirVisitor for CheckUninitVisitor {
                             // This is a union-to-union assignment, so we need to copy the
                             // initialization state.
                             if place.ty(&self.locals).unwrap().kind().is_union() {
-                                self.push_target(MemoryInitOp::AssignUnion {
-                                    lvalue: place.clone(),
-                                    rvalue: operand.clone(),
-                                });
+                                if let Operand::Constant(_) = operand {
+                                    self.set_from_constant(place, operand);
+                                } else {
+                                    self.push_target(MemoryInitOp::AssignUnion {
+                                        lvalue: place.clone(),
+                                        rvalue: operand.clone(),
+                                    });
+                                }
                             } else {
                                 // This is assignment to a field of a union.
                                 self.push_target(MemoryInitOp::SetRef {
@@ -471,6 +573,14 @@ impl MirVisitor for CheckUninitVisitor {
                                     value: true,
                                     position: InsertPosition::After,
                                 });
+                                // The stored value's union bytes keep the value's state, as for
+                                // an assignment `*dst = src`: marking them initialized would hide
+                                // a store of `MaybeUninit::uninit()`.
+                                if let Some(pointee) = args[1].ty(&self.locals).ok()
+                                    && has_union_bytes(pointee)
+                                {
+                                    self.store_union_value(&args[0], &args[1]);
+                                }
                             }
                             // `volatile_set_memory(dst, val, count)` has the same shape and the
                             // same memory-initialization effect as `write_bytes(dst, val, count)`;
@@ -717,6 +827,39 @@ impl MirVisitor for CheckUninitVisitor {
                             operand: Operand::Copy(place.clone()),
                             mask: mask.clone(),
                         });
+                        // A reference must also point to a valid value, but if the union can
+                        // hold a raw pointer, it may point to uninitialized memory. Reads through
+                        // references are not checked, so check the pointee here. A union holding
+                        // only references (`MaybeUninit<&T>`) needs no check: a reference was
+                        // valid when it was written, and Kani does not track the memory behind
+                        // references, so checking it would be a false alarm.
+                        if contains_raw_pointer(operand_ty) {
+                            match ty.kind().rigid() {
+                                Some(RigidTy::Ref(_, pointee, _))
+                                    if PointeeInfo::from_ty(*pointee).is_ok_and(|info| {
+                                        matches!(
+                                            info.layout(),
+                                            PointeeLayout::Sized { .. }
+                                                | PointeeLayout::Union { .. }
+                                        )
+                                    }) =>
+                                {
+                                    self.push_target(MemoryInitOp::CheckAs {
+                                        operand: operand.clone(),
+                                        pointee_ty: *pointee,
+                                    })
+                                }
+                                _ if contains_reference(*ty) => {
+                                    self.push_target(MemoryInitOp::Unsupported {
+                                        reason:
+                                            "Kani does not support checking the value behind a \
+                                             reference transmuted from a union."
+                                                .to_string(),
+                                    })
+                                }
+                                _ => {}
+                            }
+                        }
                     } else if !matches!(requirement, TransmuteRequirement::Compatible)
                         && !tys_layout_compatible_to_size(&operand_ty, ty)
                     {

@@ -57,6 +57,8 @@ const KANI_SET_STR_PTR_INITIALIZED: KaniFunction =
 const KANI_COPY_INIT_STATE: KaniFunction = KaniFunction::Model(KaniModel::CopyInitState);
 const KANI_COPY_INIT_STATE_SINGLE: KaniFunction =
     KaniFunction::Model(KaniModel::CopyInitStateSingle);
+const KANI_COPY_INIT_STATE_MASKED: KaniFunction =
+    KaniFunction::Model(KaniModel::CopyInitStateMasked);
 const KANI_LOAD_ARGUMENT: KaniFunction = KaniFunction::Model(KaniModel::LoadArgument);
 const KANI_STORE_ARGUMENT: KaniFunction = KaniFunction::Model(KaniModel::StoreArgument);
 // The contract-clause-depth functions access the `CONTRACT_CLAUSE_DEPTH`
@@ -88,6 +90,7 @@ const SKIPPED_ITEMS: &[KaniFunction] = &[
     KANI_SET_STR_PTR_INITIALIZED,
     KANI_COPY_INIT_STATE,
     KANI_COPY_INIT_STATE_SINGLE,
+    KANI_COPY_INIT_STATE_MASKED,
     KANI_LOAD_ARGUMENT,
     KANI_STORE_ARGUMENT,
     KANI_ENTER_CONTRACT_CLAUSE,
@@ -192,7 +195,9 @@ impl<'a> UninitInstrumenter<'a> {
                     )
                 };
             // Calculate pointee layout for byte-by-byte memory initialization checks.
-            if let MemoryInitOp::CheckMasked { mask, .. } = &operation {
+            if let MemoryInitOp::CheckMasked { mask, .. } | MemoryInitOp::SetMasked { mask, .. } =
+                &operation
+            {
                 PointeeInfo::with_mask(pointee_ty, mask.clone())
             } else {
                 match PointeeInfo::from_ty(pointee_ty) {
@@ -221,6 +226,7 @@ impl<'a> UninitInstrumenter<'a> {
             | MemoryInitOp::SetRef { .. }
             | MemoryInitOp::SetVtable { .. }
             | MemoryInitOp::SetAs { .. }
+            | MemoryInitOp::SetMasked { .. }
             | MemoryInitOp::CreateUnion { .. } => {
                 self.build_set(body, source, operation, pointee_info)
             }
@@ -416,7 +422,8 @@ impl<'a> UninitInstrumenter<'a> {
                     MemoryInitOp::Set { .. }
                     | MemoryInitOp::SetRef { .. }
                     | MemoryInitOp::SetVtable { .. }
-                    | MemoryInitOp::SetAs { .. } => match keep_operand {
+                    | MemoryInitOp::SetAs { .. }
+                    | MemoryInitOp::SetMasked { .. } => match keep_operand {
                         Some(keep_operand) => (
                             KANI_SET_PTR_INITIALIZED_KEEP,
                             vec![ptr_operand, layout_operand, keep_operand, value_operand],
@@ -729,12 +736,23 @@ impl<'a> UninitInstrumenter<'a> {
         };
         let mut statements = vec![];
         let layout_size = pointee_info.layout().maybe_size().unwrap();
+        let (from, to) = operation.expect_assign_union_operands(body, &mut statements, source);
+        let (model, args) = match pointee_info.layout() {
+            // A type with unions nested in it: copy only the union bytes. The data and padding
+            // bytes are marked as for any write of the type, which is then independent of the
+            // order of the two operations.
+            PointeeLayout::Sized { union_mask, .. } if !union_mask.is_empty() => {
+                let mask = mk_layout_operand(body, &mut statements, source, union_mask);
+                (KANI_COPY_INIT_STATE_MASKED, vec![from, to, mask])
+            }
+            // A union: all of its bytes take the source's state.
+            _ => (KANI_COPY_INIT_STATE_SINGLE, vec![from, to]),
+        };
         let copy_init_state_instance = resolve_mem_init_fn(
-            get_mem_init_fn_def(KANI_COPY_INIT_STATE_SINGLE, self.mem_init_fn_cache),
+            get_mem_init_fn_def(model, self.mem_init_fn_cache),
             layout_size,
             *pointee_info.ty(),
         );
-        let (from, to) = operation.expect_assign_union_operands(body, &mut statements, source);
         let terminator = Terminator {
             kind: TerminatorKind::Call {
                 func: Operand::Copy(Place::from(body.new_local(
@@ -742,7 +760,7 @@ impl<'a> UninitInstrumenter<'a> {
                     source.span(body.blocks()),
                     Mutability::Not,
                 ))),
-                args: vec![from, to],
+                args,
                 destination: ret_place.clone(),
                 target: Some(0), // this will be overriden in add_bb
                 unwind: UnwindAction::Terminate,

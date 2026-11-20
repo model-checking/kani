@@ -70,6 +70,9 @@ pub enum MemoryInitOp {
     /// Load the return value of the call that just returned, which contains a union, from the
     /// argument buffer into the call's destination `operand`.
     LoadReturnValue { operand: Operand },
+    /// Set the initialization state of the bytes of the place `operand` to `mask`, e.g. to those
+    /// of a constant assigned to it, whose bytes are known.
+    SetMasked { operand: Operand, mask: Vec<bool> },
 }
 
 impl MemoryInitOp {
@@ -88,7 +91,19 @@ impl MemoryInitOp {
             | MemoryInitOp::CheckSliceChunk { operand, .. }
             | MemoryInitOp::SetSliceChunk { operand, .. } => operand.clone(),
             MemoryInitOp::CheckAs { operand, pointee_ty } => {
-                mk_cast(operand, *pointee_ty, body, statements, source)
+                // A pointer or reference is cast. Anything else, e.g. a union that holds a
+                // pointer, is reinterpreted as the pointer it holds.
+                if operand.ty(body.locals()).unwrap().kind().is_any_ptr() {
+                    mk_cast(operand, *pointee_ty, body, statements, source)
+                } else {
+                    mk_transmute(
+                        operand,
+                        Ty::new_ptr(*pointee_ty, Mutability::Not),
+                        body,
+                        statements,
+                        source,
+                    )
+                }
             }
             MemoryInitOp::SetVtable { metadata } => {
                 mk_transmute(metadata, vtable_header_ptr_ty(), body, statements, source)
@@ -106,9 +121,8 @@ impl MemoryInitOp {
             | MemoryInitOp::LoadArgument { operand, .. }
             | MemoryInitOp::StoreArgument { operand, .. }
             | MemoryInitOp::LoadReturnValue { operand }
-            | MemoryInitOp::CheckMasked { operand, .. } => {
-                mk_ref(operand, body, statements, source)
-            }
+            | MemoryInitOp::CheckMasked { operand, .. }
+            | MemoryInitOp::SetMasked { operand, .. } => mk_ref(operand, body, statements, source),
             MemoryInitOp::Copy { .. }
             | MemoryInitOp::AssignUnion { .. }
             | MemoryInitOp::Unsupported { .. }
@@ -160,7 +174,8 @@ impl MemoryInitOp {
             | MemoryInitOp::LoadArgument { operand, .. }
             | MemoryInitOp::StoreArgument { operand, .. }
             | MemoryInitOp::LoadReturnValue { operand }
-            | MemoryInitOp::CheckMasked { operand, .. } => {
+            | MemoryInitOp::CheckMasked { operand, .. }
+            | MemoryInitOp::SetMasked { operand, .. } => {
                 let place = match operand {
                     Operand::Copy(place) | Operand::Move(place) => place,
                     Operand::Constant(_) | Operand::RuntimeChecks(_) => unreachable!(),
@@ -214,7 +229,8 @@ impl MemoryInitOp {
             | MemoryInitOp::TriviallyUnsafe { .. }
             | MemoryInitOp::StoreArgument { .. }
             | MemoryInitOp::LoadArgument { .. }
-            | MemoryInitOp::LoadReturnValue { .. } => unreachable!(),
+            | MemoryInitOp::LoadReturnValue { .. }
+            | MemoryInitOp::SetMasked { .. } => unreachable!(),
         }
     }
 
@@ -224,7 +240,9 @@ impl MemoryInitOp {
             | MemoryInitOp::SetSliceChunk { value, .. }
             | MemoryInitOp::SetRef { value, .. }
             | MemoryInitOp::SetAs { value, .. } => *value,
-            MemoryInitOp::CreateUnion { .. } | MemoryInitOp::SetVtable { .. } => true,
+            MemoryInitOp::CreateUnion { .. }
+            | MemoryInitOp::SetVtable { .. }
+            | MemoryInitOp::SetMasked { .. } => true,
             MemoryInitOp::Check { .. }
             | MemoryInitOp::CheckAs { .. }
             | MemoryInitOp::CheckMasked { .. }
@@ -259,7 +277,8 @@ impl MemoryInitOp {
             | MemoryInitOp::AssignUnion { .. }
             | MemoryInitOp::StoreArgument { .. }
             | MemoryInitOp::LoadArgument { .. }
-            | MemoryInitOp::LoadReturnValue { .. } => None,
+            | MemoryInitOp::LoadReturnValue { .. }
+            | MemoryInitOp::SetMasked { .. } => None,
         }
     }
 
@@ -282,7 +301,8 @@ impl MemoryInitOp {
             | MemoryInitOp::AssignUnion { .. }
             | MemoryInitOp::CreateUnion { .. }
             | MemoryInitOp::SetVtable { .. }
-            | MemoryInitOp::LoadReturnValue { .. } => InsertPosition::After,
+            | MemoryInitOp::LoadReturnValue { .. }
+            | MemoryInitOp::SetMasked { .. } => InsertPosition::After,
         }
     }
 

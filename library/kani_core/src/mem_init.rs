@@ -150,6 +150,47 @@ macro_rules! kani_mem_init {
                 }
             }
 
+            /// As [Self::copy] for one value, but only for the bytes that `mask` marks (the bytes of
+            /// unions nested in the type): the destination's other bytes are left unchanged, for
+            /// the caller to mark as for any write of the type.
+            #[kanitool::disable_checks(pointer)]
+            pub fn copy_masked<const LAYOUT_SIZE: usize>(
+                &mut self,
+                from_ptr: *const u8,
+                to_ptr: *const u8,
+                mask: Layout<LAYOUT_SIZE>,
+            ) {
+                let from_obj = super::mem::pointer_object(from_ptr);
+                let from_offset = super::mem::pointer_offset(from_ptr);
+                let to_obj = super::mem::pointer_object(to_ptr);
+                let to_offset = super::mem::pointer_offset(to_ptr);
+                let in_to = |obj: usize, offset: usize| {
+                    obj == to_obj
+                        && offset >= to_offset
+                        && offset < to_offset + LAYOUT_SIZE
+                        && mask[offset - to_offset]
+                };
+                if self.tracked_object_id == from_obj
+                    && self.tracked_offset >= from_offset
+                    && self.tracked_offset < from_offset + LAYOUT_SIZE
+                    && mask[self.tracked_offset - from_offset]
+                {
+                    let should_reset: bool = super::any();
+                    if should_reset {
+                        self.tracked_object_id = to_obj;
+                        // `tracked_offset >= from_offset` here; subtract first so that a copy to a
+                        // lower offset does not underflow.
+                        self.tracked_offset = self.tracked_offset - from_offset + to_offset;
+                    } else if in_to(self.tracked_object_id, self.tracked_offset) {
+                        // An overlapping copy put another, untracked, source byte here.
+                        self.value = true;
+                    }
+                } else if in_to(self.tracked_object_id, self.tracked_offset) {
+                    // The corresponding source byte is not tracked, so it is initialized.
+                    self.value = true;
+                }
+            }
+
             /// Set currently tracked memory initialization state to `true` if `ptr` points to the
             /// currently tracked object and the tracked offset lies within `LAYOUT_SIZE * num_elts`
             /// bytes of `ptr`.
@@ -466,6 +507,25 @@ macro_rules! kani_mem_init {
         #[kanitool::fn_marker = "CopyInitStateSingleModel"]
         fn copy_init_state_single<const LAYOUT_SIZE: usize, T>(from: *const T, to: *const T) {
             copy_init_state::<LAYOUT_SIZE, T>(from, to, 1);
+        }
+
+        /// As [copy_init_state_single], but only for the bytes `mask` marks: the bytes of unions
+        /// nested in `T`, whose state is the source's. The caller marks the other bytes.
+        #[kanitool::disable_checks(pointer)]
+        #[kanitool::fn_marker = "CopyInitStateMaskedModel"]
+        fn copy_init_state_masked<const LAYOUT_SIZE: usize, T>(
+            from: *const T,
+            to: *const T,
+            mask: Layout<LAYOUT_SIZE>,
+        ) {
+            if LAYOUT_SIZE == 0 {
+                return;
+            }
+            let (from_ptr, _) = from.to_raw_parts();
+            let (to_ptr, _) = to.to_raw_parts();
+            unsafe {
+                MEM_INIT_STATE.copy_masked::<LAYOUT_SIZE>(from_ptr as *const u8, to_ptr as *const u8, mask);
+            }
         }
 
         /// Information about currently tracked argument, used for passing union initialization

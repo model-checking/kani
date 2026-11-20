@@ -145,6 +145,8 @@ pub enum KaniModel {
     CopyInitState,
     #[strum(serialize = "CopyInitStateSingleModel")]
     CopyInitStateSingle,
+    #[strum(serialize = "CopyInitStateMaskedModel")]
+    CopyInitStateMasked,
     #[strum(serialize = "LoadArgumentModel")]
     LoadArgument,
     #[strum(serialize = "InitializeMemoryInitializationStateModel")]
