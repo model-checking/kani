@@ -4,7 +4,9 @@
 
 # Check that `cargo kani list` accepts `--target-dir` and builds into it.
 
-rm -rf custom_target
+trap 'rm -rf custom_target' EXIT
+
+rm -rf custom_target target
 cargo kani list --target-dir custom_target || exit 1
 
 if [ -d custom_target ]; then
@@ -13,4 +15,5 @@ else
     echo "Test failed: custom_target was not created"
     exit 1
 fi
-rm -rf custom_target
+
+[ ! -d target ] || { echo "Test failed: default target dir used"; exit 1; }
