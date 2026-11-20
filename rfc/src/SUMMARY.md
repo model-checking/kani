@@ -21,3 +21,4 @@
 - [0013-list](rfcs/0013-list.md)
 - [0014-harness-partition](rfcs/0014-harness-partition.md)
 - [0015-export-json](rfcs/0015-export-json.md)
+- [0016-aliasing-checks](rfcs/0016-aliasing-checks.md)
