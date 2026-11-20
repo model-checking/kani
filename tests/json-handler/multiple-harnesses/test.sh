@@ -61,6 +61,11 @@ check(names == expected,
       f"harnesses should cover {sorted(expected)}, got {sorted(map(str, names))}")
 check(all(h.get('crate_name') for h in harnesses),
       "every harness should report a non-empty crate_name")
+for h in harnesses:
+    want = h['name'] == 'verify_multiply_positive'
+    actual = h['attributes'].get('no_unwinding_checks')
+    check(actual is want,
+          f"{h['name']} attributes.no_unwinding_checks should be {want}, got {actual}")
 
 summary = data['summary']
 for field, want in [('total', 3), ('successful', 3), ('failed', 0)]:

@@ -1,0 +1,2 @@
+error: the `no_unwinding_checks` attribute also requires the `#[kani::proof]` attribute
+error: aborting due to 1 previous error
