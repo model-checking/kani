@@ -28,6 +28,7 @@
     - [Loop Contracts](./reference/experimental/loop-contracts.md)
     - [Concrete Playback](./reference/experimental/concrete-playback.md)
     - [Quantifiers](./reference/experimental/quantifiers.md)
+    - [Verifying for another target](./reference/experimental/target.md)
 - [Application](./application.md)
   - [Comparison with other tools](./tool-comparison.md)
   - [Where to start on real code](./tutorial-real-code.md)
