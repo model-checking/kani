@@ -77,8 +77,9 @@ impl GotocCtx<'_, '_> {
             // `abort` was renamed to `abort_immediate`; the current pinned toolchain
             // only emits the latter. The `"abort"` arm is kept so the match still
             // handles a toolchain that predates the rename.
+            // Kani compiles code with `-C panic=abort`, so an abort is reported like a panic.
             "abort" | "abort_immediate" => self.codegen_fatal_error(
-                PropertyClass::Assertion,
+                PropertyClass::Panic,
                 &format!("reached intrinsic::{intrinsic}"),
                 span,
             ),

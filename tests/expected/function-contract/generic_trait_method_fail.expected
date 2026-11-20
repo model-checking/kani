@@ -1,0 +1,14 @@
+Checking harness verified_generic_stub_precondition...
+Failed Checks: self.0 < 100
+VERIFICATION:- FAILED
+
+Checking harness incorrect_generic_contract...
+Failed Checks: |r| *r == self.0 + 1
+VERIFICATION:- FAILED
+
+Checking harness generic_contract...
+VERIFICATION:- SUCCESSFUL
+
+Verification failed for - verified_generic_stub_precondition
+Verification failed for - incorrect_generic_contract
+Complete - 1 successfully verified harnesses, 2 failures, 3 total.

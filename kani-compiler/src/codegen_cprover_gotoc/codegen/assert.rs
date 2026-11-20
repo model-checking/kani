@@ -72,7 +72,8 @@ pub enum PropertyClass {
     ExactDiv,
     /// Rust panics: `panic!`, `assert!` and the other panicking macros, panicking library
     /// functions such as `Option::unwrap`, and the panics rustc inserts for bounds checks,
-    /// arithmetic overflow and division by zero.
+    /// arithmetic overflow and division by zero. Aborts are reported like panics, since Kani
+    /// compiles code with `-C panic=abort`.
     ///
     /// SPECIAL BEHAVIOR: These failures are observable during normal execution of Rust code.
     /// `#[kani::should_panic]` accepts them as expected failures, and `--prove-safety-only`

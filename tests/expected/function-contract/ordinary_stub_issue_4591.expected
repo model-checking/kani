@@ -1,4 +1,4 @@
-caller.assertion\
+caller.panic\
 - Status: FAILURE\
 - Description: "attempt to add with overflow"
 

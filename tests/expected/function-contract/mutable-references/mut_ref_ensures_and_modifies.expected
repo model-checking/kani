@@ -1,4 +1,4 @@
-assertion\
+panic\
 	- Status: UNREACHABLE\
 	- Description: "attempt to divide by zero"\
 in function divide_by
