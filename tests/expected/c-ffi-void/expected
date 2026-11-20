@@ -1,0 +1,32 @@
+Status: SATISFIED\
+Description: "pointer call decremented"
+
+Failed Checks: "pointer call left x unchanged"
+
+Status: SATISFIED\
+Description: "direct call decremented"
+
+Failed Checks: "direct call left x unchanged"
+
+Status: SATISFIED\
+Description: "called add_one through the pointer"
+
+Status: SATISFIED\
+Description: "called double_it through the pointer"
+
+Status: SUCCESS\
+Description: ""pointer call had its effect""
+
+Status: SATISFIED\
+Description: "calling halt"
+
+Status: SUCCESS\
+Description: ""halt returned""
+
+Failed Checks: Kani-internal sanity check: Unexpected return from Never function
+
+Summary:\
+Verification failed for - check_never_returns_anyway\
+Verification failed for - check_fn_ptr_call\
+Verification failed for - check_direct_call\
+Complete - 2 successfully verified harnesses, 3 failures, 5 total.
