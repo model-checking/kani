@@ -37,7 +37,7 @@ use rustc_middle::{
         BasicBlock, BinOp, Body, CallReturnPlaces, Location, NonDivergingIntrinsic, Operand, Place,
         ProjectionElem, Rvalue, Statement, StatementKind, Terminator, TerminatorKind,
     },
-    ty::{Instance, InstanceKind, List, TyCtxt, TyKind, TypingEnv},
+    ty::{Instance, InstanceKind, List, TyCtxt},
 };
 use rustc_mir_dataflow::{Analysis, Forward, JoinSemiLattice};
 use rustc_public::mir::{
@@ -46,7 +46,7 @@ use rustc_public::mir::{
 };
 use rustc_public::rustc_internal;
 use rustc_public::ty::{RigidTy as StableRigidTy, Ty as StableTy, TyKind as StableTyKind};
-use rustc_span::{DUMMY_SP, Spanned};
+use rustc_span::Spanned;
 use std::cell::RefCell;
 use std::collections::HashSet;
 
@@ -200,12 +200,13 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
         location: Location,
     ) {
         if let TerminatorKind::Call { func, args, destination, .. } = &terminator.kind {
-            // Calls the analysis cannot follow add no edges here: the instrumentation guards each
-            // of them with an unsupported check, which stops execution before the call.
-            if unsupported_call(rustc_internal::stable(func.ty(self.body, self.tcx))).is_some() {
+            // Instrumentation stops execution at unsupported calls before their effects occur.
+            let Ok((instance, body)) =
+                resolve_call(self.tcx, rustc_internal::stable(func.ty(self.body, self.tcx)))
+            else {
                 return;
-            }
-            let instance = try_resolve_instance(self.body, func, self.tcx);
+            };
+            let instance = rustc_internal::internal(self.tcx, instance);
             match instance.def {
                 // Intrinsics could introduce aliasing edges we care about, so need to handle them.
                 InstanceKind::Intrinsic(_) => {
@@ -341,7 +342,8 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
                             );
                             self.tcx.dcx().abort_if_errors();
                         }
-                        self.apply_regular_call_effect(state, instance, args, destination);
+                        let Some(body) = body else { return };
+                        self.apply_regular_call_effect(state, instance, body, args, destination);
                     }
                 }
             }
@@ -358,43 +360,38 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
     }
 }
 
-/// Why the analysis cannot follow a call to a callee of type `func_ty`, if it cannot: the callee of
-/// a call through a function pointer or a vtable is not known statically. Callers that rely on the
-/// analysis must guard such calls with an unsupported check.
-pub fn unsupported_call(func_ty: StableTy) -> Option<String> {
-    let reason = match func_ty.kind() {
-        StableTyKind::RigidTy(StableRigidTy::FnDef(def, args)) => {
-            match StableInstance::resolve(def, &args) {
-                Ok(instance) if !matches!(instance.kind, StableInstanceKind::Virtual { .. }) => {
-                    return None;
-                }
-                _ => "trait object method calls",
-            }
-        }
-        _ => "calls through function pointers",
+/// Resolve a supported direct callee and return its checked MIR body.
+/// Intrinsics and foreign items return no body.
+pub fn resolve_call(
+    tcx: TyCtxt,
+    func_ty: StableTy,
+) -> Result<(StableInstance, Option<StableBody>), String> {
+    let StableTyKind::RigidTy(StableRigidTy::FnDef(def, args)) = func_ty.kind() else {
+        return Err(unsupported_call_reason("calls through function pointers"));
     };
-    Some(format!(
-        "Kani does not support memory initialization checks across {reason}. For more information about planned support, see https://github.com/model-checking/kani/issues/3300."
-    ))
+    let instance = StableInstance::resolve(def, &args).map_err(|err| {
+        format!("Kani could not resolve function item `{func_ty:?}` for memory initialization checks: {err:?}.")
+    })?;
+    let reason = match instance.kind {
+        StableInstanceKind::Intrinsic => return Ok((instance, None)),
+        StableInstanceKind::Item if instance.is_foreign_item() => return Ok((instance, None)),
+        StableInstanceKind::Item | StableInstanceKind::Shim => {
+            // Check MIR availability for the instance, including compiler-generated shims,
+            // and report explicit tail calls before converting user code to stable MIR.
+            if let Some(body) = crate::kani_middle::checked_body(tcx, instance) {
+                return Ok((instance, Some(body)));
+            }
+            format!("calls to bodyless {:?} instances", instance.kind)
+        }
+        StableInstanceKind::Virtual { .. } => "trait object method calls".to_string(),
+        StableInstanceKind::LlvmIntrinsic => "calls to LlvmIntrinsic instances".to_string(),
+    };
+    Err(unsupported_call_reason(&reason))
 }
 
-/// The instance a call operand refers to, which `unsupported_call` has checked is a function item.
-fn try_resolve_instance<'tcx>(
-    body: &Body<'tcx>,
-    func: &Operand<'tcx>,
-    tcx: TyCtxt<'tcx>,
-) -> Instance<'tcx> {
-    let TyKind::FnDef(def, args) = func.ty(body, tcx).kind() else {
-        unreachable!("`unsupported_call` rejects callees that are not function items")
-    };
-    // Span here is used for error-reporting, which we don't expect to encounter anyway, so it is ok
-    // to use a dummy.
-    Instance::expect_resolve(
-        tcx,
-        TypingEnv::fully_monomorphized(),
-        *def,
-        args.skip_binder(),
-        DUMMY_SP,
+fn unsupported_call_reason(kind: &str) -> String {
+    format!(
+        "Kani does not support memory initialization checks across {kind}. For more information about planned support, see https://github.com/model-checking/kani/issues/3300."
     )
 }
 
@@ -464,15 +461,12 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
         &self,
         state: &mut PointsToGraph<'tcx>,
         instance: Instance<'tcx>,
+        body: StableBody,
         args: &[Spanned<Operand<'tcx>>],
         destination: &Place<'tcx>,
     ) {
         // Here we simply call another function, so need to retrieve internal body for it.
-        let new_body = {
-            let stable_instance = rustc_internal::stable(instance);
-            let stable_body = crate::kani_middle::checked_body(self.tcx, stable_instance).unwrap();
-            stable_body.internal_mir(self.tcx)
-        };
+        let new_body = body.internal_mir(self.tcx);
 
         // In order to be efficient, create a new graph for the function call analysis, which only
         // contains arguments and statics and anything transitively reachable from them.
