@@ -1,0 +1,49 @@
+Checking harness pass_partly_init_constant_unsupported...
+Failed Checks: Kani does not support passing a constant with uninitialized bytes in a union to a function.
+VERIFICATION:- FAILED
+
+Checking harness pass_init_constant_ok...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness assign_partly_init_constant_ok...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness assign_uninit_constant_ub...
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const std::mem::MaybeUninit<u32>`
+VERIFICATION:- FAILED
+
+Checking harness maybe_uninit_reference_ok...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness union_to_reference_init_ok...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness union_to_reference_uninit_ub...
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`
+VERIFICATION:- FAILED
+
+Checking harness padding_after_write_ub...
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`
+VERIFICATION:- FAILED
+
+Checking harness volatile_store_init_ok...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness volatile_store_uninit_ub...
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const std::mem::MaybeUninit<u32>`
+VERIFICATION:- FAILED
+
+Checking harness swap_moves_init_ok...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness swap_moves_uninit_ub...
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const std::mem::MaybeUninit<u32>`
+VERIFICATION:- FAILED
+
+Verification failed for - pass_partly_init_constant_unsupported
+Verification failed for - assign_uninit_constant_ub
+Verification failed for - union_to_reference_uninit_ub
+Verification failed for - padding_after_write_ub
+Verification failed for - volatile_store_uninit_ub
+Verification failed for - swap_moves_uninit_ub
+Complete - 6 successfully verified harnesses, 6 failures, 12 total.

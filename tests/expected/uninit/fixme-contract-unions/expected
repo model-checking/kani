@@ -1,0 +1,12 @@
+Checking harness takes_uninitialized_union_ub...
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const std::mem::MaybeUninit<u32>`
+VERIFICATION:- FAILED
+
+Checking harness takes_initialized_union_ok...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness returns_union_ok...
+VERIFICATION:- SUCCESSFUL
+
+Verification failed for - takes_uninitialized_union_ub
+Complete - 2 successfully verified harnesses, 1 failures, 3 total.

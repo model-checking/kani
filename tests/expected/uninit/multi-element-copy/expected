@@ -1,0 +1,19 @@
+Checking harness overlapping_copy_of_uninit_ub...
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `u8`
+VERIFICATION:- FAILED
+
+Checking harness overlapping_copy_ok...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness copy_some_then_read_past_ub...
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const u8`
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `u8`
+VERIFICATION:- FAILED
+
+Checking harness copy_many_from_initialized_ok...
+VERIFICATION:- SUCCESSFUL
+
+Verification failed for - overlapping_copy_of_uninit_ub
+Verification failed for - copy_some_then_read_past_ub
+Complete - 2 successfully verified harnesses, 2 failures, 4 total.
