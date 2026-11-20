@@ -74,6 +74,9 @@ pub fn list_cargo(args: CargoListArgs, mut verify_opts: VerificationArgs) -> Res
     let quiet = args.common_args.quiet;
     let verbose = args.common_args.verbose;
     verify_opts.common_args = args.common_args;
+    if let Some(dir) = args.target_dir {
+        verify_opts.target_dir = Some(dir);
+    }
     let mut session = KaniSession::new(verify_opts)?;
     if !quiet {
         print_kani_version(InvocationType::CargoKani(vec![]), verbose);
