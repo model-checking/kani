@@ -39,10 +39,26 @@ pub fn proxy(bin: &str) -> Result<()> {
                 // This handles cases where the setup was left incomplete due to an interrupt
                 // For example - https://github.com/model-checking/kani/issues/1545
                 if let Some(path_to_bundle) = setup::appears_incomplete() {
-                    setup::setup(Some(path_to_bundle.clone().into_os_string()), None)?;
-                    // Suppress warning with unused assignment
-                    // and remove the bundle if it still exists
-                    let _ = fs::remove_file(path_to_bundle);
+                    if let Err(err) =
+                        setup::setup(Some(path_to_bundle.clone().into_os_string()), None)
+                    {
+                        // The leftover bundle is what an interrupted *download* leaves behind, so
+                        // it is usually truncated and `tar` cannot read it. Retrying with the same
+                        // file fails the same way forever, which is what made users delete
+                        // `~/.kani` by hand, c.f.
+                        // https://github.com/model-checking/kani/issues/2830. Discard it and
+                        // download a fresh copy instead.
+                        println!(
+                            "Discarding the incomplete Kani bundle at {}: {err:#}",
+                            path_to_bundle.display()
+                        );
+                        let _ = fs::remove_file(&path_to_bundle);
+                        setup::setup(None, None)?;
+                    } else {
+                        // Suppress warning with unused assignment
+                        // and remove the bundle if it still exists
+                        let _ = fs::remove_file(path_to_bundle);
+                    }
                 }
             }
             exec(bin)

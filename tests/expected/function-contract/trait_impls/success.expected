@@ -1,0 +1,17 @@
+Status: SUCCESS\
+Description: "|res| *res == 0"\
+in function X::foo
+
+Status: SUCCESS\
+Description: "|res| *res == 300"\
+in function <X as B>::bar
+
+Status: SUCCESS\
+Description: "|res| *res == 200"\
+in function <X as A>::bar
+
+Status: SUCCESS\
+Description: "|res| *res == 100"\
+in function <X as A>::foo
+
+Complete - 4 successfully verified harnesses, 0 failures, 4 total.

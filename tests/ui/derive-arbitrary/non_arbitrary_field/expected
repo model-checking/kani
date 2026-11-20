@@ -1,4 +1,6 @@
 error[E0277]: the trait bound `NotArbitrary: kani::Arbitrary` is not satisfied
 |\
 |     not_arbitrary: NotArbitrary,\
-|     ^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `kani::Arbitrary` is not implemented for `NotArbitrary`
+|     ^^^^^^^^^^^^^^^^^^^^^^^^^^^ unsatisfied trait bound
+
+help: the trait `kani::Arbitrary` is not implemented for `NotArbitrary`

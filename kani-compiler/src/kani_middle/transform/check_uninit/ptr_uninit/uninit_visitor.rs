@@ -5,6 +5,7 @@
 
 use crate::{
     intrinsics::Intrinsic,
+    kani_middle::nonnull_pointee,
     kani_middle::transform::{
         body::{InsertPosition, MutableBody, SourceInstruction},
         check_uninit::{
@@ -14,20 +15,24 @@ use crate::{
         },
     },
 };
-use stable_mir::{
+use rustc_public::CrateDefType;
+use rustc_public::{
     mir::{
-        AggregateKind, CastKind, LocalDecl, MirVisitor, NonDivergingIntrinsic, Operand, Place,
-        PointerCoercion, ProjectionElem, Rvalue, Statement, StatementKind, Terminator,
-        TerminatorKind,
+        AggregateKind, BorrowKind, CastKind, Local, LocalDecl, MirVisitor, NonDivergingIntrinsic,
+        Operand, Place, PointerCoercion, ProjectionElem, RawPtrKind, Rvalue, Statement,
+        StatementKind, Terminator, TerminatorKind,
         alloc::GlobalAlloc,
         mono::{Instance, InstanceKind},
         visit::{Location, PlaceContext},
     },
-    ty::{AdtKind, ConstantKind, RigidTy, TyKind},
+    ty::{AdtKind, ConstantKind, RigidTy, Ty, TyConstKind, TyKind},
 };
+use std::collections::HashSet;
 
 pub struct CheckUninitVisitor {
     locals: Vec<LocalDecl>,
+    /// Locals that only ever hold a pointer read out of a `Box` (see `box_pointer_locals`).
+    box_pointers: HashSet<Local>,
     /// All target instructions in the body.
     targets: Vec<InitRelevantInstruction>,
     /// Current analysis target, eventually needs to be added to a list of all targets.
@@ -37,6 +42,7 @@ pub struct CheckUninitVisitor {
 impl TargetFinder for CheckUninitVisitor {
     fn find_all(mut self, body: &MutableBody) -> Vec<InitRelevantInstruction> {
         self.locals = body.locals().to_vec();
+        self.box_pointers = box_pointer_locals(body, &self.locals);
         for (bb_idx, bb) in body.blocks().iter().enumerate() {
             // Set the first target to start iterating from.
             self.current_target = if !bb.statements.is_empty() {
@@ -80,6 +86,7 @@ impl CheckUninitVisitor {
     pub fn new() -> Self {
         Self {
             locals: vec![],
+            box_pointers: HashSet::new(),
             targets: vec![],
             current_target: InitRelevantInstruction {
                 source: SourceInstruction::Statement { idx: 0, bb: 0 },
@@ -91,6 +98,13 @@ impl CheckUninitVisitor {
 
     fn push_target(&mut self, source_op: MemoryInitOp) {
         self.current_target.push_operation(source_op);
+    }
+
+    /// Whether `place` is a pointer read out of a `Box`: a field of a `Box`, or a local that only
+    /// ever holds one (MIR dereferences `*b` as `*(b.0 as *const T)`, possibly via a temporary).
+    fn is_inside_box(&self, place: &Place) -> bool {
+        (place.projection.is_empty() && self.box_pointers.contains(&place.local))
+            || is_inside_box(place, &self.locals)
     }
 }
 
@@ -111,6 +125,19 @@ impl MirVisitor for CheckUninitVisitor {
             StatementKind::Assign(place, rvalue) => {
                 // First check rvalue.
                 self.visit_rvalue(rvalue, location);
+
+                // Reading the metadata of a pointer to a trait object gives access to its vtable,
+                // e.g. to read its size and alignment. The vtable is constant data that the code
+                // generator emits, so mark its header initialized.
+                if let Rvalue::UnaryOp(rustc_public::mir::UnOp::PtrMetadata, operand) = rvalue
+                    && let Some(pointee) =
+                        operand.ty(&self.locals).unwrap().kind().builtin_deref(true)
+                    && pointee.ty.kind().is_trait()
+                {
+                    self.push_target(MemoryInitOp::SetVtable {
+                        metadata: Operand::Copy(place.clone()),
+                    });
+                }
 
                 // Preemptively check if we do not support computing the layout of a type because of
                 // inner union fields. This allows to inject `assert!(false)` early.
@@ -187,7 +214,7 @@ impl MirVisitor for CheckUninitVisitor {
                 // either a union or a field inside a union.
                 if is_inside_union {
                     match rvalue {
-                        Rvalue::Use(operand) => {
+                        Rvalue::Use(operand, _) => {
                             // This is a union-to-union assignment, so we need to copy the
                             // initialization state.
                             if place.ty(&self.locals).unwrap().kind().is_union() {
@@ -220,19 +247,10 @@ impl MirVisitor for CheckUninitVisitor {
                     }
                 }
             }
-            StatementKind::Deinit(place) => {
-                self.super_statement(stmt, location);
-                self.push_target(MemoryInitOp::Set {
-                    operand: Operand::Copy(place.clone()),
-                    value: false,
-                    position: InsertPosition::After,
-                });
-            }
             StatementKind::FakeRead(_, _)
             | StatementKind::SetDiscriminant { .. }
             | StatementKind::StorageLive(_)
             | StatementKind::StorageDead(_)
-            | StatementKind::Retag(_, _)
             | StatementKind::PlaceMention(_)
             | StatementKind::AscribeUserType { .. }
             | StatementKind::Coverage(_)
@@ -291,7 +309,6 @@ impl MirVisitor for CheckUninitVisitor {
                             | Intrinsic::AtomicMin
                             | Intrinsic::AtomicNand
                             | Intrinsic::AtomicOr
-                            | Intrinsic::AtomicStore
                             | Intrinsic::AtomicUmax
                             | Intrinsic::AtomicUmin
                             | Intrinsic::AtomicXadd
@@ -299,6 +316,25 @@ impl MirVisitor for CheckUninitVisitor {
                             | Intrinsic::AtomicXor
                             | Intrinsic::AtomicXsub => {
                                 self.push_target(MemoryInitOp::Check { operand: args[0].clone() });
+                            }
+                            Intrinsic::AtomicStore => {
+                                let is_volatile = matches!(
+                                    instance.args().0[2].expect_const().kind(),
+                                    TyConstKind::Value(_, allocation)
+                                        if allocation.read_bool().is_ok_and(|value| value)
+                                );
+                                // Preserve the existing check for non-volatile stores, which are
+                                // specified in terms of creating a reference with `from_ptr`.
+                                if !is_volatile {
+                                    self.push_target(MemoryInitOp::Check {
+                                        operand: args[0].clone(),
+                                    });
+                                }
+                                self.push_target(MemoryInitOp::Set {
+                                    operand: args[0].clone(),
+                                    value: true,
+                                    position: InsertPosition::After,
+                                });
                             }
                             Intrinsic::CompareBytes => {
                                 self.push_target(MemoryInitOp::CheckSliceChunk {
@@ -337,21 +373,28 @@ impl MirVisitor for CheckUninitVisitor {
                             Intrinsic::VolatileLoad | Intrinsic::UnalignedVolatileLoad => {
                                 self.push_target(MemoryInitOp::Check { operand: args[0].clone() });
                             }
-                            Intrinsic::VolatileStore => {
+                            Intrinsic::VolatileStore | Intrinsic::UnalignedVolatileStore => {
                                 self.push_target(MemoryInitOp::Set {
                                     operand: args[0].clone(),
                                     value: true,
                                     position: InsertPosition::After,
                                 });
                             }
-                            Intrinsic::WriteBytes => {
-                                self.push_target(MemoryInitOp::SetSliceChunk {
+                            // `volatile_set_memory(dst, val, count)` has the same shape and the
+                            // same memory-initialization effect as `write_bytes(dst, val, count)`;
+                            // volatility does not change which bytes become initialized.
+                            Intrinsic::WriteBytes | Intrinsic::VolatileSetMemory => self
+                                .push_target(MemoryInitOp::SetSliceChunk {
                                     operand: args[0].clone(),
                                     count: args[2].clone(),
                                     value: true,
                                     position: InsertPosition::After,
-                                })
-                            }
+                                }),
+                            // An intrinsic that Kani does not know, but whose fallback body it uses
+                            // (e.g. `integer_max`, new in nightly-2026-11-17), runs ordinary MIR,
+                            // which is instrumented like any other function: an ordinary call.
+                            Intrinsic::Unimplemented { .. }
+                                if !crate::intrinsics::uses_kani_model(&instance) => {}
                             intrinsic => {
                                 self.push_target(MemoryInitOp::Unsupported {
                                     reason: format!("Kani does not support reasoning about memory initialization of intrinsic `{intrinsic:?}`."),
@@ -377,7 +420,7 @@ impl MirVisitor for CheckUninitVisitor {
                                 "alloc::alloc::__rust_dealloc" => {
                                     /* Memory is uninitialized here, need to update shadow memory. */
                                     self.push_target(MemoryInitOp::SetSliceChunk {
-                                        operand: args[0].clone(),
+                                        operand: raw_ptr_arg(&args[0], self.locals.as_slice()),
                                         count: args[1].clone(),
                                         value: false,
                                         position: InsertPosition::After,
@@ -418,7 +461,7 @@ impl MirVisitor for CheckUninitVisitor {
                     .rigid()
                     .expect("should be working with monomorphized code")
                 {
-                    RigidTy::Adt(..) | RigidTy::Dynamic(_, _, _) => {
+                    RigidTy::Adt(..) | RigidTy::Dynamic(_, _) => {
                         self.push_target(MemoryInitOp::SetRef {
                             operand: Operand::Copy(place.clone()),
                             value: true,
@@ -456,11 +499,14 @@ impl MirVisitor for CheckUninitVisitor {
             match elem {
                 ProjectionElem::Deref => {
                     let ptr_ty = intermediate_place.ty(&self.locals).unwrap();
-                    if ptr_ty.kind().is_raw_ptr() {
+                    if ptr_ty.kind().is_raw_ptr() && !points_to_trait_object(ptr_ty) {
                         self.push_target(MemoryInitOp::Check {
                             operand: Operand::Copy(intermediate_place.clone()),
                         });
                     }
+                    // A place `*p` of a trait object type is never read: it is unsized, so it can
+                    // only be borrowed or have its address taken. Taking its address reads
+                    // nothing. Borrowing it is handled in `visit_rvalue`.
                 }
                 ProjectionElem::Field(_, _) => {
                     if intermediate_place.ty(&self.locals).unwrap().kind().is_union()
@@ -488,7 +534,6 @@ impl MirVisitor for CheckUninitVisitor {
                 }
                 ProjectionElem::Downcast(_) => {}
                 ProjectionElem::OpaqueCast(_) => {}
-                ProjectionElem::Subtype(_) => {}
             }
         }
         self.super_place(place, ptx, location)
@@ -515,15 +560,45 @@ impl MirVisitor for CheckUninitVisitor {
     }
 
     fn visit_rvalue(&mut self, rvalue: &Rvalue, location: Location) {
+        // A reference must point to a valid value, but the layout of the value behind a raw
+        // pointer to a trait object is only known from its vtable at run time, so its
+        // initialization cannot be checked here. Neither can the concrete method a call through
+        // the reference reaches, since Kani does not check reads through references.
+        // A `Box`, like a reference, points to a valid value; MIR dereferences it through the
+        // raw pointer inside it, so a raw pointer reached through a `Box` is exempt.
+        if let Rvalue::Ref(_, _, place) = rvalue
+            && let Some(ptr) = try_remove_topmost_deref(place)
+            && ptr.ty(&self.locals).unwrap().kind().is_raw_ptr()
+            && points_to_trait_object(ptr.ty(&self.locals).unwrap())
+            && !self.is_inside_box(&ptr)
+        {
+            self.push_target(MemoryInitOp::Unsupported {
+                reason: "Kani does not support checking the initialization of a reference to a \
+                         trait object created from a raw pointer."
+                    .to_string(),
+            });
+        }
         if let Rvalue::Cast(cast_kind, operand, ty) = rvalue {
             match cast_kind {
                 CastKind::PointerCoercion(PointerCoercion::Unsize) => {
+                    // Unsizing a reference to a sized value into a raw pointer to a trait object
+                    // creates a raw pointer to that value, whose type is still known here. Mark it
+                    // initialized with that type's layout, as for any raw pointer created from a
+                    // reference: a reference points to a valid value. Unsizing a raw pointer
+                    // creates no new pointee and must keep the pointee's state, initialized or
+                    // not; so does unsizing an already unsized pointer (e.g. trait upcasting).
                     if let TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) = ty.kind()
                         && pointee_ty.kind().is_trait()
+                        && let TyKind::RigidTy(RigidTy::Ref(_, source_ty, _)) =
+                            operand.ty(&self.locals).unwrap().kind()
+                        && !source_ty.kind().is_trait()
                     {
-                        self.push_target(MemoryInitOp::Unsupported {
-                                reason: "Kani does not support reasoning about memory initialization of unsized pointers.".to_string(),
-                            });
+                        self.push_target(MemoryInitOp::SetAs {
+                            operand: operand.clone(),
+                            pointee_ty: source_ty,
+                            value: true,
+                            position: InsertPosition::After,
+                        });
                     }
                 }
                 CastKind::Transmute => {
@@ -549,15 +624,17 @@ impl MirVisitor for CheckUninitVisitor {
                             });
                         }
                     } else if let (
-                        TyKind::RigidTy(RigidTy::RawPtr(from_ty, _)),
+                        TyKind::RigidTy(RigidTy::RawPtr(..)),
                         TyKind::RigidTy(RigidTy::Ref(_, to_ty, _)),
                     ) = (operand_ty.kind(), ty.kind())
                     {
-                        // Assert that we can only cast this way if types are the same.
-                        assert!(from_ty == to_ty);
                         // When transmuting from a raw pointer to a reference, need to check that
-                        // the value pointed by the raw pointer is initialized.
-                        self.push_target(MemoryInitOp::Check { operand: operand.clone() });
+                        // the value the reference points to is initialized. That is a `to_ty`,
+                        // whatever the pointer pointed to before.
+                        self.push_target(MemoryInitOp::CheckAs {
+                            operand: operand.clone(),
+                            pointee_ty: to_ty,
+                        });
                     }
                 }
                 _ => {}
@@ -599,6 +676,8 @@ fn can_skip_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::Exp2F64
         | Intrinsic::ExpF32
         | Intrinsic::ExpF64
+        | Intrinsic::FabsF128
+        | Intrinsic::FabsF16
         | Intrinsic::FabsF32
         | Intrinsic::FabsF64
         | Intrinsic::FaddFast
@@ -663,6 +742,9 @@ fn can_skip_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::SimdAnd
         | Intrinsic::SimdDiv
         | Intrinsic::SimdRem
+        | Intrinsic::SimdReduceAll
+        | Intrinsic::SimdReduceMax
+        | Intrinsic::SimdReduceMin
         | Intrinsic::SimdEq
         | Intrinsic::SimdExtract
         | Intrinsic::SimdGe
@@ -676,6 +758,7 @@ fn can_skip_intrinsic(intrinsic: Intrinsic) -> bool {
         | Intrinsic::SimdShl
         | Intrinsic::SimdShr
         | Intrinsic::SimdShuffle(_)
+        | Intrinsic::SimdSplat
         | Intrinsic::SimdSub
         | Intrinsic::SimdXor => {
             /* SIMD operations */
@@ -693,6 +776,51 @@ fn can_skip_intrinsic(intrinsic: Intrinsic) -> bool {
 }
 
 /// Try removing a topmost deref projection from a place if it exists, returning a place without it.
+/// Whether `place` is a field of a `Box`, e.g. `b.0`.
+fn is_inside_box(place: &Place, locals: &[LocalDecl]) -> bool {
+    (0..place.projection.len()).any(|len| {
+        let prefix = Place { local: place.local, projection: place.projection[..len].to_vec() };
+        prefix.ty(locals).unwrap().kind().is_box()
+    })
+}
+
+/// Locals of `body` that only ever hold a pointer read out of a `Box`: every assignment to them
+/// copies or casts a field of a `Box`, and they are never borrowed mutably or written through a
+/// projection.
+fn box_pointer_locals(body: &MutableBody, locals: &[LocalDecl]) -> HashSet<Local> {
+    let mut candidates = HashSet::new();
+    let mut disqualified = HashSet::new();
+    for bb in body.blocks() {
+        for stmt in &bb.statements {
+            let StatementKind::Assign(place, rvalue) = &stmt.kind else { continue };
+            let from_box = match rvalue {
+                Rvalue::Use(Operand::Copy(src) | Operand::Move(src), _)
+                | Rvalue::Cast(_, Operand::Copy(src) | Operand::Move(src), _) => {
+                    is_inside_box(src, locals)
+                }
+                _ => false,
+            };
+            if place.projection.is_empty() && from_box {
+                candidates.insert(place.local);
+            } else {
+                disqualified.insert(place.local);
+            }
+            if let Rvalue::Ref(_, BorrowKind::Mut { .. }, borrowed)
+            | Rvalue::AddressOf(RawPtrKind::Mut, borrowed) = rvalue
+            {
+                disqualified.insert(borrowed.local);
+            }
+        }
+    }
+    candidates.retain(|local| !disqualified.contains(local));
+    candidates
+}
+
+/// Whether `ptr_ty` is a pointer or reference to a trait object.
+fn points_to_trait_object(ptr_ty: Ty) -> bool {
+    ptr_ty.kind().builtin_deref(true).is_some_and(|pointee| pointee.ty.kind().is_trait())
+}
+
 fn try_remove_topmost_deref(place: &Place) -> Option<Place> {
     let mut new_place = place.clone();
     if let Some(ProjectionElem::Deref) = new_place.projection.pop() {
@@ -710,5 +838,51 @@ fn try_resolve_instance(locals: &[LocalDecl], func: &Operand) -> Result<Instance
         _ => Err(format!(
             "Kani was not able to resolve the instance of the function operand `{ty:?}`. Currently, memory initialization checks in presence of function pointers and vtable calls are not supported. For more information about planned support, see https://github.com/model-checking/kani/issues/3300."
         )),
+    }
+}
+
+/// The pointer argument of an allocation shim, as a raw pointer.
+///
+/// These shims take `NonNull<u8>` as of nightly-2026-03-21, where they previously took `*mut u8`.
+/// `NonNull<T>` holds the address in a single field, which as of nightly-2026-05-01 is a
+/// `pattern_type!(*const T is !null)` rather than a bare `*const T`. Project through those
+/// single-field wrappers until the raw pointer is reached, so that the shadow-memory models see the
+/// same address with the pointer type they expect. Operands that are already raw pointers, and any
+/// shape we cannot project all the way down to a pointer, are passed through unchanged.
+fn raw_ptr_arg(arg: &Operand, locals: &[LocalDecl]) -> Operand {
+    let Ok(arg_ty) = arg.ty(locals) else { return arg.clone() };
+    if nonnull_pointee(arg_ty).is_none() {
+        return arg.clone();
+    }
+    let place = match arg {
+        Operand::Copy(place) | Operand::Move(place) => place,
+        Operand::Constant(_) | Operand::RuntimeChecks(_) => return arg.clone(),
+    };
+    let mut projection = place.projection.clone();
+    let mut curr_ty = arg_ty;
+    while !curr_ty.kind().is_raw_ptr() {
+        let Some(field_ty) = single_field_ty(curr_ty) else { return arg.clone() };
+        projection.push(ProjectionElem::Field(0, field_ty));
+        curr_ty = field_ty;
+    }
+    Operand::Copy(Place { local: place.local, projection })
+}
+
+/// The type held by `ty`'s only field, if `ty` is a single-field wrapper.
+///
+/// This sees through both structs with exactly one field (such as `NonNull`) and pattern types,
+/// which hold the type they constrain in a single tuple-like field.
+fn single_field_ty(ty: Ty) -> Option<Ty> {
+    match ty.kind() {
+        TyKind::RigidTy(RigidTy::Adt(def, args)) => {
+            let variant = def.variants_iter().next()?;
+            let fields = variant.fields();
+            if fields.len() != 1 {
+                return None;
+            }
+            Some(fields[0].ty_with_args(&args))
+        }
+        TyKind::RigidTy(RigidTy::Pat(base_ty, _)) => Some(base_ty),
+        _ => None,
     }
 }

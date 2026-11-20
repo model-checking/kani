@@ -8,9 +8,10 @@
 //! the call-graph could be reused by different analysis.
 
 use crate::analysis::{FnCallVisitor, FnUnsafeOperations, OverallStats};
-use stable_mir::mir::{MirVisitor, Safety};
-use stable_mir::ty::{FnDef, RigidTy, Ty, TyKind};
-use stable_mir::{CrateDef, CrateDefType};
+use rustc_middle::ty::TyCtxt;
+use rustc_public::mir::{MirVisitor, Safety};
+use rustc_public::ty::{FnDef, RigidTy, Ty, TyKind};
+use rustc_public::{CrateDef, CrateDefType};
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
 use std::hash::{Hash, Hasher};
@@ -23,10 +24,12 @@ impl OverallStats {
     /// - 0 if this function contains unsafe code (including invoking unsafe fns).
     /// - 1 if this function calls a safe abstraction.
     /// - 2+ if this function calls other functions that call safe abstractions.
-    pub fn unsafe_distance(&mut self, filename: PathBuf) {
-        let all_items = stable_mir::all_local_items();
-        let mut queue =
-            all_items.into_iter().filter_map(|item| Node::try_new(item.ty())).collect::<Vec<_>>();
+    pub fn unsafe_distance(&mut self, filename: PathBuf, tcx: &TyCtxt) {
+        let all_items = rustc_public::all_local_items();
+        let mut queue = all_items
+            .into_iter()
+            .filter_map(|item| Node::try_new(item.ty(), tcx))
+            .collect::<Vec<_>>();
         // Build call graph
         let mut call_graph = CallGraph::default();
         while let Some(node) = queue.pop() {
@@ -37,7 +40,7 @@ impl OverallStats {
                 };
                 let mut visitor = FnCallVisitor { body: &body, fns: vec![] };
                 visitor.visit_body(&body);
-                queue.extend(visitor.fns.iter().map(|def| Node::try_new(def.ty()).unwrap()));
+                queue.extend(visitor.fns.iter().map(|def| Node::try_new(def.ty(), tcx).unwrap()));
                 for callee in &visitor.fns {
                     call_graph.rev_edges.entry(*callee).or_default().push(node.def)
                 }
@@ -61,10 +64,12 @@ impl OverallStats {
                 }
             }
         }
-        let krate = stable_mir::local_crate();
+        let krate = rustc_public::local_crate();
         let transitive_unsafe = visited
             .into_iter()
-            .filter_map(|(def, distance)| (def.krate() == krate).then_some((def.name(), distance)))
+            .filter_map(|(def, distance)| {
+                (def.krate() == krate).then_some((crate::item_name(&def), distance))
+            })
             .collect::<Vec<_>>();
         self.counters.push(("transitive_unsafe", transitive_unsafe.len()));
         crate::analysis::dump_csv(filename, &transitive_unsafe);
@@ -79,13 +84,13 @@ struct Node {
 }
 
 impl Node {
-    fn try_new(ty: Ty) -> Option<Node> {
+    fn try_new(ty: Ty, tcx: &TyCtxt) -> Option<Node> {
         let kind = ty.kind();
         let TyKind::RigidTy(RigidTy::FnDef(def, _)) = kind else {
             return None;
         };
         let has_unsafe = if let Some(body) = def.body() {
-            let unsafe_ops = FnUnsafeOperations::new(def.name()).collect(&body);
+            let unsafe_ops = FnUnsafeOperations::new(crate::item_name(&def)).collect(&body, tcx);
             unsafe_ops.has_unsafe()
         } else {
             true

@@ -4,19 +4,42 @@
 //! This file contains functions related to codegenning MIR functions into gotoc
 
 use crate::codegen_cprover_gotoc::GotocCtx;
-use crate::codegen_cprover_gotoc::codegen::block::reverse_postorder;
+use crate::codegen_cprover_gotoc::codegen::block::{loop_heads, reverse_postorder};
+use crate::kani_middle::attributes::KaniAttributes;
+use crate::kani_middle::readable_name;
 use cbmc::InternString;
 use cbmc::InternedString;
 use cbmc::goto_program::{Expr, Stmt, Symbol};
-use stable_mir::CrateDef;
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::{Body, Local};
-use stable_mir::ty::{RigidTy, TyKind};
+use rustc_public::CrateDef;
+use rustc_public::mir::mono::Instance;
+use rustc_public::mir::{BasicBlockIdx, Body, Local, TerminatorKind};
+use rustc_public::ty::{RigidTy, TyKind};
 use std::collections::BTreeMap;
 use tracing::{debug, debug_span};
 
 /// Codegen MIR functions into gotoc
-impl GotocCtx<'_> {
+impl GotocCtx<'_, '_> {
+    /// The heads of the loops of `body` with a loop invariant, i.e. the targets of the calls to
+    /// the functions that register loop contracts (see `LoopInvariantRegister`).
+    fn loop_contract_heads(&self, body: &Body) -> Vec<BasicBlockIdx> {
+        body.blocks
+            .iter()
+            .filter_map(|block| match &block.terminator.kind {
+                TerminatorKind::Call { func, target: Some(target), .. } => {
+                    let TyKind::RigidTy(RigidTy::FnDef(def, _)) =
+                        func.ty(body.locals()).ok()?.kind()
+                    else {
+                        return None;
+                    };
+                    (KaniAttributes::for_def_id(self.tcx, def.def_id()).fn_marker()
+                        == Some(rustc_span::Symbol::intern("kani_register_loop_contract")))
+                    .then_some(*target)
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
     /// Declare variables according to their index.
     /// - Index 0 represents the return value.
     /// - Indices [1, N] represent the function parameters where N is the number of parameters.
@@ -32,7 +55,13 @@ impl GotocCtx<'_> {
             }
             let base_name = self.codegen_var_base_name(&lc);
             let name = self.codegen_var_name(&lc);
-            let var_type = self.codegen_ty_stable(ldata.ty);
+            // Unsized-by-value arguments (`unsized_fn_params`) are represented as fat pointers,
+            // consistent with `fn_typ` and `codegen_local`.
+            let var_type = if self.is_unsized_by_value_arg(lc) {
+                self.codegen_ty_ref_stable(ldata.ty)
+            } else {
+                self.codegen_ty_stable(ldata.ty)
+            };
             let loc = self.codegen_span_stable(ldata.span);
             // Indices [1, N] represent the function parameters where N is the number of parameters.
             // Except that ZST fields are not included as parameters.
@@ -71,6 +100,13 @@ impl GotocCtx<'_> {
             debug!("Double codegen of {:?}", old_sym);
         } else {
             assert!(old_sym.is_function());
+            if self.is_unsupported_variadic(instance) {
+                // Kani cannot model such a function (c.f. `is_unsupported_variadic`), and CBMC
+                // cannot convert a body whose parameters it has no symbols for, so leave the
+                // symbol a declaration. Calls to it are replaced by an unsupported-construct
+                // stub, so the missing body is never reached.
+                return;
+            }
             let body = self.transformer.body(self.tcx, instance);
             self.set_current_fn(instance, &body);
             self.print_instance(instance, &body);
@@ -78,7 +114,23 @@ impl GotocCtx<'_> {
             self.codegen_declare_variables(&body, name.clone().into());
 
             // Get the order from internal body for now.
-            reverse_postorder(&body).for_each(|bb| self.codegen_block(bb, &body.blocks[bb]));
+            let blocks: Vec<_> = reverse_postorder(&body).collect();
+            if self.queries.args().unstable_features.iter().any(|arg| arg == "loop-contracts")
+                && body.var_debug_info.iter().any(|info| info.name == "kani_loop_decreases")
+            {
+                // Used to attach decreases clauses to their loops. The head of a loop with a loop
+                // invariant has no back edge if the body of the loop always exits.
+                let mut heads = loop_heads(&body, &blocks);
+                heads.extend(self.loop_contract_heads(&body));
+                self.current_fn_mut().loop_decreases_mut().loop_heads = heads;
+            }
+            blocks.into_iter().for_each(|bb| self.codegen_block(bb, &body.blocks[bb]));
+            // Report the decreases clauses that were not attached to a loop, e.g. the clause of a
+            // loop without a loop invariant.
+            let clauses = std::mem::take(self.current_fn_mut().loop_decreases_mut());
+            for decreases in clauses.pending.into_iter().chain(clauses.by_head.into_values()) {
+                self.report_ignored_loop_decreases(decreases.span);
+            }
 
             let loc = self.codegen_span_stable(instance.def.span());
             let stmts = self.current_fn_mut().extract_block();
@@ -220,7 +272,7 @@ impl GotocCtx<'_> {
             &fname,
             self.fn_typ(instance, &body),
             None,
-            instance.name(),
+            readable_name(instance),
             self.codegen_span_stable(instance.def.span()),
         );
         if !self.symbol_table.contains((&fname).into()) {
@@ -235,17 +287,17 @@ impl GotocCtx<'_> {
     }
 }
 
-pub mod rustc_smir {
+pub mod rustc_public_bridge {
     use crate::codegen_cprover_gotoc::codegen::source_region::{SourceRegion, make_source_region};
-    use crate::stable_mir::CrateDef;
+    use crate::rustc_public::CrateDef;
     use rustc_middle::mir::coverage::BasicCoverageBlock;
     use rustc_middle::mir::coverage::MappingKind::Code;
     use rustc_middle::ty::TyCtxt;
-    use stable_mir::mir::mono::Instance;
-    use stable_mir::rustc_internal;
-    use stable_mir::{Filename, Opaque};
+    use rustc_public::mir::mono::Instance;
+    use rustc_public::rustc_internal;
+    use rustc_public::{Filename, Opaque};
 
-    type CoverageOpaque = stable_mir::Opaque;
+    type CoverageOpaque = rustc_public::Opaque;
 
     /// Retrieves the `SourceRegion` associated with the data in a
     /// `CoverageOpaque` object.
@@ -290,7 +342,7 @@ pub mod rustc_smir {
         let filename = rustc_internal::stable(body.span).get_filename();
         // Some functions, like `std` ones, may not have coverage info attached
         // to them because they have been compiled without coverage flags.
-        if let Some(cov_info) = &body.function_coverage_info {
+        if let Some(cov_info) = &body.coverage_mir_info {
             // Iterate over the coverage mappings and match with the coverage term.
             let mut source_regions: Vec<SourceRegion> = Vec::new();
             for mapping in &cov_info.mappings {

@@ -203,6 +203,7 @@ pub enum BinaryOperator {
     Bitxor,
     Div,
     Equal,
+    FloatbvMod,
     FloatbvRoundToIntegral,
     Ge,
     Gt,
@@ -262,6 +263,10 @@ pub enum UnaryOperator {
     IsDynamicObject,
     /// `isfinite(self)`
     IsFinite,
+    /// `isinf(self)`
+    IsInf,
+    /// `isnan(self)`
+    IsNan,
     /// `!self`
     Not,
     /// `__CPROVER_OBJECT_SIZE(self)`
@@ -349,11 +354,220 @@ impl Expr {
 
 /// Predicates
 impl Expr {
+    /// Replace all occurrences of `Symbol { identifier: old_id }` with `replacement`.
+    /// Returns `(new_expr, changed)` where `changed` indicates if any substitution occurred.
+    ///
+    /// Note: Does NOT recurse into `StatementExpression` nodes. These must be
+    /// flattened first via `inline_as_pure_expr` before substitution.
+    pub fn substitute_symbol(self, old_id: &InternedString, replacement: &Expr) -> (Expr, bool) {
+        self.substitute_symbol_inner(old_id, replacement, None)
+    }
+
+    /// Substitute a captured environment without taking addresses of struct rvalues.
+    /// Reduce type-correct `*(&value)` and struct projections with safely elidable fields.
+    pub fn substitute_quantifier_capture(
+        self,
+        old_id: &InternedString,
+        replacement: &Expr,
+        symbol_table: &SymbolTable,
+    ) -> (Expr, bool) {
+        self.substitute_symbol_inner(old_id, replacement, Some(symbol_table))
+    }
+
+    fn substitute_symbol_inner(
+        self,
+        old_id: &InternedString,
+        replacement: &Expr,
+        projection: Option<&SymbolTable>,
+    ) -> (Expr, bool) {
+        let loc = self.location;
+        let typ = self.typ.clone();
+        let ann = self.size_of_annotation.clone();
+        let mk = |value: ExprValue| Expr {
+            value: Box::new(value),
+            typ: typ.clone(),
+            location: loc,
+            size_of_annotation: ann.clone(),
+        };
+        let sub = |e: Expr| e.substitute_symbol_inner(old_id, replacement, projection);
+        let sub_vec = |v: Vec<Expr>| -> (Vec<Expr>, bool) {
+            let mut changed = false;
+            let v: Vec<_> = v
+                .into_iter()
+                .map(|e| {
+                    let (e, c) = sub(e);
+                    changed |= c;
+                    e
+                })
+                .collect();
+            (v, changed)
+        };
+
+        match *self.value {
+            ExprValue::Symbol { identifier } if identifier == *old_id => {
+                (replacement.clone().with_location(loc), true)
+            }
+            ExprValue::AddressOf(e) => {
+                let (e, c) = sub(e);
+                (mk(AddressOf(e)), c)
+            }
+            ExprValue::Dereference(e) => {
+                let (e, c) = sub(e);
+                if c && projection.is_some()
+                    && let AddressOf(value) = e.value()
+                    && value.typ() == &typ
+                {
+                    return (value.clone().with_location(loc), true);
+                }
+                (mk(Dereference(e)), c)
+            }
+            ExprValue::Typecast(e) => {
+                let (e, c) = sub(e);
+                (mk(Typecast(e)), c)
+            }
+            ExprValue::UnOp { op, e } => {
+                let (e, c) = sub(e);
+                (mk(UnOp { op, e }), c)
+            }
+            ExprValue::BinOp { op, lhs, rhs } => {
+                let (l, c1) = sub(lhs);
+                let (r, c2) = sub(rhs);
+                (mk(BinOp { op, lhs: l, rhs: r }), c1 || c2)
+            }
+            ExprValue::If { c, t, e } => {
+                let (c, c1) = sub(c);
+                let (t, c2) = sub(t);
+                let (e, c3) = sub(e);
+                (mk(If { c, t, e }), c1 || c2 || c3)
+            }
+            ExprValue::Index { array, index } => {
+                let (a, c1) = sub(array);
+                let (i, c2) = sub(index);
+                (mk(Index { array: a, index: i }), c1 || c2)
+            }
+            ExprValue::Member { lhs, field } => {
+                let (l, c) = sub(lhs);
+                if c && let Some(symbol_table) = projection
+                    && let Struct { values } = l.value()
+                    && let Some(fields) = l.typ().lookup_components(symbol_table)
+                    && fields.len() == values.len()
+                    // A semantic field read cannot observe nondeterministic padding.
+                    && fields.iter().zip(values).all(|(component, value)| {
+                        (component.is_padding() && matches!(value.value(), Nondet))
+                            || value.can_elide_evaluation()
+                    })
+                    && let Some(index) =
+                        fields.iter().position(|component| !component.is_padding() && component.name() == field)
+                    && values[index].typ() == &typ
+                {
+                    return (values[index].clone().with_location(loc), true);
+                }
+                (mk(Member { lhs: l, field }), c)
+            }
+            ExprValue::FunctionCall { function, arguments } => {
+                let (f, c1) = sub(function);
+                let (a, c2) = sub_vec(arguments);
+                (mk(FunctionCall { function: f, arguments: a }), c1 || c2)
+            }
+            ExprValue::Array { elems } => {
+                let (e, c) = sub_vec(elems);
+                (mk(Array { elems: e }), c)
+            }
+            ExprValue::Struct { values } => {
+                let (v, c) = sub_vec(values);
+                (mk(Struct { values: v }), c)
+            }
+            ExprValue::Assign { left, right } => {
+                let (l, c1) = sub(left);
+                let (r, c2) = sub(right);
+                (mk(Assign { left: l, right: r }), c1 || c2)
+            }
+            ExprValue::ReadOk { ptr, size } => {
+                let (p, c1) = sub(ptr);
+                let (s, c2) = sub(size);
+                (mk(ReadOk { ptr: p, size: s }), c1 || c2)
+            }
+            ExprValue::ArrayOf { elem } => {
+                let (e, c) = sub(elem);
+                (mk(ArrayOf { elem: e }), c)
+            }
+            ExprValue::ByteExtract { e, offset } => {
+                let (e, c) = sub(e);
+                (mk(ByteExtract { e, offset }), c)
+            }
+            ExprValue::SelfOp { op, e } => {
+                let (e, c) = sub(e);
+                (mk(SelfOp { op, e }), c)
+            }
+            ExprValue::Union { value, field } => {
+                let (v, c) = sub(value);
+                (mk(Union { value: v, field }), c)
+            }
+            ExprValue::Forall { variable, domain } => {
+                let (v, c1) = sub(variable);
+                let (d, c2) = sub(domain);
+                (mk(Forall { variable: v, domain: d }), c1 || c2)
+            }
+            ExprValue::Exists { variable, domain } => {
+                let (v, c1) = sub(variable);
+                let (d, c2) = sub(domain);
+                (mk(Exists { variable: v, domain: d }), c1 || c2)
+            }
+            ExprValue::Vector { elems } => {
+                let (e, c) = sub_vec(elems);
+                (mk(Vector { elems: e }), c)
+            }
+            ExprValue::ShuffleVector { vector1, vector2, indexes } => {
+                let (v1, c1) = sub(vector1);
+                let (v2, c2) = sub(vector2);
+                let (ix, c3) = sub_vec(indexes);
+                (mk(ShuffleVector { vector1: v1, vector2: v2, indexes: ix }), c1 || c2 || c3)
+            }
+            // Leaf nodes — no substitution possible
+            ExprValue::Symbol { .. }
+            | ExprValue::IntConstant(_)
+            | ExprValue::BoolConstant(_)
+            | ExprValue::CBoolConstant(_)
+            | ExprValue::DoubleConstant(_)
+            | ExprValue::FloatConstant(_)
+            | ExprValue::Float16Constant(_)
+            | ExprValue::Float128Constant(_)
+            | ExprValue::PointerConstant(_)
+            | ExprValue::StringConstant { .. }
+            | ExprValue::Nondet
+            | ExprValue::EmptyUnion => (self, false),
+            // StatementExpression: not recursed into — must be flattened via
+            // inline_as_pure_expr before substitution.
+            ExprValue::StatementExpression { .. } => (self, false),
+        }
+    }
+
     pub fn is_int_constant(&self) -> bool {
         match *self.value {
             IntConstant(_) => true,
             _ => false,
         }
+    }
+
+    // Symbols and their struct fields read values whose evaluation has already occurred.
+    // Pointer reads, union projections, and computations need separate safety checks.
+    fn can_elide_evaluation(&self) -> bool {
+        if let Member { lhs, .. } = self.value() {
+            return lhs.typ().is_struct_tag() && lhs.can_elide_evaluation();
+        }
+        matches!(
+            self.value(),
+            Symbol { .. }
+                | IntConstant(_)
+                | BoolConstant(_)
+                | CBoolConstant(_)
+                | DoubleConstant(_)
+                | FloatConstant(_)
+                | Float16Constant(_)
+                | Float128Constant(_)
+                | PointerConstant(_)
+                | StringConstant { .. }
+        )
     }
 
     /// Returns whether an expression causes side effects or not
@@ -373,9 +587,13 @@ impl Expr {
             BinOp { op: _, lhs, rhs } => lhs.is_side_effect() || rhs.is_side_effect(),
             ByteExtract { e, offset: _ } => e.is_side_effect(),
             Dereference(e) => e.is_side_effect(),
+            Forall { variable, domain } | Exists { variable, domain } => {
+                variable.is_side_effect() || domain.is_side_effect()
+            }
             If { c, t, e } => c.is_side_effect() || t.is_side_effect() || e.is_side_effect(),
             Index { array, index } => array.is_side_effect() || index.is_side_effect(),
             Member { lhs, field: _ } => lhs.is_side_effect(),
+            ReadOk { ptr, size } => ptr.is_side_effect() || size.is_side_effect(),
             ShuffleVector { vector1, vector2, indexes } => {
                 vector1.is_side_effect()
                     || vector2.is_side_effect()
@@ -386,8 +604,17 @@ impl Expr {
             Union { value, field: _ } => value.is_side_effect(),
             UnOp { op: _, e } => e.is_side_effect(),
             Vector { elems } => elems.iter().any(|e| e.is_side_effect()),
-            // The rest of expressions (constants) do not cause side effects
-            _ => false,
+            Symbol { .. }
+            | IntConstant(_)
+            | BoolConstant(_)
+            | CBoolConstant(_)
+            | DoubleConstant(_)
+            | FloatConstant(_)
+            | Float16Constant(_)
+            | Float128Constant(_)
+            | PointerConstant(_)
+            | StringConstant { .. }
+            | EmptyUnion => false,
         }
     }
 
@@ -1029,7 +1256,8 @@ impl Expr {
                     || (lhs.typ.is_pointer() && rhs.typ.is_integer())
             }
             // Arithmetic
-            Div | Mod | Mult => lhs.typ == rhs.typ && (lhs.typ.is_numeric() || lhs.typ.is_vector()),
+            Div | Mult => lhs.typ == rhs.typ && (lhs.typ.is_numeric() || lhs.typ.is_vector()),
+            Mod => lhs.typ == rhs.typ && (lhs.typ.is_integer() || lhs.typ.is_vector()),
             // Bitshifts
             Ashr | Lshr | Shl => {
                 lhs.typ.is_integer() && rhs.typ.is_integer()
@@ -1071,6 +1299,7 @@ impl Expr {
                     "vector comparison operators must be typechecked by `typecheck_vector_cmp_expr`"
                 )
             }
+            FloatbvMod => lhs.typ == rhs.typ && lhs.typ.is_floating_point(),
             FloatbvRoundToIntegral => lhs.typ.is_floating_point() && rhs.typ.is_integer(),
         }
     }
@@ -1086,7 +1315,7 @@ impl Expr {
                 }
             }
             // Arithmetic
-            Div | Mod | Mult | Plus => lhs.typ.clone(),
+            Div | FloatbvMod | Mod | Mult | Plus => lhs.typ.clone(),
             // Bitshifts
             Ashr | Lshr | Rol | Ror | Shl => lhs.typ.clone(),
             // Boolean ops
@@ -1181,9 +1410,12 @@ impl Expr {
         self.binop(Div, e)
     }
 
-    /// `self % e`
+    /// `self % e`. For floating-point types, emits CBMC's `floatbv_mod` which
+    /// implements C `fmod` semantics (matching Rust's `%` on floats via LLVM `frem`).
+    /// Unlike other `floatbv_*` ops, `floatbv_mod` does not take a rounding mode
+    /// parameter — the result is exact per IEEE 754.
     pub fn rem(self, e: Expr) -> Expr {
-        self.binop(Mod, e)
+        if self.typ().is_floating_point() { self.binop(FloatbvMod, e) } else { self.binop(Mod, e) }
     }
 
     /// `self && e`
@@ -1402,7 +1634,7 @@ impl Expr {
             Bitnot | BitReverse | Bswap | Popcount => arg.typ.is_integer(),
             CountLeadingZeros { .. } | CountTrailingZeros { .. } => arg.typ.is_integer(),
             IsDynamicObject | ObjectSize | PointerObject => arg.typ().is_pointer(),
-            IsFinite => arg.typ().is_floating_point(),
+            IsFinite | IsInf | IsNan => arg.typ().is_floating_point(),
             PointerOffset => arg.typ == Type::void_pointer(),
             Not => arg.typ.is_bool(),
             UnaryMinus => arg.typ().is_numeric(),
@@ -1415,7 +1647,7 @@ impl Expr {
             CountLeadingZeros { .. } | CountTrailingZeros { .. } => Type::unsigned_int(32),
             ObjectSize | PointerObject => Type::size_t(),
             PointerOffset => Type::ssize_t(),
-            IsDynamicObject | IsFinite | Not => Type::bool(),
+            IsDynamicObject | IsFinite | IsInf | IsNan | Not => Type::bool(),
             Popcount => Type::unsigned_int(32),
         }
     }
@@ -1449,6 +1681,16 @@ impl Expr {
     /// `isfinite(self)`
     pub fn is_finite(self) -> Self {
         self.unop(IsFinite)
+    }
+
+    /// `isinf(self)`
+    pub fn is_inf(self) -> Self {
+        self.unop(IsInf)
+    }
+
+    /// `isnan(self)`
+    pub fn is_nan(self) -> Self {
+        self.unop(IsNan)
     }
 
     /// `-self`
@@ -1687,11 +1929,6 @@ impl Expr {
         Stmt::assign(self, rhs, loc)
     }
 
-    /// Shorthand to build a `Deinit(self)` statement. See `StmtBody::Deinit`
-    pub fn deinit(self, loc: Location) -> Stmt {
-        Stmt::deinit(self, loc)
-    }
-
     /// `if (self) { t } else { e }` or `if (self) { t }`
     pub fn if_then_else(self, t: Stmt, e: Option<Stmt>, loc: Location) -> Stmt {
         Stmt::if_then_else(self, t, e, loc)
@@ -1751,5 +1988,233 @@ impl Expr {
             }
         }
         exprs
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sym(name: &str) -> Expr {
+        Expr::symbol_expression(name, Type::signed_int(32))
+    }
+
+    fn int(val: i64) -> Expr {
+        Expr::int_constant(val, Type::signed_int(32))
+    }
+
+    #[test]
+    fn substitute_symbol_leaf_match() {
+        let old: InternedString = "x".into();
+        let replacement = int(42);
+        let (result, _changed) = sym("x").substitute_symbol(&old, &replacement);
+        assert!(matches!(result.value(), ExprValue::IntConstant(v) if *v == 42.into()));
+    }
+
+    #[test]
+    fn substitute_symbol_leaf_no_match() {
+        let old: InternedString = "x".into();
+        let replacement = int(42);
+        let (result, _changed) = sym("y").substitute_symbol(&old, &replacement);
+        assert!(matches!(result.value(), ExprValue::Symbol { identifier } if *identifier == "y"));
+    }
+
+    #[test]
+    fn substitute_symbol_in_binop() {
+        let old: InternedString = "x".into();
+        let replacement = int(10);
+        // x + 1 → 10 + 1
+        let expr = sym("x").plus(int(1));
+        let (result, _changed) = expr.substitute_symbol(&old, &replacement);
+        if let ExprValue::BinOp { lhs, rhs, .. } = result.value() {
+            assert!(matches!(lhs.value(), ExprValue::IntConstant(v) if *v == 10.into()));
+            assert!(matches!(rhs.value(), ExprValue::IntConstant(v) if *v == 1.into()));
+        } else {
+            panic!("Expected BinOp");
+        }
+    }
+
+    #[test]
+    fn substitute_symbol_nested() {
+        let old: InternedString = "x".into();
+        let replacement = int(5);
+        // (x + x) * 2 → (5 + 5) * 2
+        let expr = sym("x").plus(sym("x")).mul(int(2));
+        let (result, _changed) = expr.substitute_symbol(&old, &replacement);
+        if let ExprValue::BinOp { lhs, .. } = result.value() {
+            if let ExprValue::BinOp { lhs: ll, rhs: lr, .. } = lhs.value() {
+                assert!(matches!(ll.value(), ExprValue::IntConstant(v) if *v == 5.into()));
+                assert!(matches!(lr.value(), ExprValue::IntConstant(v) if *v == 5.into()));
+            } else {
+                panic!("Expected inner BinOp");
+            }
+        } else {
+            panic!("Expected outer BinOp");
+        }
+    }
+
+    #[test]
+    fn substitute_symbol_in_typecast() {
+        let old: InternedString = "x".into();
+        let replacement = int(7);
+        let expr = sym("x").cast_to(Type::signed_int(64));
+        let (result, _changed) = expr.substitute_symbol(&old, &replacement);
+        if let ExprValue::Typecast(inner) = result.value() {
+            assert!(matches!(inner.value(), ExprValue::IntConstant(v) if *v == 7.into()));
+        } else {
+            panic!("Expected Typecast");
+        }
+    }
+
+    #[test]
+    fn substitute_preserves_unrelated_symbols() {
+        let old: InternedString = "x".into();
+        let replacement = int(1);
+        // y + x → y + 1
+        let expr = sym("y").plus(sym("x"));
+        let (result, _changed) = expr.substitute_symbol(&old, &replacement);
+        if let ExprValue::BinOp { lhs, rhs, .. } = result.value() {
+            assert!(matches!(lhs.value(), ExprValue::Symbol { identifier } if *identifier == "y"));
+            assert!(matches!(rhs.value(), ExprValue::IntConstant(v) if *v == 1.into()));
+        } else {
+            panic!("Expected BinOp");
+        }
+    }
+
+    fn capture_table() -> (SymbolTable, Type) {
+        use super::super::Symbol;
+        use crate::machine_model::test_util::machine_model_test_stub;
+        let mut table = SymbolTable::new(machine_model_test_stub());
+        let typ = Type::struct_type(
+            "Capture",
+            vec![
+                DatatypeComponent::field("enabled", Type::bool()),
+                DatatypeComponent::padding("pad", 7),
+                DatatypeComponent::field("index", Type::signed_int(32)),
+            ],
+        );
+        table.ensure(typ.type_name().unwrap(), |_, name| {
+            Symbol::variable(name, name, typ, Location::none())
+        });
+        (table, Type::struct_tag("Capture"))
+    }
+
+    #[test]
+    fn quantifier_capture_projects_padded_environment() {
+        let (table, typ) = capture_table();
+        let closure = Expr::struct_expr(
+            typ.clone(),
+            BTreeMap::from([
+                ("enabled".into(), Expr::bool_constant(false)),
+                ("index".into(), sym("outer_quantified")),
+            ]),
+            &table,
+        );
+        let env = Expr::symbol_expression("env", typ);
+        let read = env.clone().address_of().dereference();
+        let (result, _) = read.clone().member("index", &table).substitute_quantifier_capture(
+            &"env".into(),
+            &closure,
+            &table,
+        );
+        assert!(
+            matches!(result.value(), Symbol { identifier } if *identifier == "outer_quantified")
+        );
+        let (result, _) = read.member("enabled", &table).substitute_quantifier_capture(
+            &"env".into(),
+            &closure,
+            &table,
+        );
+        assert!(matches!(result.value(), BoolConstant(false)));
+        let (result, _) = env.member("index", &table).substitute_symbol(&"env".into(), &closure);
+        assert!(matches!(result.value(), Member { .. }));
+    }
+
+    #[test]
+    fn quantifier_capture_preserves_unused_side_effect() {
+        let (table, typ) = capture_table();
+        let closure = Expr::struct_expr(
+            typ.clone(),
+            BTreeMap::from([
+                ("enabled".into(), Expr::bool_constant(false)),
+                ("index".into(), Expr::nondet(Type::signed_int(32))),
+            ]),
+            &table,
+        );
+        let read = Expr::symbol_expression("env", typ).member("enabled", &table);
+        let (result, _) = read.substitute_quantifier_capture(&"env".into(), &closure, &table);
+        assert!(matches!(result.value(), Member { .. }));
+        assert!(result.is_side_effect());
+    }
+
+    #[test]
+    fn quantifier_side_effect_is_detected() {
+        let effect = Expr::nondet(Type::bool());
+        assert!(Expr::forall_expr(Type::Bool, sym("i"), effect.clone()).is_side_effect());
+        assert!(Expr::exists_expr(Type::Bool, sym("i"), effect).is_side_effect());
+    }
+
+    #[test]
+    fn read_ok_propagates_side_effects() {
+        let ptr = Expr::nondet(Type::void_pointer());
+        let size = Expr::int_constant(1, Type::size_t());
+        assert!(Expr::read_ok(ptr, size.clone()).is_side_effect());
+        assert!(
+            Expr::read_ok(
+                Expr::pointer_constant(0, Type::void_pointer()),
+                Expr::nondet(Type::size_t())
+            )
+            .is_side_effect()
+        );
+        assert!(
+            !Expr::read_ok(Expr::pointer_constant(0, Type::void_pointer()), size).is_side_effect()
+        );
+    }
+
+    #[test]
+    fn quantifier_capture_does_not_project_unrelated_expressions() {
+        let (table, typ) = capture_table();
+        let closure = Expr::struct_expr(
+            typ,
+            BTreeMap::from([
+                ("enabled".into(), Expr::bool_constant(false)),
+                ("index".into(), int(1)),
+            ]),
+            &table,
+        );
+        for expr in [closure.member("index", &table), sym("x").address_of().dereference()] {
+            let (result, changed) =
+                expr.clone().substitute_quantifier_capture(&"absent".into(), &int(2), &table);
+            assert!(!changed);
+            assert_eq!(format!("{result:?}"), format!("{expr:?}"));
+        }
+    }
+
+    #[test]
+    fn quantifier_capture_preserves_potential_safety_checks() {
+        let (table, typ) = capture_table();
+        let array = Expr::array_expr(Type::signed_int(32).array_of(1), vec![int(0)]);
+        for unsafe_value in [
+            Expr::pointer_constant(0, Type::signed_int(32).to_pointer()).dereference(),
+            Expr::pointer_constant(0, typ.clone().to_pointer())
+                .dereference()
+                .member("index", &table),
+            array.index(int(1)),
+            int(1).div(int(0)),
+        ] {
+            let closure = Expr::struct_expr(
+                typ.clone(),
+                BTreeMap::from([
+                    ("enabled".into(), Expr::bool_constant(false)),
+                    ("index".into(), unsafe_value),
+                ]),
+                &table,
+            );
+            let read = Expr::symbol_expression("env", typ.clone()).member("enabled", &table);
+            let (result, changed) =
+                read.substitute_quantifier_capture(&"env".into(), &closure, &table);
+            assert!(changed);
+            assert_eq!(format!("{result:?}"), format!("{:?}", closure.member("enabled", &table)));
+        }
     }
 }

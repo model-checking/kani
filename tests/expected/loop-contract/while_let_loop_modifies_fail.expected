@@ -1,0 +1,9 @@
+- Status: FAILURE\
+- Description: "Check that j is assignable"\
+in function invariant_then_modifies
+
+- Status: FAILURE\
+- Description: "Check that j is assignable"\
+in function modifies_then_invariant
+
+VERIFICATION:- FAILED

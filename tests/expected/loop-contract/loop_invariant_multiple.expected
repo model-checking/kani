@@ -1,0 +1,13 @@
+- Status: FAILURE\
+- Description: "Check invariant before entry for loop while_first_false.0"
+
+- Status: FAILURE\
+- Description: "Check invariant before entry for loop while_second_false.0"
+
+- Status: FAILURE\
+- Description: "Check invariant before entry for loop for_first_false.0"
+
+- Status: FAILURE\
+- Description: "Check invariant before entry for loop for_second_false.0"
+
+Complete - 3 successfully verified harnesses, 4 failures, 7 total.

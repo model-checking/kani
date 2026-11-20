@@ -38,6 +38,8 @@ cargo test -p cprover_bindings
 cargo test -p kani-compiler
 cargo test -p kani-driver
 cargo test -p kani_metadata
+cargo test -p compiletest
+cargo test -p kani-cov
 # Use concrete playback to enable assertions failure
 cargo test -p kani --features concrete_playback
 # Test the actual macros, skipping doc tests and enabling extra traits for "syn"
@@ -60,6 +62,7 @@ TESTS=(
     "cargo-coverage cargo-coverage"
     "kani-docs cargo-kani"
     "kani-fixme kani-fixme"
+    "json-handler exec"
 )
 
 # Build compiletest and print configuration. We pick suite / mode combo so there's no test.
@@ -71,13 +74,29 @@ echo "-----------------------------"
 cargo build -p kani-cov
 
 # Extract testing suite information and run compiletest
+# Bound each test's wall time so a hanging test (e.g. one whose verification
+# fails to terminate under a new toolchain) fails as a normal test failure with
+# output, instead of stalling the whole run until the CI job is killed hours
+# later. The nightly toolchain-upgrade automation relies on this: a clean
+# regression failure lets it open a tracking issue, whereas an unbounded hang
+# produces an unattributable job timeout. The cap is a guardrail against hangs,
+# not a tight performance bound, so it sits well above the slowest legitimate
+# test. The slowest single test is expected/shadow/unsupported_num_objects,
+# whose ~1020-object loops can take ~15 min on the slowest CI runners, so the
+# default is set with comfortable margin above that. Override via
+# KANI_REGRESSION_TEST_TIMEOUT (a positive integer number of seconds).
+timeout_secs="${KANI_REGRESSION_TEST_TIMEOUT:-2400}"
+if ! [[ "$timeout_secs" =~ ^[1-9][0-9]*$ ]]; then
+  echo "error: KANI_REGRESSION_TEST_TIMEOUT must be a positive integer (seconds), got '$timeout_secs'" >&2
+  exit 1
+fi
 for testp in "${TESTS[@]}"; do
   testl=($testp)
   suite=${testl[0]}
   mode=${testl[1]}
-  echo "Check compiletest suite=$suite mode=$mode"
+  echo "Check compiletest suite=$suite mode=$mode timeout=${timeout_secs}s"
   cargo run -p compiletest --quiet -- --suite $suite --mode $mode \
-      --quiet --no-fail-fast
+      --quiet --no-fail-fast --timeout "$timeout_secs"
 done
 
 # We rarely benefit from re-using build artifacts in the firecracker test,
@@ -102,11 +121,8 @@ cargo clean --manifest-path "$FEATURES_MANIFEST_PATH"
 # Setting RUSTFLAGS like this always resets cargo's build cache resulting in
 # all tests to be re-run. I.e., cannot keep re-runing the regression from where
 # we stopped.
-# Only run with the `cprover` feature to avoid compiling the `charon` library
-# which is not our code and may have warnings. The downside is that we wouldn't
-# detect any warnings in the charon code path. TODO: Remove
-# `--no-default-features --features cprover` when the warnings in charon are
-# fixed and we advance the charon pin to that version
+# Only the `cprover` feature is built here; the LLBC backend (`llbc`, which pulls in Charon) is
+# built with warnings denied, and linted, by `kani-llbc-regression.sh`.
 RUSTFLAGS="-D warnings" cargo build --target-dir /tmp/kani_build_warnings --no-default-features --features cprover
 
 echo

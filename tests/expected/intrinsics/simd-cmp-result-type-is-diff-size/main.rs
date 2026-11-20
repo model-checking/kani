@@ -1,25 +1,33 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-//! Checks that storing the result of a vector operation in a vector of
-//! size different to the operands' sizes causes an error.
+//! Checks that storing the result of a vector comparison in a vector of
+//! size different to the operands' sizes is reported as an unsupported
+//! construct. rustc's codegen backends reject it with E0511; Kani reports it
+//! per harness rather than aborting the crate (see #4950).
 #![feature(repr_simd, core_intrinsics)]
 use std::intrinsics::simd::simd_eq;
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 pub struct i64x2([i64; 2]);
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 pub struct u64x2([u64; 2]);
 
 #[repr(simd)]
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 pub struct u32x4([u32; 4]);
+
+impl u32x4 {
+    fn into_array(self) -> [u32; 4] {
+        unsafe { std::mem::transmute(self) }
+    }
+}
 
 #[kani::proof]
 fn main() {
@@ -28,7 +36,7 @@ fn main() {
 
     unsafe {
         let invalid_simd: u32x4 = simd_eq(x, y);
-        assert!(invalid_simd == u32x4([u32::MAX, u32::MAX, 0, 0]));
+        assert!(invalid_simd.into_array() == u32x4([u32::MAX, u32::MAX, 0, 0]).into_array());
         // ^^^^ The code above fails to type-check in Rust with the error:
         // ```
         // error[E0511]: invalid monomorphization of `simd_eq` intrinsic: expected

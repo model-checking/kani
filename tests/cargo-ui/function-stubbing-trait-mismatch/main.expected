@@ -1,2 +1,2 @@
-error: `&str` doesn't implement `DoIt`. The function `foo` cannot be stubbed by `bar` due to generic bounds not being met.
-error: `&str` doesn't implement `std::cmp::PartialEq`. The function `foo` cannot be stubbed by `bar` due to generic bounds not being met.
+type `&str` doesn't implement trait `DoIt`, so `foo` cannot be stubbed by `bar`. All trait bounds of the stub must be satisfied by the original's call sites.
+type `&str` doesn't implement trait `std::cmp::PartialEq`, so `foo` cannot be stubbed by `bar`. All trait bounds of the stub must be satisfied by the original's call sites.

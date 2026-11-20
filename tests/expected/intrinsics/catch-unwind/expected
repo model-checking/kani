@@ -1,0 +1,2 @@
+Failed Checks: catch_unwind is not currently supported by Kani. Please post your example at https://github.com/model-checking/kani/issues/267
+VERIFICATION:- FAILED

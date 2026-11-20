@@ -6,6 +6,7 @@
 
 mod assert;
 mod block;
+pub(crate) mod cache;
 mod foreign_function;
 mod function;
 mod intrinsic;
@@ -24,4 +25,5 @@ pub(super) mod typ;
 
 pub use assert::PropertyClass;
 pub use block::bb_label;
+pub use span::disabled_check_pragmas;
 pub use typ::TypeExt;

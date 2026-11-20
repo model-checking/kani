@@ -1,0 +1,11 @@
+assertion\
+- Status: FAILURE\
+- Description: "x < 4"
+
+assertion\
+- Status: FAILURE\
+- Description: "|result| *result == 0"
+
+VERIFICATION:- FAILED
+Verification failed for - replacement_provider_postcondition
+Complete - 0 successfully verified harnesses, 1 failures, 1 total.

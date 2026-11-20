@@ -1,0 +1,14 @@
+<usize as kani::rustc_intrinsics::ToISize>::to_isize.safety_check\
+	 - Status: FAILURE\
+	 - Description: "Offset value overflows isize"
+
+kani::rustc_intrinsics::offset::<u8, *const u8, usize>.safety_check\
+	 - Status: FAILURE\
+	 - Description: "Offset result and original pointer must point to the same allocation"
+
+Failed Checks: Offset value overflows isize
+Failed Checks: Offset result and original pointer must point to the same allocation
+
+VERIFICATION:- FAILED
+Verification failed for - debug_assert_does_not_hide_ub
+Complete - 0 successfully verified harnesses, 1 failures, 1 total.

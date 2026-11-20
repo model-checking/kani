@@ -1,0 +1,5 @@
+.pointer_dereference.4\
+- Status: FAILURE\
+- Description: "dereference failure: dead object"
+
+VERIFICATION:- FAILED

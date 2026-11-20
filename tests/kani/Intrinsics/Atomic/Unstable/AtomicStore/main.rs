@@ -18,9 +18,9 @@ fn main() {
     let ptr_a3: *mut u8 = &mut a3;
 
     unsafe {
-        atomic_store::<_, { AtomicOrdering::SeqCst }>(ptr_a1, 0);
-        atomic_store::<_, { AtomicOrdering::Release }>(ptr_a2, 0);
-        atomic_store::<_, { AtomicOrdering::Relaxed }>(ptr_a3, 0);
+        atomic_store::<_, { AtomicOrdering::SeqCst }, /* VOLATILE */ false>(ptr_a1, 0);
+        atomic_store::<_, { AtomicOrdering::Release }, /* VOLATILE */ false>(ptr_a2, 0);
+        atomic_store::<_, { AtomicOrdering::Relaxed }, /* VOLATILE */ false>(ptr_a3, 0);
 
         assert!(*ptr_a1 == 0);
         assert!(*ptr_a2 == 0);

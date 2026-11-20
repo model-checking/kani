@@ -1,0 +1,4 @@
+error: `Wrapper::new` is used as a verified stub, but generating an arbitrary value of its return type `Wrapper` calls `Wrapper::new` again
+note: the contract replacement havocs its return value with `kani::any::<Wrapper>()`, so this forms an unbounded recursion:
+-> <stub_verified_arbitrary_replacement_cycle::Wrapper as kani::Arbitrary>::any
+-> stub_verified_arbitrary_replacement_cycle::Wrapper::new

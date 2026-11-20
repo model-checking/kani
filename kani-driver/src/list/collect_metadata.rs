@@ -55,7 +55,7 @@ pub fn process_metadata(metadata: Vec<KaniMetadata>) -> BTreeSet<ListMetadata> {
             }
         }
 
-        contracted_functions.extend(kani_meta.contracted_functions.into_iter());
+        contracted_functions.extend(kani_meta.contracted_functions);
 
         list_metadata.insert(ListMetadata {
             crate_name: kani_meta.crate_name,
@@ -72,10 +72,11 @@ pub fn process_metadata(metadata: Vec<KaniMetadata>) -> BTreeSet<ListMetadata> {
 
 pub fn list_cargo(args: CargoListArgs, mut verify_opts: VerificationArgs) -> Result<()> {
     let quiet = args.common_args.quiet;
+    let verbose = args.common_args.verbose;
     verify_opts.common_args = args.common_args;
     let mut session = KaniSession::new(verify_opts)?;
     if !quiet {
-        print_kani_version(InvocationType::CargoKani(vec![]));
+        print_kani_version(InvocationType::CargoKani(vec![]), verbose);
     }
 
     let project = cargo_project(&mut session, false)?;
@@ -86,10 +87,11 @@ pub fn list_cargo(args: CargoListArgs, mut verify_opts: VerificationArgs) -> Res
 
 pub fn list_standalone(args: StandaloneListArgs, mut verify_opts: VerificationArgs) -> Result<()> {
     let quiet = args.common_args.quiet;
+    let verbose = args.common_args.verbose;
     verify_opts.common_args = args.common_args;
     let session = KaniSession::new(verify_opts)?;
     if !quiet {
-        print_kani_version(InvocationType::Standalone);
+        print_kani_version(InvocationType::Standalone, verbose);
     }
 
     let project: Project = if args.std {

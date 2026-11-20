@@ -41,10 +41,33 @@ fn j1<X, Y>(_x: &X, _y1: &Y, _y2: &Y) {}
 
 fn j2<X, Y>(_x1: &X, _x2: &X, _y: &Y) {}
 
+trait TraitA {
+    fn method_a(&self, x: String) -> i32;
+}
+
+trait TraitB {
+    fn method_b(&self, x: i32) -> bool;
+}
+
+struct MyStruct;
+
+impl TraitA for MyStruct {
+    fn method_a(&self, x: String) -> i32 {
+        x.len() as i32
+    }
+}
+
+impl TraitB for MyStruct {
+    fn method_b(&self, x: i32) -> bool {
+        x > 0
+    }
+}
+
 #[kani::proof]
 #[kani::stub(f1, f2)]
 #[kani::stub(g1, g2)]
 #[kani::stub(h1, h2)]
 #[kani::stub(i1, i2)]
 #[kani::stub(j1, j2)]
+#[kani::stub(<MyStruct as TraitA>::method_a, <MyStruct as TraitB>::method_b)]
 fn harness() {}

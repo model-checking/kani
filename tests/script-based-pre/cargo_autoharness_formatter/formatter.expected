@@ -1,0 +1,19 @@
+[without --bounded-arguments]
+| cargo_autoharness_formatter | assumes_default  | Requires --bounded-arguments for argument(s) f: &std::fmt::Formatter<'_>      |
+[with --bounded-arguments]
+| cargo_autoharness_formatter | nested           | Missing Arbitrary implementation for argument(s) f: &&std::fmt::Formatter<'_> |
+Failed Checks: assertion failed: f.width().is_none() && f.precision().is_none()
+Status: SATISFIED\
+Description: "no width"
+Status: SATISFIED\
+Description: "maximum width"
+Status: SATISFIED\
+Description: "center alignment"
+Status: SATISFIED\
+Description: "alternate with plus sign"
+Status: SATISFIED\
+Description: "fill '*'"
+| cargo_autoharness_formatter | options_cover     | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_formatter | pad               | #[kani::proof] (bounded)  | Success             |
+| cargo_autoharness_formatter | assumes_default   | #[kani::proof] (bounded)  | Failure             |
+Complete - 2 successfully verified functions, 1 failures, 3 total.

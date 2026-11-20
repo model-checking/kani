@@ -1,0 +1,4 @@
+Failed Checks: x >= 10
+
+Verification failed for - check_misuse_still_caught
+Complete - 1 successfully verified harnesses, 1 failures, 2 total.

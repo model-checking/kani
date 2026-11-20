@@ -10,7 +10,7 @@
 //! applied multiple times, one per specialization.
 //!
 //! Another downside is that these modifications cannot be applied to concrete playback, since they
-//! are applied on the top of StableMIR body, which cannot be propagated back to rustc's backend.
+//! are applied on the top of rustc_public body, which cannot be propagated back to rustc's backend.
 //!
 //! # Warn
 //!
@@ -21,6 +21,7 @@ use crate::kani_middle::reachability::CallGraph;
 use crate::kani_middle::transform::body::CheckType;
 use crate::kani_middle::transform::check_uninit::{DelayedUbPass, UninitPass};
 use crate::kani_middle::transform::check_values::ValidValuePass;
+use crate::kani_middle::transform::clone::{ClonableGlobalPass, ClonableTransformPass};
 use crate::kani_middle::transform::contracts::{AnyModifiesPass, FunctionWithContractPass};
 use crate::kani_middle::transform::kani_intrinsics::IntrinsicGeneratorPass;
 use crate::kani_middle::transform::loop_contracts::LoopContractPass;
@@ -28,14 +29,41 @@ use crate::kani_middle::transform::stubs::{ExternFnStubPass, FnStubPass};
 use crate::kani_queries::QueryDb;
 use automatic::{AutomaticArbitraryPass, AutomaticHarnessPass};
 use dump_mir_pass::DumpMirPass;
-use rustc_middle::ty::TyCtxt;
-use stable_mir::mir::Body;
-use stable_mir::mir::mono::{Instance, MonoItem};
+use rustc_hir::def::DefKind;
+use rustc_middle::ty::{EarlyBinder, TyCtxt, TypingEnv};
+use rustc_public::mir::mono::{Instance, MonoItem};
+use rustc_public::mir::{Body, Local};
+use rustc_public::rustc_internal;
 use std::collections::HashMap;
 use std::fmt::Debug;
 
 use crate::kani_middle::transform::rustc_intrinsics::RustcIntrinsicsPass;
 pub use internal_mir::RustcInternalMir;
+
+/// Build the `Body` for an instance whose body `rustc_public` does not surface.
+///
+/// This currently only handles ADT constructors: rust-lang/rust stopped encoding
+/// *optimized* MIR for constructors (`instance_mir` uses `mir_for_ctfe` for them),
+/// which makes `rustc_public::Instance::body()` return `None` for constructors
+/// imported from other crates even though rustc can still build their (trivial)
+/// shim body. We reconstruct it here the same way `rustc_public`'s `BodyBuilder`
+/// would: fetch the instance MIR and monomorphize it, then convert to the stable
+/// representation. Any other bodyless instance is a genuine error and panics.
+fn build_missing_body(tcx: TyCtxt, instance: Instance) -> Body {
+    let internal_instance = rustc_internal::internal(tcx, instance);
+    assert!(
+        matches!(tcx.def_kind(internal_instance.def_id()), DefKind::Ctor(..)),
+        "expected a body for instance `{}`",
+        instance.name()
+    );
+    let internal_body = tcx.instance_mir(internal_instance.def).clone();
+    let mono_body = internal_instance.instantiate_mir_and_normalize_erasing_regions(
+        tcx,
+        TypingEnv::fully_monomorphized(),
+        EarlyBinder::bind(tcx, internal_body),
+    );
+    rustc_internal::stable(&mono_body)
+}
 
 mod automatic;
 pub(crate) mod body;
@@ -54,15 +82,23 @@ mod stubs;
 ///
 /// The order however is always the same, we run optimizations first, and instrument the code
 /// after.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct BodyTransformation {
     /// The passes that may change the function body according to harness configuration.
     /// The stubbing passes should be applied before so user stubs take precedence.
-    stub_passes: Vec<Box<dyn TransformPass>>,
+    stub_passes: Vec<Box<dyn ClonableTransformPass>>,
     /// The passes that may add safety checks to the function body.
-    inst_passes: Vec<Box<dyn TransformPass>>,
+    inst_passes: Vec<Box<dyn ClonableTransformPass>>,
     /// Cache transformation results.
     cache: HashMap<Instance, TransformationResult>,
+    /// The locals to add to the loop modifies clause of a loop, by the instance of the body that
+    /// contains the loop and the instance of the register function that the loop latch calls, as
+    /// recorded by the passes (see [TransformPass::take_generated_loop_modifies]).
+    generated_loop_modifies: HashMap<(Instance, Instance), Vec<Local>>,
+    /// The instance of the register function of the loop whose loop modifies clause a
+    /// `kani_loop_modifies` binding is, by the instance of the body and the binding local, as
+    /// recorded by the passes (see [TransformPass::take_loop_modifies_bindings]).
+    loop_modifies_bindings: HashMap<(Instance, Local), Instance>,
 }
 
 impl BodyTransformation {
@@ -71,6 +107,8 @@ impl BodyTransformation {
             stub_passes: vec![],
             inst_passes: vec![],
             cache: Default::default(),
+            generated_loop_modifies: Default::default(),
+            loop_modifies_bindings: Default::default(),
         };
         let safety_check_type = CheckType::new_safety_check_assert_assume(queries);
         let unsupported_check_type = CheckType::new_unsupported_check_assert_assume_false(queries);
@@ -86,7 +124,7 @@ impl BodyTransformation {
         transformer.add_pass(
             queries,
             ValidValuePass {
-                safety_check_type: safety_check_type.clone(),
+                safety_check_type,
                 unsupported_check_type: unsupported_check_type.clone(),
             },
         );
@@ -106,8 +144,59 @@ impl BodyTransformation {
         );
         transformer.add_pass(queries, IntrinsicGeneratorPass::new(unsupported_check_type, queries));
         transformer.add_pass(queries, LoopContractPass::new(tcx, queries, unit));
-        transformer.add_pass(queries, RustcIntrinsicsPass::new(queries));
+        transformer.add_pass(queries, RustcIntrinsicsPass::new(queries, &unit.stubs));
         transformer
+    }
+
+    /// Equivalent to `body()`, but avoids cloning the returned `Body`.
+    pub fn body_ref(&mut self, tcx: TyCtxt, instance: Instance) -> &Body {
+        &self
+            .cache
+            .entry(instance)
+            .or_insert_with(|| {
+                // Transform and add to the cache if there's no existing entry.
+                let mut body = crate::kani_middle::checked_body(tcx, instance)
+                    .unwrap_or_else(|| build_missing_body(tcx, instance));
+
+                let mut modified = false;
+                let mut body_source = instance;
+                for pass in self.stub_passes.iter_mut().chain(self.inst_passes.iter_mut()) {
+                    let transform_instance = pass.transform_instance(instance, body_source);
+                    let result = pass.transform(tcx, body, transform_instance);
+                    if let Some(source) = pass.take_body_source() {
+                        body_source = source;
+                    }
+                    modified |= result.0;
+                    body = result.1;
+                    self.generated_loop_modifies.extend(
+                        pass.take_generated_loop_modifies()
+                            .into_iter()
+                            .map(|(register_fn, locals)| ((instance, register_fn), locals)),
+                    );
+                    self.loop_modifies_bindings.extend(
+                        pass.take_loop_modifies_bindings()
+                            .into_iter()
+                            .map(|(binding, register_fn)| ((instance, binding), register_fn)),
+                    );
+                }
+
+                TransformationResult(body, modified)
+            })
+            .0
+    }
+
+    /// The locals of the transformed body of `instance` that codegen adds to the loop modifies
+    /// clause written by the user for the loop whose latch calls the register function
+    /// `register_fn`. The body of `instance` must have been transformed already.
+    pub fn generated_loop_modifies(&self, instance: Instance, register_fn: Instance) -> &[Local] {
+        self.generated_loop_modifies.get(&(instance, register_fn)).map_or(&[], Vec::as_slice)
+    }
+
+    /// The instance of the register function of the loop whose loop modifies clause is the
+    /// `kani_loop_modifies` binding `binding` of the transformed body of `instance`, if the
+    /// binding belongs to a loop with a loop contract.
+    pub fn loop_of_modifies_binding(&self, instance: Instance, binding: Local) -> Option<Instance> {
+        self.loop_modifies_bindings.get(&(instance, binding)).copied()
     }
 
     /// Retrieve the body of an instance. This does not apply global passes, but will retrieve the
@@ -116,30 +205,10 @@ impl BodyTransformation {
     /// Note that this assumes that the instance does have a body since existing consumers already
     /// assume that. Use `instance.has_body()` to check if an instance has a body.
     pub fn body(&mut self, tcx: TyCtxt, instance: Instance) -> Body {
-        match self.cache.get(&instance) {
-            Some(TransformationResult::Modified(body)) => body.clone(),
-            Some(TransformationResult::NotModified) => instance.body().unwrap(),
-            None => {
-                let mut body = instance.body().unwrap();
-                let mut modified = false;
-                for pass in self.stub_passes.iter_mut().chain(self.inst_passes.iter_mut()) {
-                    let result = pass.transform(tcx, body, instance);
-                    modified |= result.0;
-                    body = result.1;
-                }
-
-                let result = if modified {
-                    TransformationResult::Modified(body.clone())
-                } else {
-                    TransformationResult::NotModified
-                };
-                self.cache.insert(instance, result);
-                body
-            }
-        }
+        self.body_ref(tcx, instance).clone()
     }
 
-    fn add_pass<P: TransformPass + 'static>(&mut self, query_db: &QueryDb, pass: P) {
+    fn add_pass<P: ClonableTransformPass + 'static>(&mut self, query_db: &QueryDb, pass: P) {
         if pass.is_enabled(query_db) {
             match P::transformation_type() {
                 TransformationType::Instrumentation => self.inst_passes.push(Box::new(pass)),
@@ -171,6 +240,31 @@ pub(crate) trait TransformPass: Debug {
 
     /// Run a transformation pass in the function body.
     fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body);
+
+    /// Select the instance whose attributes apply to this pass. `body_source` identifies the
+    /// resolved ordinary stub supplying the body when a replacement has been applied.
+    fn transform_instance(&self, instance: Instance, _body_source: Instance) -> Instance {
+        instance
+    }
+
+    /// Take the source instance of a successfully replaced body.
+    fn take_body_source(&mut self) -> Option<Instance> {
+        None
+    }
+
+    /// Take the locals that codegen must add to the loop modifies clause of the loops of the body
+    /// that this pass last transformed, by the instance of the register function that each
+    /// loop latch calls. See `LoopContractPass::add_generated_loop_modifies`.
+    fn take_generated_loop_modifies(&mut self) -> Vec<(Instance, Vec<Local>)> {
+        Vec::new()
+    }
+
+    /// Take the `kani_loop_modifies` bindings of the loops of the body that this pass last
+    /// transformed, with the instance of the register function of their loop. See
+    /// `LoopContractPass::find_loop_modifies_bindings`.
+    fn take_loop_modifies_bindings(&mut self) -> Vec<(Local, Instance)> {
+        Vec::new()
+    }
 }
 
 /// A trait to represent transformation passes that operate on the whole codegen unit.
@@ -191,18 +285,23 @@ pub(crate) trait GlobalPass: Debug {
     ) -> bool;
 }
 
-/// The transformation result.
-/// We currently only cache the body of functions that were instrumented.
 #[derive(Clone, Debug)]
-enum TransformationResult {
-    Modified(Body),
-    NotModified,
+/// The [Body] resulting from applying all transformations, and a bool marking
+/// whether any of the transformations modified the body.
+struct TransformationResult(Body, bool);
+
+#[allow(dead_code)]
+impl TransformationResult {
+    pub fn has_been_modified(&self) -> bool {
+        self.1
+    }
 }
 
+#[derive(Clone)]
 pub struct GlobalPasses {
     /// The passes that operate on the whole codegen unit, they run after all previous passes are
     /// done.
-    global_passes: Vec<Box<dyn GlobalPass>>,
+    global_passes: Vec<Box<dyn ClonableGlobalPass>>,
 }
 
 impl GlobalPasses {
@@ -220,7 +319,7 @@ impl GlobalPasses {
         global_passes
     }
 
-    fn add_global_pass<P: GlobalPass + 'static>(&mut self, query_db: &QueryDb, pass: P) {
+    fn add_global_pass<P: ClonableGlobalPass + 'static>(&mut self, query_db: &QueryDb, pass: P) {
         if pass.is_enabled(query_db) {
             self.global_passes.push(Box::new(pass))
         }
@@ -248,4 +347,58 @@ impl GlobalPasses {
         }
         modified
     }
+}
+
+mod clone {
+    //! This is all just machinery to implement `Clone` for a `Box<dyn TransformPass + Clone>`.
+    //!
+    //! To avoid circular reasoning, we use two traits that can each clone into a dyn of the other, and since
+    //! we set both up to have blanket implementations for all `T: TransformPass + Clone`, the compiler pieces them together properly
+    //! and we can implement `Clone` directly using the pair!
+
+    /// Builds a new dyn compatible wrapper trait that's essentially equivalent to extending
+    /// `$extends` with `Clone`. Requires an ident for an intermediate trait for avoiding cycles
+    /// in the implementation.
+    macro_rules! implement_clone {
+        ($new_trait_name: ident, $intermediate_trait_name: ident, $extends: path) => {
+            #[allow(private_interfaces)]
+            pub(crate) trait $new_trait_name: $extends {
+                fn clone_there(&self) -> Box<dyn $intermediate_trait_name>;
+            }
+
+            impl Clone for Box<dyn $new_trait_name> {
+                fn clone(&self) -> Self {
+                    self.clone_there().clone_back()
+                }
+            }
+
+            #[allow(private_interfaces)]
+            impl<T: $extends + Clone + 'static> $new_trait_name for T {
+                fn clone_there(&self) -> Box<dyn $intermediate_trait_name> {
+                    Box::new(self.clone())
+                }
+            }
+
+            trait $intermediate_trait_name {
+                fn clone_back(&self) -> Box<dyn $new_trait_name>;
+            }
+
+            impl<T: $extends + Clone + 'static> $intermediate_trait_name for T {
+                fn clone_back(&self) -> Box<dyn $new_trait_name> {
+                    Box::new(self.clone())
+                }
+            }
+        };
+    }
+
+    implement_clone!(
+        ClonableTransformPass,
+        ClonableTransformPassMid,
+        crate::kani_middle::transform::TransformPass
+    );
+    implement_clone!(
+        ClonableGlobalPass,
+        ClonableGlobalPassMid,
+        crate::kani_middle::transform::GlobalPass
+    );
 }

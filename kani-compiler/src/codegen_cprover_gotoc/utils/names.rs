@@ -6,11 +6,11 @@
 use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::InternedString;
 use rustc_hir::def_id::LOCAL_CRATE;
-use rustc_middle::mir::mono::CodegenUnitNameBuilder;
+use rustc_middle::mono::CodegenUnitNameBuilder;
 use rustc_middle::ty::TyCtxt;
-use stable_mir::mir::Local;
+use rustc_public::mir::Local;
 
-impl GotocCtx<'_> {
+impl GotocCtx<'_, '_> {
     /// The full crate name including versioning info
     pub fn full_crate_name(&self) -> &str {
         &self.full_crate_name

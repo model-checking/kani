@@ -13,6 +13,8 @@
 # Changes unrelated to the toolchain should match the current status of main.
 
 name: Check Std Verification
+permissions:
+  contents: read
 on:
   pull_request:
   workflow_call:
@@ -26,28 +28,20 @@ jobs:
     strategy:
       matrix:
         # Kani does not support windows.
-        os: [ ubuntu-22.04, macos-14 ]
+        os: [ ubuntu-22.04, macos-15 ]
     steps:
       - name: Checkout Library
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: model-checking/verify-rust-std
           path: verify-rust-std
           submodules: true
 
       - name: Checkout `Kani`
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: kani
           fetch-depth: 0
-
-      - name: Cache Kani build artifacts
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-          workspaces: kani
-          shared-key: "kani-rust-cache-dev"
-          cache-directories: "~/.rustup"
 
       - name: Setup Kani Dependencies
         uses: ./kani/.github/actions/setup

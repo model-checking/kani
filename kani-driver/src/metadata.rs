@@ -1,11 +1,12 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use std::path::Path;
-use tracing::{debug, trace};
 
-use kani_metadata::{HarnessMetadata, InternedString, TraitDefinedMethod, VtableCtxResults};
+use kani_metadata::{
+    HarnessMetadata, InternedString, TraitDefinedMethod, VtableCtxResults, find_proof_harnesses,
+};
 use std::collections::{BTreeSet, HashMap};
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
@@ -91,40 +92,64 @@ impl KaniSession {
     /// Determine which function to use as entry point, based on command-line arguments and kani-metadata.
     pub fn determine_targets<'a>(
         &self,
-        all_harnesses: &[&'a HarnessMetadata],
+        compiler_filtered_harnesses: Vec<&'a HarnessMetadata>,
     ) -> Result<Vec<&'a HarnessMetadata>> {
-        let harnesses = BTreeSet::from_iter(self.args.harnesses.iter());
-        let total_harnesses = harnesses.len();
-        let all_targets = &harnesses;
+        let harness_filters = BTreeSet::from_iter(self.args.harnesses.iter());
 
-        if harnesses.is_empty() {
-            Ok(Vec::from(all_harnesses))
-        } else {
-            let harnesses_found: Vec<&HarnessMetadata> =
-                find_proof_harnesses(&harnesses, all_harnesses, self.args.exact);
-
-            // If even one harness was not found with --exact, return an error to user
-            if self.args.exact && harnesses_found.len() < total_harnesses {
-                let harness_found_names: BTreeSet<&String> =
-                    harnesses_found.iter().map(|&h| &h.pretty_name).collect();
-
-                // Check which harnesses are missing from the difference of targets and harnesses_found
-                let harnesses_missing: Vec<&String> =
-                    all_targets.difference(&harness_found_names).cloned().collect();
-                let joined_string = harnesses_missing
-                    .iter()
-                    .map(|&s| (*s).clone())
-                    .collect::<Vec<String>>()
-                    .join("`, `");
-
-                bail!(
-                    "Failed to match the following harness(es):\n{joined_string}\nPlease specify the fully-qualified name of a harness.",
-                );
-            }
-
-            Ok(harnesses_found)
+        // For dev builds, re-filter the harnesses to double check filtering in the compiler
+        // and ensure we're doing the minimal harness codegen possible. That filtering happens in
+        // the `kani-compiler/src/kani_middle/codegen_units.rs` file's `determine_targets` function.
+        // The compiler filters only manual harnesses and keeps every automatic harness, and
+        // `find_proof_harnesses` skips automatic harnesses, so compare the manual harnesses only.
+        // This detects retained manual harnesses that do not satisfy the filter. It does not check
+        // the selection of automatic harnesses.
+        if cfg!(debug_assertions) && !harness_filters.is_empty() {
+            let manual_harnesses: Vec<&HarnessMetadata> = compiler_filtered_harnesses
+                .iter()
+                .copied()
+                .filter(|harness| !harness.is_automatically_generated)
+                .collect();
+            let filtered_harnesses: Vec<&HarnessMetadata> =
+                find_proof_harnesses(&harness_filters, &manual_harnesses, self.args.exact);
+            assert_eq!(manual_harnesses, filtered_harnesses);
         }
+
+        if self.args.exact {
+            check_exact_filters_matched(&harness_filters, &compiler_filtered_harnesses)?;
+        }
+
+        // A `--harness` filter that matches nothing must fail here, before codegen and export.
+        if !harness_filters.is_empty() && compiler_filtered_harnesses.is_empty() {
+            return Err(no_harness_match_error(&self.args.harnesses));
+        }
+
+        Ok(compiler_filtered_harnesses)
     }
+}
+
+/// Checked per filter, not by comparing total counts: a filter matching in more than one crate
+/// can otherwise mask a sibling filter that matched nothing.
+fn check_exact_filters_matched(
+    harness_filters: &BTreeSet<&String>,
+    compiler_filtered_harnesses: &[&HarnessMetadata],
+) -> Result<()> {
+    let harness_found_names: BTreeSet<&String> =
+        compiler_filtered_harnesses.iter().map(|&h| &h.pretty_name).collect();
+    let harnesses_missing: Vec<String> =
+        harness_filters.difference(&harness_found_names).map(|&s| s.clone()).collect();
+    if !harnesses_missing.is_empty() {
+        return Err(no_harness_match_error(&harnesses_missing));
+    }
+    Ok(())
+}
+
+/// The error for a harness filter that failed to match. Every zero-match site reports
+/// through this one function, so the wordings cannot drift.
+pub(crate) fn no_harness_match_error(missing: &[String]) -> anyhow::Error {
+    anyhow::anyhow!(
+        "Failed to match the following harness(es):\n{}\nPlease specify the fully-qualified name of a harness.",
+        missing.join("`, `")
+    )
 }
 
 /// Sort harnesses such that for two harnesses in the same file, it is guaranteed that later
@@ -140,44 +165,6 @@ pub fn sort_harnesses_by_loc<'a>(harnesses: &[&'a HarnessMetadata]) -> Vec<&'a H
             .then(harness1.original_start_line.cmp(&harness2.original_start_line).reverse())
     });
     harnesses_clone
-}
-
-/// Search for a proof harness with a particular name.
-/// At the present time, we use `no_mangle` so collisions shouldn't happen,
-/// but this function is written to be robust against that changing in the future.
-fn find_proof_harnesses<'a>(
-    targets: &BTreeSet<&String>,
-    all_harnesses: &[&'a HarnessMetadata],
-    exact_filter: bool,
-) -> Vec<&'a HarnessMetadata> {
-    debug!(?targets, "find_proof_harness");
-    let mut result = vec![];
-    for md in all_harnesses.iter() {
-        // --harnesses should not select automatic harnesses
-        if md.is_automatically_generated {
-            continue;
-        }
-        if exact_filter {
-            // Check for exact match only
-            if targets.contains(&md.pretty_name) {
-                // if exact match found, stop searching
-                result.push(*md);
-            } else {
-                trace!(skip = md.pretty_name, "find_proof_harnesses");
-            }
-        } else {
-            // Either an exact match, or a substring match. We check the exact first since it's cheaper.
-            if targets.contains(&md.pretty_name)
-                || targets.contains(&md.get_harness_name_unqualified().to_string())
-                || targets.iter().any(|target| md.pretty_name.contains(*target))
-            {
-                result.push(*md);
-            } else {
-                trace!(skip = md.pretty_name, "find_proof_harnesses");
-            }
-        }
-    }
-    result
 }
 
 #[cfg(test)]
@@ -206,12 +193,15 @@ pub mod tests {
             contract: Default::default(),
             has_loop_contracts: false,
             is_automatically_generated: false,
+            is_bounded: false,
+            is_ctor_based: false,
+            has_refcount_caveat: false,
         }
     }
 
     #[test]
     fn check_find_proof_harness_without_exact() {
-        let harnesses = vec![
+        let harnesses = [
             mock_proof_harness("check_one", None, None, None),
             mock_proof_harness("module::check_two", None, None, None),
             mock_proof_harness("module::not_check_three", None, None, None),
@@ -256,7 +246,7 @@ pub mod tests {
     fn check_find_proof_harness_with_exact() {
         // Check with exact match
 
-        let harnesses = vec![
+        let harnesses = [
             mock_proof_harness("check_one", None, None, None),
             mock_proof_harness("module::check_two", None, None, None),
             mock_proof_harness("module::not_check_three", None, None, None),
@@ -293,5 +283,29 @@ pub mod tests {
             .mangled_name,
             "module::not_check_three"
         );
+    }
+
+    #[test]
+    fn check_exact_filters_matched_rejects_filter_unmatched_across_crates() {
+        let common_crate_a = mock_proof_harness("common", None, Some("crate_a"), None);
+        let common_crate_b = mock_proof_harness("common", None, Some("crate_b"), None);
+        let harnesses = [&common_crate_a, &common_crate_b];
+        let common = "common".to_string();
+        let typo = "typo".to_string();
+        let filters = BTreeSet::from([&common, &typo]);
+
+        let err = check_exact_filters_matched(&filters, &harnesses).unwrap_err();
+        assert!(err.to_string().contains("typo"));
+    }
+
+    #[test]
+    fn check_exact_filters_matched_accepts_every_filter_matched() {
+        let common_crate_a = mock_proof_harness("common", None, Some("crate_a"), None);
+        let common_crate_b = mock_proof_harness("common", None, Some("crate_b"), None);
+        let harnesses = [&common_crate_a, &common_crate_b];
+        let common = "common".to_string();
+        let filters = BTreeSet::from([&common]);
+
+        assert!(check_exact_filters_matched(&filters, &harnesses).is_ok());
     }
 }

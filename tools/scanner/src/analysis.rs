@@ -3,22 +3,23 @@
 
 //! Provide passes that perform intra-function analysis on the crate under compilation
 
-use crate::info;
+use crate::{info, item_name};
 use csv::WriterBuilder;
 use graph_cycles::Cycles;
 use petgraph::graph::Graph;
 use rustc_middle::ty::TyCtxt;
-use serde::{Serialize, Serializer, ser::SerializeStruct};
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::visit::{Location, PlaceContext, PlaceRef};
-use stable_mir::mir::{
+use rustc_public::CrateDefType;
+use rustc_public::mir::mono::Instance;
+use rustc_public::mir::visit::{Location, PlaceContext, PlaceRef};
+use rustc_public::mir::{
     BasicBlock, Body, CastKind, MirVisitor, Mutability, NonDivergingIntrinsic, ProjectionElem,
     Rvalue, Safety, Statement, StatementKind, Terminator, TerminatorKind,
 };
-use stable_mir::rustc_internal;
-use stable_mir::ty::{Abi, AdtDef, AdtKind, FnDef, GenericArgs, MirConst, RigidTy, Ty, TyKind};
-use stable_mir::visitor::{Visitable, Visitor};
-use stable_mir::{CrateDef, CrateItem};
+use rustc_public::rustc_internal;
+use rustc_public::ty::{Abi, AdtDef, AdtKind, FnDef, GenericArgs, MirConst, RigidTy, Ty, TyKind};
+use rustc_public::visitor::{Visitable, Visitor};
+use rustc_public::{CrateDef, CrateItem};
+use serde::{Serialize, Serializer, ser::SerializeStruct};
 use std::collections::{HashMap, HashSet};
 use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
@@ -44,7 +45,7 @@ struct FnStats {
 impl FnStats {
     fn new(fn_item: CrateItem) -> FnStats {
         FnStats {
-            name: fn_item.name(),
+            name: item_name(&fn_item),
             is_unsafe: None,
             has_unsafe_ops: None,
             has_unsupported_input: None,
@@ -62,7 +63,7 @@ impl Default for OverallStats {
 
 impl OverallStats {
     pub fn new() -> OverallStats {
-        let all_items = stable_mir::all_local_items();
+        let all_items = rustc_public::all_local_items();
         let fn_stats: HashMap<_, _> = all_items
             .into_iter()
             .filter_map(|item| item.ty().kind().is_fn().then_some((item, FnStats::new(item))))
@@ -85,7 +86,7 @@ impl OverallStats {
 
     /// Iterate over all functions defined in this crate and log generic vs monomorphic.
     pub fn generic_fns(&mut self) {
-        let all_items = stable_mir::all_local_items();
+        let all_items = rustc_public::all_local_items();
         let fn_items =
             all_items.into_iter().filter(|item| item.ty().kind().is_fn()).collect::<Vec<_>>();
         let (mono_fns, generics) = fn_items
@@ -97,7 +98,7 @@ impl OverallStats {
 
     /// Iterate over all functions defined in this crate and log safe vs unsafe.
     pub fn safe_fns(&mut self, _base_filename: PathBuf) {
-        let all_items = stable_mir::all_local_items();
+        let all_items = rustc_public::all_local_items();
         let (unsafe_fns, safe_fns) = all_items
             .into_iter()
             .filter_map(|item| {
@@ -117,7 +118,7 @@ impl OverallStats {
 
     /// Iterate over all functions defined in this crate and log the inputs.
     pub fn supported_inputs(&mut self, filename: PathBuf) {
-        let all_items = stable_mir::all_local_items();
+        let all_items = rustc_public::all_local_items();
         let (supported, unsupported) = all_items
             .into_iter()
             .filter_map(|item| {
@@ -126,7 +127,8 @@ impl OverallStats {
                     return None;
                 };
                 let fn_sig = kind.fn_sig().unwrap();
-                let props = FnInputProps::new(item.name()).collect(fn_sig.skip_binder().inputs());
+                let props =
+                    FnInputProps::new(item_name(&item)).collect(fn_sig.skip_binder().inputs());
                 self.fn_stats.get_mut(&item).unwrap().has_unsupported_input =
                     Some(!props.is_supported());
                 Some(props)
@@ -140,8 +142,8 @@ impl OverallStats {
     }
 
     /// Iterate over all functions defined in this crate and log any unsafe operation.
-    pub fn unsafe_operations(&mut self, filename: PathBuf) {
-        let all_items = stable_mir::all_local_items();
+    pub fn unsafe_operations(&mut self, filename: PathBuf, tcx: &TyCtxt) {
+        let all_items = rustc_public::all_local_items();
         let (has_unsafe, no_unsafe) = all_items
             .into_iter()
             .filter_map(|item| {
@@ -149,7 +151,8 @@ impl OverallStats {
                 if !kind.is_fn() {
                     return None;
                 };
-                let unsafe_ops = FnUnsafeOperations::new(item.name()).collect(&item.expect_body());
+                let unsafe_ops =
+                    FnUnsafeOperations::new(item_name(&item)).collect(&item.expect_body(), tcx);
                 let fn_sig = kind.fn_sig().unwrap();
                 let is_unsafe = fn_sig.skip_binder().safety == Safety::Unsafe;
                 self.fn_stats.get_mut(&item).unwrap().has_unsafe_ops =
@@ -169,7 +172,7 @@ impl OverallStats {
     ///
     /// A hidden loop is a call to a iterator function that has a loop inside.
     pub fn loops(&mut self, filename: PathBuf) {
-        let all_items = stable_mir::all_local_items();
+        let all_items = rustc_public::all_local_items();
         let (has_loops, no_loops) = all_items
             .clone()
             .into_iter()
@@ -178,7 +181,7 @@ impl OverallStats {
                 if !kind.is_fn() {
                     return None;
                 };
-                Some(FnLoops::new(item.name()).collect(&item.expect_body()))
+                Some(FnLoops::new(item_name(&item)).collect(&item.expect_body()))
             })
             .partition::<Vec<_>, _>(|props| props.has_loops());
 
@@ -190,7 +193,7 @@ impl OverallStats {
                 if !kind.is_fn() {
                     return None;
                 };
-                Some(FnLoops::new(item.name()).collect(&item.expect_body()))
+                Some(FnLoops::new(item_name(&item)).collect(&item.expect_body()))
             })
             .partition::<Vec<_>, _>(|props| props.has_iterators());
 
@@ -201,7 +204,7 @@ impl OverallStats {
                 if !kind.is_fn() {
                     return None;
                 };
-                let fn_props = FnLoops::new(item.name()).collect(&item.expect_body());
+                let fn_props = FnLoops::new(item_name(&item)).collect(&item.expect_body());
                 self.fn_stats.get_mut(&item).unwrap().has_loop_or_iterator =
                     Some(fn_props.has_iterators() || fn_props.has_loops());
                 Some(fn_props)
@@ -219,7 +222,7 @@ impl OverallStats {
 
     /// Create a callgraph for this crate and try to find recursive calls.
     pub fn recursion(&mut self, filename: PathBuf) {
-        let all_items = stable_mir::all_local_items();
+        let all_items = rustc_public::all_local_items();
         let recursions = Recursion::collect(&all_items);
         self.counters.extend_from_slice(&[
             ("with_recursion", recursions.with_recursion.len()),
@@ -232,7 +235,7 @@ impl OverallStats {
                 .iter()
                 .map(|def| {
                     (
-                        def.name(),
+                        item_name(def),
                         if recursions.recursive_fns.contains(def) { "recursive" } else { "" },
                     )
                 })
@@ -242,7 +245,7 @@ impl OverallStats {
 
     /// Iterate over all functions defined in this crate and log public vs private
     pub fn public_fns(&mut self, tcx: &TyCtxt) {
-        let all_items = stable_mir::all_local_items();
+        let all_items = rustc_public::all_local_items();
         let (public_fns, private_fns) = all_items
             .into_iter()
             .filter_map(|item| {
@@ -434,8 +437,8 @@ fn_props! {
 }
 
 impl FnUnsafeOperations {
-    pub fn collect(self, body: &Body) -> FnUnsafeOperations {
-        let mut visitor = BodyVisitor { props: self, body };
+    pub fn collect(self, body: &Body, tcx: &TyCtxt) -> FnUnsafeOperations {
+        let mut visitor = BodyVisitor { props: self, body, tcx };
         visitor.visit_body(body);
         visitor.props
     }
@@ -450,12 +453,13 @@ impl FnUnsafeOperations {
     }
 }
 
-struct BodyVisitor<'a> {
+struct BodyVisitor<'a, 'tcx> {
     props: FnUnsafeOperations,
     body: &'a Body,
+    tcx: &'a TyCtxt<'tcx>,
 }
 
-impl MirVisitor for BodyVisitor<'_> {
+impl MirVisitor for BodyVisitor<'_, '_> {
     fn visit_terminator(&mut self, term: &Terminator, location: Location) {
         match &term.kind {
             TerminatorKind::Call { func, .. } => {
@@ -522,13 +526,17 @@ impl MirVisitor for BodyVisitor<'_> {
                 }
             }
             ProjectionElem::Field(_, ty) => {
-                if ty.kind().is_union() {
+                // Check union-ness on the internal representation. The field type may be an
+                // un-normalized alias, and `rustc_public` cannot yet convert those to their stable
+                // representation, so calling the stable `Ty::kind()` on one panics. The internal
+                // representation is always safe to inspect, and reports an alias as not a union,
+                // which is what the stable `TyKind::Alias` did before it became unconvertible.
+                if rustc_internal::internal(*self.tcx, ty).is_union() {
                     self.props.unsafe_union_access += 1;
                 }
             }
             ProjectionElem::Downcast(_) => {}
             ProjectionElem::OpaqueCast(_) => {}
-            ProjectionElem::Subtype(_) => {}
             ProjectionElem::Index(_)
             | ProjectionElem::ConstantIndex { .. }
             | ProjectionElem::Subslice { .. } => { /* safe */ }

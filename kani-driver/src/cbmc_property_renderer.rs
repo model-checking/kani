@@ -3,13 +3,14 @@
 
 use crate::args::OutputFormat;
 use crate::call_cbmc::{FailedProperties, VerificationStatus};
-use crate::cbmc_output_parser::{CheckStatus, ParserItem, Property, TraceItem};
+use crate::cbmc_output_parser::{CheckStatus, ListedProperty, ParserItem, Property, TraceItem};
 use crate::coverage::cov_results::CoverageResults;
 use console::style;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use rustc_demangle::demangle;
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 type CbmcAltDescriptions = HashMap<&'static str, Vec<(&'static str, Option<&'static str>)>>;
 
@@ -153,6 +154,7 @@ const UNSUPPORTED_CONSTRUCT_DESC: &str = "is not currently supported by Kani";
 const UNWINDING_ASSERT_DESC: &str = "unwinding assertion loop";
 const UNWINDING_ASSERT_REC_DESC: &str = "recursion unwinding assertion";
 const UNDEFINED_FUNCTION_DESC: &str = "undefined function should be unreachable";
+const VACUITY_COVER_DESC: &str = kani_metadata::AUTOHARNESS_VACUITY_COVER_PREFIX;
 
 impl ParserItem {
     /// Determines if an item must be skipped or not.
@@ -165,12 +167,14 @@ impl ParserItem {
 /// filter and transform it into the format we expect.
 ///
 /// This will output "messages" live as they stream in if `output_format` is
-/// set to `regular` but will otherwise not print.
+/// set to `regular` but will otherwise not print. When a log file path is provided, output is
+/// redirected to the log file instead.
 pub fn kani_cbmc_output_filter(
     item: ParserItem,
     extra_ptr_checks: bool,
     quiet: bool,
     output_format: &OutputFormat,
+    log_file: Option<&PathBuf>,
 ) -> Option<ParserItem> {
     // Some items (e.g., messages) are skipped.
     // We could also process them and decide to skip later.
@@ -183,11 +187,19 @@ pub fn kani_cbmc_output_filter(
     if !quiet {
         let formatted_item = format_item(&processed_item, output_format);
         if let Some(fmt_item) = formatted_item {
-            println!("{fmt_item}");
+            if let Some(log_path) = log_file {
+                if let Err(e) = crate::log_file::append_line(log_path, &fmt_item) {
+                    eprintln!(
+                        "Failed to write CBMC output to log file {}: {}",
+                        log_path.display(),
+                        e
+                    );
+                }
+            } else {
+                println!("{fmt_item}");
+            }
         }
     }
-    // TODO: Record processed items and dump them into a JSON file
-    // <https://github.com/model-checking/kani/issues/942>
     Some(processed_item)
 }
 
@@ -222,8 +234,23 @@ fn format_item_regular(item: &ParserItem) -> Option<String> {
     match item {
         ParserItem::Program { program } => Some(program.to_string()),
         ParserItem::Message { message_text, .. } => Some(message_text.to_string()),
+        ParserItem::Properties { properties } => Some(format_properties(properties)),
         _ => None,
     }
+}
+
+/// Formats the properties listed by `--show-properties`
+fn format_properties(properties: &[ListedProperty]) -> String {
+    let mut result_str = String::from("\nPROPERTIES:\n");
+    for (index, prop) in (1..).zip(properties) {
+        result_str.push_str(&format!("Check {index}: {}\n", prop.name));
+        result_str.push_str(&format!("\t - Description: \"{}\"\n", prop.description));
+        if !prop.source_location.is_missing() {
+            result_str.push_str(&format!("\t - Location: {}\n", prop.source_location));
+        }
+        result_str.push('\n');
+    }
+    result_str
 }
 
 /// Formats an item using the terse output format
@@ -238,7 +265,9 @@ fn format_item_terse(_item: &ParserItem) -> Option<String> {
 /// This function reports the results of normal checks (e.g. assertions and
 /// arithmetic overflow checks) and cover properties (specified using the
 /// `kani::cover` macro) separately. Cover properties currently do not impact
-/// the overall verification success or failure.
+/// the overall verification success or failure, except that a harness fails
+/// when no input reaches its autoharness vacuity cover (see
+/// `is_vacuous_harness_cover`).
 ///
 /// TODO: We could `write!` to `result_str` instead
 /// <https://github.com/model-checking/kani/issues/1480>
@@ -261,13 +290,11 @@ pub fn format_result(
     let mut number_covers_unreachable = 0;
     let mut number_covers_unsatisfiable = 0;
 
-    let mut index = 1;
-
     if show_checks {
         result_str.push_str("\nRESULTS:\n");
     }
 
-    for prop in properties {
+    for (index, prop) in (1..).zip(properties) {
         let name = prop.property_name();
         let status = &prop.status;
         let description = &prop.description;
@@ -318,8 +345,6 @@ pub fn format_result(
             }
             result_str.push('\n');
         }
-
-        index += 1;
     }
 
     if show_checks {
@@ -382,6 +407,10 @@ pub fn format_result(
         let failure_message = build_failure_message(prop.description.clone(), &prop.trace.clone());
         result_str.push_str(&failure_message);
     }
+    for message in properties.iter().filter_map(vacuity_message) {
+        let vacuity_line = format!("{message}\n");
+        result_str.push_str(&vacuity_line);
+    }
 
     let verification_result = if status == VerificationStatus::Success {
         style("SUCCESSFUL").green()
@@ -395,6 +424,7 @@ pub fn format_result(
             FailedProperties::Other => {
                 " (encountered failures other than panics, which were unexpected)"
             }
+            FailedProperties::Error => " (encountered a solver error)",
         }
     } else {
         ""
@@ -461,13 +491,10 @@ fn build_failure_message(description: String, trace: &Option<Vec<TraceItem>>) ->
     }
     let failure_source = failure_source_wrap.unwrap();
 
-    if failure_source.file.is_some()
-        && failure_source.function.is_some()
-        && failure_source.line.is_some()
+    if let Some(failure_file) = failure_source.file
+        && let Some(failure_function) = failure_source.function
+        && let Some(failure_line) = failure_source.line
     {
-        let failure_file = failure_source.file.unwrap();
-        let failure_function = failure_source.function.unwrap();
-        let failure_line = failure_source.line.unwrap();
         return format!(
             "Failed Checks: {description}\n File: \"{failure_file}\", line {failure_line}, in {failure_function}\n"
         );
@@ -543,6 +570,21 @@ pub fn postprocess_result(properties: Vec<Property>, extra_ptr_checks: bool) -> 
         update_properties_with_reach_status(properties_filtered, has_fundamental_failures);
     let results_after_code_coverage = update_results_of_code_covererage_checks(updated_properties);
     update_results_of_cover_checks(results_after_code_coverage)
+}
+
+/// Whether `prop` is a `cover_function_reached` cover (kani-compiler, `automatic.rs`) that no
+/// input can satisfy, which makes the harness vacuous.
+pub fn is_vacuous_harness_cover(prop: &Property) -> bool {
+    prop.is_cover_property()
+        && prop.description.starts_with(VACUITY_COVER_DESC)
+        && matches!(prop.status, CheckStatus::Unsatisfiable | CheckStatus::Unreachable)
+}
+
+/// The line reporting a vacuous harness, if `prop` is a cover that makes it vacuous.
+pub fn vacuity_message(prop: &Property) -> Option<String> {
+    let function = prop.description.strip_prefix(VACUITY_COVER_DESC)?;
+    is_vacuous_harness_cover(prop)
+        .then(|| format!("Vacuous harness: no generated input reaches {function}"))
 }
 
 /// Determines if there is property with status `FAILURE` and the given description

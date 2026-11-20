@@ -1,0 +1,262 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+// Test that the autoharness subcommand supports generic functions by instantiating their type
+// parameters with a concrete type: the first candidate (starting from `i32`) that satisfies all
+// of the function's trait bounds. Lifetime parameters are erased; functions with const generic
+// parameters or with bounds that no candidate satisfies are skipped.
+// The "TEST NOTE" comments below explain the expected result for each function.
+
+// TEST NOTE: verified as `identity::<i32>`.
+pub fn identity<T>(x: T) -> T {
+    x
+}
+
+// TEST NOTE: verified as `max3::<i32>`; primitives satisfy the bounds.
+pub fn max3<T: Copy + PartialOrd>(a: T, b: T, c: T) -> T {
+    let mut m = a;
+    if b > m {
+        m = b;
+    }
+    if c > m {
+        m = c;
+    }
+    m
+}
+
+// TEST NOTE: verified as `buggy_add::<i32>` and FAILS, since the addition can overflow.
+// This demonstrates that instantiating a generic function can find real bugs.
+pub fn buggy_add<T: Copy + core::ops::Add<Output = T>>(a: T, b: T) -> T {
+    a + b
+}
+
+// TEST NOTE: verified as `pair::<i32, i32>`; multiple type parameters are supported.
+pub fn pair<T: Copy, U: Default>(x: T, _y: U) -> (T, U) {
+    (x, U::default())
+}
+
+// TEST NOTE: verified as `extend_unit::<()>`. The collection type is fixed to (),
+// whose Extend implementation requires unit items. Trait-impl discovery does not
+// infer T from this bound's concrete Self type, so the unit fallback supplies T.
+pub fn extend_unit<T>(value: T)
+where
+    (): Extend<T>,
+{
+    let mut items = core::iter::once(value);
+    ().extend(&mut items);
+    assert!(items.next().is_none());
+}
+
+// TEST NOTE: verified as `extend_unit_pair::<(), ()>`. Exercise the standard
+// library's tuple Extend implementation with two unit item parameters, and
+// check that extending the pair actually consumes the input iterator.
+pub fn extend_unit_pair<A, B>(a: A, b: B)
+where
+    (): Extend<A> + Extend<B>,
+{
+    let mut items = core::iter::once((a, b));
+    ((), ()).extend(&mut items);
+    assert!(items.next().is_none());
+}
+
+pub trait OnlyUsize {}
+impl OnlyUsize for usize {}
+pub trait OnlyU32 {}
+impl OnlyU32 for u32 {}
+pub trait OnlyU64 {}
+impl OnlyU64 for u64 {}
+
+// TEST NOTE: verified as `three_params::<usize, u32, u64>`. Near the attempt cap;
+// must keep this instantiation if the fallback changes (see #4880).
+pub fn three_params<A: OnlyUsize, B: OnlyU32, C: OnlyU64>(_a: A, _b: B, _c: C) {}
+
+// TEST NOTE: verified as `first::<i32>`; lifetime parameters are erased.
+pub fn first<'a, T: Copy>(x: &'a T) -> T {
+    *x
+}
+
+// TEST NOTE: verified as `takes_impl::<u32>`: `i32` does not satisfy `Into<u64>`,
+// so the next candidate that does (`u32`) is chosen.
+pub fn takes_impl(x: impl Into<u64> + Copy) -> u64 {
+    x.into()
+}
+
+// TEST NOTE: skipped (Generic Function), since no candidate type implements `Exotic`
+// (the trait has no implementations at all).
+pub trait Exotic {
+    fn exotic(&self) -> u8;
+}
+pub fn needs_exotic<T: Exotic>(x: T) -> u8 {
+    x.exotic()
+}
+
+// TEST NOTE: verified as `halve::<f64>`; no integral candidate satisfies the bound, but the
+// float candidates do (mimics num-traits' `Float`).
+pub trait FloatLike {
+    fn half(self) -> Self;
+}
+impl FloatLike for f64 {
+    fn half(self) -> Self {
+        self / 2.0
+    }
+}
+impl FloatLike for f32 {
+    fn half(self) -> Self {
+        self / 2.0
+    }
+}
+pub fn halve<T: FloatLike>(x: T) -> T {
+    x.half()
+}
+
+// TEST NOTE: verified as `frob_it::<Widget>`; no primitive implements `Frobnicate`, so the
+// candidate is derived from the trait's implementations.
+pub trait Frobnicate {
+    fn frob(&self) -> u32;
+}
+#[derive(kani::Arbitrary)]
+pub struct Widget {
+    pub id: u32,
+}
+impl Frobnicate for Widget {
+    fn frob(&self) -> u32 {
+        self.id.wrapping_add(1)
+    }
+}
+pub fn frob_it<W: Frobnicate>(w: W) -> u32 {
+    w.frob()
+}
+
+// TEST NOTE: verified as `mixed::<f64, Widget>`; the parameters require *different*
+// candidate types, found by the per-parameter search.
+pub fn mixed<T: FloatLike, U: Frobnicate>(x: T, w: U) -> u32 {
+    let _ = x.half();
+    w.frob()
+}
+
+// TEST NOTE: verified as `Container::<Widget>::mix::<f64>`. The bound that needs an
+// impl-derived candidate (`W: Frobnicate`) is on the *impl*, not on `mix` itself, so it is a
+// predicate of the parent rather than of the method; deriving candidates has to walk the
+// parent chain to see it.
+pub struct Container<W> {
+    pub w: W,
+}
+impl<W: Frobnicate> Container<W> {
+    pub fn mix<T: FloatLike>(&self, x: T) -> u32 {
+        let _ = x.half();
+        self.w.frob()
+    }
+}
+
+// TEST NOTE: verified as `with_const::<2>`; usize const generic parameters are instantiated
+// with the value 2.
+pub fn with_const<const N: usize>(x: [u8; N]) -> usize {
+    x.len() + N
+}
+
+// TEST NOTE: skipped (Generic Function), since non-usize const generic parameters are not
+// supported yet.
+pub fn with_bool_const<const B: bool>(x: u8) -> u8 {
+    if B { x } else { 0 }
+}
+
+// TEST NOTE: skipped (Generic Function). The `const {}` block constrains N, and the value
+// autoharness substitutes (2) violates it. This is the shape reported in
+// https://github.com/model-checking/kani/issues/4794 (`core::escape`'s `const { assert!(N >= 4) }`).
+pub fn with_const_assert<const N: usize>(x: u8) -> u8 {
+    const { assert!(N >= 4) };
+    x
+}
+
+// TEST NOTE: skipped (Generic Function), as above, but here the block produces a value, so
+// codegen forces its evaluation: generating a harness anyway made rustc reject the instantiation
+// with an unrecoverable E0080 that aborted the whole run.
+pub fn with_const_index<const N: usize>(x: u8) -> u8 {
+    const { [10u8, 20u8][N] };
+    x
+}
+
+// TEST NOTE: skipped (Generic Function). The block is not in this function's body, but harnessing
+// it monomorphizes `with_const_index::<2>` all the same, so the search for const-block
+// preconditions follows calls that forward a const parameter.
+pub fn forwards_const_precondition<const N: usize>(x: u8) -> u8 {
+    with_const_index::<N>(x)
+}
+
+// TEST NOTE: skipped (Generic Function), as above: a closure body is a separate MIR body, but it
+// inherits its parent's const parameter, so it is searched too.
+pub fn const_precondition_in_closure<const N: usize>(x: u8) -> u8 {
+    let guarded = || {
+        const { [10u8, 20u8][N] };
+        x
+    };
+    guarded()
+}
+
+// TEST NOTE: verified as `forwards_concrete_const::<2>`. The callee's const argument is concrete,
+// so whether it evaluates does not depend on the value autoharness substitutes, and the candidate
+// is accepted.
+pub fn forwards_concrete_const<const N: usize>(x: u8) -> u8 {
+    with_const_index::<1>(x).wrapping_add(N as u8)
+}
+
+// TEST NOTE: skipped (Generic Function). The `const {}` block is decided by the substituted *type*:
+// harnessing it as `with_type_index::<i32>` made rustc reject the instantiation with an
+// unrecoverable E0080 that aborted the whole run.
+// https://github.com/model-checking/kani/issues/4826
+pub fn with_type_index<T>(x: u8) -> u8 {
+    const { [10u8, 20u8][std::mem::size_of::<T>()] };
+    x
+}
+
+// TEST NOTE: skipped (Generic Function). The const parameter reaches the guarded block only through
+// a type argument, `[u8; N]`, so the search must follow calls whose type arguments mention it.
+// https://github.com/model-checking/kani/issues/4826
+pub fn forwards_const_through_type<const N: usize>(x: u8) -> u8 {
+    with_type_index::<[u8; N]>(x)
+}
+
+// TEST NOTE: verified as `forwards_concrete_type::<i32>`. The callee's type argument is concrete,
+// so whether its block evaluates does not depend on the type autoharness substitutes.
+pub fn forwards_concrete_type<T>(x: u8, _y: T) -> u8 {
+    with_type_index::<u8>(x)
+}
+
+// TEST NOTE: skipped (Generic Function). Its second type parameter decides the guarded callee.
+pub fn forwards_second_type<A, B>(x: u8, _y: A) -> u8 {
+    with_type_index::<B>(x)
+}
+
+// TEST NOTE: verified as `concrete_second_type::<i32>`. It reaches the same guarded callee, but
+// only through the concrete second argument `u8`: the search carries the arguments it instantiates
+// `forwards_second_type` with, rather than inspecting that body in its identity form.
+pub fn concrete_second_type<T>(x: u8, y: T) -> u8 {
+    forwards_second_type::<T, u8>(x, y)
+}
+
+// TEST NOTE: verified as `slice_len::<i32>`. The slice iterator it reaches requires generic
+// associated constants such as `<T as SizedTypeProperties>::IS_ZST`, which are not `const {}`
+// blocks and are not treated as preconditions on the type parameter.
+pub fn slice_len<T>(x: [T; 2]) -> usize {
+    x.iter().count()
+}
+
+// TEST NOTE: verified as `Wrapper::<i32>::get`; generic parameters of the impl block are
+// instantiated too.
+pub struct Wrapper<T> {
+    val: T,
+}
+
+impl<T: Copy> Wrapper<T> {
+    pub fn get(&self) -> T {
+        self.val
+    }
+}
+
+// TEST NOTE: verified as `contracted::<u32>` with a contract harness; the contract is checked
+// for the chosen instantiation.
+#[kani::requires(x < 1000)]
+#[kani::ensures(|r| *r >= x)]
+pub fn contracted<T: Copy + Into<u64>>(_marker: T, x: u64) -> u64 {
+    x + 1
+}

@@ -11,15 +11,16 @@ use std::collections::HashSet;
 
 use crate::codegen_cprover_gotoc::GotocCtx;
 use crate::codegen_cprover_gotoc::codegen::PropertyClass;
+use crate::kani_middle::nonnull_pointee;
 use crate::unwrap_or_return_codegen_unimplemented_stmt;
 use cbmc::goto_program::{Expr, Location, Stmt, Symbol, Type};
 use cbmc::{InternString, InternedString};
 use lazy_static::lazy_static;
-use stable_mir::CrateDef;
-use stable_mir::abi::{CallConvention, PassMode};
-use stable_mir::mir::Place;
-use stable_mir::mir::mono::Instance;
-use stable_mir::ty::{RigidTy, TyKind};
+use rustc_public::CrateDef;
+use rustc_public::abi::{CallConvention, PassMode};
+use rustc_public::mir::Place;
+use rustc_public::mir::mono::Instance;
+use rustc_public::ty::{RigidTy, TyKind};
 use tracing::{debug, trace};
 
 lazy_static! {
@@ -40,7 +41,7 @@ lazy_static! {
     };
 }
 
-impl GotocCtx<'_> {
+impl GotocCtx<'_, '_> {
     /// Generate the symbol and symbol table entry for foreign items.
     ///
     /// CBMC built-in functions that are supported by Kani are always added to the symbol table, and
@@ -67,7 +68,10 @@ impl GotocCtx<'_> {
                 Symbol::function(trimmed_fn_name, typ, None, instance.name(), loc)
                     .with_is_extern(true)
             })
-        } else if self.is_cffi_enabled() && instance.fn_abi().unwrap().conv == CallConvention::C {
+        } else if self.is_cffi_enabled()
+            && !self.is_unsupported_variadic(instance)
+            && instance.fn_abi().unwrap().conv == CallConvention::C
+        {
             // When C-FFI feature is enabled, we just trust the rust declaration.
             // TODO: Add proper casting and clashing definitions check.
             // https://github.com/model-checking/kani/issues/2426
@@ -109,7 +113,20 @@ impl GotocCtx<'_> {
             .unwrap()
             .iter()
             .zip(args)
-            .map(|(param, arg)| arg.cast_to(param.typ().clone()))
+            .map(|(param, arg)| {
+                let param_typ = param.typ().clone();
+                // `cast_to` only handles scalar conversions. When an aggregate is
+                // involved — e.g. `core::ptr::Alignment` (a struct) passed where the C
+                // shim in `kani_lib.c` declares `size_t` — reinterpret the bits with
+                // `transmute_to` instead (the two are ABI-identical).
+                if arg.typ().is_scalar() && param_typ.is_scalar() {
+                    arg.cast_to(param_typ)
+                } else if *arg.typ() == param_typ {
+                    arg
+                } else {
+                    arg.transmute_to(param_typ, &self.symbol_table)
+                }
+            })
             .collect::<Vec<_>>();
         let call_expr = fn_expr.call(expected_args);
 
@@ -130,7 +147,7 @@ impl GotocCtx<'_> {
     /// Checks whether C-FFI has been enabled or not.
     /// When enabled, we blindly encode the function type as is.
     fn is_cffi_enabled(&self) -> bool {
-        self.queries.args().unstable_features.contains(&"c-ffi".to_string())
+        self.queries.args().unstable_features.iter().any(|arg| arg == "c-ffi")
     }
 
     /// Generate code for a foreign function shim.
@@ -145,8 +162,30 @@ impl GotocCtx<'_> {
     /// Generate type for the given foreign instance.
     fn codegen_ffi_type(&mut self, instance: Instance) -> Type {
         let fn_name = instance.mangled_name();
-        let fn_abi = instance.fn_abi().unwrap();
         let loc = self.codegen_span_stable(instance.def.span());
+        if self.is_unsupported_variadic(instance) {
+            // See `is_unsupported_variadic`: the ABI is unavailable, so take the parameter types
+            // from the signature. The shim still gets the unsupported-construct body every FFI
+            // shim gets, and CBMC requires a body's parameters to be named symbols.
+            let sig = instance.ty().kind().fn_sig().unwrap().value;
+            let params = sig
+                .inputs()
+                .iter()
+                .enumerate()
+                .map(|(idx, ty)| {
+                    let arg_name = format!("{fn_name}::param_{idx}");
+                    let base_name = format!("param_{idx}");
+                    let arg_type = self.codegen_ty_stable(*ty);
+                    let sym = Symbol::variable(&arg_name, &base_name, arg_type.clone(), loc)
+                        .with_is_parameter(true);
+                    self.symbol_table.insert(sym);
+                    arg_type.as_parameter(Some(arg_name.into()), Some(base_name.into()))
+                })
+                .collect();
+            let ret_type = self.codegen_ty_stable(sig.output());
+            return Type::variadic_code(params, ret_type);
+        }
+        let fn_abi = instance.fn_abi().unwrap();
         let params = fn_abi
             .args
             .iter()
@@ -155,7 +194,21 @@ impl GotocCtx<'_> {
             .map(|(idx, arg)| {
                 let arg_name = format!("{fn_name}::param_{idx}");
                 let base_name = format!("param_{idx}");
-                let arg_type = self.codegen_ty_stable(arg.ty);
+                // `core::mem::Alignment` is `repr(transparent)` over a `repr(usize)`
+                // enum (ABI-identical to `usize`). As of nightly-2026-02-16 the Rust
+                // allocation shims (`__rust_alloc` etc.) take their alignment argument
+                // as `Alignment` rather than `usize`. Its goto type is not `size_t`,
+                // which would mismatch the `size_t` parameters of the C definitions in
+                // `kani_lib.c` at link time, leaving the allocator body unlinked (so it
+                // havocs and may "fail", making the OOM path reachable). Represent it as
+                // `size_t` for FFI so the definitions link.
+                let arg_type = if is_alignment(arg.ty) {
+                    Type::size_t()
+                } else if let Some(pointee) = nonnull_pointee(arg.ty) {
+                    self.codegen_ty_stable(pointee).to_pointer()
+                } else {
+                    self.codegen_ty_stable(arg.ty)
+                };
                 let sym = Symbol::variable(&arg_name, &base_name, arg_type.clone(), loc)
                     .with_is_parameter(true);
                 self.symbol_table.insert(sym);
@@ -183,13 +236,23 @@ impl GotocCtx<'_> {
         let entry = self.unsupported_constructs.entry("foreign function".into()).or_default();
         entry.push(loc);
 
-        let call_conv = instance.fn_abi().unwrap().conv;
-        let msg = format!("call to foreign \"{call_conv:?}\" function `{fn_name}`");
-        let url = if call_conv == CallConvention::C {
-            "https://github.com/model-checking/kani/issues/2423"
+        // Asking for the ABI of a non-C variadic aborts the compilation (c.f.
+        // `is_unsupported_variadic`), so name the convention from the declaration for those.
+        let (call_conv, url) = if self.is_unsupported_variadic(instance) {
+            (
+                format!("{:?}", instance.ty().kind().fn_sig().unwrap().value.abi),
+                "https://github.com/model-checking/kani/issues/4817",
+            )
         } else {
-            "https://github.com/model-checking/kani/issues/new/choose"
+            let conv = instance.fn_abi().unwrap().conv;
+            let url = if conv == CallConvention::C {
+                "https://github.com/model-checking/kani/issues/2423"
+            } else {
+                "https://github.com/model-checking/kani/issues/new/choose"
+            };
+            (format!("{conv:?}"), url)
         };
+        let msg = format!("call to foreign \"{call_conv}\" function `{fn_name}`");
         self.codegen_assert_assume(
             Expr::bool_false(),
             PropertyClass::UnsupportedConstruct,
@@ -197,4 +260,27 @@ impl GotocCtx<'_> {
             loc,
         )
     }
+}
+
+/// Returns `true` if `ty` is the standard library's `Alignment`, under either the `core` or `std`
+/// path and under either the `mem` module (as of nightly-2026-03-21) or the `ptr` module (before).
+///
+/// That type is `repr(transparent)` over a `repr(usize)` enum and is therefore
+/// ABI-identical to `usize`, but its goto type is not `size_t`. We treat it as
+/// `size_t` in foreign (FFI) signatures so that Rust's allocation shims match the
+/// `size_t`-typed definitions in `kani_lib.c`.
+fn is_alignment(ty: rustc_public::ty::Ty) -> bool {
+    matches!(
+        ty.kind(),
+        TyKind::RigidTy(RigidTy::Adt(def, _))
+            if matches!(
+                def.name().as_str(),
+                // The type moved from `ptr` to `mem` in nightly-2026-03-21; both paths are matched
+                // so that this keeps working across the move.
+                "core::mem::Alignment"
+                    | "std::mem::Alignment"
+                    | "core::ptr::Alignment"
+                    | "std::ptr::Alignment"
+            )
+    )
 }

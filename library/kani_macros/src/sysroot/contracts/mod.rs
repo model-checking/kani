@@ -171,7 +171,7 @@
 //!     const fn kani_register_contract<T, F: FnOnce() -> T>(f: F) -> T {
 //!         unreachable!()
 //!     }
-//!     #[inline(never)]
+//!     #[inline]
 //!     #[kanitool::fn_marker = "kani_contract_mode"]
 //!     const fn kani_contract_mode() -> kani::internal::Mode {
 //!         kani::internal::ORIGINAL
@@ -341,7 +341,7 @@
 //!     const fn kani_register_contract<T, F: FnOnce() -> T>(f: F) -> T {
 //!         unreachable!()
 //!     }
-//!     #[inline(never)]
+//!     #[inline]
 //!     #[kanitool::fn_marker = "kani_contract_mode"]
 //!     const fn kani_contract_mode() -> kani::internal::Mode {
 //!         kani::internal::ORIGINAL
@@ -513,9 +513,12 @@
 //! ```
 
 use proc_macro::TokenStream;
-use proc_macro2::{Ident, TokenStream as TokenStream2};
+use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 use quote::quote;
-use syn::{Expr, ExprClosure, ItemFn, parse_macro_input, parse_quote};
+use strum_macros::Display;
+use syn::{
+    Error, Expr, ExprClosure, ImplItemFn, ItemFn, TraitItemFn, parse_macro_input, parse_quote,
+};
 
 mod assert;
 mod bootstrap;
@@ -527,6 +530,7 @@ mod replace;
 mod shared;
 
 const INTERNAL_RESULT_IDENT: &str = "result_kani_internal";
+const INTERNAL_SELF_IDENT: &str = "self_kani_internal";
 
 pub fn requires(attr: TokenStream, item: TokenStream) -> TokenStream {
     contract_main(attr, item, ContractConditionsType::Requires)
@@ -573,6 +577,11 @@ pub fn proof_for_contract(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args = proc_macro2::TokenStream::from(attr);
     let mut fn_item = parse_macro_input!(item as ItemFn);
     fn_item.block.stmts.insert(0, parse_quote!(kani::internal::init_contracts();));
+    // Reset the contract-clause depth counter before anything else: statics
+    // are not reliably zero-initialized, and the counter steers the dispatch
+    // of calls to the function under verification (see `set_mode` in the
+    // Kani compiler).
+    fn_item.block.stmts.insert(0, parse_quote!(kani::internal::reset_contract_clause_depth();));
     quote!(
         #[allow(dead_code)]
         #[kanitool::proof_for_contract = stringify!(#args)]
@@ -597,7 +606,7 @@ struct ContractConditionsHandler<'a> {
     /// Information specific to the type of contract attribute we're expanding.
     condition_type: ContractConditionsData,
     /// Body of the function this attribute was found on.
-    annotated_fn: &'a ItemFn,
+    annotated_fn: &'a ImplItemFn,
     /// An unparsed, unmodified copy of `attr`, used in the error messages.
     attr_copy: TokenStream2,
     /// The stream to which we should write the generated code.
@@ -617,7 +626,8 @@ struct ContractConditionsHandler<'a> {
 /// Which kind of contract attribute are we dealing with?
 ///
 /// Pre-parsing version of [`ContractConditionsData`].
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Display)]
+#[strum(serialize_all = "lowercase")]
 enum ContractConditionsType {
     Requires,
     PanicsIf,
@@ -674,16 +684,26 @@ impl<'a> ContractConditionsHandler<'a> {
 fn contract_main(
     attr: TokenStream,
     item: TokenStream,
-    condition_kind: ContractConditionsType,
+    contract_typ: ContractConditionsType,
 ) -> TokenStream {
+    // Contract expansion edits the body of the function,
+    // so we can't allow applying contract attributes to method decls without bodies.
+    if let Ok(trait_fn) = syn::parse::<TraitItemFn>(item.clone())
+        && trait_fn.default.is_none()
+    {
+        let error_msg = format!(
+            "#[kani::{contract_typ}] cannot be applied to trait function declarations without default bodies.\n\
+             help: Apply this attribute to the implementation of the function instead.",
+        );
+        return Error::new(Span::call_site(), error_msg).into_compile_error().into();
+    }
     let attr_copy = TokenStream2::from(attr.clone());
-    let mut item_fn = parse_macro_input!(item as ItemFn);
+    let item_fn = parse_macro_input!(item as ImplItemFn);
     let function_state = ContractFunctionState::from_attributes(&item_fn.attrs);
-    let handler =
-        match ContractConditionsHandler::new(condition_kind, attr, &mut item_fn, attr_copy) {
-            Ok(handler) => handler,
-            Err(e) => return e.into_compile_error().into(),
-        };
+    let handler = match ContractConditionsHandler::new(contract_typ, attr, &item_fn, attr_copy) {
+        Ok(handler) => handler,
+        Err(e) => return e.into_compile_error().into(),
+    };
 
     handler.dispatch_on(function_state).into()
 }

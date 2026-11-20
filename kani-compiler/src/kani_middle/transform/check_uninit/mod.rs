@@ -4,11 +4,12 @@
 //! Module containing multiple transformation passes that instrument the code to detect possible UB
 //! due to the accesses to uninitialized memory.
 
+use crate::kani_middle::nonnull_pointee;
 use crate::kani_middle::transform::body::{
-    CheckType, InsertPosition, MutableBody, SourceInstruction,
+    CheckType, InsertPosition, MutableBody, SourceInstruction, synthetic_source_info,
 };
 use relevant_instruction::{InitRelevantInstruction, MemoryInitOp};
-use stable_mir::{
+use rustc_public::{
     mir::{
         AggregateKind, BasicBlock, Body, ConstOperand, Mutability, Operand, Place, Rvalue,
         Statement, StatementKind, Terminator, TerminatorKind, UnwindAction, mono::Instance,
@@ -20,6 +21,7 @@ use std::collections::HashMap;
 use crate::kani_middle::kani_functions::{KaniFunction, KaniModel};
 pub use delayed_ub::DelayedUbPass;
 pub use ptr_uninit::UninitPass;
+use rustc_public::mir::WithRetag;
 pub use ty_layout::{PointeeInfo, PointeeLayout};
 
 mod delayed_ub;
@@ -51,6 +53,19 @@ const KANI_COPY_INIT_STATE_SINGLE: KaniFunction =
     KaniFunction::Model(KaniModel::CopyInitStateSingle);
 const KANI_LOAD_ARGUMENT: KaniFunction = KaniFunction::Model(KaniModel::LoadArgument);
 const KANI_STORE_ARGUMENT: KaniFunction = KaniFunction::Model(KaniModel::StoreArgument);
+// The contract-clause-depth functions access the `CONTRACT_CLAUSE_DEPTH`
+// static. Instrumenting that access would inject memory-initialization shadow
+// writes that CBMC's contract write-set check then flags as illegal side
+// effects when a clause is evaluated during contract verification (e.g. a
+// `requires(can_dereference(..))` under `-Z uninit-checks`). The counter is
+// verifier-internal and always reset at harness entry, so skipping these is
+// sound, mirroring the mem-init functions above.
+const KANI_ENTER_CONTRACT_CLAUSE: KaniFunction =
+    KaniFunction::Model(KaniModel::EnterContractClause);
+const KANI_EXIT_CONTRACT_CLAUSE: KaniFunction = KaniFunction::Model(KaniModel::ExitContractClause);
+const KANI_IN_CONTRACT_CLAUSE: KaniFunction = KaniFunction::Model(KaniModel::InContractClause);
+const KANI_RESET_CONTRACT_CLAUSE_DEPTH: KaniFunction =
+    KaniFunction::Model(KaniModel::ResetContractClauseDepth);
 
 // Function bodies of those functions will not be instrumented as not to cause infinite recursion.
 const SKIPPED_ITEMS: &[KaniFunction] = &[
@@ -66,6 +81,10 @@ const SKIPPED_ITEMS: &[KaniFunction] = &[
     KANI_COPY_INIT_STATE_SINGLE,
     KANI_LOAD_ARGUMENT,
     KANI_STORE_ARGUMENT,
+    KANI_ENTER_CONTRACT_CLAUSE,
+    KANI_EXIT_CONTRACT_CLAUSE,
+    KANI_IN_CONTRACT_CLAUSE,
+    KANI_RESET_CONTRACT_CLAUSE_DEPTH,
 ];
 
 /// Instruments the code with checks for uninitialized memory, agnostic to the source of targets.
@@ -149,14 +168,18 @@ impl<'a> UninitInstrumenter<'a> {
             // Sanity check: since CBMC memory object primitives only accept pointers, need to
             // ensure the correct type.
             let ptr_operand_ty = operation.operand_ty(body);
-            let pointee_ty = match ptr_operand_ty.kind() {
-                TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) => pointee_ty,
-                _ => {
+            let pointee_ty =
+                if let TyKind::RigidTy(RigidTy::RawPtr(pointee_ty, _)) = ptr_operand_ty.kind() {
+                    pointee_ty
+                } else if let Some(pointee_ty) = nonnull_pointee(ptr_operand_ty) {
+                    // The allocation shims hand us a `NonNull<u8>`, which holds the same address as the
+                    // `*mut u8` they used to take.
+                    pointee_ty
+                } else {
                     unreachable!(
                         "Should only build checks for raw pointers, `{ptr_operand_ty}` encountered."
                     )
-                }
-            };
+                };
             // Calculate pointee layout for byte-by-byte memory initialization checks.
             match PointeeInfo::from_ty(pointee_ty) {
                 Ok(type_info) => type_info,
@@ -173,12 +196,15 @@ impl<'a> UninitInstrumenter<'a> {
         match &operation {
             MemoryInitOp::CheckSliceChunk { .. }
             | MemoryInitOp::Check { .. }
+            | MemoryInitOp::CheckAs { .. }
             | MemoryInitOp::CheckRef { .. } => {
                 self.build_get_and_check(body, source, operation, pointee_info)
             }
             MemoryInitOp::SetSliceChunk { .. }
             | MemoryInitOp::Set { .. }
             | MemoryInitOp::SetRef { .. }
+            | MemoryInitOp::SetVtable { .. }
+            | MemoryInitOp::SetAs { .. }
             | MemoryInitOp::CreateUnion { .. } => {
                 self.build_set(body, source, operation, pointee_info)
             }
@@ -218,7 +244,9 @@ impl<'a> UninitInstrumenter<'a> {
                 // Depending on whether accessing the known number of elements in the slice, need to
                 // pass is as an argument.
                 let (diagnostic, args) = match &operation {
-                    MemoryInitOp::Check { .. } | MemoryInitOp::CheckRef { .. } => {
+                    MemoryInitOp::Check { .. }
+                    | MemoryInitOp::CheckAs { .. }
+                    | MemoryInitOp::CheckRef { .. } => {
                         let diagnostic = KANI_IS_PTR_INITIALIZED;
                         let args = vec![ptr_operand.clone(), layout_operand];
                         (diagnostic, args)
@@ -248,7 +276,7 @@ impl<'a> UninitInstrumenter<'a> {
                         target: Some(0), // The current value does not matter, since it will be overwritten in add_bb.
                         unwind: UnwindAction::Terminate,
                     },
-                    span: source.span(body.blocks()),
+                    source_info: synthetic_source_info(source.span(body.blocks())),
                 }
             }
             PointeeLayout::Slice { element_layout } => {
@@ -281,12 +309,20 @@ impl<'a> UninitInstrumenter<'a> {
                         target: Some(0), // The current value does not matter, since it will be overwritten in add_bb.
                         unwind: UnwindAction::Terminate,
                     },
-                    span: source.span(body.blocks()),
+                    source_info: synthetic_source_info(source.span(body.blocks())),
                 }
             }
             PointeeLayout::TraitObject => {
-                let reason = "Kani does not support reasoning about memory initialization of pointers to trait objects.";
-                self.inject_unsupported_check(body, source, operation.position(), reason);
+                // The layout of the value behind the pointer, and so which of its bytes must be
+                // initialized, is only known from the vtable at run time. Places `*ptr` of a trait
+                // object type are not checked (see `CheckUninitVisitor::visit_place`), so this is
+                // a check that a reference to a trait object points to a valid value, e.g. for a
+                // transmute from a raw pointer to a reference: report it as unsupported.
+                let reason = format!(
+                    "Kani does not support checking the initialization of the value behind a `{}`.",
+                    operation.operand_ty(body)
+                );
+                self.inject_unsupported_check(body, source, operation.position(), &reason);
                 return;
             }
             PointeeLayout::Union { .. } => {
@@ -308,6 +344,7 @@ impl<'a> UninitInstrumenter<'a> {
             MemoryInitOp::Check { operand }
             | MemoryInitOp::CheckSliceChunk { operand, .. }
             | MemoryInitOp::CheckRef { operand } => operand.ty(body.locals()).unwrap(),
+            MemoryInitOp::CheckAs { .. } => operation.operand_ty(body),
             _ => unreachable!(),
         };
         body.insert_check(
@@ -346,7 +383,10 @@ impl<'a> UninitInstrumenter<'a> {
                 // Depending on whether writing to the known number of elements in the slice, need to
                 // pass is as an argument.
                 let (diagnostic, args) = match &operation {
-                    MemoryInitOp::Set { .. } | MemoryInitOp::SetRef { .. } => {
+                    MemoryInitOp::Set { .. }
+                    | MemoryInitOp::SetRef { .. }
+                    | MemoryInitOp::SetVtable { .. }
+                    | MemoryInitOp::SetAs { .. } => {
                         let diagnostic = KANI_SET_PTR_INITIALIZED;
                         let args = vec![
                             ptr_operand,
@@ -392,7 +432,7 @@ impl<'a> UninitInstrumenter<'a> {
                         target: Some(0), // this will be overriden in add_bb
                         unwind: UnwindAction::Terminate,
                     },
-                    span: source.span(body.blocks()),
+                    source_info: synthetic_source_info(source.span(body.blocks())),
                 }
             }
             PointeeLayout::Slice { element_layout } => {
@@ -433,11 +473,29 @@ impl<'a> UninitInstrumenter<'a> {
                         target: Some(0), // The current value does not matter, since it will be overwritten in add_bb.
                         unwind: UnwindAction::Terminate,
                     },
-                    span: source.span(body.blocks()),
+                    source_info: synthetic_source_info(source.span(body.blocks())),
                 }
             }
             PointeeLayout::TraitObject => {
-                unreachable!("Cannot change the initialization state of a trait object directly.");
+                // The layout, and so the padding, depends on the concrete type behind the vtable,
+                // so the update cannot be applied here.
+                //
+                // Marking the pointee initialized can be skipped soundly. For a trait object it only
+                // happens where a pointer to an existing, valid value is created: from a reference
+                // (`&raw const *r`) or for the place a `Drop` terminator drops. An unsized value
+                // cannot be assigned through a pointer. Creating a pointer does not change which
+                // bytes are initialized, so skipping the update leaves the tracked state as it was.
+                // At worst Kani then treats bytes that were not tracked yet as uninitialized: a
+                // false alarm rather than a missed one.
+                //
+                // Marking it uninitialized cannot be skipped: that would leave memory that is no
+                // longer initialized marked as initialized.
+                if !value {
+                    let reason = "Kani does not support marking the memory behind a pointer to a \
+                                  trait object as uninitialized.";
+                    self.inject_unsupported_check(body, source, operation.position(), reason);
+                }
+                return;
             }
             PointeeLayout::Union { field_layouts } => {
                 // Writing union data, which could be either creating a union from scratch or
@@ -487,7 +545,7 @@ impl<'a> UninitInstrumenter<'a> {
                         target: Some(0), // this will be overriden in add_bb
                         unwind: UnwindAction::Terminate,
                     },
-                    span: source.span(body.blocks()),
+                    source_info: synthetic_source_info(source.span(body.blocks())),
                 }
             }
         };
@@ -573,7 +631,7 @@ impl<'a> UninitInstrumenter<'a> {
                 target: Some(0), // this will be overriden in add_bb
                 unwind: UnwindAction::Terminate,
             },
-            span: source.span(body.blocks()),
+            source_info: synthetic_source_info(source.span(body.blocks())),
         };
 
         // Construct the basic block and insert it into the body.
@@ -612,7 +670,7 @@ impl<'a> UninitInstrumenter<'a> {
                 target: Some(0), // this will be overriden in add_bb
                 unwind: UnwindAction::Terminate,
             },
-            span: source.span(body.blocks()),
+            source_info: synthetic_source_info(source.span(body.blocks())),
         };
 
         // Construct the basic block and insert it into the body.
@@ -627,11 +685,14 @@ impl<'a> UninitInstrumenter<'a> {
         reason: &str,
     ) {
         let span = source.span(body.blocks());
-        let rvalue = Rvalue::Use(Operand::Constant(ConstOperand {
-            const_: MirConst::from_bool(false),
-            span,
-            user_ty: None,
-        }));
+        let rvalue = Rvalue::Use(
+            Operand::Constant(ConstOperand {
+                const_: MirConst::from_bool(false),
+                span,
+                user_ty: None,
+            }),
+            WithRetag::No,
+        );
         let result = body.insert_assignment(rvalue, source, position);
         body.insert_check(&self.safety_check_type, source, position, Some(result), reason);
     }
@@ -681,7 +742,10 @@ pub fn mk_layout_operand(
     );
     let ret_ty = rvalue.ty(body.locals()).unwrap();
     let result = body.new_local(ret_ty, span, Mutability::Not);
-    let stmt = Statement { kind: StatementKind::Assign(Place::from(result), rvalue), span };
+    let stmt = Statement {
+        kind: StatementKind::Assign(Place::from(result), rvalue),
+        source_info: synthetic_source_info(span),
+    };
     statements.push(stmt);
 
     Operand::Move(Place { local: result, projection: vec![] })

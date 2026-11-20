@@ -1,6 +1,6 @@
 // Copyright Kani Contributors
 // SPDX-License-Identifier: Apache-2.0 OR MIT
-// kani-flags: -Zfunction-contracts
+// kani-flags: -Zfunction-contracts -Zstubbing
 
 //! Check that Kani reports the correct error message when modifies clause
 //! includes objects of types that do not implement `kani::Arbitrary`.
@@ -24,4 +24,10 @@ fn use_modify(ptr: &mut u32) {
 fn harness() {
     let mut i = kani::any_where(|x| *x < 100);
     use_modify(&mut i);
+}
+
+#[kani::proof_for_contract(modify)]
+fn check_modify() {
+    let mut x: u32 = kani::any();
+    modify(&mut x);
 }

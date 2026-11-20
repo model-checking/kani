@@ -30,7 +30,13 @@ cargo fmt ${check_flag} || error=1
 # Check test source files.
 TESTS=("tests" "docs/src/tutorial")
 # Add ignore patterns for code we don't want to format.
-IGNORE=("*/perf/s2n-quic/*")
+# `*/perf/s2n-quic/*` excludes the upstream submodule.
+# `*/perf/overlays/*` excludes the overlay sources (see
+# `tests/perf/overlays/README.md`): these are partial copies of submodule
+# files staged for `cp -r` by `scripts/kani-perf.sh`, and they can reference
+# `mod` declarations whose siblings only exist in the submodule, so rustfmt
+# cannot standalone-parse them.
+IGNORE=("*/perf/s2n-quic/*" "*/perf/overlays/*")
 
 # Arguments for the find command for excluding the IGNORE paths
 IGNORE_ARGS=()

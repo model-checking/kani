@@ -6,8 +6,26 @@
 #![feature(repr_simd)]
 
 #[repr(simd)]
-#[derive(Clone, PartialEq, Eq, PartialOrd, kani::Arbitrary)]
+#[derive(Clone, Copy, kani::Arbitrary)]
 pub struct i64x2([i64; 2]);
+
+impl i64x2 {
+    fn into_array(self) -> [i64; 2] {
+        unsafe { std::mem::transmute(self) }
+    }
+}
+
+impl std::cmp::PartialEq for i64x2 {
+    fn eq(&self, other: &Self) -> bool {
+        self.into_array() == other.into_array()
+    }
+}
+
+impl std::cmp::PartialOrd for i64x2 {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.into_array().partial_cmp(&other.into_array())
+    }
+}
 
 #[kani::proof]
 fn check_diff() {
@@ -19,18 +37,38 @@ fn check_diff() {
 #[kani::proof]
 fn check_ge() {
     let x: i64x2 = kani::any();
-    kani::assume(x.0[0] > 0);
-    kani::assume(x.0[1] > 0);
+    kani::assume(x.into_array()[0] > 0);
+    kani::assume(x.into_array()[1] > 0);
     assert!(x > i64x2([0, 0]));
 }
 
-#[derive(Clone, Debug)]
+#[derive(Copy)]
 #[repr(simd)]
 struct CustomSimd<T, const LANES: usize>([T; LANES]);
+
+impl<T: Copy, const LANES: usize> Clone for CustomSimd<T, LANES> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T, const LANES: usize> CustomSimd<T, LANES> {
+    fn as_array(&self) -> &[T; LANES] {
+        let p: *const Self = self;
+        unsafe { &*p.cast::<[T; LANES]>() }
+    }
+
+    fn into_array(self) -> [T; LANES]
+    where
+        T: Copy,
+    {
+        *self.as_array()
+    }
+}
 
 #[kani::proof]
 fn simd_vec() {
     let simd = CustomSimd([0u8; 10]);
     let idx: usize = kani::any_where(|x: &usize| *x < 10);
-    assert_eq!(simd.0[idx], 0);
+    assert_eq!(simd.into_array()[idx], 0);
 }

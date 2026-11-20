@@ -32,7 +32,6 @@ pub mod common;
 pub mod header;
 mod json;
 mod raise_fd_limit;
-mod read2;
 pub mod runtest;
 pub mod util;
 
@@ -96,6 +95,8 @@ pub fn parse_config(args: Vec<String>) -> Config {
         .optopt("", "timeout", "the timeout for each test in seconds", "TIMEOUT")
         .optflag("", "no-fail-fast", "run all tests regardless of failure")
         .optflag("", "dry-run", "don't actually run the tests")
+        .optflag("", "require-success",
+        "in `expected` mode, also fail a test whose Kani invocation exits unsuccessfully")
         .optflag("", "fix-expected",
         "override all expected files that did not match the output. Tests will NOT fail when there is a mismatch")
         .optflag("", "report-time",
@@ -109,11 +110,18 @@ pub fn parse_config(args: Vec<String>) -> Config {
     ;
 
     let (argv0, args_) = args.split_first().unwrap();
-    if args.len() == 1 || args[1] == "-h" || args[1] == "--help" {
+    if args.len() == 1 {
         let message = format!("Usage: {argv0} [OPTIONS] [TESTNAME...]");
         println!("{}", opts.usage(&message));
         println!();
-        panic!()
+        std::process::exit(1);
+    }
+
+    if args[1] == "-h" || args[1] == "--help" {
+        let message = format!("Usage: {argv0} [OPTIONS] [TESTNAME...]");
+        println!("{}", opts.usage(&message));
+        println!();
+        std::process::exit(0);
     }
 
     let matches = &match opts.parse(args_) {
@@ -125,7 +133,7 @@ pub fn parse_config(args: Vec<String>) -> Config {
         let message = format!("Usage: {argv0} [OPTIONS]  [TESTNAME...]");
         println!("{}", opts.usage(&message));
         println!();
-        panic!()
+        std::process::exit(0);
     }
 
     fn opt_path(m: &getopts::Matches, nm: &str, default: &[&str]) -> PathBuf {
@@ -178,6 +186,7 @@ pub fn parse_config(args: Vec<String>) -> Config {
         fail_fast: !matches.opt_present("no-fail-fast"),
         dry_run: matches.opt_present("dry-run"),
         fix_expected: matches.opt_present("fix-expected"),
+        require_success: matches.opt_present("require-success"),
         timeout,
         time_opts: matches
             .opt_present("report-time")
@@ -203,6 +212,7 @@ pub fn log_config(config: &Config) {
     logv(c, format!("fail-fast: {:?}", config.fail_fast));
     logv(c, format!("dry-run: {:?}", config.dry_run));
     logv(c, format!("fix-expected: {:?}", config.fix_expected));
+    logv(c, format!("require-success: {:?}", config.require_success));
     logv(
         c,
         format!(
@@ -264,6 +274,11 @@ pub fn run_tests(config: Config) {
         return;
     }
 
+    // `run_tests_console` now takes a tagged list. compiletest collects tests by walking
+    // directories, so the order is not by name and must be reported as `Unsorted`: the
+    // harness binary-searches a list tagged `Sorted`.
+    let test_refs: Vec<&test::TestDescAndFn> = tests.iter().collect();
+    let tests = test::TestList::new(&test_refs, test::TestListOrder::Unsorted);
     let res = test::run_tests_console(&opts, tests);
     match res {
         Ok(true) => {}
@@ -593,8 +608,8 @@ fn make_test_name(config: &Config, testpaths: &TestPaths) -> test::TestName {
 fn make_test_closure(config: &Config, testpaths: &TestPaths) -> test::TestFn {
     let config = config.clone();
     let testpaths = testpaths.clone();
-    test::DynTestFn(Box::new(move || {
-        runtest::run(config, &testpaths);
+    test::DynTestFn(std::sync::Arc::new(move || {
+        runtest::run(config.clone(), &testpaths);
         Ok(())
     }))
 }

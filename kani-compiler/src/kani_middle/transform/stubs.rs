@@ -8,12 +8,12 @@ use crate::kani_middle::transform::body::{MutMirVisitor, MutableBody};
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
 use rustc_middle::ty::TyCtxt;
-use stable_mir::CrateDef;
-use stable_mir::mir::mono::Instance;
-use stable_mir::mir::visit::{Location, MirVisitor};
-use stable_mir::mir::{Body, ConstOperand, LocalDecl, Operand, Terminator, TerminatorKind};
-use stable_mir::rustc_internal;
-use stable_mir::ty::{FnDef, MirConst, RigidTy, TyKind};
+use rustc_public::CrateDef;
+use rustc_public::mir::mono::Instance;
+use rustc_public::mir::visit::{Location, MirVisitor};
+use rustc_public::mir::{Body, ConstOperand, LocalDecl, Operand, Terminator, TerminatorKind};
+use rustc_public::rustc_internal;
+use rustc_public::ty::{FnDef, MirConst, RigidTy, TyKind};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use tracing::{debug, trace};
@@ -22,9 +22,10 @@ use tracing::{debug, trace};
 ///
 /// This pass will replace the entire body, and it should only be applied to stubs
 /// that have a body.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FnStubPass {
     stubs: Stubs,
+    body_source: Option<Instance>,
 }
 
 impl TransformPass for FnStubPass {
@@ -45,6 +46,7 @@ impl TransformPass for FnStubPass {
     /// Transform the function body by replacing it with the stub body.
     fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
+        self.body_source = None;
         let ty = instance.ty();
         if let TyKind::RigidTy(RigidTy::FnDef(fn_def, args)) = ty.kind()
             && let Some(replace) = self.stubs.get(&fn_def)
@@ -52,10 +54,15 @@ impl TransformPass for FnStubPass {
             let new_instance = Instance::resolve(*replace, &args).unwrap();
             debug!(from=?instance.name(), to=?new_instance.name(), "FnStubPass::transform");
             if let Some(body) = FnStubValidator::validate(tcx, (fn_def, *replace), new_instance) {
+                self.body_source = Some(new_instance);
                 return (true, body);
             }
         }
         (false, body)
+    }
+
+    fn take_body_source(&mut self) -> Option<Instance> {
+        self.body_source.take()
     }
 }
 
@@ -66,7 +73,7 @@ impl FnStubPass {
             .iter()
             .filter_map(|(from, to)| (has_body(*from) && has_body(*to)).then_some((*from, *to)))
             .collect::<HashMap<_, _>>();
-        FnStubPass { stubs }
+        FnStubPass { stubs, body_source: None }
     }
 }
 
@@ -74,7 +81,7 @@ impl FnStubPass {
 ///
 /// This pass will replace the function call, since one of the functions do not have a body to
 /// replace.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ExternFnStubPass {
     pub stubs: Stubs,
 }
@@ -97,13 +104,21 @@ impl TransformPass for ExternFnStubPass {
     /// Search for calls to extern functions that should be stubbed.
     ///
     /// We need to find function calls and function pointers.
-    /// We should replace this with a visitor once StableMIR includes a mutable one.
+    /// Only allocate a mutable copy of the body if stubs actually apply (#2664).
     fn transform(&mut self, _tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
+        // Scan the body for any reference to a stubbed function before allocating
+        // a mutable copy (COW pattern). This uses the read-only MirVisitor to
+        // check all operands (calls, function pointers, constants) without
+        // heap-allocating a MutableBody.
+        let mut scanner = StubScanner { stubs: &self.stubs, found: false };
+        scanner.visit_body(&body);
+        if !scanner.found {
+            return (false, body);
+        }
         let mut new_body = MutableBody::from(body);
-        let changed = false;
         let locals = new_body.locals().to_vec();
-        let mut visitor = ExternFnStubVisitor { changed, locals, stubs: &self.stubs };
+        let mut visitor = ExternFnStubVisitor { changed: false, locals, stubs: &self.stubs };
         visitor.visit_body(&mut new_body);
         (visitor.changed, new_body.into())
     }
@@ -123,7 +138,7 @@ impl ExternFnStubPass {
 }
 
 fn has_body(def: FnDef) -> bool {
-    def.body().is_some()
+    def.has_body()
 }
 
 /// Validate that the body of the stub is valid for the given instantiation
@@ -137,7 +152,7 @@ struct FnStubValidator<'a, 'tcx> {
 impl FnStubValidator<'_, '_> {
     fn validate(tcx: TyCtxt, stub: (FnDef, FnDef), new_instance: Instance) -> Option<Body> {
         if validate_stub_const(tcx, new_instance) {
-            let body = new_instance.body().unwrap();
+            let body = crate::kani_middle::checked_body(tcx, new_instance).unwrap();
             let mut validator =
                 FnStubValidator { stub, tcx, locals: body.locals(), is_valid: true };
             validator.visit_body(&body);
@@ -155,22 +170,18 @@ impl MirVisitor for FnStubValidator<'_, '_> {
             && Instance::resolve(def, &args).is_err()
         {
             self.is_valid = false;
-            let callee = def.name();
+            let callee = crate::kani_middle::strip_local_crate_prefix(def.name());
             let receiver_ty = args.0[0].expect_ty();
             let sep = callee.rfind("::").unwrap();
             let trait_ = &callee[..sep];
             self.tcx.dcx().span_err(
                 rustc_internal::internal(self.tcx, loc.span()),
                 format!(
-                    "`{}` doesn't implement \
-                                        `{}`. The function `{}` \
-                                        cannot be stubbed by `{}` due to \
-                                        generic bounds not being met. Callee: {}",
-                    receiver_ty,
-                    trait_,
-                    self.stub.0.name(),
-                    self.stub.1.name(),
-                    callee,
+                    "type `{receiver_ty}` doesn't implement trait `{trait_}`, \
+                     so `{}` cannot be stubbed by `{}`. \
+                     All trait bounds of the stub must be satisfied by the original's call sites.",
+                    crate::kani_middle::strip_local_crate_prefix(self.stub.0.name()),
+                    crate::kani_middle::strip_local_crate_prefix(self.stub.1.name()),
                 ),
             );
         }
@@ -193,7 +204,7 @@ impl MutMirVisitor for ExternFnStubVisitor<'_> {
         {
             let instance = Instance::resolve(*new_def, &args).unwrap();
             let literal = MirConst::try_new_zero_sized(instance.ty()).unwrap();
-            let span = term.span;
+            let span = term.source_info.span;
             let new_func = ConstOperand { span, user_ty: None, const_: literal };
             *func = Operand::Constant(new_func);
             self.changed = true;
@@ -214,6 +225,28 @@ impl MutMirVisitor for ExternFnStubVisitor<'_> {
             let new_func = ConstOperand { span: *span, user_ty: None, const_: literal };
             *operand = Operand::Constant(new_func);
             self.changed = true;
+        }
+    }
+}
+
+/// Read-only visitor that checks if a body contains any reference to a stubbed
+/// function. Used as a fast pre-scan to avoid allocating a MutableBody when no
+/// stubs apply (COW pattern).
+/// Mirrors the same `Operand::Constant` + `FnDef` check used by
+/// `ExternFnStubVisitor` in both `visit_terminator` and `visit_operand`.
+struct StubScanner<'a> {
+    stubs: &'a Stubs,
+    found: bool,
+}
+
+impl MirVisitor for StubScanner<'_> {
+    fn visit_operand(&mut self, op: &Operand, _loc: Location) {
+        if !self.found
+            && let Operand::Constant(c) = op
+            && let TyKind::RigidTy(RigidTy::FnDef(def, _)) = c.const_.ty().kind()
+            && self.stubs.contains_key(&def)
+        {
+            self.found = true;
         }
     }
 }

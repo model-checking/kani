@@ -14,4 +14,16 @@ in function Point::add_x
 
 VERIFICATION:- SUCCESSFUL
 
-Complete - 2 successfully verified harnesses, 0 failures, 2 total.
+Checking harness check_add...
+
+Status: SUCCESS\
+Description: "|result| result.x == self.x + other.x"\
+in function <Point as std::ops::Add>::add
+
+Status: SUCCESS\
+Description: "|result| result.y == self.y + other.y"\
+in function <Point as std::ops::Add>::add
+
+VERIFICATION:- SUCCESSFUL
+
+Complete - 3 successfully verified harnesses, 0 failures, 3 total.

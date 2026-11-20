@@ -1,0 +1,3 @@
+error: function `f` cannot be both the target of `#[kani::proof_for_contract]` and replaced by `#[kani::stub]`
+error: function `f` cannot be both the target of `#[kani::stub_verified]` and replaced by `#[kani::stub]`
+error: aborting due to 2 previous errors

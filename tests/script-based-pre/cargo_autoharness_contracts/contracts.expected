@@ -42,10 +42,6 @@ Autoharness: Checking function should_pass::alignment::Alignment::as_usize's con
 
 should_pass::alignment::Alignment::as_usize\
 	 - Status: SUCCESS\
-	 - Description: "Rust intrinsic assumption failed"
-
-should_pass::alignment::Alignment::as_usize\
-	 - Status: SUCCESS\
 	 - Description: "|result| result.is_power_of_two()"
 
 Manual Harness Summary:
@@ -67,6 +63,6 @@ Autoharness Summary:
 |-----------------------------+---------------------------------------------+-----------------------------+---------------------|
 | cargo_autoharness_contracts | should_fail::max                            | #[kani::proof_for_contract] | Failure             |
 +-----------------------------+---------------------------------------------+-----------------------------+---------------------+
-Note that `kani autoharness` sets default --harness-timeout of 60s and --default-unwind of 20.
+Note that `kani autoharness` sets default --harness-timeout of 60s and --default-unwind of 20 for automatic harnesses.
 If verification failed because of timing out or too low of an unwinding bound, try passing larger values for these arguments (or, if possible, writing a loop contract).
 Complete - 5 successfully verified functions, 1 failures, 6 total.

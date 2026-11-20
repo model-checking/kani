@@ -21,17 +21,17 @@ use initial_target_visitor::{AnalysisTarget, InitialTargetVisitor};
 use instrumentation_visitor::InstrumentationVisitor;
 use rustc_middle::ty::TyCtxt;
 use rustc_mir_dataflow::JoinSemiLattice;
-use rustc_session::config::OutputType;
-use stable_mir::{
+use rustc_public::{
     mir::MirVisitor,
     mir::mono::{Instance, MonoItem},
     ty::FnDef,
 };
+use rustc_session::config::OutputType;
 
 mod initial_target_visitor;
 mod instrumentation_visitor;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DelayedUbPass {
     pub safety_check_type: CheckType,
     pub unsupported_check_type: CheckType,
@@ -72,7 +72,7 @@ impl GlobalPass for DelayedUbPass {
         let targets: HashSet<_> = instances
             .iter()
             .flat_map(|instance| {
-                let body = instance.body().unwrap();
+                let body = crate::kani_middle::checked_body(tcx, *instance).unwrap();
                 let mut visitor = InitialTargetVisitor::new(body.clone());
                 visitor.visit_body(&body);
                 // Convert all places into the format of aliasing graph for later comparison.
@@ -104,7 +104,7 @@ impl GlobalPass for DelayedUbPass {
                     MonoItem::GlobalAsm(_) => None,
                 };
                 if let Some(instance) = entry_fn {
-                    let body = instance.body().unwrap();
+                    let body = crate::kani_middle::checked_body(tcx, instance).unwrap();
                     let results = run_points_to_analysis(&body, tcx, instance, call_graph);
                     global_points_to_graph.join(&results);
                 }
@@ -141,7 +141,7 @@ impl GlobalPass for DelayedUbPass {
                 if instrumentation_added {
                     modified = true;
                     transformer.cache.entry(instance).and_modify(|transformation_result| {
-                        *transformation_result = TransformationResult::Modified(body);
+                        *transformation_result = TransformationResult(body, true);
                     });
                 }
             }

@@ -1,0 +1,3 @@
+--- functions over SVE tuples get harnesses and compile
+--- passing a tuple through verifies
+--- an unsupported SVE operation fails its harness, not the run

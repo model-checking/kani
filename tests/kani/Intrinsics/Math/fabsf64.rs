@@ -9,7 +9,7 @@
 fn test_abs_finite() {
     let x: f64 = kani::any();
     kani::assume(!x.is_nan());
-    let abs_x = unsafe { std::intrinsics::fabsf64(x) };
+    let abs_x = unsafe { std::intrinsics::fabs(x) };
     if x < 0.0 {
         assert!(-x == abs_x);
     } else {
@@ -21,6 +21,6 @@ fn test_abs_finite() {
 fn test_abs_nan() {
     let x: f64 = kani::any();
     kani::assume(x.is_nan());
-    let abs_x = unsafe { std::intrinsics::fabsf64(x) };
+    let abs_x = unsafe { std::intrinsics::fabs(x) };
     assert!(abs_x.is_nan());
 }

@@ -6,7 +6,7 @@
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
-use syn::{Expr, ItemFn, Stmt};
+use syn::{Expr, ImplItemFn, Stmt};
 
 use super::{ContractConditionsHandler, INTERNAL_RESULT_IDENT, helpers::*};
 
@@ -38,7 +38,7 @@ impl<'a> ContractConditionsHandler<'a> {
         // expanded outside in. This way other contract annotations in `attrs`
         // sees those attributes and can use them to determine
         // `function_state`.
-        let ItemFn { attrs, vis, sig, block } = &self.annotated_fn;
+        let ImplItemFn { attrs, vis, defaultness, sig, block } = self.annotated_fn;
         self.output.extend(quote!(
             #(#attrs)*
             #[kanitool::recursion_check = #recursion_name]
@@ -46,7 +46,7 @@ impl<'a> ContractConditionsHandler<'a> {
             #[kanitool::replaced_with = #replace_name]
             #[kanitool::asserted_with = #assert_name]
             #[kanitool::modifies_wrapper = #modifies_name]
-            #vis #sig {
+            #vis #defaultness #sig {
                 // Dummy functions used to force the compiler to annotate Kani's
                 // closures as `FnOnce`. Without this, Rust infers the generated closures as `FnMut`,
                 // preventing us from writing contracts for functions returning mutable references.
@@ -70,8 +70,14 @@ impl<'a> ContractConditionsHandler<'a> {
                     unreachable!()
                 }
                 // Dummy function that we replace to pick the contract mode.
-                // By default, return ORIGINAL
-                #[inline(never)]
+                // By default, return ORIGINAL.
+                //
+                // `#[inline]`, unlike the other markers: this is the only non-generic one, so its
+                // single instantiation lives in the defining crate, and `compiler_builtins` cannot
+                // call through an upstream monomorphization (rust-lang/rust#137222). `#[inline]`
+                // makes rustc emit a local copy in each crate that needs it. Kani still finds the
+                // call in MIR because the MIR `Inline` pass is off at Kani's default opt level.
+                #[inline]
                 #[kanitool::fn_marker = "kani_contract_mode"]
                 const fn kani_contract_mode() -> kani::internal::Mode {
                     kani::internal::ORIGINAL
@@ -106,7 +112,7 @@ impl<'a> ContractConditionsHandler<'a> {
     /// to the attribute being handled.
     pub fn handle_expanded(&mut self) {
         let mut annotated_fn = self.annotated_fn.clone();
-        let ItemFn { block, .. } = &mut annotated_fn;
+        let ImplItemFn { block, .. } = &mut annotated_fn;
         let recursion_closure = expect_closure_in_match(&mut block.stmts, "recursion_check");
         self.expand_recursion(recursion_closure);
 
@@ -128,7 +134,7 @@ impl<'a> ContractConditionsHandler<'a> {
         replace_closure: &TokenStream,
         check_closure: &TokenStream,
     ) -> TokenStream {
-        let ItemFn { sig, .. } = self.annotated_fn;
+        let ImplItemFn { sig, .. } = self.annotated_fn;
         let output = &sig.output;
         let span = Span::call_site();
         let result = Ident::new(INTERNAL_RESULT_IDENT, span);

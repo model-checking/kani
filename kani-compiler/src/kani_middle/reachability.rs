@@ -14,31 +14,32 @@
 //!
 //! We have kept this module agnostic of any Kani code in case we can contribute this back to rustc.
 //!
-//! Note that this is a copy of `reachability.rs` that uses StableMIR but the public APIs are still
+//! Note that this is a copy of `reachability.rs` that uses rustc_public but the public APIs are still
 //! kept with internal APIs.
 use tracing::{debug, debug_span, trace};
 
 use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_data_structures::fx::FxHashSet;
-use rustc_data_structures::stable_hasher::{HashStable, StableHasher};
+use rustc_data_structures::stable_hash::{StableHash, StableHasher};
 use rustc_middle::ty::{TyCtxt, VtblEntry};
-use rustc_session::config::OutputType;
-use stable_mir::CrateItem;
-use stable_mir::mir::alloc::{AllocId, GlobalAlloc};
-use stable_mir::mir::mono::{Instance, InstanceKind, MonoItem, StaticDef};
-use stable_mir::mir::{
+use rustc_public::CrateItem;
+use rustc_public::mir::alloc::{AllocId, GlobalAlloc};
+use rustc_public::mir::mono::{Instance, InstanceKind, MonoItem, StaticDef};
+use rustc_public::mir::{
     Body, CastKind, ConstOperand, MirVisitor, PointerCoercion, Rvalue, Terminator, TerminatorKind,
     visit::Location,
 };
-use stable_mir::rustc_internal;
-use stable_mir::ty::{Allocation, ClosureKind, ConstantKind, RigidTy, Ty, TyKind};
-use stable_mir::{CrateDef, ItemKind};
+use rustc_public::rustc_internal;
+use rustc_public::ty::{Allocation, ClosureKind, ConstantKind, RigidTy, Ty, TyKind};
+use rustc_public::{CrateDef, ItemKind};
+#[cfg(debug_assertions)]
+use rustc_session::config::OutputType;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
-use std::{
-    collections::{HashMap, HashSet},
-    fs::File,
-    io::{BufWriter, Write},
-};
+#[cfg(debug_assertions)]
+use std::fs::File;
+#[cfg(debug_assertions)]
+use std::io::{BufWriter, Write};
 
 use crate::kani_middle::coercion;
 use crate::kani_middle::coercion::CoercionBase;
@@ -79,19 +80,11 @@ pub fn filter_crate_items<F>(tcx: TyCtxt, predicate: F) -> Vec<Instance>
 where
     F: Fn(TyCtxt, Instance) -> bool,
 {
-    let crate_items = stable_mir::all_local_items();
+    let crate_items = rustc_public::all_local_items();
     // Filter regular items.
     crate_items
         .iter()
         .filter_map(|item| {
-            // avoid stable MIR panic
-            // https://github.com/model-checking/kani/issues/3919
-            if let Ok(instance) = Instance::try_from(*item) {
-                let int_def_id = rustc_internal::internal(tcx, instance.def.def_id());
-                if matches!(tcx.def_kind(int_def_id), rustc_hir::def::DefKind::GlobalAsm) {
-                    return None;
-                }
-            };
             // Only collect monomorphic items.
             matches!(item.kind(), ItemKind::Fn)
                 .then(|| {
@@ -178,10 +171,10 @@ impl<'tcx, 'a> MonoItemsCollector<'tcx, 'a> {
     /// Visit a function and collect all mono-items reachable from its instructions.
     fn visit_fn(&mut self, instance: Instance) -> Vec<CollectedItem> {
         let _guard = debug_span!("visit_fn", function=?instance).entered();
-        let body = self.transformer.body(self.tcx, instance);
+        let body = self.transformer.body_ref(self.tcx, instance);
         let mut collector =
-            MonoItemsFnCollector { tcx: self.tcx, collected: FxHashSet::default(), body: &body };
-        collector.visit_body(&body);
+            MonoItemsFnCollector { tcx: self.tcx, collected: FxHashSet::default(), body };
+        collector.visit_body(body);
         collector.collected.into_iter().collect()
     }
 
@@ -278,16 +271,16 @@ impl MonoItemsFnCollector<'_, '_> {
                 assert!(is_direct_call, "Expected direct call {instance:?}");
                 false
             }
+            InstanceKind::LlvmIntrinsic => {
+                // LLVM intrinsics have no Rust body to collect.
+                assert!(is_direct_call, "Expected direct call {instance:?}");
+                false
+            }
             InstanceKind::Intrinsic => {
                 // Intrinsics may have a fallback body.
                 assert!(is_direct_call, "Expected direct call {instance:?}");
-                let TyKind::RigidTy(RigidTy::FnDef(def, _)) = instance.ty().kind() else {
-                    unreachable!("Expected function type for intrinsic: {instance:?}")
-                };
-                // The compiler is currently transitioning how to handle intrinsic fallback body.
-                // Until https://github.com/rust-lang/project-stable-mir/issues/79 is implemented
-                // we have to check `must_be_overridden` and `has_body`.
-                !def.as_intrinsic().unwrap().must_be_overridden() && instance.has_body()
+                // Collect the fallback body only if codegen uses it.
+                !crate::intrinsics::uses_kani_model(&instance)
             }
             InstanceKind::Shim | InstanceKind::Item => true,
         };
@@ -356,7 +349,7 @@ impl MirVisitor for MonoItemsFnCollector<'_, '_> {
                 }
             }
             Rvalue::Cast(
-                CastKind::PointerCoercion(PointerCoercion::ReifyFnPointer),
+                CastKind::PointerCoercion(PointerCoercion::ReifyFnPointer(_)),
                 ref operand,
                 _,
             ) => {
@@ -401,7 +394,17 @@ impl MirVisitor for MonoItemsFnCollector<'_, '_> {
         let allocation = match constant.const_.kind() {
             ConstantKind::Allocated(allocation) => allocation,
             ConstantKind::Unevaluated(_) => {
-                unreachable!("Instance with polymorphic constant: `{constant:?}`")
+                // Instance bodies are monomorphic, so their constants are evaluated when the
+                // body is built. A constant is only left unevaluated if its evaluation failed,
+                // e.g., a type too big for the target architecture, in which case the error
+                // has already been reported. Skip the constant and let
+                // `collect_reachable_items` abort compilation once collection finishes.
+                // See <https://github.com/model-checking/kani/issues/4814>.
+                assert!(
+                    self.tcx.dcx().has_errors().is_some(),
+                    "Instance with polymorphic constant: `{constant:?}`"
+                );
+                return;
             }
             ConstantKind::Param(_) => unreachable!("Unexpected parameter constant: {constant:?}"),
             ConstantKind::ZeroSized => {
@@ -486,7 +489,7 @@ fn extract_unsize_coercion(tcx: TyCtxt, orig_ty: Ty, dst_trait: Ty) -> (Ty, Ty) 
 fn to_fingerprint(tcx: TyCtxt, item: &MonoItem) -> Fingerprint {
     tcx.with_stable_hashing_context(|mut hcx| {
         let mut hasher = StableHasher::new();
-        rustc_internal::internal(tcx, item).hash_stable(&mut hcx, &mut hasher);
+        rustc_internal::internal(tcx, item).stable_hash(&mut hcx, &mut hasher);
         hasher.finish()
     })
 }
@@ -588,6 +591,7 @@ impl CallGraph {
 
     /// Print the graph in DOT format to a file.
     /// See <https://graphviz.org/doc/info/lang.html> for more information.
+    #[cfg(debug_assertions)]
     fn dump_dot(&self, tcx: TyCtxt, initial: Option<MonoItem>) -> std::io::Result<()> {
         if let Ok(target) = std::env::var("KANI_REACH_DEBUG") {
             debug!(?target, "dump_dot");
@@ -616,6 +620,7 @@ impl CallGraph {
     }
 
     /// Write all notes to the given writer.
+    #[cfg(debug_assertions)]
     fn dump_all<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
         tracing::info!(nodes=?self.nodes.len(), edges=?self.edges.len(), "dump_all");
         for node in &self.nodes {
@@ -629,6 +634,7 @@ impl CallGraph {
     }
 
     /// Write all notes that may have led to the discovery of the given target.
+    #[cfg(debug_assertions)]
     fn dump_reason<W: Write>(&self, writer: &mut W, target: &str) -> std::io::Result<()> {
         let mut queue: Vec<Node> =
             self.nodes.iter().filter(|item| item.to_string().contains(target)).cloned().collect();

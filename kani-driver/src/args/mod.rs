@@ -140,17 +140,17 @@ impl From<Timeout> for Duration {
 
 #[derive(Debug, clap::Parser)]
 #[command(
-    version,
     name = "kani",
     about = "Verify a single Rust crate. For more information, see https://github.com/model-checking/kani",
     args_override_self = true,
     subcommand_negates_reqs = true,
     subcommand_precedence_over_arg = true,
-    args_conflicts_with_subcommands = true
+    args_conflicts_with_subcommands = true,
+    disable_version_flag = true
 )]
 pub struct StandaloneArgs {
     /// Rust file to verify
-    #[arg(required = true)]
+    #[arg(required_unless_present = "version")]
     pub input: Option<PathBuf>,
 
     #[command(flatten)]
@@ -161,6 +161,10 @@ pub struct StandaloneArgs {
 
     #[arg(long, hide = true)]
     pub crate_name: Option<String>,
+
+    /// Print version information
+    #[arg(long, short = 'V')]
+    pub version: bool,
 }
 
 /// Kani takes optional subcommands to request specialized behavior.
@@ -174,15 +178,19 @@ pub enum StandaloneSubcommand {
     /// Execute concrete playback testcases of a local crate.
     Playback(Box<playback_args::KaniPlaybackArgs>),
     /// Verify the rust standard library.
+    ///
+    /// The build of the standard library is reused while its inputs (the library sources, the Kani
+    /// compiler and its libraries, the arguments and `RUSTFLAGS`) are unchanged. Delete the
+    /// `kani_verify_std` folder in the target directory to force a rebuild.
     VerifyStd(Box<std_args::VerifyStdArgs>),
 }
 
 #[derive(Debug, clap::Parser)]
 #[command(
-    version,
     name = "cargo-kani",
     about = "Verify a Rust crate. For more information, see https://github.com/model-checking/kani",
-    args_override_self = true
+    args_override_self = true,
+    disable_version_flag = true
 )]
 pub struct CargoKaniArgs {
     #[command(subcommand)]
@@ -190,6 +198,10 @@ pub struct CargoKaniArgs {
 
     #[command(flatten)]
     pub verify_opts: VerificationArgs,
+
+    /// Print version information
+    #[arg(long, short = 'V')]
+    pub version: bool,
 }
 
 /// cargo-kani takes optional subcommands to request specialized behavior
@@ -242,6 +254,11 @@ pub struct VerificationArgs {
     #[arg(long)]
     pub default_unwind: Option<u32>,
 
+    /// Output the verification results to a JSON file at the specified path.
+    /// This feature is unstable and it requires `-Z export-json` to be used
+    #[arg(long)]
+    pub export_json: Option<PathBuf>,
+
     /// When specified, the harness filter will only match the exact fully qualified name of a harness
     #[arg(long, requires("harnesses"))]
     pub exact: bool,
@@ -254,6 +271,8 @@ pub struct VerificationArgs {
     pub extra_pointer_checks: bool,
 
     /// Stop the verification process as soon as one of the harnesses fails.
+    /// Harnesses already running when that happens still finish and are counted, so under
+    /// `--jobs N` the set of reported harnesses depends on how many were in flight.
     #[arg(long)]
     pub fail_fast: bool,
 
@@ -281,12 +300,19 @@ pub struct VerificationArgs {
     #[arg(long, hide_short_help = true)]
     pub ignore_global_asm: bool,
 
+    /// Do not replace `assert!`, `panic!`, and related macros with Kani's versions.
+    /// Assertion failures are then reported as generic panics, without the original condition
+    /// or message. Use this as an escape hatch if your crate's macro imports conflict with
+    /// Kani's injected overrides (error E0659: `assert` is ambiguous).
+    #[arg(long, hide_short_help = true)]
+    pub no_assert_overrides: bool,
+
     /// Number of threads to spawn to verify harnesses in parallel.
     /// Omit the flag entirely to run sequentially (i.e. one thread).
     /// Pass -j to run with the thread pool's default number of threads.
     /// Pass -j <N> to specify N threads.
     #[arg(short, long, hide_short_help = true)]
-    pub jobs: Option<Option<usize>>,
+    jobs: Option<Option<usize>>,
 
     /// Keep temporary files generated throughout Kani process. This is already the default
     /// behavior for `cargo-kani`.
@@ -318,17 +344,30 @@ pub struct VerificationArgs {
     #[arg(long, hide_short_help = true)]
     pub only_codegen: bool,
 
-    /// Toggle between different styles of output
-    #[arg(long, default_value = "regular", ignore_case = true, value_enum)]
-    pub output_format: OutputFormat,
+    /// Toggle between different styles of output. Defaults to "regular", except for
+    /// `autoharness`, which defaults to "terse" (to support parallel harness verification,
+    /// c.f. `--jobs`) unless this option is passed explicitly.
+    #[arg(long, ignore_case = true, value_enum)]
+    pub output_format: Option<OutputFormat>,
 
     /// Write verification results into per-harness files, rather than to stdout
     #[arg(long, hide_short_help = true)]
     pub output_into_files: bool,
 
+    /// Write verbose and terse log output to the specified file.
+    /// When enabled with an interactive terminal, progress indicator will be shown on terminal
+    /// while detailed logs are written to the file.
+    #[arg(long, value_name = "PATH")]
+    pub log_file: Option<PathBuf>,
+
     /// Print final LLBC for Lean backend. This requires the `-Z lean` option.
     #[arg(long, hide = true)]
     pub print_llbc: bool,
+
+    /// Compute verification results under the assumption that no panic occurs.
+    /// This feature is unstable, and it requires `-Z unstable-options` to be used
+    #[arg(long, hide_short_help = true)]
+    pub prove_safety_only: bool,
 
     /// Randomize the layout of structures. This option can help catching code that relies on
     /// a specific layout chosen by the compiler that is not guaranteed to be stable in the future.
@@ -345,6 +384,10 @@ pub struct VerificationArgs {
     /// Execute CBMC's sanity checks to ensure the goto-program we generate is correct.
     #[arg(long, hide_short_help = true)]
     pub run_sanity_checks: bool,
+
+    /// Write SARIF output (Static Analysis Results Interchange Format) to the given path.
+    #[arg(long, value_name = "PATH")]
+    pub sarif: Option<PathBuf>,
 
     /// Specify the CBMC solver to use. Overrides the harness `solver` attribute.
     /// If no solver is specified (with --solver or harness attribute), Kani will use CaDiCaL.
@@ -391,7 +434,53 @@ pub struct VerificationArgs {
     pub target: CargoTargetArgs,
 }
 
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub enum NumThreads {
+    /// The user specified a specific number of threads to use (the `-j [COUNT]` option).
+    UserSpecified(usize),
+    /// The user asked for multithreading, but didn't specify exactly how much (the `-j` option).
+    ThreadPoolDefault,
+    /// The user didn't ask for any multithreading (default).
+    NoMultithreading,
+}
+
+impl NumThreads {
+    /// Build a Rayon thread pool with this job count.
+    pub(crate) fn build_thread_pool(
+        self,
+    ) -> Result<rayon::ThreadPool, rayon::ThreadPoolBuildError> {
+        let mut builder = rayon::ThreadPoolBuilder::new();
+        match self {
+            Self::UserSpecified(num_threads) => {
+                builder = builder.num_threads(num_threads);
+            }
+            Self::NoMultithreading => {
+                builder = builder.num_threads(1);
+            }
+            Self::ThreadPoolDefault => {
+                // Rayon uses its default number of threads.
+            }
+        }
+        builder.build()
+    }
+
+    /// Checks if this will spawn multiple threads in the pool.
+    pub fn will_multithread(&self) -> bool {
+        match self {
+            Self::UserSpecified(x) if *x != 1 => true,
+            Self::ThreadPoolDefault => true,
+            _ => false,
+        }
+    }
+}
+
 impl VerificationArgs {
+    /// Whether the LLBC backend (`-Z lean`) replaces the CBMC one. It writes no goto program, so
+    /// there is nothing to link or verify: Kani stops once the compiler has run.
+    pub fn uses_llbc_backend(&self) -> bool {
+        self.common_args.unstable_features.contains(UnstableFeature::Lean)
+    }
+
     pub fn restrict_vtable(&self) -> bool {
         self.common_args.unstable_features.contains(UnstableFeature::RestrictVtable)
             && !self.no_restrict_vtable
@@ -411,12 +500,26 @@ impl VerificationArgs {
         }
     }
 
-    /// Given an argument, warn if UnstableFeature::UnstableOptions is enabled.
+    /// Given the string representation of an option, warn if it's enabled while
+    /// UnstableFeature::UnstableOptions is also enabled.
     /// This is for cases where the option was previously unstable but has since been stabilized.
+    /// Example invocation: self.check_unnecessary_unstable_option(self.jobs.is_some(), "jobs");
+    #[allow(dead_code)]
     pub fn check_unnecessary_unstable_option(&self, enabled: bool, option: &str) {
+        // Note that the body of this function is subject to change; an option
+        // will only be here if it has been stabilized *recently*, such that we should still warn about unstable-options.
+        // So a body of just `None` is fine, since that just means that no unstable options are currently in that in-between period.
+        // Example of an appropriate body:
+        // ```rust
+        //    match option {
+        //      "jobs" => Some("0.63.0".to_string()),
+        //      _ => None,
+        //    }
+        // ```
+        // for the unstable jobs option, which was stabilized in version 0.63.
+        #[allow(clippy::match_single_binding)]
         fn stabilization_version(option: &str) -> Option<String> {
             match option {
-                "jobs" => Some("0.63.0".to_string()),
                 _ => None,
             }
         }
@@ -429,12 +532,37 @@ impl VerificationArgs {
         }
     }
 
+    /// The output format, defaulting to `regular` when the user did not specify one.
+    pub fn output_format(&self) -> OutputFormat {
+        self.output_format.unwrap_or(OutputFormat::Regular)
+    }
+
+    /// Default to parallel harness verification with terse output for `autoharness`, which
+    /// typically generates hundreds of harnesses; sequential verification is a poor fit.
+    ///
+    /// Explicit user choices are preserved: `--output-format` is only defaulted when the user
+    /// did not pass it, and `--jobs` is only defaulted when the user did not pass it *and* the
+    /// resulting format is `terse` (parallel verification requires terse output, c.f.
+    /// `validate`). Consequently `--output-format=regular` (or `old`) opts back into sequential
+    /// verification, while a bare `--jobs=N` still gets the terse output it needs.
+    ///
+    /// This must run *before* argument validation, so that validation sees the options the run
+    /// will actually use; it is idempotent, so calling it again later is harmless.
+    pub fn apply_autoharness_parallel_defaults(&mut self) {
+        if self.output_format.is_none() {
+            self.output_format = Some(OutputFormat::Terse);
+        }
+        if self.jobs.is_none() && self.output_format() == OutputFormat::Terse {
+            self.jobs = Some(None); // `-j`: the thread pool's default thread count
+        }
+    }
+
     /// Computes how many threads should be used to verify harnesses.
-    pub fn jobs(&self) -> Option<usize> {
+    pub fn jobs(&self) -> NumThreads {
         match self.jobs {
-            None => Some(1),          // no argument, default 1
-            Some(None) => None,       // -j
-            Some(Some(x)) => Some(x), // -j=x
+            None => NumThreads::NoMultithreading, // no argument, default 1
+            Some(None) => NumThreads::ThreadPoolDefault, // -j
+            Some(Some(x)) => NumThreads::UserSpecified(x), // -j=x
         }
     }
 
@@ -458,7 +586,7 @@ pub enum ConcretePlaybackMode {
     InPlace,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, ValueEnum)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 pub enum OutputFormat {
     Regular,
     Terse,
@@ -468,39 +596,22 @@ pub enum OutputFormat {
 #[derive(Debug, clap::Args)]
 #[clap(next_help_heading = "Memory Checks")]
 pub struct CheckArgs {
-    // Rust argument parsers (/clap) don't have the convenient '--flag' and '--no-flag' boolean pairs, so approximate
-    // We're put both here then create helper functions to "intepret"
-    /// Turn on all default checks
-    #[arg(long, hide = true)]
-    pub default_checks: bool,
     /// Turn off all default checks
     #[arg(long)]
     pub no_default_checks: bool,
 
-    /// Turn on default memory safety checks
-    #[arg(long, hide = true)]
-    pub memory_safety_checks: bool,
     /// Turn off default memory safety checks
     #[arg(long)]
     pub no_memory_safety_checks: bool,
 
-    /// Turn on default overflow checks
-    #[arg(long, hide = true)]
-    pub overflow_checks: bool,
     /// Turn off default overflow checks
     #[arg(long)]
     pub no_overflow_checks: bool,
 
-    /// Turn on undefined function checks
-    #[arg(long, hide = true)]
-    pub undefined_function_checks: bool,
     /// Turn off undefined function checks
     #[arg(long)]
     pub no_undefined_function_checks: bool,
 
-    /// Turn on default unwinding checks
-    #[arg(long, hide = true)]
-    pub unwinding_checks: bool,
     /// Turn off default unwinding checks
     #[arg(long)]
     pub no_unwinding_checks: bool,
@@ -508,41 +619,16 @@ pub struct CheckArgs {
 
 impl CheckArgs {
     pub fn memory_safety_on(&self) -> bool {
-        !self.no_default_checks && !self.no_memory_safety_checks || self.memory_safety_checks
+        !self.no_default_checks && !self.no_memory_safety_checks
     }
     pub fn overflow_on(&self) -> bool {
-        !self.no_default_checks && !self.no_overflow_checks || self.overflow_checks
+        !self.no_default_checks && !self.no_overflow_checks
     }
     pub fn undefined_function_on(&self) -> bool {
         !self.no_default_checks && !self.no_undefined_function_checks
-            || self.undefined_function_checks
     }
     pub fn unwinding_on(&self) -> bool {
-        !self.no_default_checks && !self.no_unwinding_checks || self.unwinding_checks
-    }
-    pub fn print_deprecated(&self, verbosity: &CommonArgs) {
-        let deprecation_version = "0.63.0";
-        let alternative = "omitting the argument, since this is already the default behavior";
-        if self.default_checks {
-            print_deprecated(verbosity, "--default-checks", deprecation_version, alternative);
-        }
-        if self.memory_safety_checks {
-            print_deprecated(verbosity, "--memory-safety-checks", deprecation_version, alternative);
-        }
-        if self.overflow_checks {
-            print_deprecated(verbosity, "--overflow-checks", deprecation_version, alternative);
-        }
-        if self.undefined_function_checks {
-            print_deprecated(
-                verbosity,
-                "--undefined-function-checks",
-                deprecation_version,
-                alternative,
-            );
-        }
-        if self.unwinding_checks {
-            print_deprecated(verbosity, "--unwinding-checks", deprecation_version, alternative);
-        }
+        !self.no_default_checks && !self.no_unwinding_checks
     }
 }
 
@@ -726,6 +812,18 @@ impl ValidateArgs for VerificationArgs {
                 UnstableFeature::FunctionContracts,
             )?;
 
+            self.common_args.check_unstable(
+                self.prove_safety_only,
+                "prove-safety-only",
+                UnstableFeature::UnstableOptions,
+            )?;
+
+            self.common_args.check_unstable(
+                self.export_json.is_some(),
+                "export-json",
+                UnstableFeature::ExportJson,
+            )?;
+
             Ok(())
         };
 
@@ -756,26 +854,89 @@ impl ValidateArgs for VerificationArgs {
                     "Conflicting options: --concrete-playback=print and --quiet.",
                 ));
             }
-            if self.concrete_playback.is_some() && self.output_format == OutputFormat::Old {
+            if self.concrete_playback.is_some() && self.output_format() == OutputFormat::Old {
                 return Err(Error::raw(
                     ErrorKind::ArgumentConflict,
                     "Conflicting options: --concrete-playback isn't compatible with \
                 --output-format=old.",
                 ));
             }
-            if self.concrete_playback.is_some() && self.jobs() != Some(1) {
+            if self.sarif.is_some() && self.output_format() == OutputFormat::Old {
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    "Conflicting options: --sarif isn't compatible with --output-format=old.",
+                ));
+            }
+            // `--output-format=old` bypasses CBMC's structured output entirely: `run_cbmc` mocks a
+            // result with no properties, and treats a timeout as success. An export produced from
+            // that would be indistinguishable from a real clean run.
+            if self.export_json.is_some() && self.output_format() == OutputFormat::Old {
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    "Conflicting options: --export-json isn't compatible with --output-format=old.",
+                ));
+            }
+            if self.concrete_playback.is_some() && self.jobs().will_multithread() {
                 // Concrete playback currently embeds a lot of assumptions about the order in which harnesses get called.
                 return Err(Error::raw(
                     ErrorKind::ArgumentConflict,
-                    "Conflicting options: --concrete-playback isn't compatible with --jobs.",
+                    "Conflicting options: --concrete-playback isn't compatible with --jobs specifying multiple threads.",
                 ));
             }
-            if self.jobs.is_some() && self.output_format != OutputFormat::Terse {
+            if self.sarif.is_some() && self.only_codegen {
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    "Conflicting options: --sarif isn't compatible with --only-codegen.",
+                ));
+            }
+            // The LLBC backend stops after codegen too (see `uses_llbc_backend`), so the same
+            // holds for it: nothing would write the requested file.
+            if self.uses_llbc_backend() {
+                for (requested, option) in [
+                    (self.sarif.is_some(), "--sarif"),
+                    (self.export_json.is_some(), "--export-json"),
+                ] {
+                    if requested {
+                        return Err(Error::raw(
+                            ErrorKind::ArgumentConflict,
+                            format!(
+                                "Conflicting options: {option} isn't compatible with {}.",
+                                UnstableFeature::Lean.as_argument_string()
+                            ),
+                        ));
+                    }
+                }
+            }
+            // Neither code-generation-only mode runs verification, so there is nothing to export.
+            // `--only-codegen` would otherwise succeed without writing the file the user asked for,
+            // and `--no-codegen` would write a document describing a run that never happened.
+            if self.export_json.is_some() && (self.only_codegen || self.no_codegen) {
+                let incompatible =
+                    if self.only_codegen { "--only-codegen" } else { "--no-codegen" };
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    format!(
+                        "Conflicting options: --export-json isn't compatible with {incompatible}."
+                    ),
+                ));
+            }
+            if self.jobs().will_multithread() && self.output_format() != OutputFormat::Terse {
                 // More verbose output formats make it hard to interpret output right now when run in parallel.
                 // This can be removed when we change up how results are printed.
                 return Err(Error::raw(
                     ErrorKind::ArgumentConflict,
                     "Conflicting options: --jobs requires `--output-format=terse`",
+                ));
+            }
+            if self.log_file.is_some() && self.output_format() == OutputFormat::Old {
+                // `old` runs CBMC with inherited stdio instead of piping it, so neither
+                // `kani_cbmc_output_filter` nor `process_output` runs and nothing but the
+                // per-harness "Checking harness ..." lines reaches the log. Accepting the
+                // combination would promise a verbose log and deliver an almost empty one,
+                // while the raw CBMC output went to the terminal the log exists to keep clear.
+                return Err(Error::raw(
+                    ErrorKind::ArgumentConflict,
+                    "Conflicting options: --log-file is not compatible with `--output-format=old`",
                 ));
             }
             // TODO: error out for other CBMC-backend-specific arguments
@@ -796,9 +957,6 @@ impl ValidateArgs for VerificationArgs {
 
         // Check for any deprecated/obsolete options, or providing an unstable flag that has since been stabilized.
         let deprecated_stabilized_obsolete = || -> Result<(), Error> {
-            self.checks.print_deprecated(&self.common_args);
-            self.check_unnecessary_unstable_option(self.jobs.is_some(), "jobs");
-
             if self.write_json_symtab {
                 return Err(Error::raw(
                     ErrorKind::ValueValidation,
@@ -824,8 +982,10 @@ impl ValidateArgs for VerificationArgs {
         deprecated_stabilized_obsolete()?;
 
         // Bespoke validations that don't fit into any of the categories above.
-        if self.randomize_layout.is_some() && self.concrete_playback.is_some() {
-            let random_seed = if let Some(seed) = self.randomize_layout.unwrap() {
+        if let Some(randomize_layout) = self.randomize_layout
+            && self.concrete_playback.is_some()
+        {
+            let random_seed = if let Some(seed) = randomize_layout {
                 format!(" -Z layout-seed={seed}")
             } else {
                 String::new()
@@ -850,8 +1010,22 @@ impl ValidateArgs for VerificationArgs {
                 ),
             ));
         }
+        reject_existing_dir("--sarif", self.sarif.as_deref())?;
+        reject_existing_dir("--export-json", self.export_json.as_deref())?;
 
         Ok(())
+    }
+}
+
+/// An output-file flag must not point at a directory: the write would fail only after
+/// verification has run.
+fn reject_existing_dir(flag: &str, path: Option<&Path>) -> Result<(), Error> {
+    match path {
+        Some(path) if path.is_dir() => Err(Error::raw(
+            ErrorKind::InvalidValue,
+            format!("Invalid argument: `{flag}` argument `{}` is a directory", path.display()),
+        )),
+        _ => Ok(()),
     }
 }
 
@@ -1103,6 +1277,99 @@ mod tests {
     }
 
     #[test]
+    fn check_export_json_conflicts() {
+        expect_validation_error(
+            "kani file.rs -Z export-json --export-json out.json --output-format=old",
+            ErrorKind::ArgumentConflict,
+        );
+        expect_validation_error(
+            "kani file.rs -Z export-json --export-json out.json --only-codegen",
+            ErrorKind::ArgumentConflict,
+        );
+        expect_validation_error(
+            "kani file.rs -Z export-json -Z unstable-options --export-json out.json --no-codegen",
+            ErrorKind::ArgumentConflict,
+        );
+        expect_validation_error(
+            "kani file.rs -Z export-json -Z lean --export-json out.json",
+            ErrorKind::ArgumentConflict,
+        );
+    }
+
+    #[test]
+    fn check_output_file_flags_reject_existing_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("dir with spaces");
+        std::fs::create_dir(&target).unwrap();
+        for flags in [&["--sarif"][..], &["-Z", "export-json", "--export-json"][..]] {
+            let mut args = vec![OsString::from("kani"), OsString::from("file.rs")];
+            args.extend(flags.iter().map(OsString::from));
+            args.push(target.as_os_str().to_os_string());
+            let verify_opts = StandaloneArgs::try_parse_from(args).unwrap().verify_opts;
+            assert_eq!(
+                verify_opts.validate().unwrap_err().kind(),
+                ErrorKind::InvalidValue,
+                "{flags:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn check_log_file_conflicts() {
+        // `old` bypasses the piped-output path that populates the log, so the
+        // combination would silently produce an almost empty log file.
+        expect_validation_error(
+            "kani file.rs --log-file out.log --output-format=old",
+            ErrorKind::ArgumentConflict,
+        );
+    }
+
+    #[test]
+    fn check_log_file_allowed_formats() {
+        // The formats that do go through the piped-output path must keep working.
+        // `validate` also checks the input is a regular file, so use a real one.
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("file.rs");
+        std::fs::write(&input, "fn main() {}").unwrap();
+
+        for format in ["terse", "regular"] {
+            let args = StandaloneArgs::try_parse_from([
+                "kani",
+                input.to_str().unwrap(),
+                "--log-file",
+                "out.log",
+                "--output-format",
+                format,
+            ])
+            .unwrap();
+            let result = args.validate();
+            assert!(
+                result.is_ok(),
+                "--log-file should be accepted with --output-format={format}, got {:?}",
+                result.err().map(|e| e.to_string())
+            );
+        }
+    }
+
+    #[test]
+    fn check_export_json_unstable() {
+        check_opt!(
+            "--export-json results.json",
+            Some(UnstableFeature::ExportJson),
+            export_json,
+            Some(PathBuf::from("results.json"))
+        );
+    }
+
+    #[test]
+    fn check_export_json_unstable_options_alone_is_not_sufficient() {
+        let err =
+            parse_unstable_enabled("--export-json results.json", UnstableFeature::UnstableOptions)
+                .unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::MissingRequiredArgument);
+    }
+
+    #[test]
     fn check_concrete_playback_unstable() {
         let check = |input: &str| {
             let args = input.split_whitespace();
@@ -1131,6 +1398,28 @@ mod tests {
         );
         expect_validation_error(
             "kani --concrete-playback=inplace --output-format=old -Z concrete-playback test.rs",
+            ErrorKind::ArgumentConflict,
+        );
+    }
+
+    #[test]
+    fn check_sarif_parsing() {
+        let args = parse_unstable_disabled("--sarif out.sarif").unwrap();
+        assert_eq!(args.verify_opts.sarif, Some(PathBuf::from("out.sarif")));
+    }
+
+    #[test]
+    fn check_sarif_conflicts() {
+        expect_validation_error(
+            "kani file.rs --sarif out.sarif --output-format=old",
+            ErrorKind::ArgumentConflict,
+        );
+        expect_validation_error(
+            "kani file.rs --sarif out.sarif --only-codegen",
+            ErrorKind::ArgumentConflict,
+        );
+        expect_validation_error(
+            "kani file.rs -Z lean --sarif out.sarif",
             ErrorKind::ArgumentConflict,
         );
     }
@@ -1209,5 +1498,62 @@ mod tests {
         let args = "kani input.rs --no-assert-contracts".split_whitespace();
         let err = StandaloneArgs::try_parse_from(args).unwrap().validate().unwrap_err();
         assert_eq!(err.kind(), ErrorKind::MissingRequiredArgument);
+    }
+
+    /// `autoharness` verifies harnesses in parallel by default, which requires terse output.
+    /// Check each combination of explicitly passed / defaulted `--jobs` and `--output-format`.
+    #[test]
+    fn check_autoharness_parallel_defaults() {
+        let effective = |extra: &str| {
+            let args = format!("kani autoharness -Z autoharness {extra} input.rs");
+            let parsed = StandaloneArgs::try_parse_from(args.split_whitespace()).unwrap();
+            let Some(StandaloneSubcommand::Autoharness(mut autoharness)) = parsed.command else {
+                panic!("expected the autoharness subcommand");
+            };
+            autoharness.verify_opts.apply_autoharness_parallel_defaults();
+            (autoharness.verify_opts.jobs(), autoharness.verify_opts.output_format())
+        };
+
+        // Neither option passed: parallel with terse output.
+        assert_eq!(effective(""), (NumThreads::ThreadPoolDefault, OutputFormat::Terse));
+        // Only `--jobs`: the user's thread count, plus the terse output it requires.
+        assert_eq!(effective("--jobs=4"), (NumThreads::UserSpecified(4), OutputFormat::Terse));
+        // Only `--output-format=terse`: parallel, since terse is what parallel needs.
+        assert_eq!(
+            effective("--output-format=terse"),
+            (NumThreads::ThreadPoolDefault, OutputFormat::Terse)
+        );
+        // A more verbose format opts back into sequential verification.
+        assert_eq!(
+            effective("--output-format=regular"),
+            (NumThreads::NoMultithreading, OutputFormat::Regular)
+        );
+        assert_eq!(
+            effective("--output-format=old"),
+            (NumThreads::NoMultithreading, OutputFormat::Old)
+        );
+
+        // Applying the defaults is idempotent, and plain verification is unaffected.
+        let args = "kani input.rs".split_whitespace();
+        let parsed = StandaloneArgs::try_parse_from(args).unwrap();
+        assert_eq!(parsed.verify_opts.jobs(), NumThreads::NoMultithreading);
+        assert_eq!(parsed.verify_opts.output_format(), OutputFormat::Regular);
+    }
+
+    /// `--jobs` with an explicitly requested non-terse format stays an error, for `autoharness`
+    /// (where the defaults cannot silently override the user) as well as plain verification.
+    #[test]
+    fn check_jobs_still_requires_terse() {
+        for args in [
+            "kani autoharness -Z autoharness --jobs=4 --output-format=regular input.rs",
+            "kani --jobs=4 input.rs",
+        ] {
+            let mut parsed = StandaloneArgs::try_parse_from(args.split_whitespace()).unwrap();
+            if let Some(StandaloneSubcommand::Autoharness(autoharness)) = &mut parsed.command {
+                autoharness.verify_opts.apply_autoharness_parallel_defaults();
+            }
+            let err = parsed.validate().unwrap_err();
+            assert_eq!(err.kind(), ErrorKind::ArgumentConflict, "for `{args}`");
+        }
     }
 }

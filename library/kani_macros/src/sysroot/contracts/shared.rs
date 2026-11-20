@@ -13,7 +13,8 @@ use proc_macro2::{Ident, Span, TokenStream as TokenStream2};
 use quote::quote;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use syn::{
-    Expr, ExprCall, ExprClosure, ExprPath, Path, Stmt, spanned::Spanned, visit_mut::VisitMut,
+    Expr, ExprBlock, ExprCall, ExprClosure, ExprPath, Path, Stmt, spanned::Spanned,
+    visit_mut::VisitMut,
 };
 
 use super::{ContractMode, INTERNAL_RESULT_IDENT};
@@ -51,18 +52,41 @@ pub fn split_for_remembers(stmts: &[Stmt], contract_mode: ContractMode) -> (&[St
     };
 
     for stmt in stmts {
-        if let Stmt::Expr(Expr::Call(ExprCall { func, .. }), _) = stmt
-            && let Expr::Path(ExprPath { path: Path { segments, .. }, .. }) = func.as_ref()
-        {
-            let first_two_idents =
-                segments.iter().take(2).map(|sgmt| sgmt.ident.to_string()).collect::<Vec<_>>();
-
-            if first_two_idents == vec!["kani", check_str] {
-                pos += 1;
-            }
+        if stmt_is_precondition(stmt, check_str) {
+            pos += 1;
         }
     }
     stmts.split_at(pos)
+}
+
+/// Is `expr` a call to `kani::assume` / `kani::assert` (per `check_str`)?
+fn is_kani_check_call(expr: &Expr, check_str: &str) -> bool {
+    if let Expr::Call(ExprCall { func, .. }) = expr
+        && let Expr::Path(ExprPath { path: Path { segments, .. }, .. }) = func.as_ref()
+    {
+        let first_two_idents =
+            segments.iter().take(2).map(|sgmt| sgmt.ident.to_string()).collect::<Vec<_>>();
+        first_two_idents == vec!["kani", check_str]
+    } else {
+        false
+    }
+}
+
+/// Whether `stmt` is a precondition statement that [`split_for_remembers`] must
+/// place remembers after. Preconditions are emitted either as a bare
+/// `kani::assume(..)` / `kani::assert(..)` call statement, or wrapped in a
+/// clause-depth bracket (see `helpers::bracket_clause_stmt`), i.e.
+/// `{ let __kani_clause_guard = ..; kani::assume(#cond); }`. Both forms must be
+/// recognized, otherwise remembers get inserted before the precondition and
+/// `old(..)` expressions are evaluated without the precondition's constraints.
+fn stmt_is_precondition(stmt: &Stmt, check_str: &str) -> bool {
+    match stmt {
+        Stmt::Expr(Expr::Block(ExprBlock { block, .. }), _) => {
+            block.stmts.iter().any(|inner| stmt_is_precondition(inner, check_str))
+        }
+        Stmt::Expr(expr, _) => is_kani_check_call(expr, check_str),
+        _ => false,
+    }
 }
 
 /// Used as the "single source of truth" for [`try_as_result_assign`] and [`try_as_result_assign_mut`]
@@ -122,9 +146,12 @@ pub fn build_ensures(data: &ExprClosure) -> (TokenStream2, Expr) {
     let expr = &mut data.clone();
     vis.visit_expr_closure_mut(expr);
 
-    let remembers_stmts: TokenStream2 = remembers_exprs
-        .iter()
-        .fold(quote!(), |collect, (ident, expr)| quote!(let #ident = #expr; #collect));
+    let remembers_stmts: TokenStream2 =
+        remembers_exprs.iter().fold(quote!(), |collect, (ident, expr)| {
+            let bracketed =
+                crate::sysroot::contracts::helpers::bracket_clause_expr(quote!((#expr).clone()));
+            quote!(let #ident = #bracketed; #collect)
+        });
 
     let result: Ident = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
     (remembers_stmts, Expr::Verbatim(quote!(kani::internal::apply_closure(#expr, &#result))))
