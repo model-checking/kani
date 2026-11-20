@@ -524,7 +524,11 @@ macro_rules! kani_mem_init {
             let (from_ptr, _) = from.to_raw_parts();
             let (to_ptr, _) = to.to_raw_parts();
             unsafe {
-                MEM_INIT_STATE.copy_masked::<LAYOUT_SIZE>(from_ptr as *const u8, to_ptr as *const u8, mask);
+                MEM_INIT_STATE.copy_masked::<LAYOUT_SIZE>(
+                    from_ptr as *const u8,
+                    to_ptr as *const u8,
+                    mask,
+                );
             }
         }
 
