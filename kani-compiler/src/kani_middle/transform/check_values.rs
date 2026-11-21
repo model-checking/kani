@@ -1752,13 +1752,14 @@ pub fn ty_validity_per_offset(
                     // Fat pointer has arbitrary shape.
                     Ok(ty_req())
                 }
-                RigidTy::FnDef(_, _)
-                | RigidTy::FnPtr(_)
+                // A function item is a zero-sized type: any value is valid.
+                RigidTy::FnDef(_, _) => Ok(vec![]),
+                RigidTy::FnPtr(_)
+                | RigidTy::Dynamic(_, _)
                 | RigidTy::Coroutine(_, _)
                 | RigidTy::CoroutineClosure(_, _)
                 | RigidTy::CoroutineWitness(_, _)
-                | RigidTy::Foreign(_)
-                | RigidTy::Dynamic(_, _) => Err(format!("Unsupported {ty:?}")),
+                | RigidTy::Foreign(_) => Err(format!("Unsupported {ty:?}")),
             }
         }
         FieldsShape::Union(_) | FieldsShape::Array { .. } => {
