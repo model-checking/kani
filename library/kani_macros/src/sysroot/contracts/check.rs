@@ -21,6 +21,9 @@ impl<'a> ContractConditionsHandler<'a> {
     ///
     /// Wraps the conditions from this attribute around `self.body`.
     pub fn make_check_body(&self, mut body_stmts: Vec<Stmt>) -> TokenStream2 {
+        if let Some(error) = duplicate_panic_clause(&self.condition_type, &body_stmts) {
+            return error;
+        }
         let Self { attr_copy, .. } = self;
         match &self.condition_type {
             ContractConditionsData::Requires { attr } => {
@@ -253,5 +256,41 @@ impl<'a> ContractConditionsHandler<'a> {
             FnArg::Receiver(_) => vec![],
             FnArg::Typed(typed) => pat_to_bindings(typed.pat.as_ref()),
         })
+    }
+}
+
+/// A compile error if `body` already records a clause of the same panic kind as `condition`.
+///
+/// `contract_main` rejects a second clause by its attribute name, but a renamed import (`use
+/// kani::panics_if as p;`) escapes that check. The expansion of the first clause stays in the
+/// check closure, so look for its call to the matching `set_*` function instead.
+fn duplicate_panic_clause(
+    condition: &ContractConditionsData,
+    body: &[Stmt],
+) -> Option<TokenStream2> {
+    let (setter, clause) = match condition {
+        ContractConditionsData::PanicsOnlyIf { .. } => ("set_panics_only_if", "panics_only_if"),
+        ContractConditionsData::PanicsIf { .. } => ("set_panics_if", "panics_if"),
+        _ => return None,
+    };
+    let records_clause = body
+        .iter()
+        .any(|stmt| quote!(#stmt).into_iter().any(|token| token_mentions(&token, setter)));
+    records_clause.then(|| {
+        let message = format!("a function may have at most one `#[kani::{clause}]` clause");
+        let error = syn::Error::new(Span::call_site(), message).into_compile_error();
+        // The result replaces the check closure's body, which must be a block.
+        quote!({ #error })
+    })
+}
+
+/// Whether `token`, or any token nested in it, is the identifier `name`.
+fn token_mentions(token: &proc_macro2::TokenTree, name: &str) -> bool {
+    match token {
+        proc_macro2::TokenTree::Ident(ident) => ident == name,
+        proc_macro2::TokenTree::Group(group) => {
+            group.stream().into_iter().any(|token| token_mentions(&token, name))
+        }
+        _ => false,
     }
 }
