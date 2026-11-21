@@ -12,7 +12,6 @@ categories = ["development-tools"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/model-checking/kani"
 documentation = "https://model-checking.github.io/kani/"
-homepage = "https://github.com/model-checking/kani"
 # N.B. Cargo.* is included automatically:
 include = ["/src", "/build.rs", "/rust-toolchain.toml", "/LICENSE-*", "/README.md", "/CHANGELOG.md"]
 
@@ -37,6 +36,9 @@ inherits = "release"
 debug = true
 strip = "none"
 lto = "off"
+
+[lints]
+workspace = true
 
 # Below is the workspace (vs above is "kani-verifier" crate) config:
 
