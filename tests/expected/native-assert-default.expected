@@ -1,0 +1,9 @@
+Failed Checks: assertion failed: 0u8 != 0u8\
+in check_assert_ne
+Failed Checks: assertion failed: 0u8 == 1u8\
+in check_debug_assert_eq
+Failed Checks: assertion failed\
+in check_core_assert_eq
+Failed Checks: pattern assertion failed\
+in check_assert_matches
+VERIFICATION:- FAILED

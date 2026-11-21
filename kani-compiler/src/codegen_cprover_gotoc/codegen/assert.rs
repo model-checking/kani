@@ -231,7 +231,7 @@ impl GotocCtx<'_, '_> {
         self.codegen_assert_assume_false(property_class, msg, loc)
     }
 
-    /// Kani hooks function calls to `panic` and calls this intead.
+    /// Emit the panic property after evaluating the original call operands.
     pub fn codegen_panic(&self, span: SpanStable, fargs: Vec<Expr>) -> Stmt {
         // CBMC requires that the argument to the assertion must be a string constant.
         // If there is one in the MIR, use it; otherwise, explain that we can't.
@@ -239,7 +239,11 @@ impl GotocCtx<'_, '_> {
         let msg = self.extract_const_message(&fargs[0]).unwrap_or(String::from(
             "This is a placeholder message; Kani doesn't support message formatted at runtime",
         ));
-        self.codegen_fatal_error(PropertyClass::Assertion, &msg, span)
+        let loc = self.codegen_caller_span_stable(span);
+        // A projected operand can read memory even when the panic never uses its value.
+        let mut statements: Vec<_> = fargs.into_iter().map(|arg| arg.as_stmt(loc)).collect();
+        statements.push(self.codegen_assert_assume_false(PropertyClass::Assertion, &msg, loc));
+        Stmt::block(statements, loc)
     }
 
     /// Kani does not currently support all MIR constructs.
