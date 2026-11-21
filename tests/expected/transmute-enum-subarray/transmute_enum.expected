@@ -1,0 +1,8 @@
+Checking harness transmute_invalid_value_should_fail...
+Failed Checks: invalid enum construction: value is not a valid discriminant for this enum
+VERIFICATION:- FAILED
+
+Checking harness transmute_valid_value...
+VERIFICATION:- SUCCESSFUL
+
+Complete - 1 successfully verified harnesses, 1 failures, 2 total.
