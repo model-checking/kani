@@ -1648,85 +1648,94 @@ impl GotocCtx<'_, '_> {
         let vtable_name = self.vtable_name_stable(trait_type).intern();
         let vtable_impl_name = format!("{vtable_name}_impl_for_{src_name}");
 
-        self.ensure_global_var_init(
-            vtable_impl_name,
-            true,
-            true,
-            Type::struct_tag(vtable_name),
-            loc,
-            |ctx, var| {
-                // Build the vtable, using Rust's vtable_entries to determine field order
-                let vtable_entries = if let Some(principal) = trait_type.kind().trait_principal() {
-                    let trait_ref =
-                        rustc_internal::internal(ctx.tcx, principal.with_self_ty(src_mir_type));
-                    let trait_ref = ctx.tcx.instantiate_bound_regions_with_erased(trait_ref);
-                    ctx.tcx.vtable_entries(trait_ref)
-                } else {
-                    TyCtxt::COMMON_VTABLE_ENTRIES
-                };
+        let vtable = self
+            .ensure_global_var_init(
+                vtable_impl_name.clone(),
+                true,
+                true,
+                Type::struct_tag(vtable_name),
+                loc,
+                |ctx, var| {
+                    // Build the vtable, using Rust's vtable_entries to determine field order
+                    let vtable_entries = if let Some(principal) =
+                        trait_type.kind().trait_principal()
+                    {
+                        let trait_ref =
+                            rustc_internal::internal(ctx.tcx, principal.with_self_ty(src_mir_type));
+                        let trait_ref = ctx.tcx.instantiate_bound_regions_with_erased(trait_ref);
+                        ctx.tcx.vtable_entries(trait_ref)
+                    } else {
+                        TyCtxt::COMMON_VTABLE_ENTRIES
+                    };
 
-                let (vt_size, vt_align) = ctx.codegen_vtable_size_and_align(src_mir_type);
-                let size_assert = ctx.check_vtable_size(src_mir_type, vt_size.clone(), loc);
+                    let (vt_size, vt_align) = ctx.codegen_vtable_size_and_align(src_mir_type);
+                    let size_assert = ctx.check_vtable_size(src_mir_type, vt_size.clone(), loc);
 
-                let vtable_fields: Vec<Expr> = vtable_entries
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(idx, entry)| match entry {
-                        VtblEntry::MetadataDropInPlace => {
-                            Some(ctx.codegen_vtable_drop_in_place(src_mir_type, trait_type))
-                        }
-                        VtblEntry::MetadataSize => Some(vt_size.clone()),
-                        VtblEntry::MetadataAlign => Some(vt_align.clone()),
-                        VtblEntry::Vacant => {
-                            // vtable_entries with the CONCRETE self type may mark a slot
-                            // vacant where the vtable struct type (built with dyn self in
-                            // trait_vtable_field_types) declares a method pointer: e.g. a
-                            // method with an HRTB predicate a fixed-region function item
-                            // does not satisfy. rustc pads such slots with null; mirror
-                            // that, typed as the declared field. If the type side skipped
-                            // the slot too, keep skipping it.
-                            let field_name = ctx.vtable_field_name(idx);
-                            Type::struct_tag(vtable_name)
-                                .lookup_field_type(field_name, &ctx.symbol_table)
-                                .map(|field_ty| Expr::pointer_constant(0, field_ty))
-                        }
-                        VtblEntry::TraitVPtr(trait_ref) => {
-                            let projections = match dst_mir_type.kind() {
-                                TyKind::RigidTy(RigidTy::Dynamic(predicates, ..)) => predicates
-                                    .iter()
-                                    .filter_map(|pred| match &pred.value {
-                                        ExistentialPredicate::Projection(proj) => {
-                                            Some(Binder::bind_with_vars(
-                                                proj.clone(),
-                                                pred.bound_vars.clone(),
-                                            ))
-                                        }
-                                        _ => None,
-                                    })
-                                    .collect(),
-                                _ => vec![],
-                            };
+                    let vtable_fields: Vec<Expr> = vtable_entries
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(idx, entry)| match entry {
+                            VtblEntry::MetadataDropInPlace => {
+                                Some(ctx.codegen_vtable_drop_in_place(src_mir_type, trait_type))
+                            }
+                            VtblEntry::MetadataSize => Some(vt_size.clone()),
+                            VtblEntry::MetadataAlign => Some(vt_align.clone()),
+                            VtblEntry::Vacant => {
+                                // vtable_entries with the CONCRETE self type may mark a slot
+                                // vacant where the vtable struct type (built with dyn self in
+                                // trait_vtable_field_types) declares a method pointer: e.g. a
+                                // method with an HRTB predicate a fixed-region function item
+                                // does not satisfy. rustc pads such slots with null; mirror
+                                // that, typed as the declared field. If the type side skipped
+                                // the slot too, keep skipping it.
+                                let field_name = ctx.vtable_field_name(idx);
+                                Type::struct_tag(vtable_name)
+                                    .lookup_field_type(field_name, &ctx.symbol_table)
+                                    .map(|field_ty| Expr::pointer_constant(0, field_ty))
+                            }
+                            VtblEntry::TraitVPtr(trait_ref) => {
+                                let projections = match dst_mir_type.kind() {
+                                    TyKind::RigidTy(RigidTy::Dynamic(predicates, ..)) => predicates
+                                        .iter()
+                                        .filter_map(|pred| match &pred.value {
+                                            ExistentialPredicate::Projection(proj) => {
+                                                Some(Binder::bind_with_vars(
+                                                    proj.clone(),
+                                                    pred.bound_vars.clone(),
+                                                ))
+                                            }
+                                            _ => None,
+                                        })
+                                        .collect(),
+                                    _ => vec![],
+                                };
 
-                            let dyn_ref = ctx.trait_ref_to_dyn_trait(*trait_ref, projections);
-                            Some(ctx.codegen_vtable(src_mir_type, dyn_ref, loc).address_of())
-                        }
-                        VtblEntry::Method(instance) => Some(ctx.codegen_vtable_method_field(
-                            rustc_internal::stable(instance),
-                            trait_type,
-                            idx,
-                        )),
-                    })
-                    .collect();
+                                let dyn_ref = ctx.trait_ref_to_dyn_trait(*trait_ref, projections);
+                                Some(ctx.codegen_vtable(src_mir_type, dyn_ref, loc).address_of())
+                            }
+                            VtblEntry::Method(instance) => Some(ctx.codegen_vtable_method_field(
+                                rustc_internal::stable(instance),
+                                trait_type,
+                                idx,
+                            )),
+                        })
+                        .collect();
 
-                let vtable = Expr::struct_expr_from_values(
-                    Type::struct_tag(vtable_name),
-                    vtable_fields,
-                    &ctx.symbol_table,
-                );
-                Expr::statement_expression(vec![size_assert, vtable.as_stmt(loc)], var.typ, loc)
-            },
-        )
-        .to_expr()
+                    let vtable = Expr::struct_expr_from_values(
+                        Type::struct_tag(vtable_name),
+                        vtable_fields,
+                        &ctx.symbol_table,
+                    );
+                    Expr::statement_expression(vec![size_assert, vtable.as_stmt(loc)], var.typ, loc)
+                },
+            )
+            .to_expr();
+        self.record_vtable(
+            rustc_internal::internal(self.tcx, trait_type),
+            vtable_impl_name.into(),
+            vtable.clone().address_of(),
+        );
+        vtable
     }
 
     /// Cast a pointer to a fat pointer.
@@ -1795,6 +1804,7 @@ impl GotocCtx<'_, '_> {
                     || dst_ty.trait_principal().is_none()
                 {
                     // If we're casting to the same dyn trait, we can reuse the old vtable
+                    self.record_vtable_reuse(metadata_src_type, metadata_dst_type);
                     src_vtable.cast_to(vtable_ty)
                 } else if let Some(vptr_entry_idx) = self.tcx.supertrait_vtable_slot((
                     rustc_internal::internal(self.tcx, metadata_src_type),
@@ -1808,6 +1818,7 @@ impl GotocCtx<'_, '_> {
                         .cast_to(vtable_ty)
                 } else {
                     // Fallback to original vtable
+                    self.record_vtable_reuse(metadata_src_type, metadata_dst_type);
                     src_vtable.cast_to(vtable_ty)
                 };
                 dynamic_fat_ptr(fat_ptr_type, dst_data, dst_vtable, &self.symbol_table)

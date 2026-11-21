@@ -15,7 +15,7 @@
 //!   2. We could avoid checking places that have been checked before.
 use crate::args::ExtraChecks;
 use crate::kani_middle::attributes::attrs_by_path;
-use crate::kani_middle::kani_functions::{KaniFunction, KaniIntrinsic, KaniModel};
+use crate::kani_middle::kani_functions::{KaniFunction, KaniHook, KaniIntrinsic, KaniModel};
 use crate::kani_middle::transform::body::{
     CheckType, InsertPosition, MutableBody, SourceInstruction, synthetic_source_info,
 };
@@ -121,7 +121,13 @@ impl ValidValuePass {
                     let value = body.insert_assignment(rvalue, &mut source, InsertPosition::Before);
                     let rvalue_ptr = Rvalue::AddressOf(RawPtrKind::Const, Place::from(value));
                     for range in ranges {
-                        let result = build_limits(body, &range, rvalue_ptr.clone(), &mut source);
+                        let result = build_limits(
+                            body,
+                            &range,
+                            rvalue_ptr.clone(),
+                            &mut source,
+                            &self.kani_functions,
+                        );
                         let msg =
                             format!("Undefined Behavior: Invalid value of type `{target_ty}`",);
                         body.insert_check(
@@ -135,7 +141,13 @@ impl ValidValuePass {
                 }
                 SourceOp::DerefValidity { pointee_ty, rvalue, ranges } => {
                     for range in ranges {
-                        let result = build_limits(body, &range, rvalue.clone(), &mut source);
+                        let result = build_limits(
+                            body,
+                            &range,
+                            rvalue.clone(),
+                            &mut source,
+                            &self.kani_functions,
+                        );
                         let msg =
                             format!("Undefined Behavior: Invalid value of type `{pointee_ty}`",);
                         body.insert_check(
@@ -244,6 +256,7 @@ impl ValidValuePass {
                         &range,
                         Rvalue::Use(Operand::Copy(Place::from(ptr)), WithRetag::No),
                         source,
+                        &self.kani_functions,
                     );
                     let result = body.insert_binary_op(
                         BinOp::BitOr,
@@ -417,6 +430,9 @@ enum ValidityRange {
     /// value is valid: the requirement of an uninhabited enum variant, which only applies if the
     /// tag selects it.
     Multiple(Vec<WrappingRange>),
+    /// The pointer at the offset is the address of a vtable Kani generated for the trait object
+    /// type (the metadata of a pointer to a `dyn Trait`).
+    Vtable(Ty),
 }
 
 // TODO: Optimize checks by merging requirements whenever possible.
@@ -488,13 +504,18 @@ impl ValidValueReq {
             return self == other;
         }
         let ranges = |req: &ValidValueReq| match &req.valid_range {
-            ValidityRange::Single(range) => vec![*range],
-            ValidityRange::Multiple(ranges) => ranges.clone(),
+            ValidityRange::Single(range) => Some(vec![*range]),
+            ValidityRange::Multiple(ranges) => Some(ranges.clone()),
+            ValidityRange::Vtable(_) => None,
         };
-        let (this_ranges, other_ranges) = (ranges(self), ranges(other));
-        other_ranges.iter().all(|other_range| {
-            this_ranges.iter().any(|this_range| range_contains(this_range, other_range, self.size))
-        })
+        match (ranges(self), ranges(other)) {
+            (Some(this_ranges), Some(other_ranges)) => other_ranges.iter().all(|other_range| {
+                this_ranges
+                    .iter()
+                    .any(|this_range| range_contains(this_range, other_range, self.size))
+            }),
+            _ => self == other,
+        }
     }
 
     /// This requirement for a value that is `delta` bytes further.
@@ -1211,12 +1232,28 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                         }
                     }
                 }
+                // A wide pointer built from its parts (`ptr::from_raw_parts`): its metadata must
+                // be valid, which for a trait object means a vtable for its trait.
+                AggregateKind::RawPtr(pointee, mutability) => {
+                    let ptr_ty = Ty::new_ptr(*pointee, *mutability);
+                    match ty_validity_per_offset(self.tcx, &self.machine, ptr_ty, 0) {
+                        Ok(ranges) if ranges.is_empty() => {}
+                        Ok(ranges) => self.push_target(SourceOp::BytesValidity {
+                            target_ty: ptr_ty,
+                            rvalue: rvalue.clone(),
+                            ranges,
+                        }),
+                        Err(_) => self.push_target(SourceOp::UnsupportedCheck {
+                            check: "raw pointer from its parts".to_string(),
+                            ty: ptr_ty,
+                        }),
+                    }
+                }
                 // Only aggregate value.
                 AggregateKind::Array(_)
                 | AggregateKind::Closure(_, _)
                 | AggregateKind::Coroutine(_, _)
                 | AggregateKind::CoroutineClosure(_, _)
-                | AggregateKind::RawPtr(_, _)
                 | AggregateKind::Tuple => {}
             },
             // Reading a discriminant, or a place to dereference it, is a typed read.
@@ -1347,11 +1384,14 @@ fn intrinsic_name(locals: &[LocalDecl], func: &Operand) -> Option<String> {
 /// ```
 /// A guarded requirement becomes `!guard_1 || ... || !guard_n || valid`, where each guard reads
 /// the tag it depends on the same way.
+///
+/// `kani_functions` provides the hook that checks vtables.
 pub fn build_limits(
     body: &mut MutableBody,
     req: &ValidValueReq,
     rvalue_ptr: Rvalue,
     source: &mut SourceInstruction,
+    kani_functions: &HashMap<KaniFunction, FnDef>,
 ) -> Local {
     let span = source.span(body.blocks());
     debug!(?req, ?rvalue_ptr, ?span, "build_limits");
@@ -1400,6 +1440,11 @@ pub fn build_limits(
                     InsertPosition::Before,
                 )
             })
+        }
+        ValidityRange::Vtable(dyn_ty) => {
+            let byte_ptr = Ty::new_ptr(Ty::unsigned_ty(UintTy::U8), Mutability::Not);
+            let vtable = read_at_offset(body, rvalue_ptr.clone(), req.offset, byte_ptr, source);
+            call_hook(body, source, kani_functions, KaniHook::ValidVtable, *dyn_ty, vec![vtable])
         }
     };
     for guard in &req.guards {
@@ -1467,6 +1512,23 @@ fn read_at_offset(
     let value_ptr =
         body.insert_ptr_cast(orig_ptr, value_ty, Mutability::Not, source, InsertPosition::Before);
     Operand::Copy(Place { local: value_ptr, projection: vec![ProjectionElem::Deref] })
+}
+
+/// Insert a call to the hook `hook::<ty>(args)`, which returns a `bool`, and return its result.
+fn call_hook(
+    body: &mut MutableBody,
+    source: &mut SourceInstruction,
+    kani_functions: &HashMap<KaniFunction, FnDef>,
+    hook: KaniHook,
+    ty: Ty,
+    args: Vec<Operand>,
+) -> Local {
+    let span = source.span(body.blocks());
+    let def = kani_functions[&hook.into()];
+    let instance = Instance::resolve(def, &GenericArgs(vec![GenericArgKind::Type(ty)])).unwrap();
+    let ret = body.new_local(Ty::bool_ty(), span, Mutability::Not);
+    body.insert_call(&instance, source, InsertPosition::Before, args, Place::from(ret));
+    ret
 }
 
 fn build_single_limit(
@@ -1577,7 +1639,28 @@ pub fn ty_validity_per_offset(
         if !matches!(layout.value_repr, ValueRepr::Scalar(..) | ValueRepr::ScalarPair { .. }) {
             return Err(format!("Unsupported pattern type over a non-scalar type: {ty}"));
         }
-        return Ok(ty_req());
+        let mut reqs = ty_req();
+        // The metadata of a pattern over a raw pointer (`NonNull<dyn Trait>`) must be valid as
+        // a raw pointer's.
+        if let rustc_middle::ty::TyKind::RawPtr(pointee, _) = base_ty.kind() {
+            let pointee = rustc_internal::stable(*pointee);
+            reqs.extend(pointer_metadata_validity(tcx, machine_info, pointee, current_offset));
+        }
+        return Ok(reqs);
+    }
+    // Pointers, whose layout is a scalar or a scalar pair.
+    match ty.kind() {
+        TyKind::RigidTy(RigidTy::Ref(_, pointee, _)) => {
+            let mut reqs = ty_req();
+            reqs.extend(pointer_metadata_validity(tcx, machine_info, pointee, current_offset));
+            return Ok(reqs);
+        }
+        TyKind::RigidTy(RigidTy::RawPtr(pointee, _)) => {
+            let mut reqs = ty_req();
+            reqs.extend(pointer_metadata_validity(tcx, machine_info, pointee, current_offset));
+            return Ok(reqs);
+        }
+        _ => {}
     }
     match layout.fields {
         FieldsShape::Primitive => Ok(ty_req()),
@@ -1749,8 +1832,7 @@ pub fn ty_validity_per_offset(
                     unreachable!("Expected array layout for {ty:?}")
                 }
                 RigidTy::RawPtr(_, _) | RigidTy::Ref(_, _, _) => {
-                    // Fat pointer has arbitrary shape.
-                    Ok(ty_req())
+                    unreachable!("handled before the field-shape match: {ty:?}")
                 }
                 // A function item is a zero-sized type: any value is valid.
                 RigidTy::FnDef(_, _) => Ok(vec![]),
@@ -1766,6 +1848,35 @@ pub fn ty_validity_per_offset(
             /* Anything is valid */
             Ok(vec![])
         }
+    }
+}
+
+/// The requirements on the metadata of a pointer at `offset` to `pointee`: the metadata of a
+/// pointer to a trait object must be a vtable for its trait. This applies to raw pointers too, as
+/// Miri checks it, although the Reference says it's still debated for them.
+///
+/// Whether the pointer is null is checked by the pointer type's own valid range.
+fn pointer_metadata_validity(
+    tcx: TyCtxt,
+    machine_info: &MachineInfo,
+    pointee: Ty,
+    offset: usize,
+) -> Vec<ValidValueReq> {
+    let ptr_size = machine_info.pointer_width;
+    let internal_pointee = rustc_internal::internal(tcx, pointee);
+    let tail = tcx.struct_tail_for_codegen(
+        internal_pointee,
+        rustc_middle::ty::TypingEnv::fully_monomorphized(),
+    );
+    if tail.is_trait() {
+        vec![ValidValueReq {
+            offset: offset + ptr_size.bytes(),
+            size: ptr_size,
+            valid_range: ValidityRange::Vtable(rustc_internal::stable(tail)),
+            guards: vec![],
+        }]
+    } else {
+        vec![]
     }
 }
 

@@ -72,6 +72,16 @@ macro_rules! kani_valid_value {
             }
         }
 
+        /// Whether `vtable` is the address of a vtable that the program can create for the trait
+        /// object type `T` (or the trait object at the tail of `T`): one Kani generated for the
+        /// trait, or for a trait whose vtables the program casts to it. The compiler generates
+        /// the body once all the vtables are known.
+        #[kanitool::fn_marker = "ValidVtableHook"]
+        #[inline(never)]
+        fn valid_vtable<T: ?Sized>(_vtable: *const u8) -> bool {
+            super::kani_intrinsic()
+        }
+
         /// Whether one of the `size` bytes at `ptr` was written untyped.
         #[kanitool::disable_checks(pointer)]
         #[kanitool::fn_marker = "IsUntypedWriteModel"]

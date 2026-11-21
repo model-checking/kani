@@ -167,8 +167,13 @@ impl IntrinsicGeneratorPass {
                 // Given the pointer argument, check for possible invalid ranges.
                 let rvalue = Rvalue::Use(Operand::Move(Place::from(1)), WithRetag::No);
                 for range in ranges {
-                    let result =
-                        build_limits(&mut new_body, &range, rvalue.clone(), &mut terminator);
+                    let result = build_limits(
+                        &mut new_body,
+                        &range,
+                        rvalue.clone(),
+                        &mut terminator,
+                        &self.kani_defs,
+                    );
                     let rvalue = Rvalue::BinaryOp(
                         BinOp::BitAnd,
                         Operand::Move(Place::from(ret_var)),
