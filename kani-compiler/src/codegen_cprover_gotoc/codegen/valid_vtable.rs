@@ -311,6 +311,9 @@ impl<'tcx> GotocCtx<'tcx, '_> {
                     .map(|range| in_range(read(req.offset(), uint.clone()), range, &uint))
                     .reduce(Expr::or)
                     .unwrap_or_else(Expr::bool_false),
+                ValidityRange::Aligned(align) => read(req.offset(), Type::size_t())
+                    .bitand(Expr::int_constant(align - 1, Type::size_t()))
+                    .eq(Expr::int_constant(0, Type::size_t())),
                 ValidityRange::Vtable(dyn_ty) => {
                     let check = self.valid_vtable_fn(*dyn_ty);
                     check.call(vec![read(req.offset(), byte_ptr())]).cast_to(Type::bool())

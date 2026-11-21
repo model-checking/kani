@@ -430,6 +430,8 @@ pub enum ValidityRange {
     /// value is valid: the requirement of an uninhabited enum variant, which only applies if the
     /// tag selects it.
     Multiple(Vec<WrappingRange>),
+    /// The pointer at the offset is aligned to this many bytes: a reference or a `Box`.
+    Aligned(u64),
     /// The pointer at the offset is the address of a vtable Kani generated for the trait object
     /// type (the metadata of a pointer to a `dyn Trait`).
     Vtable(Ty),
@@ -511,7 +513,9 @@ impl ValidValueReq {
         let ranges = |req: &ValidValueReq| match &req.valid_range {
             ValidityRange::Single(range) => Some(vec![*range]),
             ValidityRange::Multiple(ranges) => Some(ranges.clone()),
-            ValidityRange::Vtable(_) | ValidityRange::DynValue(_) => None,
+            ValidityRange::Aligned(_) | ValidityRange::Vtable(_) | ValidityRange::DynValue(_) => {
+                None
+            }
         };
         match (ranges(self), ranges(other)) {
             (Some(this_ranges), Some(other_ranges)) => other_ranges.iter().all(|other_range| {
@@ -1476,6 +1480,21 @@ pub fn build_limits(
                 )
             })
         }
+        ValidityRange::Aligned(align) => {
+            // `addr & (align - 1) == 0`
+            let addr = read_at_offset(body, rvalue_ptr.clone(), req.offset, Ty::usize_ty(), source);
+            let mask = body.new_uint_operand((*align - 1) as u128, UintTy::Usize, span);
+            let low_bits =
+                body.insert_binary_op(BinOp::BitAnd, addr, mask, source, InsertPosition::Before);
+            let zero = body.new_uint_operand(0, UintTy::Usize, span);
+            body.insert_binary_op(
+                BinOp::Eq,
+                move_local(low_bits),
+                zero,
+                source,
+                InsertPosition::Before,
+            )
+        }
         ValidityRange::Vtable(dyn_ty) => {
             let byte_ptr = Ty::new_ptr(Ty::unsigned_ty(UintTy::U8), Mutability::Not);
             let vtable = read_at_offset(body, rvalue_ptr.clone(), req.offset, byte_ptr, source);
@@ -1701,7 +1720,13 @@ pub fn ty_validity_per_offset(
         // a raw pointer's.
         if let rustc_middle::ty::TyKind::RawPtr(pointee, _) = base_ty.kind() {
             let pointee = rustc_internal::stable(*pointee);
-            reqs.extend(pointer_metadata_validity(tcx, machine_info, pointee, current_offset));
+            reqs.extend(pointer_metadata_validity(
+                tcx,
+                machine_info,
+                pointee,
+                false,
+                current_offset,
+            ));
         }
         return Ok(reqs);
     }
@@ -1709,12 +1734,24 @@ pub fn ty_validity_per_offset(
     match ty.kind() {
         TyKind::RigidTy(RigidTy::Ref(_, pointee, _)) => {
             let mut reqs = ty_req();
-            reqs.extend(pointer_metadata_validity(tcx, machine_info, pointee, current_offset));
+            reqs.extend(pointer_metadata_validity(
+                tcx,
+                machine_info,
+                pointee,
+                true,
+                current_offset,
+            ));
             return Ok(reqs);
         }
         TyKind::RigidTy(RigidTy::RawPtr(pointee, _)) => {
             let mut reqs = ty_req();
-            reqs.extend(pointer_metadata_validity(tcx, machine_info, pointee, current_offset));
+            reqs.extend(pointer_metadata_validity(
+                tcx,
+                machine_info,
+                pointee,
+                false,
+                current_offset,
+            ));
             return Ok(reqs);
         }
         // A trait object, the pointee of a pointer to `dyn Trait`: valid at its dynamic type.
@@ -1843,6 +1880,23 @@ pub fn ty_validity_per_offset(
                                     }
                                 }
                             }
+                            // A `Box` must be aligned, and the length of a boxed slice bounded,
+                            // as for a reference. Its pointer is the `Unique` in its first field,
+                            // whose raw pointer adds the requirements on the vtable.
+                            if def.is_box() {
+                                let pointee = args.0[0].expect_ty();
+                                for req in pointer_metadata_validity(
+                                    tcx,
+                                    machine_info,
+                                    *pointee,
+                                    true,
+                                    offsets[0].bytes() + current_offset,
+                                ) {
+                                    if !struct_validity.contains(&req) {
+                                        struct_validity.push(req);
+                                    }
+                                }
+                            }
                             Ok(struct_validity)
                         }
                     }
@@ -1935,33 +1989,66 @@ fn unsized_field_validity(
     Ok(reqs)
 }
 
-/// The requirements on the metadata of a pointer at `offset` to `pointee`: the metadata of a
-/// pointer to a trait object must be a vtable for its trait. This applies to raw pointers too, as
-/// Miri checks it, although the Reference says it's still debated for them.
+/// The requirements on the metadata of a pointer at `offset` to `pointee`, and on the pointer
+/// itself if it is a reference or a `Box` (`ref_like`):
+///  - The metadata of a pointer to a trait object must be a vtable for its trait. This applies to
+///    raw pointers too, as Miri checks it, although the Reference says it's still debated for
+///    them.
+///  - A reference or a `Box` must be aligned to the static alignment of its pointee (the dynamic
+///    alignment of a trait object isn't checked).
+///  - The length of a reference to or a `Box` of a slice must not make the size of the pointee
+///    exceed `isize::MAX`.
 ///
 /// Whether the pointer is null is checked by the pointer type's own valid range.
 fn pointer_metadata_validity(
     tcx: TyCtxt,
     machine_info: &MachineInfo,
     pointee: Ty,
+    ref_like: bool,
     offset: usize,
 ) -> Vec<ValidValueReq> {
     let ptr_size = machine_info.pointer_width;
+    let req =
+        |offset, valid_range| ValidValueReq { offset, size: ptr_size, valid_range, guards: vec![] };
     let internal_pointee = rustc_internal::internal(tcx, pointee);
     let tail = tcx.struct_tail_for_codegen(
         internal_pointee,
         rustc_middle::ty::TypingEnv::fully_monomorphized(),
     );
+    let mut reqs = vec![];
     if tail.is_trait() {
-        vec![ValidValueReq {
-            offset: offset + ptr_size.bytes(),
-            size: ptr_size,
-            valid_range: ValidityRange::Vtable(rustc_internal::stable(tail)),
-            guards: vec![],
-        }]
-    } else {
-        vec![]
+        reqs.push(req(
+            offset + ptr_size.bytes(),
+            ValidityRange::Vtable(rustc_internal::stable(tail)),
+        ));
     }
+    if ref_like && let Ok(layout) = pointee.layout() {
+        let layout = layout.shape();
+        let align = layout.abi_align;
+        if align > 1 {
+            reqs.push(req(offset, ValidityRange::Aligned(align)));
+        }
+        let elem_size = match tail.kind() {
+            rustc_middle::ty::TyKind::Slice(elem) => {
+                rustc_internal::stable(*elem).layout().ok().map(|l| l.shape().size.bytes())
+            }
+            rustc_middle::ty::TyKind::Str => Some(1),
+            _ => None,
+        };
+        if let Some(elem_size) = elem_size
+            && elem_size > 0
+        {
+            // The size of the unsized layout is the size of the sized prefix. Not rounding the
+            // total size up to the alignment makes the bound weaker, never stronger.
+            let prefix = layout.size.bytes() as u128;
+            let max = (isize::MAX as u128).saturating_sub(prefix) / elem_size as u128;
+            reqs.push(req(
+                offset + ptr_size.bytes(),
+                ValidityRange::Single(WrappingRange { start: 0, end: max }),
+            ));
+        }
+    }
+    reqs
 }
 
 /// The maximum number of ranges the valid tags of an enum are checked against. An enum with more

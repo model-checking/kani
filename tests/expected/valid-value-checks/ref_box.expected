@@ -1,0 +1,47 @@
+Checking harness box_dyn_invalid_value_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `dyn Answer`
+VERIFICATION:- FAILED
+
+Checking harness box_dyn_forged_vtable_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `std::mem::ManuallyDrop<std::boxed::Box<dyn Answer>>`
+VERIFICATION:- FAILED
+
+Checking harness box_dyn_read_valid...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness box_dyn_valid...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness slice_ref_valid...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness slice_ref_too_long_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `&[u16]`
+VERIFICATION:- FAILED
+
+Checking harness aligned_ref_valid...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness misaligned_box_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `std::mem::ManuallyDrop<std::boxed::Box<u64>>`
+VERIFICATION:- FAILED
+
+Checking harness misaligned_ref_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `&u32`
+VERIFICATION:- FAILED
+
+Checking harness read_null_box_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `std::mem::ManuallyDrop<std::boxed::Box<u8>>`
+VERIFICATION:- FAILED
+
+Checking harness read_null_ref_box_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `&std::boxed::Box<u8>`
+VERIFICATION:- FAILED
+
+Checking harness read_ref_box_after_copy_valid...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness read_ref_box_valid...
+VERIFICATION:- SUCCESSFUL
+
+Complete - 6 successfully verified harnesses, 7 failures, 13 total.
