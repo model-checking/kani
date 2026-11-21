@@ -1,0 +1,4 @@
+FAILURE\
+volatile load of an uninhabited type has undefined behavior
+Failed Checks: volatile load of an uninhabited type has undefined behavior
+VERIFICATION:- FAILED
