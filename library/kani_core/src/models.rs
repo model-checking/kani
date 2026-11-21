@@ -32,6 +32,10 @@ macro_rules! generate_models {
                 }
             }
 
+            /// `RustcIntrinsicsPass` prepends a diagnostic when rewriting a native assertion
+            /// failure to this stub and deliberately keeps the original operands.
+            /// The GOTO panic hook intercepts the call, uses operand 0 as the diagnostic,
+            /// and evaluates the extra operands for their safety checks.
             #[kanitool::fn_marker = "PanicStub"]
             pub fn panic_stub(t: &str) -> ! {
                 // Using an infinite loop here to have the function return the never (`!`) type.

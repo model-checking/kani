@@ -1,0 +1,2 @@
+error: Kani does not support memory initialization checks across recursive calls.
+recurse(value, depth - 1);

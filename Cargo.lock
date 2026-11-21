@@ -463,7 +463,6 @@ checksum = "7f8f80099a98041a3d1622845c271458a2d73e688351bf3cb999266764b81d48"
 name = "cprover_bindings"
 version = "0.68.0"
 dependencies = [
- "lazy_static",
  "linear-map",
  "memuse",
  "num",
@@ -1239,7 +1238,6 @@ dependencies = [
  "proc-macro2",
  "proc-macro2-diagnostics",
  "quote",
- "strum",
  "strum_macros",
  "syn 2.0.119",
 ]

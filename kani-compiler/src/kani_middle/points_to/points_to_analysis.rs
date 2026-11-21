@@ -47,10 +47,13 @@ use rustc_public::mir::{
 use rustc_public::rustc_internal;
 use rustc_public::ty::{RigidTy as StableRigidTy, Ty as StableTy, TyKind as StableTyKind};
 use rustc_span::{DUMMY_SP, Spanned};
+use std::cell::RefCell;
 use std::collections::HashSet;
 
 /// Main points-to analysis object.
 struct PointsToAnalysis<'a, 'tcx> {
+    /// Function instances whose points-to analysis is currently in progress.
+    active_calls: &'a RefCell<HashSet<Instance<'tcx>>>,
     instance: Instance<'tcx>,
     body: &'a Body<'tcx>,
     tcx: TyCtxt<'tcx>,
@@ -75,12 +78,14 @@ pub fn run_points_to_analysis<'tcx>(
     // conversion.
     let internal_instance = rustc_internal::internal(tcx, instance);
     let internal_body = body.internal_mir(tcx);
+    let active_calls = RefCell::new(HashSet::new());
     PointsToAnalysis::run(
         &internal_body,
         tcx,
         internal_instance,
         call_graph,
         PointsToGraph::empty(),
+        &active_calls,
     )
 }
 
@@ -93,8 +98,10 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
         instance: Instance<'tcx>,
         call_graph: &'a CallGraph,
         initial_graph: PointsToGraph<'tcx>,
+        active_calls: &'a RefCell<HashSet<Instance<'tcx>>>,
     ) -> PointsToGraph<'tcx> {
-        let analysis = Self { body, tcx, instance, call_graph, initial_graph };
+        active_calls.borrow_mut().insert(instance);
+        let analysis = Self { active_calls, body, tcx, instance, call_graph, initial_graph };
         // This creates a fixpoint solver using the initial graph, the body, and extra information
         // and solves the dataflow problem, producing the cursor, which contains dataflow state for
         // each instruction in the body.
@@ -113,6 +120,7 @@ impl<'a, 'tcx> PointsToAnalysis<'a, 'tcx> {
                 results.join(&cursor.get().clone());
             }
         }
+        active_calls.borrow_mut().remove(&instance);
         results
     }
 }
@@ -326,6 +334,13 @@ impl<'tcx> Analysis<'tcx> for PointsToAnalysis<'_, 'tcx> {
                         }
                     } else {
                         // Otherwise, handle this as a regular function call.
+                        if self.active_calls.borrow().contains(&instance) {
+                            self.tcx.dcx().span_err(
+                                terminator.source_info.span,
+                                "Kani does not support memory initialization checks across recursive calls.",
+                            );
+                            self.tcx.dcx().abort_if_errors();
+                        }
                         self.apply_regular_call_effect(state, instance, args, destination);
                     }
                 }
@@ -516,8 +531,14 @@ impl<'tcx> PointsToAnalysis<'_, 'tcx> {
         }
 
         // Run the analysis.
-        let new_result =
-            PointsToAnalysis::run(&new_body, self.tcx, instance, self.call_graph, initial_graph);
+        let new_result = PointsToAnalysis::run(
+            &new_body,
+            self.tcx,
+            instance,
+            self.call_graph,
+            initial_graph,
+            self.active_calls,
+        );
         // Merge the results into the current state.
         state.join(&new_result);
 
