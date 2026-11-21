@@ -12,6 +12,11 @@
 // re-export all std symbols
 pub use std::*;
 
+// The macro overrides below expand to `kani::...` paths in the crates that use them, and the
+// `concrete_playback` feature is forwarded to `kani`, so this crate depends on `kani` without
+// referring to it. Mark the dependency as used.
+use kani as _;
+
 #[cfg(not(feature = "concrete_playback"))]
 // Override process calls with stubs.
 pub mod process;
