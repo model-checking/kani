@@ -26,11 +26,20 @@ These checks are on by default but can be individually disabled with `--no-XXX-c
 ### Opt-in (unstable)
 - **Valid value invariants** (`-Z valid-value-checks`): Checks that values meet
   their type's validity requirements (e.g., `bool` is 0 or 1, `char` is a valid
-  Unicode scalar value, enum discriminants are in range). Writing bytes that are
+  Unicode scalar value, an enum's tag is the discriminant of one of its variants
+  and the fields of that variant are valid, function pointers, references and
+  `Box` are not null, references and `Box` are aligned and the slices they point
+  to have a length that keeps their size under `isize::MAX`, and the metadata of
+  a pointer to a `dyn Trait`, raw pointers included, is a vtable the program
+  created for `Trait`). The target of a reference must be valid too: forming a
+  reference through a raw pointer checks the value it points to, a trait object
+  at the type its vtable is for. Dangling references are not reported, nor are
+  the elements of a slice behind a pointer. Writing bytes that are
   invalid for a type (with `write_bytes`, a copy, or through a pointer to a type
   without validity requirements) is not reported by itself; reading them as that
   type is. Like `-Z uninit-checks`, this tracks one byte chosen
-  nondeterministically per harness. This is an unstable feature that may change.
+  nondeterministically per harness. Kani reports the types it can't check yet as
+  unsupported. This is an unstable feature that may change.
 - **Uninitialized memory** (`-Z uninit-checks`): Checks that memory is
   initialized before being read through pointers. This is an unstable feature
   that may change.
