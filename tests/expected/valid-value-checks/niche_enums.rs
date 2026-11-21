@@ -37,10 +37,17 @@ fn read_invalid_option_bool_should_fail() {
     let _o: Option<bool> = unsafe { *(&byte as *const u8 as *const Option<bool>) };
 }
 
-/// `Option<char>` remains unsupported: its validity is not a single range (it has the
-/// surrogate gap), which the enum's scalar `valid_range` cannot express.
+/// `Option<char>`'s validity is not a single range (it has the surrogate gap), which the enum's
+/// scalar `valid_range` cannot express: the `char` is checked if the tag selects `Some`.
 #[kani::proof]
-fn read_option_char_unsupported() {
+fn read_option_char() {
     let v: u32 = 0x41;
+    let o: Option<char> = unsafe { *(&v as *const u32 as *const Option<char>) };
+    assert!(o == Some('A'));
+}
+
+#[kani::proof]
+fn read_option_char_surrogate_should_fail() {
+    let v: u32 = 0xD800;
     let _o: Option<char> = unsafe { *(&v as *const u32 as *const Option<char>) };
 }

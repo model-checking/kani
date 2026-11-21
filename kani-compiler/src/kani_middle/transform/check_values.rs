@@ -25,7 +25,7 @@ use rustc_middle::ty::TyCtxt;
 use rustc_public::CrateDef;
 use rustc_public::CrateDefType;
 use rustc_public::abi::{
-    FieldsShape, Scalar, TagEncoding, ValueRepr, VariantsShape, WrappingRange,
+    FieldsShape, Scalar, TagEncoding, ValueRepr, VariantFields, VariantsShape, WrappingRange,
 };
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::visit::{Location, PlaceContext, PlaceRef};
@@ -392,6 +392,19 @@ pub struct ValidValueReq {
     size: MachineSize,
     /// The range restriction is represented by a Scalar.
     valid_range: ValidityRange,
+    /// The requirement only applies if all of these hold. A field of an enum variant must only be
+    /// valid if the enum's tag selects that variant, so its requirements are guarded by the
+    /// values of the tag that encode the variant (one guard per enclosing enum). Empty for the
+    /// requirements that always apply, which are encoded as before.
+    guards: Vec<VariantGuard>,
+}
+
+/// The value of `size` bytes at `offset` (an enum's tag) is in `range`.
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+struct VariantGuard {
+    offset: usize,
+    size: MachineSize,
+    range: WrappingRange,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -400,7 +413,9 @@ enum ValidityRange {
     /// This includes cases where the full range is covered.
     Single(WrappingRange),
     /// The value is in one of these ranges: `char`'s two ranges around the surrogates, or the
-    /// discriminants of an enum whose discriminants are not contiguous.
+    /// discriminants of an enum whose discriminants are not contiguous. No range means that no
+    /// value is valid: the requirement of an uninhabited enum variant, which only applies if the
+    /// tag selects it.
     Multiple(Vec<WrappingRange>),
 }
 
@@ -428,6 +443,7 @@ impl ValidValueReq {
                     WrappingRange { start: 0, end: 0xD7FF },
                     WrappingRange { start: 0xE000, end: char::MAX.into() },
                 ]),
+                guards: vec![],
             })
         } else {
             let shape = ty.layout().unwrap().shape();
@@ -438,6 +454,7 @@ impl ValidValueReq {
                         offset: 0,
                         size: value.size(machine_info),
                         valid_range: ValidityRange::Single(valid_range),
+                        guards: vec![],
                     })
                 }
                 ValueRepr::Scalar(_)
@@ -452,7 +469,7 @@ impl ValidValueReq {
     /// Check if range is full.
     pub fn is_full(&self) -> bool {
         if let ValidityRange::Single(valid_range) = self.valid_range {
-            valid_range.is_full(self.size).unwrap()
+            self.guards.is_empty() && valid_range.is_full(self.size).unwrap()
         } else {
             false
         }
@@ -467,6 +484,9 @@ impl ValidValueReq {
     /// check that is not needed.
     pub fn contains(&self, other: &ValidValueReq) -> bool {
         assert_eq!(self.size, other.size);
+        if !self.guards.is_empty() || !other.guards.is_empty() {
+            return self == other;
+        }
         let ranges = |req: &ValidValueReq| match &req.valid_range {
             ValidityRange::Single(range) => vec![*range],
             ValidityRange::Multiple(ranges) => ranges.clone(),
@@ -480,6 +500,9 @@ impl ValidValueReq {
     /// This requirement for a value that is `delta` bytes further.
     fn shifted(mut self, delta: usize) -> ValidValueReq {
         self.offset += delta;
+        for guard in &mut self.guards {
+            guard.offset += delta;
+        }
         self
     }
 }
@@ -1322,6 +1345,8 @@ fn intrinsic_name(locals: &[LocalDecl], func: &Operand) -> Option<String> {
 ///     let value = unsafe { *typed_ptr };
 ///     req.valid_range.contains(value)
 /// ```
+/// A guarded requirement becomes `!guard_1 || ... || !guard_n || valid`, where each guard reads
+/// the tag it depends on the same way.
 pub fn build_limits(
     body: &mut MutableBody,
     req: &ValidValueReq,
@@ -1330,7 +1355,7 @@ pub fn build_limits(
 ) -> Local {
     let span = source.span(body.blocks());
     debug!(?req, ?rvalue_ptr, ?span, "build_limits");
-    match &req.valid_range {
+    let mut valid = match &req.valid_range {
         ValidityRange::Single(range) => {
             let primitive_ty = uint_ty(req.size.bytes());
             let value = read_at_offset(
@@ -1376,7 +1401,31 @@ pub fn build_limits(
                 )
             })
         }
+    };
+    for guard in &req.guards {
+        let primitive_ty = uint_ty(guard.size.bytes());
+        let tag = read_at_offset(
+            body,
+            rvalue_ptr.clone(),
+            guard.offset,
+            Ty::unsigned_ty(primitive_ty),
+            source,
+        );
+        let applies = build_single_limit(body, &guard.range, source, span, primitive_ty, tag);
+        let skip = body.insert_assignment(
+            Rvalue::UnaryOp(UnOp::Not, move_local(applies)),
+            source,
+            InsertPosition::Before,
+        );
+        valid = body.insert_binary_op(
+            BinOp::BitOr,
+            move_local(skip),
+            move_local(valid),
+            source,
+            InsertPosition::Before,
+        );
     }
+    valid
 }
 
 /// The value of type `value_ty` at `offset` bytes from the pointer `rvalue_ptr`, as an operand
@@ -1603,48 +1652,22 @@ pub fn ty_validity_per_offset(
                                     Ok(ty_req())
                                 }
                                 VariantsShape::Multiple {
-                                    tag_encoding: TagEncoding::Niche { .. },
-                                    ..
-                                } => {
-                                    Err(format!("Unsupported Enum `{}` check", def.trimmed_name()))?
-                                }
-                                VariantsShape::Multiple {
                                     ref tag,
+                                    ref tag_encoding,
                                     tag_field,
                                     ref variants,
-                                    ..
-                                } => {
-                                    let mut fields_validity = vec![];
-                                    for (index, variant) in variants.iter().enumerate() {
-                                        let fields = ty_variants[index].fields();
-                                        for field_idx in variant.fields_by_offset_order() {
-                                            let field_offset = variant.offsets[field_idx].bytes();
-                                            let field_ty = fields[field_idx].ty_with_args(args);
-                                            fields_validity.append(&mut ty_validity_per_offset(
-                                                tcx,
-                                                machine_info,
-                                                field_ty,
-                                                field_offset + current_offset,
-                                            )?);
-                                        }
-                                    }
-                                    if fields_validity.is_empty() {
-                                        // The tag is the field of the enum's own layout.
-                                        direct_tag_validity(
-                                            tcx,
-                                            machine_info,
-                                            ty,
-                                            current_offset + offsets[tag_field].bytes(),
-                                            tag,
-                                            variants.len(),
-                                        )
-                                    } else {
-                                        Err(format!(
-                                            "Unsupported Enum `{}` check",
-                                            def.trimmed_name()
-                                        ))
-                                    }
-                                }
+                                } => enum_validity(
+                                    tcx,
+                                    machine_info,
+                                    ty,
+                                    &ty_variants,
+                                    args,
+                                    current_offset + offsets[tag_field].bytes(),
+                                    tag,
+                                    tag_encoding,
+                                    variants,
+                                    current_offset,
+                                ),
                             }
                         }
                         AdtKind::Union => unreachable!(),
@@ -1749,17 +1772,22 @@ pub fn ty_validity_per_offset(
 /// gaps in its discriminants is checked against the tag's valid range, which contains them.
 const MAX_TAG_RANGES: usize = 16;
 
-/// The validity of a directly tagged multi-variant enum `ty`, with its `tag` at `tag_offset`: the
-/// tag must be the discriminant of an inhabited variant. Its layout may be a scalar, a scalar
-/// pair or an aggregate, whose tag is one of its fields. The fields of its variants must not have
-/// requirements, which this doesn't check.
-fn direct_tag_validity(
+/// The validity of a multi-variant enum `ty` at `current_offset`, with its `tag` at `tag_offset`:
+///  - The tag must encode the discriminant of an inhabited variant.
+///  - The fields of the variant the tag selects must be valid: each of their requirements is
+///    guarded by the tag values that encode the variant.
+#[allow(clippy::too_many_arguments)]
+fn enum_validity(
     tcx: TyCtxt,
     machine_info: &MachineInfo,
     ty: Ty,
+    ty_variants: &[VariantDef],
+    args: &GenericArgs,
     tag_offset: usize,
     tag: &Scalar,
-    variant_count: usize,
+    tag_encoding: &TagEncoding,
+    variants: &[VariantFields],
+    current_offset: usize,
 ) -> Result<Vec<ValidValueReq>, String> {
     let Scalar::Initialized { value, valid_range: tag_range } = tag else {
         return Err(format!("Unsupported enum `{ty}` with a union tag"));
@@ -1775,34 +1803,103 @@ fn direct_tag_validity(
     else {
         unreachable!("expected a multi-variant layout for `{ty}`")
     };
-    // The valid tags are the discriminants of the inhabited variants. The tag's valid range spans
-    // them, but it also contains the values between sparse discriminants.
-    let mut valid_tags: Vec<u128> = (0..variant_count)
-        .filter(|idx| !internal_variants[rustc_abi::VariantIdx::from_usize(*idx)].is_uninhabited())
-        .map(|idx| {
-            internal_ty
-                .discriminant_for_variant(tcx, rustc_abi::VariantIdx::from_usize(idx))
-                .unwrap()
-                .val
-                & mask
-        })
-        .collect();
-    valid_tags.sort_unstable();
-    valid_tags.dedup();
-    let mut ranges: Vec<WrappingRange> = vec![];
-    for tag in valid_tags {
-        match ranges.last_mut() {
-            Some(last) if last.end + 1 == tag => last.end = tag,
-            _ => ranges.push(WrappingRange { start: tag, end: tag }),
+    let inhabited =
+        |idx: usize| !internal_variants[rustc_abi::VariantIdx::from_usize(idx)].is_uninhabited();
+    let tag_req = |valid_range| ValidValueReq {
+        offset: tag_offset,
+        size: tag_size,
+        valid_range,
+        guards: vec![],
+    };
+    let single = |value: u128| WrappingRange { start: value & mask, end: value & mask };
+    let mut reqs = vec![];
+    // The tag values that select each variant, if it can be encoded.
+    let variant_tags: Vec<Option<WrappingRange>> = match tag_encoding {
+        TagEncoding::Direct => {
+            let discr = |idx: usize| {
+                internal_ty
+                    .discriminant_for_variant(tcx, rustc_abi::VariantIdx::from_usize(idx))
+                    .unwrap()
+                    .val
+                    & mask
+            };
+            // The valid tags are the discriminants of the inhabited variants. The tag's valid
+            // range spans them, but it also contains the values between sparse discriminants.
+            let mut valid_tags: Vec<u128> =
+                (0..variants.len()).filter(|idx| inhabited(*idx)).map(discr).collect();
+            valid_tags.sort_unstable();
+            valid_tags.dedup();
+            let mut ranges: Vec<WrappingRange> = vec![];
+            for tag in valid_tags {
+                match ranges.last_mut() {
+                    Some(last) if last.end + 1 == tag => last.end = tag,
+                    _ => ranges.push(WrappingRange { start: tag, end: tag }),
+                }
+            }
+            let valid_range = match ranges.len() {
+                1 => ValidityRange::Single(ranges[0]),
+                n if n <= MAX_TAG_RANGES => ValidityRange::Multiple(ranges),
+                _ => ValidityRange::Single(*tag_range),
+            };
+            let req = tag_req(valid_range);
+            if !req.is_full() {
+                reqs.push(req);
+            }
+            (0..variants.len()).map(|idx| Some(single(discr(idx)))).collect()
+        }
+        TagEncoding::Niche { untagged_variant, niche_variants, niche_start } => {
+            let req = tag_req(ValidityRange::Single(*tag_range));
+            if !req.is_full() {
+                reqs.push(req);
+            }
+            // The variant with index `idx` in `niche_variants` is encoded by the tag value
+            // `(idx - niche_variants.start).wrapping_add(niche_start)`; any other value encodes
+            // `untagged_variant`.
+            let first = niche_variants.start().to_index();
+            let last = niche_variants.end().to_index();
+            let relative_max = (last - first) as u128;
+            (0..variants.len())
+                .map(|idx| {
+                    if idx == untagged_variant.to_index() {
+                        Some(WrappingRange {
+                            start: niche_start.wrapping_add(relative_max).wrapping_add(1) & mask,
+                            end: niche_start.wrapping_sub(1) & mask,
+                        })
+                    } else if (first..=last).contains(&idx) {
+                        Some(single(niche_start.wrapping_add((idx - first) as u128)))
+                    } else {
+                        // This variant can't be encoded: it is uninhabited.
+                        None
+                    }
+                })
+                .collect()
+        }
+    };
+    for (idx, variant) in variants.iter().enumerate() {
+        let Some(range) = variant_tags[idx] else { continue };
+        let guard = VariantGuard { offset: tag_offset, size: tag_size, range };
+        if !inhabited(idx) {
+            // A directly tagged enum's valid tags exclude it already.
+            if matches!(tag_encoding, TagEncoding::Niche { .. }) {
+                let mut req = tag_req(ValidityRange::Multiple(vec![]));
+                req.guards.push(guard);
+                reqs.push(req);
+            }
+            continue;
+        }
+        let fields = ty_variants[idx].fields();
+        for field_idx in variant.fields_by_offset_order() {
+            let field_offset = variant.offsets[field_idx].bytes();
+            let field_ty = fields[field_idx].ty_with_args(args);
+            for mut req in
+                ty_validity_per_offset(tcx, machine_info, field_ty, field_offset + current_offset)?
+            {
+                req.guards.push(guard.clone());
+                reqs.push(req);
+            }
         }
     }
-    let valid_range = match ranges.len() {
-        1 => ValidityRange::Single(ranges[0]),
-        n if n <= MAX_TAG_RANGES => ValidityRange::Multiple(ranges),
-        _ => ValidityRange::Single(*tag_range),
-    };
-    let req = ValidValueReq { offset: tag_offset, size: tag_size, valid_range };
-    Ok(if req.is_full() { vec![] } else { vec![req] })
+    Ok(reqs)
 }
 
 /// The place `*ptr`, if the pointer operand is a place.
