@@ -3,7 +3,6 @@
 
 //! This test case checks the behavior of `align_of_val_raw` for dynamically sized types.
 
-#![feature(layout_for_ptr)]
 #![feature(ptr_metadata)]
 
 use std::any::Any;

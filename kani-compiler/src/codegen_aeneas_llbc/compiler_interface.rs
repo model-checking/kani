@@ -14,7 +14,7 @@ use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
 use crate::kani_middle::transform::{BodyTransformation, GlobalPasses};
 use crate::kani_queries::QUERY_DB;
-use charon_lib::ast::{ItemId, TranslatedCrate};
+use charon_lib::ast::{ItemId, RuntimeChecks, TranslatedCrate};
 use charon_lib::errors::ErrorCtx;
 use charon_lib::options::{CliOpts, Preset, SerializationFormat, TranslateOptions};
 use charon_lib::transform::{TransformCtx, run_transformation_passes};
@@ -383,9 +383,22 @@ fn charon_cli_options(print_llbc: bool) -> CliOpts {
 
 fn create_charon_transformation_context(tcx: TyCtxt) -> TransformCtx {
     let crate_name = tcx.crate_name(LOCAL_CRATE).as_str().into();
-    let mut translated = TranslatedCrate { crate_name, ..TranslatedCrate::default() };
+    let cli_options = charon_cli_options(false);
+    // Record the options in the crate: consumers check them (Aeneas rejects a crate that was not
+    // translated with `--preset=aeneas`).
+    let runtime_checks = RuntimeChecks {
+        ub_checks: tcx.sess.ub_checks(),
+        overflow_checks: tcx.sess.overflow_checks(),
+        contract_checks: tcx.sess.contract_checks(),
+    };
+    let mut translated = TranslatedCrate {
+        crate_name,
+        options: cli_options.clone(),
+        runtime_checks,
+        ..TranslatedCrate::default()
+    };
     prepare_translated_crate(tcx, &mut translated);
     let mut errors = ErrorCtx::new();
-    let options = TranslateOptions::new(&mut errors, &charon_cli_options(false));
+    let options = TranslateOptions::new(&mut errors, &cli_options);
     TransformCtx { options, translated, errors: std::cell::RefCell::new(errors) }
 }

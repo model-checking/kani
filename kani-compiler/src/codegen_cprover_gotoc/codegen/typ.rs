@@ -1200,6 +1200,12 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             if def.repr().scalable() && variant.fields.len() > 1 {
                 return ctx.codegen_scalable_vector_tuple_fields(variant, subst, align);
             }
+            // A struct with no fields can still have a size that rustc defines, such as the
+            // `x87_f80_raw` lang item (an 80-bit x87 float, 10 bytes). Its components would
+            // otherwise add up to zero bits, so represent it as padding of its layout size.
+            if variant.fields.is_empty() && layout.layout.size != Size::ZERO {
+                return vec![DatatypeComponent::padding("$pad0", layout.layout.size.bits())];
+            }
             ctx.codegen_variant_struct_fields(
                 variant,
                 subst,
