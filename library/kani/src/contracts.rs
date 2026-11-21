@@ -242,6 +242,15 @@
 //! satisfy `#[kani::should_panic]`. Under `--prove-safety-only`,
 //! panics are assumed not to occur, so the clauses add no checks.
 //!
+//! A panic while a contract clause is evaluated, such as a division by zero in a
+//! postcondition, is a panic of the contract and is never permitted.
+//!
+//! Known limitation: the destructors of by-value arguments that the function
+//! body does not move out run after Kani has checked the function's return.
+//! A panic in such a destructor is therefore reported as not permitted, and
+//! `panics_if` reports a return, even though the panic happens inside the
+//! function. This can only cause spurious failures, never hide a panic.
+//!
 //! ## Inductive Verification
 //!
 //! Function contracts by default use inductive verification to efficiently
