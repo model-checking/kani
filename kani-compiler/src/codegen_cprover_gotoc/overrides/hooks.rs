@@ -403,6 +403,9 @@ impl GotocHook for Nondet {
     }
 }
 
+/// Handles panic calls, including rewritten native assertions targeting `panic_stub`.
+/// For those calls, operand 0 supplies the diagnostic and the remaining operands are
+/// evaluated in order to preserve their safety checks.
 struct Panic;
 
 impl GotocHook for Panic {
