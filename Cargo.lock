@@ -1239,7 +1239,6 @@ dependencies = [
  "proc-macro2",
  "proc-macro2-diagnostics",
  "quote",
- "strum",
  "strum_macros",
  "syn 2.0.119",
 ]
