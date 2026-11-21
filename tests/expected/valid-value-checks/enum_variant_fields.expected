@@ -1,0 +1,81 @@
+Checking harness read_after_copy_valid...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness read_after_write_bytes_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `Tagged`
+Failed Checks: Undefined Behavior: Invalid value of type `Tagged`
+VERIFICATION:- FAILED
+
+Checking harness uninhabited_variant_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `WithUninhabited`
+Failed Checks: Undefined Behavior: Invalid value of type `WithUninhabited`
+VERIFICATION:- FAILED
+
+Checking harness nested_inner_tag_invalid_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `Outer`
+Failed Checks: Undefined Behavior: Invalid value of type `Outer`
+VERIFICATION:- FAILED
+
+Checking harness nested_inner_invalid_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `Outer`
+Failed Checks: Undefined Behavior: Invalid value of type `Outer`
+VERIFICATION:- FAILED
+
+Checking harness nested_valid...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness niche_pair_any_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `NichePair`
+VERIFICATION:- FAILED
+
+Checking harness niche_pair_valid...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness option_char_any_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `std::option::Option<char>`
+Failed Checks: Undefined Behavior: Invalid value of type `std::option::Option<char>`
+VERIFICATION:- FAILED
+
+Checking harness option_char_valid...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness niche_any_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `Niche`
+Failed Checks: Undefined Behavior: Invalid value of type `Niche`
+VERIFICATION:- FAILED
+
+Checking harness niche_surrogate_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `Niche`
+VERIFICATION:- FAILED
+
+Checking harness niche_valid...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness tagged_surrogate_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `Tagged`
+Failed Checks: Undefined Behavior: Invalid value of type `Tagged`
+VERIFICATION:- FAILED
+
+Checking harness tagged_invalid_tag_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `Tagged`
+Failed Checks: Undefined Behavior: Invalid value of type `Tagged`
+VERIFICATION:- FAILED
+
+Checking harness tagged_unrestricted_field...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness tagged_invalid_bool_field_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `Tagged`
+Failed Checks: Undefined Behavior: Invalid value of type `Tagged`
+VERIFICATION:- FAILED
+
+Checking harness tagged_valid...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness tagged_any_bytes_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `Tagged`
+Failed Checks: Undefined Behavior: Invalid value of type `Tagged`
+Failed Checks: Undefined Behavior: Invalid value of type `Tagged`
+VERIFICATION:- FAILED
+
+Complete - 7 successfully verified harnesses, 12 failures, 19 total.

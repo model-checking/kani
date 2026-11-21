@@ -102,9 +102,7 @@ pub fn check_invalid_transmute_copy() {
     let _rating: Rating = unsafe { mem::transmute_copy(&any) };
 }
 
-/// This code does not trigger UB, and verification should succeed.
-///
-/// FIX-ME: This is not supported today, and we fail due to unsupported check.
+/// Copying bytes that are invalid for `Rating` is not UB: reading them as a `Rating` would be.
 #[kani::proof]
 pub fn check_copy_nonoverlap() {
     let stars = kani::any_where(|s: &u8| *s == 0 || *s > 5);
@@ -117,6 +115,8 @@ pub fn check_copy_nonoverlap_ub() {
     let any: u8 = kani::any();
     let mut rating: Rating = kani::any();
     unsafe { ptr::copy_nonoverlapping(&any as *const _ as *const Rating, &mut rating, 1) };
+    // Reading the copied bytes as a `Rating` is UB if they are not a valid `Rating`.
+    let _stars = rating.stars();
 }
 
 #[kani::proof]

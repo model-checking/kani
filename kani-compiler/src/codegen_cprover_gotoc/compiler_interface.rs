@@ -188,7 +188,11 @@ impl GotocCodegenBackend {
                     }
                 }
 
-                check_contract.map(|check_id| gcx.handle_check_contract(check_id, &items))
+                let contract_info =
+                    check_contract.map(|check_id| gcx.handle_check_contract(check_id, &items));
+                // All vtables are known now.
+                gcx.codegen_valid_vtable_functions();
+                contract_info
             },
             "codegen",
         );

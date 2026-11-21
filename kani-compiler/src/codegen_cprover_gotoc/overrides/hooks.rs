@@ -627,6 +627,94 @@ impl GotocHook for PointerOffset {
     }
 }
 
+/// Encodes `kani::valid_value::valid_vtable::<T>(vtable)`: a call to the function that compares
+/// `vtable` with the vtables of the trait object at the tail of `T`, whose body is generated once
+/// all vtables are known (see `valid_vtable.rs`).
+struct ValidVtable;
+impl GotocHook for ValidVtable {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
+        unreachable!("{UNEXPECTED_CALL}")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        instance: Instance,
+        mut fargs: Vec<Expr>,
+        assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 1);
+        let vtable = fargs.pop().unwrap().cast_to(Type::unsigned_int(8).to_pointer());
+        let dyn_ty = *instance.args().0[0].expect_ty();
+        let check = gcx.valid_vtable_fn(dyn_ty);
+        assign_bool_call(gcx, check.call(vec![vtable]), assign_to, target, span)
+    }
+}
+
+/// Encodes `kani::valid_value::valid_dyn_value::<T>(ptr, tail_offset)`: a call to the function
+/// that checks the trait object at the tail of the `T` at `ptr` at its dynamic type.
+struct ValidDynValue;
+impl GotocHook for ValidDynValue {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
+        unreachable!("{UNEXPECTED_CALL}")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        instance: Instance,
+        mut fargs: Vec<Expr>,
+        assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 2);
+        let tail_offset = fargs.pop().unwrap().cast_to(Type::size_t());
+        let ptr = fargs.pop().unwrap();
+        let byte_ptr = Type::unsigned_int(8).to_pointer();
+        let data = ptr.clone().member("data", &gcx.symbol_table).cast_to(byte_ptr.clone());
+        let vtable = ptr.member("vtable", &gcx.symbol_table).cast_to(byte_ptr);
+        let pointee = *instance.args().0[0].expect_ty();
+        let check = gcx.valid_dyn_value_fn(pointee);
+        assign_bool_call(gcx, check.call(vec![data, vtable, tail_offset]), assign_to, target, span)
+    }
+}
+
+/// Assign the result of `call` to `assign_to`, and continue at `target`.
+fn assign_bool_call(
+    gcx: &mut GotocCtx,
+    call: Expr,
+    assign_to: &Place,
+    target: Option<BasicBlockIdx>,
+    span: Span,
+) -> Stmt {
+    let loc = gcx.codegen_caller_span_stable(span);
+    let ret_place =
+        unwrap_or_return_codegen_unimplemented_stmt!(gcx, gcx.codegen_place_stable(assign_to, loc));
+    let ret_type = ret_place.goto_expr.typ().clone();
+    Stmt::block(
+        vec![
+            ret_place.goto_expr.assign(call.cast_to(ret_type), loc),
+            Stmt::goto(bb_label(target.unwrap()), loc),
+        ],
+        loc,
+    )
+}
+
 struct RustAlloc;
 // Removing this hook causes regression failures.
 // https://github.com/model-checking/kani/issues/1170
@@ -1681,6 +1769,8 @@ pub fn fn_hooks() -> GotocHooks {
         (KaniHook::PointerOffset, Rc::new(PointerOffset)),
         (KaniHook::UnsupportedCheck, Rc::new(UnsupportedCheck)),
         (KaniHook::UntrackedDeref, Rc::new(UntrackedDeref)),
+        (KaniHook::ValidVtable, Rc::new(ValidVtable)),
+        (KaniHook::ValidDynValue, Rc::new(ValidDynValue)),
         (KaniHook::InitContracts, Rc::new(InitContracts)),
         (KaniHook::FloatToIntInRange, Rc::new(FloatToIntInRange)),
     ];

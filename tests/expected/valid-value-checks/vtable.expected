@@ -1,0 +1,30 @@
+Checking harness read_raw_dyn_ptr_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `*const dyn A`
+VERIFICATION:- FAILED
+
+Checking harness transmute_ref_valid...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness transmute_forged_ref_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `&dyn A`
+VERIFICATION:- FAILED
+
+Checking harness auto_trait_metadata_valid...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness upcast_metadata_valid...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness from_raw_parts_other_trait_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `*const dyn A`
+VERIFICATION:- FAILED
+
+Checking harness from_raw_parts_forged_metadata_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `*const dyn A`
+Failed Checks: Undefined Behavior: Invalid value of type `std::ptr::DynMetadata<dyn A>`
+VERIFICATION:- FAILED
+
+Checking harness from_raw_parts_valid...
+VERIFICATION:- SUCCESSFUL
+
+Complete - 4 successfully verified harnesses, 4 failures, 8 total.

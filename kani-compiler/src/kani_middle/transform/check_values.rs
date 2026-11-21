@@ -14,28 +14,33 @@
 //!   1. We could merge the invalid values by the offset.
 //!   2. We could avoid checking places that have been checked before.
 use crate::args::ExtraChecks;
+use crate::kani_middle::attributes::attrs_by_path;
+use crate::kani_middle::kani_functions::{KaniFunction, KaniHook, KaniIntrinsic, KaniModel};
 use crate::kani_middle::transform::body::{
-    CheckType, InsertPosition, MutableBody, SourceInstruction,
+    CheckType, InsertPosition, MutableBody, SourceInstruction, synthetic_source_info,
 };
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
-use rustc_middle::ty::{Const, TyCtxt};
+use rustc_middle::ty::TyCtxt;
 use rustc_public::CrateDef;
 use rustc_public::CrateDefType;
 use rustc_public::abi::{
-    FieldsShape, Scalar, TagEncoding, ValueRepr, VariantsShape, WrappingRange,
+    FieldsShape, Scalar, TagEncoding, ValueRepr, VariantFields, VariantsShape, WrappingRange,
 };
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::visit::{Location, PlaceContext, PlaceRef};
 use rustc_public::mir::{
-    AggregateKind, BasicBlockIdx, BinOp, Body, BorrowKind, CastKind, FieldIdx, Local, LocalDecl,
-    MirVisitor, Mutability, NonDivergingIntrinsic, Operand, Place, ProjectionElem, RawPtrKind,
-    Rvalue, Statement, StatementKind, Terminator, TerminatorKind, WithRetag,
+    AggregateKind, BasicBlock, BasicBlockIdx, BinOp, Body, BorrowKind, CastKind, ConstOperand,
+    FieldIdx, Local, LocalDecl, MirVisitor, Mutability, NonDivergingIntrinsic, Operand, Place,
+    ProjectionElem, RawPtrKind, Rvalue, Statement, StatementKind, SwitchTargets, Terminator,
+    TerminatorKind, UnOp, UnwindAction, WithRetag,
 };
 use rustc_public::rustc_internal;
 use rustc_public::target::{MachineInfo, MachineSize};
 use rustc_public::ty::{AdtKind, GenericArgs, RigidTy, Span, Ty, TyKind, UintTy, VariantDef};
+use rustc_public::ty::{FnDef, GenericArgKind, MirConst};
 use rustc_public_bridge::IndexedVal;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use strum_macros::AsRefStr;
 use tracing::{debug, trace};
@@ -45,6 +50,8 @@ use tracing::{debug, trace};
 pub struct ValidValuePass {
     pub safety_check_type: CheckType,
     pub unsupported_check_type: CheckType,
+    /// Kani's functions, for the model of untyped writes (`kani_core::kani_valid_value!`).
+    pub kani_functions: HashMap<KaniFunction, FnDef>,
 }
 
 impl TransformPass for ValidValuePass {
@@ -67,18 +74,40 @@ impl TransformPass for ValidValuePass {
     /// For every unsafe dereference or a transmute operation, we check all values are valid.
     fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
+        let harness = is_harness(instance, tcx);
+        // Kani's own functions are not instrumented, nor are the instrumentation models of the
+        // validity and initialization checks, which have helpers without markers: the model of
+        // untyped writes reads its state through a reference, and checking that read would call
+        // the model again.
+        if !harness
+            && (KaniFunction::try_from(instance).is_ok() || is_instrumentation_model(instance))
+        {
+            return (false, body);
+        }
         let mut new_body = MutableBody::from(body);
         let orig_len = new_body.blocks().len();
-        // Do not cache body.blocks().len() since it will change as we add new checks.
-        for bb_idx in 0..new_body.blocks().len() {
-            let Some(candidate) =
-                CheckValueVisitor::find_next(tcx, &new_body, bb_idx, bb_idx >= orig_len)
-            else {
+        let address_taken = address_taken_locals(&new_body);
+        // The checks split blocks, and the instructions after an instrumented one end up in a new
+        // block at the end, so the number of blocks is read on every iteration.
+        let mut bb_idx = 0;
+        while bb_idx < new_body.blocks().len() {
+            let Some(candidate) = CheckValueVisitor::find_next(
+                tcx,
+                &new_body,
+                bb_idx,
+                bb_idx >= orig_len,
+                &address_taken,
+            ) else {
+                bb_idx += 1;
                 continue;
             };
             self.build_check(&mut new_body, candidate);
+            bb_idx += 1;
         }
-        (orig_len != new_body.blocks().len(), new_body.into())
+        if harness {
+            self.initialize_untyped_write_state(&mut new_body);
+        }
+        (harness || orig_len != new_body.blocks().len(), new_body.into())
     }
 }
 
@@ -92,7 +121,13 @@ impl ValidValuePass {
                     let value = body.insert_assignment(rvalue, &mut source, InsertPosition::Before);
                     let rvalue_ptr = Rvalue::AddressOf(RawPtrKind::Const, Place::from(value));
                     for range in ranges {
-                        let result = build_limits(body, &range, rvalue_ptr.clone(), &mut source);
+                        let result = build_limits(
+                            body,
+                            &range,
+                            rvalue_ptr.clone(),
+                            &mut source,
+                            &self.kani_functions,
+                        );
                         let msg =
                             format!("Undefined Behavior: Invalid value of type `{target_ty}`",);
                         body.insert_check(
@@ -106,7 +141,13 @@ impl ValidValuePass {
                 }
                 SourceOp::DerefValidity { pointee_ty, rvalue, ranges } => {
                     for range in ranges {
-                        let result = build_limits(body, &range, rvalue.clone(), &mut source);
+                        let result = build_limits(
+                            body,
+                            &range,
+                            rvalue.clone(),
+                            &mut source,
+                            &self.kani_functions,
+                        );
                         let msg =
                             format!("Undefined Behavior: Invalid value of type `{pointee_ty}`",);
                         body.insert_check(
@@ -124,8 +165,204 @@ impl ValidValuePass {
                     );
                     self.unsupported_check(body, &mut source, &reason);
                 }
+                SourceOp::SetUntyped { ptr, count, elem_size, untyped } => {
+                    let span = source.span(body.blocks());
+                    let ptr = body.insert_assignment(ptr, &mut source, InsertPosition::Before);
+                    let pointee = pointee_ty(body.locals()[ptr].ty);
+                    let count =
+                        count.unwrap_or_else(|| body.new_uint_operand(1, UintTy::Usize, span));
+                    let elem_size = body.new_uint_operand(elem_size as u128, UintTy::Usize, span);
+                    let untyped = bool_operand(untyped, span);
+                    self.call_model(
+                        body,
+                        &mut source,
+                        KaniModel::SetUntypedWrite,
+                        pointee,
+                        vec![Operand::Move(Place::from(ptr)), count, elem_size, untyped],
+                        Ty::new_tuple(&[]),
+                    );
+                }
+                SourceOp::UntypedLoad { ptr, dest, ty, ranges } => {
+                    let span = source.span(body.blocks());
+                    let ptr = body.insert_assignment(
+                        Rvalue::Use(ptr, WithRetag::No),
+                        &mut source,
+                        InsertPosition::Before,
+                    );
+                    let size = ty.layout().unwrap().shape().size.bytes() as u128;
+                    let size = body.new_uint_operand(size, UintTy::Usize, span);
+                    let untyped = self.call_model(
+                        body,
+                        &mut source,
+                        KaniModel::IsUntypedWrite,
+                        ty,
+                        vec![Operand::Copy(Place::from(ptr)), size],
+                        Ty::bool_ty(),
+                    );
+                    // Continue after the call, where `dest` holds the loaded value.
+                    let dest_ptr = body.insert_assignment(
+                        Rvalue::AddressOf(RawPtrKind::Const, dest),
+                        &mut source,
+                        InsertPosition::After,
+                    );
+                    // Insert the checks after that assignment, before the new block's `goto`.
+                    source = SourceInstruction::Terminator { bb: source.bb() };
+                    self.check_untyped_value(body, &mut source, dest_ptr, untyped, ty, ranges);
+                }
+                SourceOp::UntypedRead { place, ty, ranges } => {
+                    let span = source.span(body.blocks());
+                    let ptr = body.insert_assignment(
+                        Rvalue::AddressOf(RawPtrKind::Const, place),
+                        &mut source,
+                        InsertPosition::Before,
+                    );
+                    let size = ty.layout().unwrap().shape().size.bytes() as u128;
+                    let size = body.new_uint_operand(size, UintTy::Usize, span);
+                    let untyped = self.call_model(
+                        body,
+                        &mut source,
+                        KaniModel::IsUntypedWrite,
+                        ty,
+                        vec![Operand::Copy(Place::from(ptr)), size],
+                        Ty::bool_ty(),
+                    );
+                    self.check_untyped_value(body, &mut source, ptr, untyped, ty, ranges);
+                }
             }
         }
+    }
+
+    /// Check that the `ty` at `ptr` is valid if `untyped` holds, or report `ty` as unsupported if
+    /// Kani can't express its validity (`ranges` is `Err`).
+    fn check_untyped_value(
+        &self,
+        body: &mut MutableBody,
+        source: &mut SourceInstruction,
+        ptr: Local,
+        untyped: Local,
+        ty: Ty,
+        ranges: Result<Vec<ValidValueReq>, String>,
+    ) {
+        let typed = body.insert_assignment(
+            Rvalue::UnaryOp(UnOp::Not, Operand::Copy(Place::from(untyped))),
+            source,
+            InsertPosition::Before,
+        );
+        match ranges {
+            Ok(ranges) => {
+                for range in ranges {
+                    let valid = build_limits(
+                        body,
+                        &range,
+                        Rvalue::Use(Operand::Copy(Place::from(ptr)), WithRetag::No),
+                        source,
+                        &self.kani_functions,
+                    );
+                    let result = body.insert_binary_op(
+                        BinOp::BitOr,
+                        Operand::Copy(Place::from(typed)),
+                        Operand::Copy(Place::from(valid)),
+                        source,
+                        InsertPosition::Before,
+                    );
+                    let msg = format!("Undefined Behavior: Invalid value of type `{ty}`");
+                    body.insert_check(
+                        &self.safety_check_type,
+                        source,
+                        InsertPosition::Before,
+                        Some(result),
+                        &msg,
+                    );
+                }
+            }
+            Err(_) => {
+                let reason = format!(
+                    "Kani currently doesn't support checking validity of `read of bytes \
+                                 written without a type check` for `{ty}`"
+                );
+                self.unsupported_check_if(body, source, untyped, &reason);
+            }
+        }
+    }
+
+    /// Insert the unsupported check `reason`, reached only if `cond` holds: split the block at
+    /// `source` on `cond`, into a block with the check, which then continues where `source` is.
+    fn unsupported_check_if(
+        &self,
+        body: &mut MutableBody,
+        source: &mut SourceInstruction,
+        cond: Local,
+        reason: &str,
+    ) {
+        let CheckType::UnsupportedCheck(check_fn) = &self.unsupported_check_type else {
+            unreachable!("the unsupported check type is an unsupported check")
+        };
+        let span = source.span(body.blocks());
+        let msg = body.new_str_operand(reason, span);
+        let func = Operand::Copy(Place::from(body.new_local(check_fn.ty(), span, Mutability::Not)));
+        let unit = body.new_local(Ty::new_tuple(&[]), span, Mutability::Not);
+        // The switch's targets are filled in once the blocks exist.
+        let switch = Terminator {
+            kind: TerminatorKind::Goto { target: 0 },
+            source_info: synthetic_source_info(span),
+        };
+        let (switch_bb, rest_bb) = body.split_with_terminator(source, switch);
+        let check_bb = body.push_raw_bb(BasicBlock {
+            statements: vec![],
+            terminator: Terminator {
+                kind: TerminatorKind::Call {
+                    func,
+                    args: vec![msg],
+                    destination: Place::from(unit),
+                    target: Some(rest_bb),
+                    unwind: UnwindAction::Terminate,
+                },
+                source_info: synthetic_source_info(span),
+            },
+        });
+        body.replace_terminator(
+            &SourceInstruction::Terminator { bb: switch_bb },
+            Terminator {
+                kind: TerminatorKind::SwitchInt {
+                    discr: Operand::Copy(Place::from(cond)),
+                    targets: SwitchTargets::new(vec![(0, rest_bb)], check_bb),
+                },
+                source_info: synthetic_source_info(span),
+            },
+        );
+    }
+
+    /// Insert a call to the model `model::<ty>(args)` and return the local with its result.
+    fn call_model(
+        &self,
+        body: &mut MutableBody,
+        source: &mut SourceInstruction,
+        model: KaniModel,
+        ty: Ty,
+        args: Vec<Operand>,
+        ret_ty: Ty,
+    ) -> Local {
+        let span = source.span(body.blocks());
+        let def = self.kani_functions[&model.into()];
+        let instance =
+            Instance::resolve(def, &GenericArgs(vec![GenericArgKind::Type(ty)])).unwrap();
+        let ret = body.new_local(ret_ty, span, Mutability::Not);
+        body.insert_call(&instance, source, InsertPosition::Before, args, Place::from(ret));
+        ret
+    }
+
+    /// Choose the byte whose untyped writes the checks track, where the harness starts.
+    fn initialize_untyped_write_state(&self, body: &mut MutableBody) {
+        let mut source = if body.blocks()[0].statements.is_empty() {
+            SourceInstruction::Terminator { bb: 0 }
+        } else {
+            SourceInstruction::Statement { idx: 0, bb: 0 }
+        };
+        let span = source.span(body.blocks());
+        let def = self.kani_functions[&KaniModel::InitializeUntypedWriteState.into()];
+        let instance = Instance::resolve(def, &GenericArgs(vec![])).unwrap();
+        let ret = body.new_local(Ty::new_tuple(&[]), span, Mutability::Not);
+        body.insert_call(&instance, &mut source, InsertPosition::Before, vec![], Place::from(ret));
     }
 
     fn unsupported_check(
@@ -168,17 +405,41 @@ pub struct ValidValueReq {
     size: MachineSize,
     /// The range restriction is represented by a Scalar.
     valid_range: ValidityRange,
+    /// The requirement only applies if all of these hold. A field of an enum variant must only be
+    /// valid if the enum's tag selects that variant, so its requirements are guarded by the
+    /// values of the tag that encode the variant (one guard per enclosing enum). Empty for the
+    /// requirements that always apply, which are encoded as before.
+    guards: Vec<VariantGuard>,
+}
+
+/// The value of `size` bytes at `offset` (an enum's tag) is in `range`.
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub struct VariantGuard {
+    offset: usize,
+    size: MachineSize,
+    range: WrappingRange,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-enum ValidityRange {
+pub enum ValidityRange {
     /// The value validity fits in a single value range.
     /// This includes cases where the full range is covered.
     Single(WrappingRange),
-    /// The validity includes more than one value range.
-    /// Currently, this is only the case for `char`, which has two ranges.
-    /// If more cases come up, we could turn this into a vector instead.
-    Multiple([WrappingRange; 2]),
+    /// The value is in one of these ranges: `char`'s two ranges around the surrogates, or the
+    /// discriminants of an enum whose discriminants are not contiguous. No range means that no
+    /// value is valid: the requirement of an uninhabited enum variant, which only applies if the
+    /// tag selects it.
+    Multiple(Vec<WrappingRange>),
+    /// The pointer at the offset is aligned to this many bytes: a reference or a `Box`.
+    Aligned(u64),
+    /// The pointer at the offset is the address of a vtable Kani generated for the trait object
+    /// type (the metadata of a pointer to a `dyn Trait`).
+    Vtable(Ty),
+    /// The trait object of this type at the offset (not rounded up to the trait object's
+    /// alignment) is a valid value of its dynamic type, as the metadata of the pointer to the
+    /// value determines it. Only for the pointee of a pointer to an unsized type, which a check
+    /// reaches through that pointer.
+    DynValue(Ty),
 }
 
 // TODO: Optimize checks by merging requirements whenever possible.
@@ -201,10 +462,11 @@ impl ValidValueReq {
             Some(ValidValueReq {
                 offset: 0,
                 size: MachineSize::from_bits(size_of::<char>() * 8),
-                valid_range: ValidityRange::Multiple([
+                valid_range: ValidityRange::Multiple(vec![
                     WrappingRange { start: 0, end: 0xD7FF },
                     WrappingRange { start: 0xE000, end: char::MAX.into() },
                 ]),
+                guards: vec![],
             })
         } else {
             let shape = ty.layout().unwrap().shape();
@@ -215,6 +477,7 @@ impl ValidValueReq {
                         offset: 0,
                         size: value.size(machine_info),
                         valid_range: ValidityRange::Single(valid_range),
+                        guards: vec![],
                     })
                 }
                 ValueRepr::Scalar(_)
@@ -229,7 +492,7 @@ impl ValidValueReq {
     /// Check if range is full.
     pub fn is_full(&self) -> bool {
         if let ValidityRange::Single(valid_range) = self.valid_range {
-            valid_range.is_full(self.size).unwrap()
+            self.guards.is_empty() && valid_range.is_full(self.size).unwrap()
         } else {
             false
         }
@@ -238,33 +501,56 @@ impl ValidValueReq {
     /// Check if this range contains `other` range.
     ///
     /// I.e., `scalar_2` ⊆ `scalar_1`
+    ///
+    /// This is conservative: it may return `false` for ranges that do contain `other` (e.g. a
+    /// range of `other` that only the union of two ranges of `self` covers), which only adds a
+    /// check that is not needed.
     pub fn contains(&self, other: &ValidValueReq) -> bool {
         assert_eq!(self.size, other.size);
-        match (&self.valid_range, &other.valid_range) {
-            (ValidityRange::Single(this_range), ValidityRange::Single(other_range)) => {
-                range_contains(this_range, other_range, self.size)
-            }
-            (ValidityRange::Multiple(this_ranges), ValidityRange::Single(other_range)) => {
-                range_contains(&this_ranges[0], other_range, self.size)
-                    || range_contains(&this_ranges[1], other_range, self.size)
-            }
-            (ValidityRange::Single(this_range), ValidityRange::Multiple(other_ranges)) => {
-                range_contains(this_range, &other_ranges[0], self.size)
-                    && range_contains(this_range, &other_ranges[1], self.size)
-            }
-            (ValidityRange::Multiple(this_ranges), ValidityRange::Multiple(other_ranges)) => {
-                let contains = (range_contains(&this_ranges[0], &other_ranges[0], self.size)
-                    || range_contains(&this_ranges[1], &other_ranges[0], self.size))
-                    && (range_contains(&this_ranges[0], &other_ranges[1], self.size)
-                        || range_contains(&this_ranges[1], &other_ranges[1], self.size));
-                // Multiple today only cover `char` case.
-                debug_assert!(
-                    contains,
-                    "Expected validity of `char` for Multiple ranges. Found: {self:?}, {other:?}"
-                );
-                contains
-            }
+        if !self.guards.is_empty() || !other.guards.is_empty() {
+            return self == other;
         }
+        let ranges = |req: &ValidValueReq| match &req.valid_range {
+            ValidityRange::Single(range) => Some(vec![*range]),
+            ValidityRange::Multiple(ranges) => Some(ranges.clone()),
+            ValidityRange::Aligned(_) | ValidityRange::Vtable(_) | ValidityRange::DynValue(_) => {
+                None
+            }
+        };
+        match (ranges(self), ranges(other)) {
+            (Some(this_ranges), Some(other_ranges)) => other_ranges.iter().all(|other_range| {
+                this_ranges
+                    .iter()
+                    .any(|this_range| range_contains(this_range, other_range, self.size))
+            }),
+            _ => self == other,
+        }
+    }
+
+    /// This requirement for a value that is `delta` bytes further.
+    fn shifted(mut self, delta: usize) -> ValidValueReq {
+        self.offset += delta;
+        for guard in &mut self.guards {
+            guard.offset += delta;
+        }
+        self
+    }
+
+    pub fn offset(&self) -> usize {
+        self.offset
+    }
+
+    pub fn size(&self) -> MachineSize {
+        self.size
+    }
+
+    pub fn valid_range(&self) -> &ValidityRange {
+        &self.valid_range
+    }
+
+    /// The guards that must hold for the requirement to apply, as `(offset, size, range)`.
+    pub fn guards(&self) -> impl Iterator<Item = (usize, MachineSize, WrappingRange)> + '_ {
+        self.guards.iter().map(|guard| (guard.offset, guard.size, guard.range))
     }
 }
 
@@ -314,6 +600,25 @@ enum SourceOp {
     /// TODO: Consider replacing the assertion(false) by an unsupported operation that emits a
     /// compilation warning.
     UnsupportedCheck { check: String, ty: Ty },
+
+    /// Record that the `count` (one if `None`) values of `elem_size` bytes at the pointer `ptr`
+    /// evaluates to were
+    /// written without a type check (`untyped`), or by a typed store of a type with validity
+    /// requirements (not `untyped`).
+    ///
+    /// Writing bytes that are invalid for a type is not undefined behavior: reading them as that
+    /// type is. So untyped writes are only recorded, and the reads that cover them are checked.
+    SetUntyped { ptr: Rvalue, count: Option<Operand>, elem_size: u64, untyped: bool },
+
+    /// A typed read of `place`, of type `ty`, from memory that may have been written untyped:
+    /// check its value if one of its bytes was. `ranges` is `Err` if Kani can't express the
+    /// validity of `ty`, which is then reported as unsupported, but only if the read covers bytes
+    /// written untyped.
+    UntypedRead { place: Place, ty: Ty, ranges: Result<Vec<ValidValueReq>, String> },
+    /// The call this instruction is, an unaligned load of a `ty` at the pointer `ptr` into
+    /// `dest`: check the value it loads, after the call, if one of the bytes at `ptr` was written
+    /// untyped. The bytes at `ptr` can't be read as `ty` in place, as they may be misaligned.
+    UntypedLoad { ptr: Operand, dest: Place, ty: Ty, ranges: Result<Vec<ValidValueReq>, String> },
 }
 
 /// The unsafe instructions that may generate invalid values.
@@ -367,6 +672,8 @@ struct CheckValueVisitor<'a, 'b> {
     bb: BasicBlockIdx,
     /// Machine information needed to calculate Niche.
     machine: MachineInfo,
+    /// Locals whose address the function takes: a pointer may write them untyped.
+    address_taken: &'a HashSet<Local>,
 }
 
 impl<'a, 'b> CheckValueVisitor<'a, 'b> {
@@ -375,6 +682,7 @@ impl<'a, 'b> CheckValueVisitor<'a, 'b> {
         body: &'a MutableBody,
         bb: BasicBlockIdx,
         skip_first: bool,
+        address_taken: &'a HashSet<Local>,
     ) -> Option<UnsafeInstruction> {
         let mut visitor = CheckValueVisitor {
             access: PlaceAccessKind::Conservative,
@@ -385,6 +693,7 @@ impl<'a, 'b> CheckValueVisitor<'a, 'b> {
             target: None,
             bb,
             machine: MachineInfo::target(),
+            address_taken,
         };
         visitor.visit_basic_block(&body.blocks()[bb]);
         visitor.target
@@ -402,6 +711,110 @@ impl<'a, 'b> CheckValueVisitor<'a, 'b> {
         self.access = access;
         visit(self);
         self.access = previous;
+    }
+
+    /// Whether the memory of `place` may have been written untyped: it is reached through a
+    /// pointer, or it is a local whose address is taken.
+    fn may_be_untyped(&self, place: &Place) -> bool {
+        place.projection.iter().any(|elem| matches!(elem, ProjectionElem::Deref))
+            || self.address_taken.contains(&place.local)
+    }
+
+    /// Whether `place` is a value a closure captured, read through its environment (`env.field`
+    /// or `(*env).field`). These reads are not checked: a closure is only called through a borrow
+    /// or a move of the closure value, and that read of the closure is checked where the closure
+    /// lives if its bytes may have been written untyped. Reads through a captured reference, into
+    /// other memory, are still checked. Quantifier predicates, which can't contain checks, read
+    /// their captures this way.
+    fn is_closure_capture(&self, place: &Place) -> bool {
+        let is_closure = |ty: Ty| {
+            matches!(
+                ty.kind(),
+                TyKind::RigidTy(RigidTy::Closure(..) | RigidTy::CoroutineClosure(..))
+            )
+        };
+        let env_ty = self.locals[place.local].ty;
+        match place.projection.as_slice() {
+            [ProjectionElem::Field(..)] => is_closure(env_ty),
+            [ProjectionElem::Deref, ProjectionElem::Field(..)] => match env_ty.kind() {
+                TyKind::RigidTy(RigidTy::Ref(_, pointee, _)) => is_closure(pointee),
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
+    /// Whether `place` dereferences a raw pointer.
+    fn derefs_raw_pointer(&self, place: &Place) -> bool {
+        place.projection.iter().enumerate().any(|(idx, elem)| {
+            matches!(elem, ProjectionElem::Deref)
+                && PlaceRef { local: place.local, projection: &place.projection[..idx] }
+                    .ty(self.locals)
+                    .is_ok_and(|ty| ty.kind().is_raw_ptr())
+        })
+    }
+
+    /// A typed read of `place`: check it if it reads bytes written untyped.
+    fn check_untyped_read(&mut self, place: &Place) {
+        if !self.may_be_untyped(place) || self.is_closure_capture(place) {
+            return;
+        }
+        let Ok(ty) = place.ty(self.locals) else { return };
+        if !ty.layout().is_ok_and(|layout| layout.shape().is_sized()) {
+            return;
+        }
+        match ty_validity_per_offset(self.tcx, &self.machine, ty, 0) {
+            Ok(ranges) if ranges.is_empty() => {}
+            ranges => self.push_target(SourceOp::UntypedRead { place: place.clone(), ty, ranges }),
+        }
+    }
+
+    /// A store to `place`. A store of a restricted type directly into a local writes a valid value
+    /// of the local's type. A store through a pointer is recorded as untyped: if the pointee type
+    /// has no validity requirements, its bytes may be invalid for the memory's type; if it does,
+    /// the pointer may alias memory of another restricted type (a `*mut NonZeroU8` cast from a
+    /// `*mut bool`), and the reads that cover the bytes check them. A restricted type whose
+    /// validity can't be expressed clears the mark instead, so that its later reads don't report
+    /// an unsupported check.
+    fn record_store(&mut self, place: &Place) {
+        if !self.may_be_untyped(place) {
+            return;
+        }
+        let Ok(ty) = place.ty(self.locals) else { return };
+        let Ok(layout) = ty.layout() else { return };
+        let shape = layout.shape();
+        if !shape.is_sized() || shape.size.bytes() == 0 {
+            return;
+        }
+        let through_pointer =
+            place.projection.iter().any(|elem| matches!(elem, ProjectionElem::Deref));
+        let validity = ty_validity_per_offset(self.tcx, &self.machine, ty, 0);
+        let unrestricted = matches!(&validity, Ok(ranges) if ranges.is_empty());
+        if unrestricted && !through_pointer {
+            // A typed store of an unrestricted type into a local: nothing reads it as a
+            // restricted type without a cast, and reads through casts are checked.
+            return;
+        }
+        let untyped = through_pointer && validity.is_ok();
+        self.push_target(SourceOp::SetUntyped {
+            ptr: Rvalue::AddressOf(RawPtrKind::Const, place.clone()),
+            count: None,
+            elem_size: shape.size.bytes() as u64,
+            untyped,
+        });
+    }
+
+    /// A write of `count` values at the pointer `ptr` (of type `*mut T`) that doesn't check types.
+    fn record_untyped_write(&mut self, ptr: &Operand, count: Option<Operand>) {
+        let ptr_ty = ptr.ty(self.locals).unwrap();
+        let elem_ty = pointee_ty(ptr_ty);
+        let Ok(layout) = elem_ty.layout() else { return };
+        self.push_target(SourceOp::SetUntyped {
+            ptr: Rvalue::Use(ptr.clone(), WithRetag::No),
+            count,
+            elem_size: layout.shape().size.bytes() as u64,
+            untyped: true,
+        });
     }
 
     /// Narrow checks only for an optional leading dereference and ordinary struct/tuple fields.
@@ -489,12 +902,9 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
             // Leave it as an exhaustive match to be notified when a new kind is added.
             match &stmt.kind {
                 StatementKind::Intrinsic(NonDivergingIntrinsic::CopyNonOverlapping(copy)) => {
-                    // Source is a *const T and it must be safe for read.
-                    // TODO: Implement value check.
-                    self.push_target(SourceOp::UnsupportedCheck {
-                        check: "copy_nonoverlapping".to_string(),
-                        ty: copy.src.ty(self.locals).unwrap(),
-                    });
+                    // A copy writes bytes, not values: the destination's bytes are written
+                    // untyped, and the reads that cover them are checked.
+                    self.record_untyped_write(&copy.dst, Some(copy.count.clone()));
                 }
                 StatementKind::Assign(place, rvalue) => {
                     // First check rvalue.
@@ -517,6 +927,7 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                             ranges,
                         });
                     }
+                    self.record_store(place);
                 }
                 StatementKind::FakeRead(_, _)
                 | StatementKind::SetDiscriminant { .. }
@@ -539,7 +950,7 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
             self.current = SourceInstruction::Terminator { bb: self.bb };
             // Leave it as an exhaustive match to be notified when a new kind is added.
             match &term.kind {
-                TerminatorKind::Call { func, args, .. } => {
+                TerminatorKind::Call { func, args, destination, .. } => {
                     // Note: For transmute, both Src and Dst must be valid type.
                     // In this case, we need to save the Dst, and invoke super_terminator.
                     // The return destination is a store; argument operands are reads.
@@ -547,42 +958,59 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                         visitor.super_terminator(term, location);
                     });
                     match intrinsic_name(self.locals, func).as_deref() {
-                        Some("write_bytes") => {
-                            // The write bytes intrinsic may trigger UB in safe code.
-                            // pub unsafe fn write_bytes<T>(dst: *mut T, val: u8, count: usize)
-                            // <https://doc.rust-lang.org/stable/core/intrinsics/fn.write_bytes.html>
-                            // This is an over-approximation since writing an invalid value is
-                            // not UB, only reading it will be.
-                            assert_eq!(
-                                args.len(),
-                                3,
-                                "Unexpected number of arguments for `write_bytes`"
-                            );
-                            let TyKind::RigidTy(RigidTy::RawPtr(target_ty, Mutability::Mut)) =
-                                args[0].ty(self.locals).unwrap().kind()
-                            else {
-                                unreachable!()
-                            };
-                            let validity =
-                                ty_validity_per_offset(self.tcx, &self.machine, target_ty, 0);
-                            match validity {
+                        // Intrinsics that write bytes, not values: record the untyped write.
+                        // <https://doc.rust-lang.org/stable/core/intrinsics/fn.write_bytes.html>
+                        Some("write_bytes") | Some("volatile_set_memory") => {
+                            self.record_untyped_write(&args[0], Some(args[2].clone()));
+                        }
+                        Some("copy") => self.record_untyped_write(&args[1], Some(args[2].clone())),
+                        Some("volatile_copy_memory")
+                        | Some("volatile_copy_nonoverlapping_memory") => {
+                            self.record_untyped_write(&args[0], Some(args[2].clone()));
+                        }
+                        Some("typed_swap_nonoverlapping") => {
+                            self.record_untyped_write(&args[0], None);
+                            self.record_untyped_write(&args[1], None);
+                        }
+                        // Volatile accesses read and write through the pointer without a MIR
+                        // place: treat them as a typed read and a store through the pointer.
+                        Some("volatile_load") => {
+                            if let Some(place) = deref_place(&args[0]) {
+                                self.check_untyped_read(&place);
+                            }
+                        }
+                        Some("unaligned_volatile_load") => {
+                            let ty = destination.ty(self.locals).unwrap();
+                            match ty_validity_per_offset(self.tcx, &self.machine, ty, 0) {
                                 Ok(ranges) if ranges.is_empty() => {}
-                                Ok(ranges) => {
-                                    let sz = rustc_internal::stable(Const::from_target_usize(
-                                        self.tcx,
-                                        target_ty.layout().unwrap().shape().size.bytes() as u64,
-                                    ));
-                                    self.push_target(SourceOp::BytesValidity {
-                                        target_ty,
-                                        rvalue: Rvalue::Repeat(args[1].clone(), sz),
-                                        ranges,
-                                    })
-                                }
-                                _ => self.push_target(SourceOp::UnsupportedCheck {
-                                    check: "write_bytes".to_string(),
-                                    ty: target_ty,
+                                ranges => self.push_target(SourceOp::UntypedLoad {
+                                    ptr: args[0].clone(),
+                                    dest: destination.clone(),
+                                    ty,
+                                    ranges,
                                 }),
                             }
+                        }
+                        Some("volatile_store") => {
+                            if let Some(place) = deref_place(&args[0]) {
+                                self.record_store(&place);
+                            }
+                        }
+                        // The pointer may be misaligned, so it's not a place: record the bytes
+                        // it writes as untyped, as for any store through a pointer.
+                        Some("unaligned_volatile_store") => {
+                            self.record_untyped_write(&args[0], None);
+                        }
+                        // Atomic operations other than loads and fences write an integer or a
+                        // pointer, types without validity requirements, through the pointer.
+                        Some(name)
+                            if name.starts_with("atomic_")
+                                && !matches!(
+                                    name,
+                                    "atomic_load" | "atomic_fence" | "atomic_singlethreadfence"
+                                ) =>
+                        {
+                            self.record_untyped_write(&args[0], None);
                         }
                         Some("transmute") | Some("transmute_copy") => {
                             unreachable!("Should've been lowered")
@@ -686,6 +1114,9 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
     }
 
     fn visit_operand(&mut self, operand: &Operand, location: Location) {
+        if let Operand::Copy(place) | Operand::Move(place) = operand {
+            self.check_untyped_read(place);
+        }
         self.with_access(PlaceAccessKind::Read, |visitor| {
             visitor.super_operand(operand, location);
         });
@@ -715,6 +1146,29 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                     let TyKind::RigidTy(RigidTy::RawPtr(src_pointee_ty, _)) = src_ty.kind() else {
                         unreachable!()
                     };
+
+                    // Writes through a pointer to a type without validity requirements are
+                    // recorded as untyped (see `record_store`), and the reads that cover them
+                    // are checked.
+                    if matches!(
+                        ty_validity_per_offset(self.tcx, &self.machine, dest_pointee_ty, 0),
+                        Ok(ranges) if ranges.is_empty()
+                    ) {
+                        return;
+                    }
+
+                    // A trait object is only read at its dynamic type: by a dereference of a raw
+                    // pointer to it, which checks the trait object at that type, or by the code
+                    // its vtable points to, through references to the concrete type. A store
+                    // through the cast pointer, of a type whose validity Kani can express, is
+                    // recorded as untyped (see `record_store`), and the reads that cover it are
+                    // checked.
+                    if matches!(src_pointee_ty.kind(), TyKind::RigidTy(RigidTy::Dynamic(..)))
+                        && ty_validity_per_offset(self.tcx, &self.machine, dest_pointee_ty, 0)
+                            .is_ok()
+                    {
+                        return;
+                    }
 
                     if src_pointee_ty.kind().is_unit() {
                         // We cannot track what was the initial type. Thus, fail.
@@ -817,22 +1271,46 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                         }
                     }
                 }
+                // A wide pointer built from its parts (`ptr::from_raw_parts`): its metadata must
+                // be valid, which for a trait object means a vtable for its trait.
+                AggregateKind::RawPtr(pointee, mutability) => {
+                    let ptr_ty = Ty::new_ptr(*pointee, *mutability);
+                    match ty_validity_per_offset(self.tcx, &self.machine, ptr_ty, 0) {
+                        Ok(ranges) if ranges.is_empty() => {}
+                        Ok(ranges) => self.push_target(SourceOp::BytesValidity {
+                            target_ty: ptr_ty,
+                            rvalue: rvalue.clone(),
+                            ranges,
+                        }),
+                        Err(_) => self.push_target(SourceOp::UnsupportedCheck {
+                            check: "raw pointer from its parts".to_string(),
+                            ty: ptr_ty,
+                        }),
+                    }
+                }
                 // Only aggregate value.
                 AggregateKind::Array(_)
                 | AggregateKind::Closure(_, _)
                 | AggregateKind::Coroutine(_, _)
                 | AggregateKind::CoroutineClosure(_, _)
-                | AggregateKind::RawPtr(_, _)
                 | AggregateKind::Tuple => {}
             },
-            Rvalue::AddressOf(_, _)
+            // Reading a discriminant, or a place to dereference it, is a typed read.
+            // So is forming a reference: Kani requires the target of a reference to be valid, as
+            // it does for `&*ptr`. Dropping a value borrows it, and its drop glue reads it.
+            Rvalue::CopyForDeref(place) | Rvalue::Discriminant(place) => {
+                self.check_untyped_read(place);
+            }
+            // A borrow through a raw pointer is checked unconditionally (`DerefValidity`).
+            Rvalue::Ref(_, _, place) if !self.derefs_raw_pointer(place) => {
+                self.check_untyped_read(place);
+            }
+            Rvalue::Ref(..)
+            | Rvalue::AddressOf(_, _)
             | Rvalue::BinaryOp(_, _, _)
             | Rvalue::CheckedBinaryOp(_, _, _)
-            | Rvalue::CopyForDeref(_)
-            | Rvalue::Discriminant(_)
             | Rvalue::Len(_)
             | Rvalue::Reborrow(..)
-            | Rvalue::Ref(_, _, _)
             | Rvalue::Repeat(_, _)
             | Rvalue::ThreadLocalRef(_)
             | Rvalue::UnaryOp(_, _)
@@ -943,16 +1421,145 @@ fn intrinsic_name(locals: &[LocalDecl], func: &Operand) -> Option<String> {
 ///     let value = unsafe { *typed_ptr };
 ///     req.valid_range.contains(value)
 /// ```
+/// A guarded requirement becomes `!guard_1 || ... || !guard_n || valid`, where each guard reads
+/// the tag it depends on the same way.
+///
+/// `kani_functions` provides the hooks that check vtables and trait objects.
 pub fn build_limits(
     body: &mut MutableBody,
     req: &ValidValueReq,
     rvalue_ptr: Rvalue,
     source: &mut SourceInstruction,
+    kani_functions: &HashMap<KaniFunction, FnDef>,
 ) -> Local {
     let span = source.span(body.blocks());
     debug!(?req, ?rvalue_ptr, ?span, "build_limits");
-    let primitive_ty = uint_ty(req.size.bytes());
-    let orig_ptr = if req.offset != 0 {
+    let mut valid = match &req.valid_range {
+        ValidityRange::Single(range) => {
+            let primitive_ty = uint_ty(req.size.bytes());
+            let value = read_at_offset(
+                body,
+                rvalue_ptr.clone(),
+                req.offset,
+                Ty::unsigned_ty(primitive_ty),
+                source,
+            );
+            build_single_limit(body, range, source, span, primitive_ty, value)
+        }
+        ValidityRange::Multiple(ranges) => {
+            // Build `let valid = range1.contains(value) || range2.contains(value) || ...;`
+            let primitive_ty = uint_ty(req.size.bytes());
+            let value = read_at_offset(
+                body,
+                rvalue_ptr.clone(),
+                req.offset,
+                Ty::unsigned_ty(primitive_ty),
+                source,
+            );
+            let mut valid = None;
+            for range in ranges {
+                let cond =
+                    build_single_limit(body, range, source, span, primitive_ty, value.clone());
+                valid = Some(match valid {
+                    None => cond,
+                    Some(valid) => body.insert_binary_op(
+                        BinOp::BitOr,
+                        move_local(valid),
+                        move_local(cond),
+                        source,
+                        InsertPosition::Before,
+                    ),
+                });
+            }
+            // No range: no value is valid.
+            valid.unwrap_or_else(|| {
+                body.insert_assignment(
+                    Rvalue::Use(bool_operand(false, span), WithRetag::No),
+                    source,
+                    InsertPosition::Before,
+                )
+            })
+        }
+        ValidityRange::Aligned(align) => {
+            // `addr & (align - 1) == 0`
+            let addr = read_at_offset(body, rvalue_ptr.clone(), req.offset, Ty::usize_ty(), source);
+            let mask = body.new_uint_operand((*align - 1) as u128, UintTy::Usize, span);
+            let low_bits =
+                body.insert_binary_op(BinOp::BitAnd, addr, mask, source, InsertPosition::Before);
+            let zero = body.new_uint_operand(0, UintTy::Usize, span);
+            body.insert_binary_op(
+                BinOp::Eq,
+                move_local(low_bits),
+                zero,
+                source,
+                InsertPosition::Before,
+            )
+        }
+        ValidityRange::Vtable(dyn_ty) => {
+            let byte_ptr = Ty::new_ptr(Ty::unsigned_ty(UintTy::U8), Mutability::Not);
+            let vtable = read_at_offset(body, rvalue_ptr.clone(), req.offset, byte_ptr, source);
+            call_hook(body, source, kani_functions, KaniHook::ValidVtable, *dyn_ty, vec![vtable])
+        }
+        ValidityRange::DynValue(_) => {
+            // The pointer to the value is the wide pointer to the unsized type that contains the
+            // trait object: the hook reads the trait object's type from its metadata.
+            let ptr = body.insert_assignment(rvalue_ptr.clone(), source, InsertPosition::Before);
+            let pointee = pointee_ty(body.locals()[ptr].ty);
+            let ptr = body.insert_ptr_cast(
+                move_local(ptr),
+                pointee,
+                Mutability::Not,
+                source,
+                InsertPosition::Before,
+            );
+            let offset = body.new_uint_operand(req.offset as u128, UintTy::Usize, span);
+            call_hook(
+                body,
+                source,
+                kani_functions,
+                KaniHook::ValidDynValue,
+                pointee,
+                vec![move_local(ptr), offset],
+            )
+        }
+    };
+    for guard in &req.guards {
+        let primitive_ty = uint_ty(guard.size.bytes());
+        let tag = read_at_offset(
+            body,
+            rvalue_ptr.clone(),
+            guard.offset,
+            Ty::unsigned_ty(primitive_ty),
+            source,
+        );
+        let applies = build_single_limit(body, &guard.range, source, span, primitive_ty, tag);
+        let skip = body.insert_assignment(
+            Rvalue::UnaryOp(UnOp::Not, move_local(applies)),
+            source,
+            InsertPosition::Before,
+        );
+        valid = body.insert_binary_op(
+            BinOp::BitOr,
+            move_local(skip),
+            move_local(valid),
+            source,
+            InsertPosition::Before,
+        );
+    }
+    valid
+}
+
+/// The value of type `value_ty` at `offset` bytes from the pointer `rvalue_ptr`, as an operand
+/// that reads it through a pointer: `*((rvalue_ptr as *const u8).add(offset) as *const value_ty)`.
+fn read_at_offset(
+    body: &mut MutableBody,
+    rvalue_ptr: Rvalue,
+    offset: usize,
+    value_ty: Ty,
+    source: &mut SourceInstruction,
+) -> Operand {
+    let span = source.span(body.blocks());
+    let orig_ptr = if offset != 0 {
         let start_ptr =
             move_local(body.insert_assignment(rvalue_ptr, source, InsertPosition::Before));
         let byte_ptr = move_local(body.insert_ptr_cast(
@@ -962,7 +1569,7 @@ pub fn build_limits(
             source,
             InsertPosition::Before,
         ));
-        let offset_const = body.new_uint_operand(req.offset as _, UintTy::Usize, span);
+        let offset_const = body.new_uint_operand(offset as _, UintTy::Usize, span);
         let offset = move_local(body.insert_assignment(
             Rvalue::Use(offset_const, WithRetag::No),
             source,
@@ -978,31 +1585,26 @@ pub fn build_limits(
     } else {
         move_local(body.insert_assignment(rvalue_ptr, source, InsertPosition::Before))
     };
-    let value_ptr = body.insert_ptr_cast(
-        orig_ptr,
-        Ty::unsigned_ty(primitive_ty),
-        Mutability::Not,
-        source,
-        InsertPosition::Before,
-    );
-    let value = Operand::Copy(Place { local: value_ptr, projection: vec![ProjectionElem::Deref] });
-    match &req.valid_range {
-        ValidityRange::Single(range) => {
-            build_single_limit(body, range, source, span, primitive_ty, value)
-        }
-        ValidityRange::Multiple([range1, range2]) => {
-            // Build `let valid = range1.contains(value) || range2.contains(value);
-            let cond1 = build_single_limit(body, range1, source, span, primitive_ty, value.clone());
-            let cond2 = build_single_limit(body, range2, source, span, primitive_ty, value);
-            body.insert_binary_op(
-                BinOp::BitOr,
-                move_local(cond1),
-                move_local(cond2),
-                source,
-                InsertPosition::Before,
-            )
-        }
-    }
+    let value_ptr =
+        body.insert_ptr_cast(orig_ptr, value_ty, Mutability::Not, source, InsertPosition::Before);
+    Operand::Copy(Place { local: value_ptr, projection: vec![ProjectionElem::Deref] })
+}
+
+/// Insert a call to the hook `hook::<ty>(args)`, which returns a `bool`, and return its result.
+fn call_hook(
+    body: &mut MutableBody,
+    source: &mut SourceInstruction,
+    kani_functions: &HashMap<KaniFunction, FnDef>,
+    hook: KaniHook,
+    ty: Ty,
+    args: Vec<Operand>,
+) -> Local {
+    let span = source.span(body.blocks());
+    let def = kani_functions[&hook.into()];
+    let instance = Instance::resolve(def, &GenericArgs(vec![GenericArgKind::Type(ty)])).unwrap();
+    let ret = body.new_local(Ty::bool_ty(), span, Mutability::Not);
+    body.insert_call(&instance, source, InsertPosition::Before, args, Place::from(ret));
+    ret
 }
 
 fn build_single_limit(
@@ -1081,11 +1683,10 @@ pub fn ty_validity_per_offset(
 ) -> Result<Vec<ValidValueReq>, String> {
     let layout = ty.layout().unwrap().shape();
     let ty_req = || {
-        if let Some(mut req) = ValidValueReq::try_from_ty(tcx, machine_info, ty)
+        if let Some(req) = ValidValueReq::try_from_ty(tcx, machine_info, ty)
             && !req.is_full()
         {
-            req.offset = current_offset;
-            vec![req]
+            vec![req.shifted(current_offset)]
         } else {
             vec![]
         }
@@ -1114,7 +1715,55 @@ pub fn ty_validity_per_offset(
         if !matches!(layout.value_repr, ValueRepr::Scalar(..) | ValueRepr::ScalarPair { .. }) {
             return Err(format!("Unsupported pattern type over a non-scalar type: {ty}"));
         }
-        return Ok(ty_req());
+        let mut reqs = ty_req();
+        // The metadata of a pattern over a raw pointer (`NonNull<dyn Trait>`) must be valid as
+        // a raw pointer's.
+        if let rustc_middle::ty::TyKind::RawPtr(pointee, _) = base_ty.kind() {
+            let pointee = rustc_internal::stable(*pointee);
+            reqs.extend(pointer_metadata_validity(
+                tcx,
+                machine_info,
+                pointee,
+                false,
+                current_offset,
+            ));
+        }
+        return Ok(reqs);
+    }
+    // Pointers, whose layout is a scalar or a scalar pair.
+    match ty.kind() {
+        TyKind::RigidTy(RigidTy::Ref(_, pointee, _)) => {
+            let mut reqs = ty_req();
+            reqs.extend(pointer_metadata_validity(
+                tcx,
+                machine_info,
+                pointee,
+                true,
+                current_offset,
+            ));
+            return Ok(reqs);
+        }
+        TyKind::RigidTy(RigidTy::RawPtr(pointee, _)) => {
+            let mut reqs = ty_req();
+            reqs.extend(pointer_metadata_validity(
+                tcx,
+                machine_info,
+                pointee,
+                false,
+                current_offset,
+            ));
+            return Ok(reqs);
+        }
+        // A trait object, the pointee of a pointer to `dyn Trait`: valid at its dynamic type.
+        TyKind::RigidTy(RigidTy::Dynamic(..)) => {
+            return Ok(vec![ValidValueReq {
+                offset: current_offset,
+                size: machine_info.pointer_width,
+                valid_range: ValidityRange::DynValue(ty),
+                guards: vec![],
+            }]);
+        }
+        _ => {}
     }
     match layout.fields {
         FieldsShape::Primitive => Ok(ty_req()),
@@ -1129,10 +1778,7 @@ pub fn ty_validity_per_offset(
                     let mut next_validity = elem_validity
                         .iter()
                         .cloned()
-                        .map(|mut req| {
-                            req.offset += elem_offset;
-                            req
-                        })
+                        .map(|req| req.shifted(elem_offset))
                         .collect::<Vec<_>>();
                     result.append(&mut next_validity)
                 }
@@ -1192,36 +1838,22 @@ pub fn ty_validity_per_offset(
                                     Ok(ty_req())
                                 }
                                 VariantsShape::Multiple {
-                                    tag_encoding: TagEncoding::Niche { .. },
-                                    ..
-                                } => {
-                                    Err(format!("Unsupported Enum `{}` check", def.trimmed_name()))?
-                                }
-                                VariantsShape::Multiple { variants, .. } => {
-                                    let enum_validity = ty_req();
-                                    let mut fields_validity = vec![];
-                                    for (index, variant) in variants.iter().enumerate() {
-                                        let fields = ty_variants[index].fields();
-                                        for field_idx in variant.fields_by_offset_order() {
-                                            let field_offset = variant.offsets[field_idx].bytes();
-                                            let field_ty = fields[field_idx].ty_with_args(args);
-                                            fields_validity.append(&mut ty_validity_per_offset(
-                                                tcx,
-                                                machine_info,
-                                                field_ty,
-                                                field_offset + current_offset,
-                                            )?);
-                                        }
-                                    }
-                                    if fields_validity.is_empty() {
-                                        Ok(enum_validity)
-                                    } else {
-                                        Err(format!(
-                                            "Unsupported Enum `{}` check",
-                                            def.trimmed_name()
-                                        ))
-                                    }
-                                }
+                                    ref tag,
+                                    ref tag_encoding,
+                                    tag_field,
+                                    ref variants,
+                                } => enum_validity(
+                                    tcx,
+                                    machine_info,
+                                    ty,
+                                    &ty_variants,
+                                    args,
+                                    current_offset + offsets[tag_field].bytes(),
+                                    tag,
+                                    tag_encoding,
+                                    variants,
+                                    current_offset,
+                                ),
                             }
                         }
                         AdtKind::Union => unreachable!(),
@@ -1232,12 +1864,38 @@ pub fn ty_validity_per_offset(
                             for idx in layout.fields.fields_by_offset_order() {
                                 let field_offset = offsets[idx].bytes();
                                 let field_ty = fields[idx].ty_with_args(args);
-                                struct_validity.append(&mut ty_validity_per_offset(
+                                for req in unsized_field_validity(
                                     tcx,
                                     machine_info,
                                     field_ty,
                                     field_offset + current_offset,
-                                )?);
+                                )? {
+                                    // A struct whose layout is a single scalar (e.g. the
+                                    // `#[repr(packed)]` `Unaligned<bool>`) has the requirement of
+                                    // its scalar field already; repeating it changes nothing, but
+                                    // would make the struct's validity compare unequal to the
+                                    // field's.
+                                    if !struct_validity.contains(&req) {
+                                        struct_validity.push(req);
+                                    }
+                                }
+                            }
+                            // A `Box` must be aligned, and the length of a boxed slice bounded,
+                            // as for a reference. Its pointer is the `Unique` in its first field,
+                            // whose raw pointer adds the requirements on the vtable.
+                            if def.is_box() {
+                                let pointee = args.0[0].expect_ty();
+                                for req in pointer_metadata_validity(
+                                    tcx,
+                                    machine_info,
+                                    *pointee,
+                                    true,
+                                    offsets[0].bytes() + current_offset,
+                                ) {
+                                    if !struct_validity.contains(&req) {
+                                        struct_validity.push(req);
+                                    }
+                                }
                             }
                             Ok(struct_validity)
                         }
@@ -1253,7 +1911,7 @@ pub fn ty_validity_per_offset(
                     for idx in layout.fields.fields_by_offset_order() {
                         let field_offset = offsets[idx].bytes();
                         let field_ty = tys[idx];
-                        tuple_validity.append(&mut ty_validity_per_offset(
+                        tuple_validity.append(&mut unsized_field_validity(
                             tcx,
                             machine_info,
                             field_ty,
@@ -1261,6 +1919,26 @@ pub fn ty_validity_per_offset(
                         )?);
                     }
                     Ok(tuple_validity)
+                }
+                // A closure is laid out like a tuple of its captures.
+                RigidTy::Closure(_, _) => {
+                    let rustc_middle::ty::TyKind::Closure(_, args) =
+                        rustc_internal::internal(tcx, ty).kind()
+                    else {
+                        unreachable!("Expected a closure: {ty:?}")
+                    };
+                    let upvars: Vec<Ty> =
+                        args.as_closure().upvar_tys().iter().map(rustc_internal::stable).collect();
+                    let mut closure_validity = vec![];
+                    for idx in layout.fields.fields_by_offset_order() {
+                        closure_validity.append(&mut ty_validity_per_offset(
+                            tcx,
+                            machine_info,
+                            upvars[idx],
+                            offsets[idx].bytes() + current_offset,
+                        )?);
+                    }
+                    Ok(closure_validity)
                 }
                 RigidTy::Bool
                 | RigidTy::Char
@@ -1273,18 +1951,16 @@ pub fn ty_validity_per_offset(
                 RigidTy::Str | RigidTy::Slice(_) | RigidTy::Array(_, _) => {
                     unreachable!("Expected array layout for {ty:?}")
                 }
-                RigidTy::RawPtr(_, _) | RigidTy::Ref(_, _, _) => {
-                    // Fat pointer has arbitrary shape.
-                    Ok(ty_req())
+                RigidTy::RawPtr(_, _) | RigidTy::Ref(_, _, _) | RigidTy::Dynamic(_, _) => {
+                    unreachable!("handled before the field-shape match: {ty:?}")
                 }
-                RigidTy::FnDef(_, _)
-                | RigidTy::FnPtr(_)
-                | RigidTy::Closure(_, _)
+                // A function item is a zero-sized type: any value is valid.
+                RigidTy::FnDef(_, _) => Ok(vec![]),
+                RigidTy::FnPtr(_)
                 | RigidTy::Coroutine(_, _)
                 | RigidTy::CoroutineClosure(_, _)
                 | RigidTy::CoroutineWitness(_, _)
-                | RigidTy::Foreign(_)
-                | RigidTy::Dynamic(_, _) => Err(format!("Unsupported {ty:?}")),
+                | RigidTy::Foreign(_) => Err(format!("Unsupported {ty:?}")),
             }
         }
         FieldsShape::Union(_) | FieldsShape::Array { .. } => {
@@ -1292,4 +1968,288 @@ pub fn ty_validity_per_offset(
             Ok(vec![])
         }
     }
+}
+
+/// The validity of the field of type `field_ty` at `offset` of a struct or a tuple. The trait
+/// object at the tail of a struct (`RcInner<dyn Trait>`) is at `offset` rounded up to its dynamic
+/// alignment, which the check of the trait object does. A struct with an unsized tail at the tail
+/// of another (`Outer<Inner<dyn Trait>>`) is at an offset that depends on the trait object's
+/// alignment too, which the requirements of `Inner` don't account for: report it as unsupported.
+fn unsized_field_validity(
+    tcx: TyCtxt,
+    machine_info: &MachineInfo,
+    field_ty: Ty,
+    offset: usize,
+) -> Result<Vec<ValidValueReq>, String> {
+    let reqs = ty_validity_per_offset(tcx, machine_info, field_ty, offset)?;
+    let is_dyn = matches!(field_ty.kind(), TyKind::RigidTy(RigidTy::Dynamic(..)));
+    if !is_dyn && reqs.iter().any(|req| matches!(req.valid_range, ValidityRange::DynValue(_))) {
+        return Err(format!("Unsupported nested unsized tail `{field_ty}`"));
+    }
+    Ok(reqs)
+}
+
+/// The requirements on the metadata of a pointer at `offset` to `pointee`, and on the pointer
+/// itself if it is a reference or a `Box` (`ref_like`):
+///  - The metadata of a pointer to a trait object must be a vtable for its trait. This applies to
+///    raw pointers too, as Miri checks it, although the Reference says it's still debated for
+///    them.
+///  - A reference or a `Box` must be aligned to the static alignment of its pointee (the dynamic
+///    alignment of a trait object isn't checked).
+///  - The length of a reference to or a `Box` of a slice must not make the size of the pointee
+///    exceed `isize::MAX`.
+///
+/// Whether the pointer is null is checked by the pointer type's own valid range.
+fn pointer_metadata_validity(
+    tcx: TyCtxt,
+    machine_info: &MachineInfo,
+    pointee: Ty,
+    ref_like: bool,
+    offset: usize,
+) -> Vec<ValidValueReq> {
+    let ptr_size = machine_info.pointer_width;
+    let req =
+        |offset, valid_range| ValidValueReq { offset, size: ptr_size, valid_range, guards: vec![] };
+    let internal_pointee = rustc_internal::internal(tcx, pointee);
+    let tail = tcx.struct_tail_for_codegen(
+        internal_pointee,
+        rustc_middle::ty::TypingEnv::fully_monomorphized(),
+    );
+    let mut reqs = vec![];
+    if tail.is_trait() {
+        reqs.push(req(
+            offset + ptr_size.bytes(),
+            ValidityRange::Vtable(rustc_internal::stable(tail)),
+        ));
+    }
+    if ref_like && let Ok(layout) = pointee.layout() {
+        let layout = layout.shape();
+        let align = layout.abi_align;
+        if align > 1 {
+            reqs.push(req(offset, ValidityRange::Aligned(align)));
+        }
+        let elem_size = match tail.kind() {
+            rustc_middle::ty::TyKind::Slice(elem) => {
+                rustc_internal::stable(*elem).layout().ok().map(|l| l.shape().size.bytes())
+            }
+            rustc_middle::ty::TyKind::Str => Some(1),
+            _ => None,
+        };
+        if let Some(elem_size) = elem_size
+            && elem_size > 0
+        {
+            // The size of the unsized layout is the size of the sized prefix. Not rounding the
+            // total size up to the alignment makes the bound weaker, never stronger.
+            let prefix = layout.size.bytes() as u128;
+            let max = (isize::MAX as u128).saturating_sub(prefix) / elem_size as u128;
+            reqs.push(req(
+                offset + ptr_size.bytes(),
+                ValidityRange::Single(WrappingRange { start: 0, end: max }),
+            ));
+        }
+    }
+    reqs
+}
+
+/// The maximum number of ranges the valid tags of an enum are checked against. An enum with more
+/// gaps in its discriminants is checked against the tag's valid range, which contains them.
+const MAX_TAG_RANGES: usize = 16;
+
+/// The validity of a multi-variant enum `ty` at `current_offset`, with its `tag` at `tag_offset`:
+///  - The tag must encode the discriminant of an inhabited variant.
+///  - The fields of the variant the tag selects must be valid: each of their requirements is
+///    guarded by the tag values that encode the variant.
+#[allow(clippy::too_many_arguments)]
+fn enum_validity(
+    tcx: TyCtxt,
+    machine_info: &MachineInfo,
+    ty: Ty,
+    ty_variants: &[VariantDef],
+    args: &GenericArgs,
+    tag_offset: usize,
+    tag: &Scalar,
+    tag_encoding: &TagEncoding,
+    variants: &[VariantFields],
+    current_offset: usize,
+) -> Result<Vec<ValidValueReq>, String> {
+    let Scalar::Initialized { value, valid_range: tag_range } = tag else {
+        return Err(format!("Unsupported enum `{ty}` with a union tag"));
+    };
+    let tag_size = value.size(machine_info);
+    let mask = tag_size.unsigned_int_max().unwrap();
+    let internal_ty = rustc_internal::internal(tcx, ty);
+    let internal_layout = tcx
+        .layout_of(rustc_middle::ty::TypingEnv::fully_monomorphized().as_query_input(internal_ty))
+        .map_err(|err| format!("Unsupported enum `{ty}`: {err:?}"))?;
+    let rustc_abi::Variants::Multiple { variants: internal_variants, .. } =
+        &internal_layout.variants
+    else {
+        unreachable!("expected a multi-variant layout for `{ty}`")
+    };
+    let inhabited =
+        |idx: usize| !internal_variants[rustc_abi::VariantIdx::from_usize(idx)].is_uninhabited();
+    let tag_req = |valid_range| ValidValueReq {
+        offset: tag_offset,
+        size: tag_size,
+        valid_range,
+        guards: vec![],
+    };
+    let single = |value: u128| WrappingRange { start: value & mask, end: value & mask };
+    let mut reqs = vec![];
+    // The tag values that select each variant, if it can be encoded.
+    let variant_tags: Vec<Option<WrappingRange>> = match tag_encoding {
+        TagEncoding::Direct => {
+            let discr = |idx: usize| {
+                internal_ty
+                    .discriminant_for_variant(tcx, rustc_abi::VariantIdx::from_usize(idx))
+                    .unwrap()
+                    .val
+                    & mask
+            };
+            // The valid tags are the discriminants of the inhabited variants. The tag's valid
+            // range spans them, but it also contains the values between sparse discriminants.
+            let mut valid_tags: Vec<u128> =
+                (0..variants.len()).filter(|idx| inhabited(*idx)).map(discr).collect();
+            valid_tags.sort_unstable();
+            valid_tags.dedup();
+            let mut ranges: Vec<WrappingRange> = vec![];
+            for tag in valid_tags {
+                match ranges.last_mut() {
+                    Some(last) if last.end + 1 == tag => last.end = tag,
+                    _ => ranges.push(WrappingRange { start: tag, end: tag }),
+                }
+            }
+            let valid_range = match ranges.len() {
+                1 => ValidityRange::Single(ranges[0]),
+                n if n <= MAX_TAG_RANGES => ValidityRange::Multiple(ranges),
+                _ => ValidityRange::Single(*tag_range),
+            };
+            let req = tag_req(valid_range);
+            if !req.is_full() {
+                reqs.push(req);
+            }
+            (0..variants.len()).map(|idx| Some(single(discr(idx)))).collect()
+        }
+        TagEncoding::Niche { untagged_variant, niche_variants, niche_start } => {
+            let req = tag_req(ValidityRange::Single(*tag_range));
+            if !req.is_full() {
+                reqs.push(req);
+            }
+            // The variant with index `idx` in `niche_variants` is encoded by the tag value
+            // `(idx - niche_variants.start).wrapping_add(niche_start)`; any other value encodes
+            // `untagged_variant`.
+            let first = niche_variants.start().to_index();
+            let last = niche_variants.end().to_index();
+            let relative_max = (last - first) as u128;
+            (0..variants.len())
+                .map(|idx| {
+                    if idx == untagged_variant.to_index() {
+                        Some(WrappingRange {
+                            start: niche_start.wrapping_add(relative_max).wrapping_add(1) & mask,
+                            end: niche_start.wrapping_sub(1) & mask,
+                        })
+                    } else if (first..=last).contains(&idx) {
+                        Some(single(niche_start.wrapping_add((idx - first) as u128)))
+                    } else {
+                        // This variant can't be encoded: it is uninhabited.
+                        None
+                    }
+                })
+                .collect()
+        }
+    };
+    for (idx, variant) in variants.iter().enumerate() {
+        let Some(range) = variant_tags[idx] else { continue };
+        let guard = VariantGuard { offset: tag_offset, size: tag_size, range };
+        if !inhabited(idx) {
+            // A directly tagged enum's valid tags exclude it already.
+            if matches!(tag_encoding, TagEncoding::Niche { .. }) {
+                let mut req = tag_req(ValidityRange::Multiple(vec![]));
+                req.guards.push(guard);
+                reqs.push(req);
+            }
+            continue;
+        }
+        let fields = ty_variants[idx].fields();
+        for field_idx in variant.fields_by_offset_order() {
+            let field_offset = variant.offsets[field_idx].bytes();
+            let field_ty = fields[field_idx].ty_with_args(args);
+            for mut req in
+                ty_validity_per_offset(tcx, machine_info, field_ty, field_offset + current_offset)?
+            {
+                req.guards.push(guard.clone());
+                reqs.push(req);
+            }
+        }
+    }
+    Ok(reqs)
+}
+
+/// The place `*ptr`, if the pointer operand is a place.
+fn deref_place(ptr: &Operand) -> Option<Place> {
+    let (Operand::Copy(place) | Operand::Move(place)) = ptr else { return None };
+    let mut projection = place.projection.clone();
+    projection.push(ProjectionElem::Deref);
+    Some(Place { local: place.local, projection })
+}
+
+/// The pointee of the raw pointer or reference type `ty`.
+fn pointee_ty(ty: Ty) -> Ty {
+    match ty.kind() {
+        TyKind::RigidTy(RigidTy::RawPtr(pointee, _))
+        | TyKind::RigidTy(RigidTy::Ref(_, pointee, _)) => pointee,
+        _ => unreachable!("expected a pointer, found `{ty}`"),
+    }
+}
+
+fn bool_operand(value: bool, span: Span) -> Operand {
+    Operand::Constant(ConstOperand { span, user_ty: None, const_: MirConst::from_bool(value) })
+}
+
+/// The locals whose address the body takes, by a reference or a raw borrow of any place in them.
+fn address_taken_locals(body: &MutableBody) -> HashSet<Local> {
+    body.blocks()
+        .iter()
+        .flat_map(|block| &block.statements)
+        .filter_map(|stmt| match &stmt.kind {
+            StatementKind::Assign(_, Rvalue::Ref(_, _, place) | Rvalue::AddressOf(_, place))
+                if !place.projection.iter().any(|elem| matches!(elem, ProjectionElem::Deref)) =>
+            {
+                Some(place.local)
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// Whether `instance` is a harness: a proof, a contract's proof, or an automatic harness.
+fn is_harness(instance: Instance, tcx: TyCtxt) -> bool {
+    if KaniFunction::try_from(instance)
+        == Ok(KaniFunction::Intrinsic(KaniIntrinsic::AutomaticHarness))
+    {
+        return true;
+    }
+    let harness_identifiers = [
+        vec![
+            rustc_span::symbol::Symbol::intern("kanitool"),
+            rustc_span::symbol::Symbol::intern("proof_for_contract"),
+        ],
+        vec![
+            rustc_span::symbol::Symbol::intern("kanitool"),
+            rustc_span::symbol::Symbol::intern("proof"),
+        ],
+    ];
+    harness_identifiers.iter().any(|attr_path| {
+        attrs_by_path(tcx, rustc_internal::internal(tcx, instance.def.def_id()), attr_path)
+            .next()
+            .is_some()
+    })
+}
+
+/// Whether `instance` belongs to the state Kani's checks keep (`kani_core::kani_mem_init!` and
+/// `kani_core::kani_valid_value!`), which is in the `kani` crate, or in `core` for the standard
+/// library.
+fn is_instrumentation_model(instance: Instance) -> bool {
+    let name = instance.name();
+    name.contains("kani::mem_init::") || name.contains("kani::valid_value::")
 }

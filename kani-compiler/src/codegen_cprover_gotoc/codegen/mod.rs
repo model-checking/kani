@@ -17,6 +17,7 @@ mod source_region;
 mod span;
 mod statement;
 mod static_var;
+pub(crate) mod valid_vtable;
 
 // Visible for all codegen module.
 pub mod contract;

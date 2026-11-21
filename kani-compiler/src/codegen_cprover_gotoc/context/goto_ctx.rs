@@ -17,6 +17,7 @@
 use super::current_fn::CurrentFnCtx;
 use super::vtable_ctx::VtableCtx;
 use crate::codegen_cprover_gotoc::UnsupportedConstructs;
+use crate::codegen_cprover_gotoc::codegen::valid_vtable::ValidVtableCtx;
 use crate::codegen_cprover_gotoc::overrides::{
     GotocHooks, QUANTIFIER_SAFETY_CHECK_ERROR, fn_hooks, has_quantifier_safety_check,
 };
@@ -79,6 +80,8 @@ pub struct GotocCtx<'tcx, 'r> {
     pub alloc_map: FxHashMap<Allocation, String>,
     /// map (trait, method) pairs to possible implementations
     pub vtable_ctx: VtableCtx,
+    /// The vtables generated, which the validity checks of trait objects compare against.
+    pub valid_vtables: ValidVtableCtx<'tcx>,
     pub current_fn: Option<CurrentFnCtx<'tcx>>,
     pub type_map: FxHashMap<InternedString, Ty<'tcx>>,
     /// map from symbol identifier to string literal
@@ -130,6 +133,7 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
             global_var_count: 0,
             alloc_map: FxHashMap::default(),
             vtable_ctx: VtableCtx::new(emit_vtable_restrictions),
+            valid_vtables: ValidVtableCtx::default(),
             current_fn: None,
             type_map: FxHashMap::default(),
             str_literals: FxHashMap::default(),

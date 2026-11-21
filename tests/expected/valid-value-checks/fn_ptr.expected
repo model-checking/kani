@@ -1,0 +1,36 @@
+Checking harness fn_item_field_invalid_flag_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `WithFnItem<fn() -> u8 {two}>`
+Failed Checks: Undefined Behavior: Invalid value of type `WithFnItem<fn() -> u8 {two}>`
+VERIFICATION:- FAILED
+
+Checking harness fn_item_field_valid...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness enum_with_fn_ptr_valid...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness enum_with_null_fn_ptr_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `Action`
+Failed Checks: Undefined Behavior: Invalid value of type `Action`
+VERIFICATION:- FAILED
+
+Checking harness struct_with_null_fn_ptr_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `Callback`
+Failed Checks: Undefined Behavior: Invalid value of type `Callback`
+VERIFICATION:- FAILED
+
+Checking harness read_null_fn_ptr_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `fn() -> u8`
+VERIFICATION:- FAILED
+
+Checking harness option_fn_ptr_valid...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness fn_ptr_valid...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness null_fn_ptr_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `fn() -> u8`
+VERIFICATION:- FAILED
+
+Complete - 4 successfully verified harnesses, 5 failures, 9 total.

@@ -149,6 +149,8 @@ pub enum KaniModel {
     LoadArgument,
     #[strum(serialize = "InitializeMemoryInitializationStateModel")]
     InitializeMemoryInitializationState,
+    #[strum(serialize = "InitializeUntypedWriteStateModel")]
+    InitializeUntypedWriteState,
     #[strum(serialize = "EnterContractClauseModel")]
     EnterContractClause,
     #[strum(serialize = "ExitContractClauseModel")]
@@ -159,6 +161,8 @@ pub enum KaniModel {
     IsPtrInitialized,
     #[strum(serialize = "IsStrPtrInitializedModel")]
     IsStrPtrInitialized,
+    #[strum(serialize = "IsUntypedWriteModel")]
+    IsUntypedWrite,
     #[strum(serialize = "IsSliceChunkPtrInitializedModel")]
     IsSliceChunkPtrInitialized,
     #[strum(serialize = "IsSlicePtrInitializedModel")]
@@ -185,6 +189,8 @@ pub enum KaniModel {
     PanicStub,
     #[strum(serialize = "SetStrPtrInitializedModel")]
     SetStrPtrInitialized,
+    #[strum(serialize = "SetUntypedWriteModel")]
+    SetUntypedWrite,
     #[strum(serialize = "SizeOfDynObjectModel")]
     SizeOfDynObject,
     #[strum(serialize = "SizeOfSliceObjectModel")]
@@ -244,6 +250,10 @@ pub enum KaniHook {
     UnsupportedCheck,
     #[strum(serialize = "UntrackedDerefHook")]
     UntrackedDeref,
+    #[strum(serialize = "ValidDynValueHook")]
+    ValidDynValue,
+    #[strum(serialize = "ValidVtableHook")]
+    ValidVtable,
 }
 
 impl KaniModel {
