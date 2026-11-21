@@ -399,10 +399,9 @@ enum ValidityRange {
     /// The value validity fits in a single value range.
     /// This includes cases where the full range is covered.
     Single(WrappingRange),
-    /// The validity includes more than one value range.
-    /// Currently, this is only the case for `char`, which has two ranges.
-    /// If more cases come up, we could turn this into a vector instead.
-    Multiple([WrappingRange; 2]),
+    /// The value is in one of these ranges: `char`'s two ranges around the surrogates, or the
+    /// discriminants of an enum whose discriminants are not contiguous.
+    Multiple(Vec<WrappingRange>),
 }
 
 // TODO: Optimize checks by merging requirements whenever possible.
@@ -425,7 +424,7 @@ impl ValidValueReq {
             Some(ValidValueReq {
                 offset: 0,
                 size: MachineSize::from_bits(size_of::<char>() * 8),
-                valid_range: ValidityRange::Multiple([
+                valid_range: ValidityRange::Multiple(vec![
                     WrappingRange { start: 0, end: 0xD7FF },
                     WrappingRange { start: 0xE000, end: char::MAX.into() },
                 ]),
@@ -462,33 +461,26 @@ impl ValidValueReq {
     /// Check if this range contains `other` range.
     ///
     /// I.e., `scalar_2` ⊆ `scalar_1`
+    ///
+    /// This is conservative: it may return `false` for ranges that do contain `other` (e.g. a
+    /// range of `other` that only the union of two ranges of `self` covers), which only adds a
+    /// check that is not needed.
     pub fn contains(&self, other: &ValidValueReq) -> bool {
         assert_eq!(self.size, other.size);
-        match (&self.valid_range, &other.valid_range) {
-            (ValidityRange::Single(this_range), ValidityRange::Single(other_range)) => {
-                range_contains(this_range, other_range, self.size)
-            }
-            (ValidityRange::Multiple(this_ranges), ValidityRange::Single(other_range)) => {
-                range_contains(&this_ranges[0], other_range, self.size)
-                    || range_contains(&this_ranges[1], other_range, self.size)
-            }
-            (ValidityRange::Single(this_range), ValidityRange::Multiple(other_ranges)) => {
-                range_contains(this_range, &other_ranges[0], self.size)
-                    && range_contains(this_range, &other_ranges[1], self.size)
-            }
-            (ValidityRange::Multiple(this_ranges), ValidityRange::Multiple(other_ranges)) => {
-                let contains = (range_contains(&this_ranges[0], &other_ranges[0], self.size)
-                    || range_contains(&this_ranges[1], &other_ranges[0], self.size))
-                    && (range_contains(&this_ranges[0], &other_ranges[1], self.size)
-                        || range_contains(&this_ranges[1], &other_ranges[1], self.size));
-                // Multiple today only cover `char` case.
-                debug_assert!(
-                    contains,
-                    "Expected validity of `char` for Multiple ranges. Found: {self:?}, {other:?}"
-                );
-                contains
-            }
-        }
+        let ranges = |req: &ValidValueReq| match &req.valid_range {
+            ValidityRange::Single(range) => vec![*range],
+            ValidityRange::Multiple(ranges) => ranges.clone(),
+        };
+        let (this_ranges, other_ranges) = (ranges(self), ranges(other));
+        other_ranges.iter().all(|other_range| {
+            this_ranges.iter().any(|this_range| range_contains(this_range, other_range, self.size))
+        })
+    }
+
+    /// This requirement for a value that is `delta` bytes further.
+    fn shifted(mut self, delta: usize) -> ValidValueReq {
+        self.offset += delta;
+        self
     }
 }
 
@@ -1338,8 +1330,66 @@ pub fn build_limits(
 ) -> Local {
     let span = source.span(body.blocks());
     debug!(?req, ?rvalue_ptr, ?span, "build_limits");
-    let primitive_ty = uint_ty(req.size.bytes());
-    let orig_ptr = if req.offset != 0 {
+    match &req.valid_range {
+        ValidityRange::Single(range) => {
+            let primitive_ty = uint_ty(req.size.bytes());
+            let value = read_at_offset(
+                body,
+                rvalue_ptr.clone(),
+                req.offset,
+                Ty::unsigned_ty(primitive_ty),
+                source,
+            );
+            build_single_limit(body, range, source, span, primitive_ty, value)
+        }
+        ValidityRange::Multiple(ranges) => {
+            // Build `let valid = range1.contains(value) || range2.contains(value) || ...;`
+            let primitive_ty = uint_ty(req.size.bytes());
+            let value = read_at_offset(
+                body,
+                rvalue_ptr.clone(),
+                req.offset,
+                Ty::unsigned_ty(primitive_ty),
+                source,
+            );
+            let mut valid = None;
+            for range in ranges {
+                let cond =
+                    build_single_limit(body, range, source, span, primitive_ty, value.clone());
+                valid = Some(match valid {
+                    None => cond,
+                    Some(valid) => body.insert_binary_op(
+                        BinOp::BitOr,
+                        move_local(valid),
+                        move_local(cond),
+                        source,
+                        InsertPosition::Before,
+                    ),
+                });
+            }
+            // No range: no value is valid.
+            valid.unwrap_or_else(|| {
+                body.insert_assignment(
+                    Rvalue::Use(bool_operand(false, span), WithRetag::No),
+                    source,
+                    InsertPosition::Before,
+                )
+            })
+        }
+    }
+}
+
+/// The value of type `value_ty` at `offset` bytes from the pointer `rvalue_ptr`, as an operand
+/// that reads it through a pointer: `*((rvalue_ptr as *const u8).add(offset) as *const value_ty)`.
+fn read_at_offset(
+    body: &mut MutableBody,
+    rvalue_ptr: Rvalue,
+    offset: usize,
+    value_ty: Ty,
+    source: &mut SourceInstruction,
+) -> Operand {
+    let span = source.span(body.blocks());
+    let orig_ptr = if offset != 0 {
         let start_ptr =
             move_local(body.insert_assignment(rvalue_ptr, source, InsertPosition::Before));
         let byte_ptr = move_local(body.insert_ptr_cast(
@@ -1349,7 +1399,7 @@ pub fn build_limits(
             source,
             InsertPosition::Before,
         ));
-        let offset_const = body.new_uint_operand(req.offset as _, UintTy::Usize, span);
+        let offset_const = body.new_uint_operand(offset as _, UintTy::Usize, span);
         let offset = move_local(body.insert_assignment(
             Rvalue::Use(offset_const, WithRetag::No),
             source,
@@ -1365,31 +1415,9 @@ pub fn build_limits(
     } else {
         move_local(body.insert_assignment(rvalue_ptr, source, InsertPosition::Before))
     };
-    let value_ptr = body.insert_ptr_cast(
-        orig_ptr,
-        Ty::unsigned_ty(primitive_ty),
-        Mutability::Not,
-        source,
-        InsertPosition::Before,
-    );
-    let value = Operand::Copy(Place { local: value_ptr, projection: vec![ProjectionElem::Deref] });
-    match &req.valid_range {
-        ValidityRange::Single(range) => {
-            build_single_limit(body, range, source, span, primitive_ty, value)
-        }
-        ValidityRange::Multiple([range1, range2]) => {
-            // Build `let valid = range1.contains(value) || range2.contains(value);
-            let cond1 = build_single_limit(body, range1, source, span, primitive_ty, value.clone());
-            let cond2 = build_single_limit(body, range2, source, span, primitive_ty, value);
-            body.insert_binary_op(
-                BinOp::BitOr,
-                move_local(cond1),
-                move_local(cond2),
-                source,
-                InsertPosition::Before,
-            )
-        }
-    }
+    let value_ptr =
+        body.insert_ptr_cast(orig_ptr, value_ty, Mutability::Not, source, InsertPosition::Before);
+    Operand::Copy(Place { local: value_ptr, projection: vec![ProjectionElem::Deref] })
 }
 
 fn build_single_limit(
@@ -1468,11 +1496,10 @@ pub fn ty_validity_per_offset(
 ) -> Result<Vec<ValidValueReq>, String> {
     let layout = ty.layout().unwrap().shape();
     let ty_req = || {
-        if let Some(mut req) = ValidValueReq::try_from_ty(tcx, machine_info, ty)
+        if let Some(req) = ValidValueReq::try_from_ty(tcx, machine_info, ty)
             && !req.is_full()
         {
-            req.offset = current_offset;
-            vec![req]
+            vec![req.shifted(current_offset)]
         } else {
             vec![]
         }
@@ -1516,10 +1543,7 @@ pub fn ty_validity_per_offset(
                     let mut next_validity = elem_validity
                         .iter()
                         .cloned()
-                        .map(|mut req| {
-                            req.offset += elem_offset;
-                            req
-                        })
+                        .map(|req| req.shifted(elem_offset))
                         .collect::<Vec<_>>();
                     result.append(&mut next_validity)
                 }
@@ -1584,8 +1608,12 @@ pub fn ty_validity_per_offset(
                                 } => {
                                     Err(format!("Unsupported Enum `{}` check", def.trimmed_name()))?
                                 }
-                                VariantsShape::Multiple { variants, .. } => {
-                                    let enum_validity = ty_req();
+                                VariantsShape::Multiple {
+                                    ref tag,
+                                    tag_field,
+                                    ref variants,
+                                    ..
+                                } => {
                                     let mut fields_validity = vec![];
                                     for (index, variant) in variants.iter().enumerate() {
                                         let fields = ty_variants[index].fields();
@@ -1601,7 +1629,15 @@ pub fn ty_validity_per_offset(
                                         }
                                     }
                                     if fields_validity.is_empty() {
-                                        Ok(enum_validity)
+                                        // The tag is the field of the enum's own layout.
+                                        direct_tag_validity(
+                                            tcx,
+                                            machine_info,
+                                            ty,
+                                            current_offset + offsets[tag_field].bytes(),
+                                            tag,
+                                            variants.len(),
+                                        )
                                     } else {
                                         Err(format!(
                                             "Unsupported Enum `{}` check",
@@ -1707,6 +1743,66 @@ pub fn ty_validity_per_offset(
             Ok(vec![])
         }
     }
+}
+
+/// The maximum number of ranges the valid tags of an enum are checked against. An enum with more
+/// gaps in its discriminants is checked against the tag's valid range, which contains them.
+const MAX_TAG_RANGES: usize = 16;
+
+/// The validity of a directly tagged multi-variant enum `ty`, with its `tag` at `tag_offset`: the
+/// tag must be the discriminant of an inhabited variant. Its layout may be a scalar, a scalar
+/// pair or an aggregate, whose tag is one of its fields. The fields of its variants must not have
+/// requirements, which this doesn't check.
+fn direct_tag_validity(
+    tcx: TyCtxt,
+    machine_info: &MachineInfo,
+    ty: Ty,
+    tag_offset: usize,
+    tag: &Scalar,
+    variant_count: usize,
+) -> Result<Vec<ValidValueReq>, String> {
+    let Scalar::Initialized { value, valid_range: tag_range } = tag else {
+        return Err(format!("Unsupported enum `{ty}` with a union tag"));
+    };
+    let tag_size = value.size(machine_info);
+    let mask = tag_size.unsigned_int_max().unwrap();
+    let internal_ty = rustc_internal::internal(tcx, ty);
+    let internal_layout = tcx
+        .layout_of(rustc_middle::ty::TypingEnv::fully_monomorphized().as_query_input(internal_ty))
+        .map_err(|err| format!("Unsupported enum `{ty}`: {err:?}"))?;
+    let rustc_abi::Variants::Multiple { variants: internal_variants, .. } =
+        &internal_layout.variants
+    else {
+        unreachable!("expected a multi-variant layout for `{ty}`")
+    };
+    // The valid tags are the discriminants of the inhabited variants. The tag's valid range spans
+    // them, but it also contains the values between sparse discriminants.
+    let mut valid_tags: Vec<u128> = (0..variant_count)
+        .filter(|idx| !internal_variants[rustc_abi::VariantIdx::from_usize(*idx)].is_uninhabited())
+        .map(|idx| {
+            internal_ty
+                .discriminant_for_variant(tcx, rustc_abi::VariantIdx::from_usize(idx))
+                .unwrap()
+                .val
+                & mask
+        })
+        .collect();
+    valid_tags.sort_unstable();
+    valid_tags.dedup();
+    let mut ranges: Vec<WrappingRange> = vec![];
+    for tag in valid_tags {
+        match ranges.last_mut() {
+            Some(last) if last.end + 1 == tag => last.end = tag,
+            _ => ranges.push(WrappingRange { start: tag, end: tag }),
+        }
+    }
+    let valid_range = match ranges.len() {
+        1 => ValidityRange::Single(ranges[0]),
+        n if n <= MAX_TAG_RANGES => ValidityRange::Multiple(ranges),
+        _ => ValidityRange::Single(*tag_range),
+    };
+    let req = ValidValueReq { offset: tag_offset, size: tag_size, valid_range };
+    Ok(if req.is_full() { vec![] } else { vec![req] })
 }
 
 /// The place `*ptr`, if the pointer operand is a place.

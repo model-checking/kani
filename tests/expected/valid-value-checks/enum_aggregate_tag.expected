@@ -1,0 +1,29 @@
+Checking harness sparse_discriminant_valid...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness sparse_discriminant_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `Sparse`
+VERIFICATION:- FAILED
+
+Checking harness repr_c_enum_valid...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness repr_c_enum_any_tag_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `CEnum`
+VERIFICATION:- FAILED
+
+Checking harness aggregate_enum_at_offset_valid...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness aggregate_enum_at_offset_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `Wrapper`
+VERIFICATION:- FAILED
+
+Checking harness aggregate_enum_valid...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness aggregate_enum_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `G`
+VERIFICATION:- FAILED
+
+Complete - 4 successfully verified harnesses, 4 failures, 8 total.
