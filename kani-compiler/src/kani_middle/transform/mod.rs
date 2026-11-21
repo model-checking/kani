@@ -68,7 +68,7 @@ fn build_missing_body(tcx: TyCtxt, instance: Instance) -> Body {
 mod automatic;
 pub(crate) mod body;
 mod check_uninit;
-mod check_values;
+pub(crate) mod check_values;
 mod contracts;
 mod dump_mir_pass;
 mod internal_mir;

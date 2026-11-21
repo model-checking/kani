@@ -1,0 +1,46 @@
+Checking harness rc_dyn_invalid_value_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `std::rc::RcInner<dyn A>`
+VERIFICATION:- FAILED
+
+Checking harness rc_dyn_valid...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness deref_dyn_value_valid...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness deref_invalid_dyn_value_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `dyn A`
+VERIFICATION:- FAILED
+
+Checking harness method_call_through_from_raw_parts...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness method_call_through_raw_ptr...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness method_call_through_ref...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness write_through_cast_of_dyn_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `char`
+VERIFICATION:- FAILED
+
+Checking harness downcast_unchecked_invalid_value_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `bool`
+Failed Checks: Undefined Behavior: Invalid value of type `bool`
+VERIFICATION:- FAILED
+
+Checking harness downcast_unchecked_valid...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness downcast_invalid_value_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `dyn std::any::Any`
+VERIFICATION:- FAILED
+
+Checking harness downcast_box_dyn_any_valid...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness downcast_box_dyn_any...
+VERIFICATION:- SUCCESSFUL
+
+Complete - 8 successfully verified harnesses, 5 failures, 13 total.

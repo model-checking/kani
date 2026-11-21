@@ -250,6 +250,8 @@ pub enum KaniHook {
     UnsupportedCheck,
     #[strum(serialize = "UntrackedDerefHook")]
     UntrackedDeref,
+    #[strum(serialize = "ValidDynValueHook")]
+    ValidDynValue,
     #[strum(serialize = "ValidVtableHook")]
     ValidVtable,
 }

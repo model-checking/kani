@@ -82,6 +82,16 @@ macro_rules! kani_valid_value {
             super::kani_intrinsic()
         }
 
+        /// Whether the trait object at the tail of the `T` at `ptr` is a valid value of its
+        /// dynamic type, which the vtable in the metadata of `ptr` determines. The trait object
+        /// is at `tail_offset` from `ptr`, rounded up to the alignment of its dynamic type. It is
+        /// invalid if the vtable is not one `valid_vtable` accepts.
+        #[kanitool::fn_marker = "ValidDynValueHook"]
+        #[inline(never)]
+        fn valid_dyn_value<T: ?Sized>(_ptr: *const T, _tail_offset: usize) -> bool {
+            super::kani_intrinsic()
+        }
+
         /// Whether one of the `size` bytes at `ptr` was written untyped.
         #[kanitool::disable_checks(pointer)]
         #[kanitool::fn_marker = "IsUntypedWriteModel"]

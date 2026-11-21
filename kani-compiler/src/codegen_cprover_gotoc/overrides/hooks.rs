@@ -659,6 +659,41 @@ impl GotocHook for ValidVtable {
     }
 }
 
+/// Encodes `kani::valid_value::valid_dyn_value::<T>(ptr, tail_offset)`: a call to the function
+/// that checks the trait object at the tail of the `T` at `ptr` at its dynamic type.
+struct ValidDynValue;
+impl GotocHook for ValidDynValue {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
+        unreachable!("{UNEXPECTED_CALL}")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        instance: Instance,
+        mut fargs: Vec<Expr>,
+        assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        assert_eq!(fargs.len(), 2);
+        let tail_offset = fargs.pop().unwrap().cast_to(Type::size_t());
+        let ptr = fargs.pop().unwrap();
+        let byte_ptr = Type::unsigned_int(8).to_pointer();
+        let data = ptr.clone().member("data", &gcx.symbol_table).cast_to(byte_ptr.clone());
+        let vtable = ptr.member("vtable", &gcx.symbol_table).cast_to(byte_ptr);
+        let pointee = *instance.args().0[0].expect_ty();
+        let check = gcx.valid_dyn_value_fn(pointee);
+        assign_bool_call(gcx, check.call(vec![data, vtable, tail_offset]), assign_to, target, span)
+    }
+}
+
 /// Assign the result of `call` to `assign_to`, and continue at `target`.
 fn assign_bool_call(
     gcx: &mut GotocCtx,
@@ -1735,6 +1770,7 @@ pub fn fn_hooks() -> GotocHooks {
         (KaniHook::UnsupportedCheck, Rc::new(UnsupportedCheck)),
         (KaniHook::UntrackedDeref, Rc::new(UntrackedDeref)),
         (KaniHook::ValidVtable, Rc::new(ValidVtable)),
+        (KaniHook::ValidDynValue, Rc::new(ValidDynValue)),
         (KaniHook::InitContracts, Rc::new(InitContracts)),
         (KaniHook::FloatToIntInRange, Rc::new(FloatToIntInRange)),
     ];

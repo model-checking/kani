@@ -1732,6 +1732,7 @@ impl GotocCtx<'_, '_> {
             .to_expr();
         self.record_vtable(
             rustc_internal::internal(self.tcx, trait_type),
+            src_mir_type,
             vtable_impl_name.into(),
             vtable.clone().address_of(),
         );

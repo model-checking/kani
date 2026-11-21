@@ -478,10 +478,15 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
                 };
                 let name = format!("{}::{alloc_id:?}", self.full_crate_name());
                 let addr = self.codegen_const_allocation(&alloc, Some(name.clone()), loc, false);
-                if let rustc_middle::mir::interpret::GlobalAlloc::VTable(_, dyn_ty) =
+                if let rustc_middle::mir::interpret::GlobalAlloc::VTable(concrete_ty, dyn_ty) =
                     self.tcx.global_alloc(rustc_internal::internal(self.tcx, alloc_id))
                 {
-                    self.record_const_vtable(dyn_ty.principal(), name.into(), addr.clone());
+                    self.record_const_vtable(
+                        dyn_ty.principal(),
+                        concrete_ty,
+                        name.into(),
+                        addr.clone(),
+                    );
                 }
                 addr
             }

@@ -414,14 +414,14 @@ pub struct ValidValueReq {
 
 /// The value of `size` bytes at `offset` (an enum's tag) is in `range`.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-struct VariantGuard {
+pub struct VariantGuard {
     offset: usize,
     size: MachineSize,
     range: WrappingRange,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-enum ValidityRange {
+pub enum ValidityRange {
     /// The value validity fits in a single value range.
     /// This includes cases where the full range is covered.
     Single(WrappingRange),
@@ -433,6 +433,11 @@ enum ValidityRange {
     /// The pointer at the offset is the address of a vtable Kani generated for the trait object
     /// type (the metadata of a pointer to a `dyn Trait`).
     Vtable(Ty),
+    /// The trait object of this type at the offset (not rounded up to the trait object's
+    /// alignment) is a valid value of its dynamic type, as the metadata of the pointer to the
+    /// value determines it. Only for the pointee of a pointer to an unsized type, which a check
+    /// reaches through that pointer.
+    DynValue(Ty),
 }
 
 // TODO: Optimize checks by merging requirements whenever possible.
@@ -506,7 +511,7 @@ impl ValidValueReq {
         let ranges = |req: &ValidValueReq| match &req.valid_range {
             ValidityRange::Single(range) => Some(vec![*range]),
             ValidityRange::Multiple(ranges) => Some(ranges.clone()),
-            ValidityRange::Vtable(_) => None,
+            ValidityRange::Vtable(_) | ValidityRange::DynValue(_) => None,
         };
         match (ranges(self), ranges(other)) {
             (Some(this_ranges), Some(other_ranges)) => other_ranges.iter().all(|other_range| {
@@ -525,6 +530,23 @@ impl ValidValueReq {
             guard.offset += delta;
         }
         self
+    }
+
+    pub fn offset(&self) -> usize {
+        self.offset
+    }
+
+    pub fn size(&self) -> MachineSize {
+        self.size
+    }
+
+    pub fn valid_range(&self) -> &ValidityRange {
+        &self.valid_range
+    }
+
+    /// The guards that must hold for the requirement to apply, as `(offset, size, range)`.
+    pub fn guards(&self) -> impl Iterator<Item = (usize, MachineSize, WrappingRange)> + '_ {
+        self.guards.iter().map(|guard| (guard.offset, guard.size, guard.range))
     }
 }
 
@@ -1131,6 +1153,19 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                         return;
                     }
 
+                    // A trait object is only read at its dynamic type: by a dereference of a raw
+                    // pointer to it, which checks the trait object at that type, or by the code
+                    // its vtable points to, through references to the concrete type. A store
+                    // through the cast pointer, of a type whose validity Kani can express, is
+                    // recorded as untyped (see `record_store`), and the reads that cover it are
+                    // checked.
+                    if matches!(src_pointee_ty.kind(), TyKind::RigidTy(RigidTy::Dynamic(..)))
+                        && ty_validity_per_offset(self.tcx, &self.machine, dest_pointee_ty, 0)
+                            .is_ok()
+                    {
+                        return;
+                    }
+
                     if src_pointee_ty.kind().is_unit() {
                         // We cannot track what was the initial type. Thus, fail.
                         self.push_target(SourceOp::UnsupportedCheck {
@@ -1385,7 +1420,7 @@ fn intrinsic_name(locals: &[LocalDecl], func: &Operand) -> Option<String> {
 /// A guarded requirement becomes `!guard_1 || ... || !guard_n || valid`, where each guard reads
 /// the tag it depends on the same way.
 ///
-/// `kani_functions` provides the hook that checks vtables.
+/// `kani_functions` provides the hooks that check vtables and trait objects.
 pub fn build_limits(
     body: &mut MutableBody,
     req: &ValidValueReq,
@@ -1445,6 +1480,28 @@ pub fn build_limits(
             let byte_ptr = Ty::new_ptr(Ty::unsigned_ty(UintTy::U8), Mutability::Not);
             let vtable = read_at_offset(body, rvalue_ptr.clone(), req.offset, byte_ptr, source);
             call_hook(body, source, kani_functions, KaniHook::ValidVtable, *dyn_ty, vec![vtable])
+        }
+        ValidityRange::DynValue(_) => {
+            // The pointer to the value is the wide pointer to the unsized type that contains the
+            // trait object: the hook reads the trait object's type from its metadata.
+            let ptr = body.insert_assignment(rvalue_ptr.clone(), source, InsertPosition::Before);
+            let pointee = pointee_ty(body.locals()[ptr].ty);
+            let ptr = body.insert_ptr_cast(
+                move_local(ptr),
+                pointee,
+                Mutability::Not,
+                source,
+                InsertPosition::Before,
+            );
+            let offset = body.new_uint_operand(req.offset as u128, UintTy::Usize, span);
+            call_hook(
+                body,
+                source,
+                kani_functions,
+                KaniHook::ValidDynValue,
+                pointee,
+                vec![move_local(ptr), offset],
+            )
         }
     };
     for guard in &req.guards {
@@ -1660,6 +1717,15 @@ pub fn ty_validity_per_offset(
             reqs.extend(pointer_metadata_validity(tcx, machine_info, pointee, current_offset));
             return Ok(reqs);
         }
+        // A trait object, the pointee of a pointer to `dyn Trait`: valid at its dynamic type.
+        TyKind::RigidTy(RigidTy::Dynamic(..)) => {
+            return Ok(vec![ValidValueReq {
+                offset: current_offset,
+                size: machine_info.pointer_width,
+                valid_range: ValidityRange::DynValue(ty),
+                guards: vec![],
+            }]);
+        }
         _ => {}
     }
     match layout.fields {
@@ -1761,7 +1827,7 @@ pub fn ty_validity_per_offset(
                             for idx in layout.fields.fields_by_offset_order() {
                                 let field_offset = offsets[idx].bytes();
                                 let field_ty = fields[idx].ty_with_args(args);
-                                for req in ty_validity_per_offset(
+                                for req in unsized_field_validity(
                                     tcx,
                                     machine_info,
                                     field_ty,
@@ -1791,7 +1857,7 @@ pub fn ty_validity_per_offset(
                     for idx in layout.fields.fields_by_offset_order() {
                         let field_offset = offsets[idx].bytes();
                         let field_ty = tys[idx];
-                        tuple_validity.append(&mut ty_validity_per_offset(
+                        tuple_validity.append(&mut unsized_field_validity(
                             tcx,
                             machine_info,
                             field_ty,
@@ -1831,13 +1897,12 @@ pub fn ty_validity_per_offset(
                 RigidTy::Str | RigidTy::Slice(_) | RigidTy::Array(_, _) => {
                     unreachable!("Expected array layout for {ty:?}")
                 }
-                RigidTy::RawPtr(_, _) | RigidTy::Ref(_, _, _) => {
+                RigidTy::RawPtr(_, _) | RigidTy::Ref(_, _, _) | RigidTy::Dynamic(_, _) => {
                     unreachable!("handled before the field-shape match: {ty:?}")
                 }
                 // A function item is a zero-sized type: any value is valid.
                 RigidTy::FnDef(_, _) => Ok(vec![]),
                 RigidTy::FnPtr(_)
-                | RigidTy::Dynamic(_, _)
                 | RigidTy::Coroutine(_, _)
                 | RigidTy::CoroutineClosure(_, _)
                 | RigidTy::CoroutineWitness(_, _)
@@ -1849,6 +1914,25 @@ pub fn ty_validity_per_offset(
             Ok(vec![])
         }
     }
+}
+
+/// The validity of the field of type `field_ty` at `offset` of a struct or a tuple. The trait
+/// object at the tail of a struct (`RcInner<dyn Trait>`) is at `offset` rounded up to its dynamic
+/// alignment, which the check of the trait object does. A struct with an unsized tail at the tail
+/// of another (`Outer<Inner<dyn Trait>>`) is at an offset that depends on the trait object's
+/// alignment too, which the requirements of `Inner` don't account for: report it as unsupported.
+fn unsized_field_validity(
+    tcx: TyCtxt,
+    machine_info: &MachineInfo,
+    field_ty: Ty,
+    offset: usize,
+) -> Result<Vec<ValidValueReq>, String> {
+    let reqs = ty_validity_per_offset(tcx, machine_info, field_ty, offset)?;
+    let is_dyn = matches!(field_ty.kind(), TyKind::RigidTy(RigidTy::Dynamic(..)));
+    if !is_dyn && reqs.iter().any(|req| matches!(req.valid_range, ValidityRange::DynValue(_))) {
+        return Err(format!("Unsupported nested unsized tail `{field_ty}`"));
+    }
+    Ok(reqs)
 }
 
 /// The requirements on the metadata of a pointer at `offset` to `pointee`: the metadata of a
