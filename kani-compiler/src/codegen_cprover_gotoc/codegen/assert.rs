@@ -174,18 +174,29 @@ impl GotocCtx<'_, '_> {
         }
     }
 
-    /// The flag that says whether a panic is permitted by the `panics_only_if` / `panics_if`
-    /// clauses of the function under contract verification (see `kani::internal`), if this
-    /// codegen unit uses those clauses, i.e., if the functions that record them are reachable.
+    /// Whether a panic is permitted by the `panics_only_if` / `panics_if` clauses of the function
+    /// under contract verification (see `kani::internal`), if this codegen unit uses those
+    /// clauses, i.e., if the functions that record them are reachable.
+    ///
+    /// A panic while a contract clause is evaluated (a postcondition, or the other panic clause's
+    /// condition) is a panic of the contract, not of the function, so it is never permitted.
     fn panic_permitted_flag(&self) -> Option<Expr> {
         const SETTERS: [&str; 2] =
             ["__VERIFIER_kani_set_panics_only_if", "__VERIFIER_kani_set_panics_if"];
         const FLAG: &str = "__CPROVER_kani_panic_permitted";
-        if SETTERS.iter().any(|setter| self.symbol_table.contains((*setter).into())) {
-            self.symbol_table.lookup(FLAG).map(|flag| flag.to_expr().cast_to(Type::bool()))
-        } else {
-            None
+        const CLAUSE_DEPTH: &str = "__CPROVER_kani_contract_clause_depth";
+        if !SETTERS.iter().any(|setter| self.symbol_table.contains((*setter).into())) {
+            return None;
         }
+        let permitted = self.symbol_table.lookup(FLAG)?.to_expr().cast_to(Type::bool());
+        Some(match self.symbol_table.lookup(CLAUSE_DEPTH) {
+            Some(depth) => {
+                let depth = depth.to_expr();
+                let zero = Expr::int_constant(0, depth.typ().clone());
+                permitted.and(depth.eq(zero))
+            }
+            None => permitted,
+        })
     }
 
     /// Generate code to cover the given condition at the current location
