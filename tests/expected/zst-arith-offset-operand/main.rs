@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // kani-flags: --output-format terse
-//! Keep the offset read in the call operand to test its codegen.
+//! Guard the projected offset read and its safety check on the ZST path.
+//! The pre-fix code also reports this expected null pointer dereference.
 
 #![feature(core_intrinsics, custom_mir)]
 #![allow(internal_features)]

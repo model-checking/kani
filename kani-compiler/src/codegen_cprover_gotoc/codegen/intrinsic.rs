@@ -1254,6 +1254,9 @@ impl GotocCtx<'_, '_> {
         let offset = fargs.remove(0);
 
         if self.is_zst_stable(pointee_type_stable(pointer_type).unwrap()) {
+            // CBMC's SMT2 pointer addition treats zero-sized pointees as one-byte elements.
+            // Rust's arith_offset on a ZST has zero byte displacement (count * 0).
+
             // Evaluate both MIR operands in order. Emitting the offset as a
             // statement preserves safety checks on projected reads.
             let (base, base_decl) =

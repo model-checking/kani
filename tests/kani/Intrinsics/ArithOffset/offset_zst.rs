@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 
 // kani-flags: -Z mem-predicates
+//! Exercise CBMC's SMT2 encoding for ordinary and over-aligned zero-sized pointees.
 
 #[repr(align(16))]
 struct AlignedZst;
@@ -19,4 +20,16 @@ fn wrapping_offset_preserves_a_zst_pointer() {
     kani::assert(kani::mem::same_allocation(base, shifted), "allocation preserved");
     unsafe { shifted.write(17) };
     kani::assert(bytes[0] == 17, "original element receives the write");
+}
+
+#[kani::proof]
+#[kani::solver(cvc5)]
+fn wrapping_offset_preserves_unit_pointer() {
+    let mut byte = 0u8;
+    let zst = (&raw mut byte).cast::<()>();
+    let offset: isize = kani::any();
+
+    let shifted = zst.wrapping_offset(offset);
+    kani::assert(shifted == zst, "unit pointer address preserved");
+    kani::assert(kani::mem::same_allocation(zst, shifted), "unit pointer allocation preserved");
 }
