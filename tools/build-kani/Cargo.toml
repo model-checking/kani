@@ -14,3 +14,6 @@ anyhow = "1"
 cargo_metadata = "0.23"
 clap = { version = "4.4.11", features=["derive"] }
 which = "8"
+
+[lints]
+workspace = true
