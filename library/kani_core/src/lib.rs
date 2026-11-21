@@ -558,6 +558,19 @@ macro_rules! kani_intrinsics {
             panic!("{}", message)
         }
 
+        /// A Rust assertion: like [`assert`], but a failure is a panic rather than a Kani check.
+        ///
+        /// Kani's `assert!`, `assert_eq!` and `assert_ne!` overrides call this function, so
+        /// `#[kani::should_panic]` and `--prove-safety-only` treat their failures as panics, and
+        /// treat `kani::assert` failures as failed checks. For concrete executions, it invokes the
+        /// regular `core::assert!()` macro.
+        #[inline(never)]
+        #[kanitool::fn_marker = "PanicAssertHook"]
+        #[doc(hidden)]
+        pub const fn panic_assert(cond: bool, msg: &'static str) {
+            assert!(cond, "{}", msg);
+        }
+
         #[doc(hidden)]
         #[allow(dead_code)]
         #[kanitool::fn_marker = "SafetyCheckHook"]
@@ -805,6 +818,99 @@ macro_rules! kani_intrinsics {
             pub fn reset_contract_clause_depth() {
                 unsafe {
                     CONTRACT_CLAUSE_DEPTH = 0;
+                    PANICS_ONLY_IF_SET = false;
+                    PANICS_ONLY_IF = false;
+                    PANICS_IF = false;
+                    PANIC_PERMITTED = false;
+                }
+            }
+
+            /// Whether a panic is permitted by the `panics_only_if` / `panics_if` clauses of the
+            /// function under contract verification, for the current call. In a
+            /// `proof_for_contract` harness whose target has one of these clauses, Kani checks
+            /// this flag at every panic site, instead of failing unconditionally.
+            ///
+            /// Like `CONTRACT_CLAUSE_DEPTH`, the state is verifier-internal (hence the
+            /// `__CPROVER_` symbol prefixes) and reset at harness entry by
+            /// [reset_contract_clause_depth]. Kani's compiler refers to this symbol by name.
+            #[unsafe(export_name = "__CPROVER_kani_panic_permitted")]
+            static mut PANIC_PERMITTED: bool = false;
+            /// Whether a `panics_only_if` condition was recorded for the current call.
+            #[unsafe(export_name = "__CPROVER_kani_panics_only_if_set")]
+            static mut PANICS_ONLY_IF_SET: bool = false;
+            /// The recorded `panics_only_if` condition.
+            #[unsafe(export_name = "__CPROVER_kani_panics_only_if")]
+            static mut PANICS_ONLY_IF: bool = false;
+            /// The recorded `panics_if` condition, `false` if there is none.
+            #[unsafe(export_name = "__CPROVER_kani_panics_if")]
+            static mut PANICS_IF: bool = false;
+
+            /// The panic-permission state of a call, saved on entry and restored on return.
+            #[doc(hidden)]
+            #[derive(Clone, Copy)]
+            pub struct PanicPermission {
+                only_if_set: bool,
+                only_if: bool,
+                must: bool,
+            }
+
+            /// Record the `panics_only_if` condition of the function under contract
+            /// verification, on entry. Returns the state to restore on return.
+            ///
+            /// A panic is permitted if the `panics_only_if` condition holds or, without a
+            /// `panics_only_if` clause, if the `panics_if` condition holds. All accesses to the
+            /// state happen directly in the `__VERIFIER`-named functions, so that CBMC's
+            /// contract instrumentation does not check them against the write set of the
+            /// function under contract (see [enter_contract_clause]).
+            #[doc(hidden)]
+            #[inline(never)]
+            #[kanitool::fn_marker = "SetPanicsOnlyIfModel"]
+            #[unsafe(export_name = "__VERIFIER_kani_set_panics_only_if")]
+            pub fn set_panics_only_if(cond: bool) -> PanicPermission {
+                unsafe {
+                    let prev = PanicPermission {
+                        only_if_set: PANICS_ONLY_IF_SET,
+                        only_if: PANICS_ONLY_IF,
+                        must: PANICS_IF,
+                    };
+                    PANICS_ONLY_IF_SET = true;
+                    PANICS_ONLY_IF = cond;
+                    PANIC_PERMITTED = cond;
+                    prev
+                }
+            }
+
+            /// Record the `panics_if` condition of the function under contract verification,
+            /// on entry. Returns the state to restore on return.
+            #[doc(hidden)]
+            #[inline(never)]
+            #[kanitool::fn_marker = "SetPanicsIfModel"]
+            #[unsafe(export_name = "__VERIFIER_kani_set_panics_if")]
+            pub fn set_panics_if(cond: bool) -> PanicPermission {
+                unsafe {
+                    let prev = PanicPermission {
+                        only_if_set: PANICS_ONLY_IF_SET,
+                        only_if: PANICS_ONLY_IF,
+                        must: PANICS_IF,
+                    };
+                    PANICS_IF = cond;
+                    PANIC_PERMITTED = if PANICS_ONLY_IF_SET { PANICS_ONLY_IF } else { cond };
+                    prev
+                }
+            }
+
+            /// Restore the panic-permission state saved by [set_panics_only_if] or
+            /// [set_panics_if], when the function returns.
+            #[doc(hidden)]
+            #[inline(never)]
+            #[kanitool::fn_marker = "RestorePanicPermissionModel"]
+            #[unsafe(export_name = "__VERIFIER_kani_restore_panic_permission")]
+            pub fn restore_panic_permission(prev: PanicPermission) {
+                unsafe {
+                    PANICS_ONLY_IF_SET = prev.only_if_set;
+                    PANICS_ONLY_IF = prev.only_if;
+                    PANICS_IF = prev.must;
+                    PANIC_PERMITTED = if prev.only_if_set { prev.only_if } else { prev.must };
                 }
             }
 

@@ -14,7 +14,7 @@ main.loop_invariant_base.2\
 	 - Status: SUCCESS\
 	 - Description: "Check invariant before entry for loop main.0"
 
-main.assertion.6\
+main.panic.6\
 	 - Status: SUCCESS\
 	 - Description: "assertion failed: s == 100"
 

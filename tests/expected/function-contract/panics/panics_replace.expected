@@ -1,0 +1,21 @@
+Checking harness check_caller_relies_on_panic...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_divide_exact...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_caller_permits...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_caller_guarded...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_caller_unguarded...
+Failed Checks: `divide` may panic: `panics_only_if(x == 0)` held
+VERIFICATION:- FAILED
+
+Checking harness check_divide...
+VERIFICATION:- SUCCESSFUL
+
+Verification failed for - check_caller_unguarded
+Complete - 5 successfully verified harnesses, 1 failures, 6 total.

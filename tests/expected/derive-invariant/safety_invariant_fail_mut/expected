@@ -1,8 +1,8 @@
-Check 1: check_invariant_fail_mut.assertion.1\
+Check 1: check_invariant_fail_mut.panic.1\
          - Status: SUCCESS\
          - Description: "assertion failed: pos_point.is_safe()"
 
-Check 2: check_invariant_fail_mut.assertion.2\
+Check 2: check_invariant_fail_mut.panic.2\
          - Status: FAILURE\
          - Description: "assertion failed: pos_point.is_safe()"
 

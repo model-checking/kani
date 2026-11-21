@@ -1,0 +1,22 @@
+Checking harness check_inconsistent...
+Failed Checks: big (not permitted by the contract)
+VERIFICATION:- FAILED
+
+Checking harness check_both...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_too_strict...
+Failed Checks: big (not permitted by the contract)
+VERIFICATION:- FAILED
+
+Checking harness check_too_lenient...
+Failed Checks: returned although `panics_if(x > 10)` held
+VERIFICATION:- FAILED
+
+Checking harness check_exact...
+VERIFICATION:- SUCCESSFUL
+
+Verification failed for - check_inconsistent
+Verification failed for - check_too_strict
+Verification failed for - check_too_lenient
+Complete - 2 successfully verified harnesses, 3 failures, 5 total.

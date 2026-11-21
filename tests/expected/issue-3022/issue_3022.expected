@@ -1,4 +1,4 @@
-main.assertion\
+main.panic\
 - Status: SUCCESS\
 - Description: "assertion failed: inner == func2.inner"
 

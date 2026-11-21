@@ -2,7 +2,7 @@ struct_projection.loop_invariant_step.\
 	 - Status: SUCCESS\
 	 - Description: "Check invariant after step for loop struct_projection.0"
 
-struct_projection.assertion.3\
+struct_projection.panic.3\
 	 - Status: SUCCESS\
 	 - Description: "assertion failed: s.b == 2"
 
