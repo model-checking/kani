@@ -109,6 +109,6 @@ Autoharness Summary:
 |----------------------------------+-------------------------------------------+-----------------------------+---------------------|
 | cargo_autoharness_type_invariant | Duration::new                             | #[kani::proof_for_contract] | Failure             |
 +----------------------------------+-------------------------------------------+-----------------------------+---------------------+
-Note that `kani autoharness` sets default --harness-timeout of 60s and --default-unwind of 20.
+Note that `kani autoharness` sets default --harness-timeout of 60s and --default-unwind of 20 for automatic harnesses.
 If verification failed because of timing out or too low of an unwinding bound, try passing larger values for these arguments (or, if possible, writing a loop contract).
 Complete - 7 successfully verified functions, 1 failures, 8 total.

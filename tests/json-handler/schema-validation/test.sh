@@ -87,7 +87,10 @@ with open(sys.argv[1]) as f:
 problems = []
 if not re.match(r"\d+\.\d+\.\d+\S* \(", tools["rustc"] or ""):
     problems.append(f"tools.rustc is not a toolchain release: {tools['rustc']!r}")
-if not re.match(r"\d+\.\d+\.\d+ \(cbmc-", tools["cbmc"] or ""):
+# CBMC reports `<release> (<git info>)`: `cbmc-6.11.0` for release builds, a bare
+# revision such as `8fcda333` for untagged checkouts (the nightly CBMC-latest job),
+# and `n/a` or nothing when built without git (see CBMC's src/util/CMakeLists.txt).
+if not re.match(r"\d+\.\d+\.\d+ \([^)]*\)$", tools["cbmc"] or ""):
     problems.append(f"tools.cbmc is not CBMC's --version output: {tools['cbmc']!r}")
 for problem in problems:
     print(f"ERROR: {problem}")

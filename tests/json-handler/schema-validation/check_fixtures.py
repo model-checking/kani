@@ -97,6 +97,10 @@ CASES = [
      "harnesses[0].attributes.kind"),
     ("missing required field", COMPLETED, delete_at(f"{H0}.resources.verification_time_s"),
      "harnesses[0].resources.verification_time_s"),
+    ("missing has_refcount_caveat", COMPLETED, delete_at(f"{H0}.has_refcount_caveat"),
+     "harnesses[0].has_refcount_caveat"),
+    ("string has_refcount_caveat", COMPLETED, set_at(f"{H0}.has_refcount_caveat", "no"),
+     "harnesses[0].has_refcount_caveat"),
     # Elements of arrays that are empty in some fixtures.
     ("integer in cbmc_args", COMPLETED, set_at("configuration.cbmc_args", [5]),
      "configuration.cbmc_args[0]"),

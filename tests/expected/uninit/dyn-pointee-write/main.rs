@@ -3,8 +3,10 @@
 // kani-flags: -Z uninit-checks
 
 //! Updating the initialization state through a pointer to a trait object used to crash the
-//! memory initialization checks. As for reads through such a pointer, it is reported as
-//! unsupported. See https://github.com/model-checking/kani/issues/4853.
+//! memory initialization checks (https://github.com/model-checking/kani/issues/4853), and was then
+//! reported as unsupported. Creating and reborrowing such a pointer reads nothing and does not
+//! change which bytes are initialized, so it now verifies
+//! (https://github.com/model-checking/kani/issues/5166).
 
 trait Printable {
     fn print(&self) -> u32;

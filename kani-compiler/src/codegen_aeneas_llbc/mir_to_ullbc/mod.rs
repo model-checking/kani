@@ -15,7 +15,8 @@ use charon_lib::ast::types::{Ty as CharonTy, TyKind as CharonTyKind};
 use charon_lib::ast::{
     Abi as CharonAbi, AggregateKind as CharonAggregateKind, Assert as CharonAssert,
     BinOp as CharonBinOp, Binder as CharonBinder, BinderKind as CharonBinderKind,
-    Body as CharonBody, BorrowKind as CharonBorrowKind, BuiltinAdt as CharonBuiltinAdt,
+    Body as CharonBody, BorrowKind as CharonBorrowKind,
+    BorrowckStatement as CharonBorrowckStatement, BuiltinAdt as CharonBuiltinAdt,
     BuiltinAssertKind as CharonBuiltinAssertKind, BuiltinImplData as CharonBuiltinImplData,
     BuiltinPathElem as CharonBuiltinPathElem, Call as CharonCall, CallSafety as CharonCallSafety,
     CastKind as CharonCastKind, ConstGenericParam as CharonConstGenericVar,
@@ -66,12 +67,12 @@ use core::panic;
 use indexmap::IndexMap;
 use rustc_data_structures::fx::FxHashMap;
 use rustc_hir::def_id::CRATE_DEF_ID;
-use rustc_middle::ty::{TyCtxt, TypingEnv};
+use rustc_middle::ty::{TyCtxt, TypeVisitableExt, TypingEnv};
 use rustc_public::mir::mono::{Instance, InstanceDef};
 use rustc_public::mir::{
     AggregateKind, AssertMessage, BasicBlock, BinOp, Body, BorrowKind, CastKind, ConstOperand,
-    Local, Mutability, Operand, Place, ProjectionElem, Rvalue, Statement, StatementKind,
-    SwitchTargets, Terminator, TerminatorKind, UnOp, VarDebugInfoContents,
+    Local, LocalDecl, Mutability, Operand, Place, ProjectionElem, RuntimeChecks, Rvalue, Statement,
+    StatementKind, SwitchTargets, Terminator, TerminatorKind, UnOp, VarDebugInfoContents,
 };
 use rustc_public::rustc_internal;
 use rustc_public::ty::{
@@ -100,6 +101,10 @@ pub struct Context<'a, 'tcx> {
     /// Block ID of the synthetic block that aborts. It is the target of every call's unwind edge
     /// (Kani does not model unwinding) and of the return edge of calls that never return.
     abort_block: CharonBlockId,
+    /// The locals of the MIR body being translated. This is the generic body of the function
+    /// (see `translate_function_body`), so their types refer to its generic parameters; the
+    /// body of `instance` has the monomorphized types instead.
+    body_locals: Vec<LocalDecl>,
     /// Blocks that the translation adds to a body beyond the MIR blocks, numbered from
     /// `first_extra_block`: a MIR block is split after each checked binary operation, which becomes
     /// a call (see `checked_op_call`). `None` until the block is complete.
@@ -157,6 +162,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             local_names,
             file_to_id,
             abort_block,
+            body_locals: Vec::new(),
             extra_blocks: Vec::new(),
             first_extra_block: 0,
             item_generics: None,
@@ -1249,6 +1255,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
     fn translate_body(&mut self, mir_body: Body) -> CharonBody {
         let span = self.translate_span(mir_body.span);
         let arg_count = self.instance.fn_abi().unwrap().args.len();
+        self.body_locals = mir_body.locals().to_vec();
         let vars = self.translate_body_locals(&mir_body);
         let locals = CharonLocals { locals: vars, arg_count };
         // The synthetic abort block (see below) is appended after the translated
@@ -1719,8 +1726,21 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             StatementKind::StorageDead(local) => {
                 Some(CharonRawStatement::StorageDead(CharonVarId::from_usize(*local)))
             }
-            StatementKind::Nop => None,
-            _ => todo!(),
+            // The statements below only exist for the borrow checker and lints. MIR
+            // optimizations remove them, but LLBC runs compile at `-Zmir-opt-level=0`. As Charon
+            // does, mentioning a place with projections is kept (evaluating it can be UB),
+            // and a fake read becomes a borrow-checker statement.
+            StatementKind::PlaceMention(place) => (!place.projection.is_empty())
+                .then(|| CharonRawStatement::PlaceMention(self.translate_place(place))),
+            StatementKind::FakeRead(_, place) => Some(CharonRawStatement::Borrowck(
+                CharonBorrowckStatement::FakeRead(self.translate_place(place)),
+            )),
+            // A type annotation the borrow checker relates the place to; a no-op at runtime.
+            StatementKind::AscribeUserType { .. } => None,
+            StatementKind::Coverage(_) | StatementKind::ConstEvalCounter | StatementKind::Nop => {
+                None
+            }
+            StatementKind::Intrinsic(intrinsic) => todo!("statement {intrinsic:?}"),
         };
         content.map(|content| {
             let span = self.translate_span(stmt.source_info.span);
@@ -1745,13 +1765,31 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 // `resolve_drop_in_place` gives the glue for `T` directly: an instance of the
                 // `core::ptr::drop_glue` lang item (which `drop_in_place::<T>` merely wraps), and
                 // Kani already collects it.
-                let place_ty = place.ty(self.instance.body().unwrap().locals()).unwrap();
-                let drop_glue = Instance::resolve_drop_in_place(place_ty);
-                let fn_ptr = self.translate_fn_ptr(drop_glue);
+                let place_ty = place.ty(&self.body_locals).unwrap();
+                let has_params =
+                    rustc_internal::internal(self.tcx, place_ty).has_non_region_param();
+                let fn_ptr = if !has_params {
+                    self.translate_fn_ptr(Instance::resolve_drop_in_place(place_ty))
+                } else {
+                    // Glue can't be resolved for a type that mentions the caller's type
+                    // parameters (e.g. a bare `T`). Point at the generic `drop_glue::<T>`
+                    // declaration instead, as generic calls do.
+                    let drop_glue = self
+                        .tcx
+                        .lang_items()
+                        .drop_glue_fn()
+                        .expect("`core::ptr::drop_glue` is a lang item");
+                    let drop_glue = stable_fn_def(self.tcx, drop_glue)
+                        .expect("`core::ptr::drop_glue` is a function");
+                    self.translate_fn_def_ptr(
+                        drop_glue.def_id(),
+                        GenericArgs(vec![GenericArgKind::Type(place_ty)]),
+                    )
+                };
                 (
                     None,
                     CharonRawTerminator::Drop {
-                        // Kani translates optimized MIR, where drops are precise.
+                        // Drop elaboration runs at every MIR level, so drops are precise.
                         kind: CharonDropKind::Precise,
                         place: self.translate_place(place),
                         fn_ptr,
@@ -1766,11 +1804,26 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
             }
             TerminatorKind::Call { func, args, destination, target, .. } => {
                 debug!("translate_call: {func:?} {args:?} {destination:?} {target:?}");
-                let fn_ty = func.ty(self.instance.body().unwrap().locals()).unwrap();
+                // Typed with the generic body: the callee's arguments can mention the caller's
+                // generic parameters, and must, or a generic function would call the instance of
+                // its callee for one particular `T`.
+                let fn_ty = func.ty(&self.body_locals).unwrap();
                 let fn_ptr = match fn_ty.kind() {
                     TyKind::RigidTy(RigidTy::FnDef(def, genarg)) => {
-                        let instance = Instance::resolve(def, &genarg).unwrap();
-                        self.translate_fn_ptr(instance)
+                        let has_params =
+                            rustc_internal::internal(self.tcx, &genarg).has_non_region_param();
+                        let internal_def_id = rustc_internal::internal(self.tcx, def.def_id());
+                        if !has_params {
+                            let instance = Instance::resolve(def, &genarg).unwrap();
+                            self.translate_fn_ptr(instance)
+                        } else if self.tcx.trait_of_assoc(internal_def_id).is_none() {
+                            // A free or inherent function: call its generic declaration.
+                            self.translate_fn_def_ptr(def.def_id(), genarg)
+                        } else {
+                            // Which impl a trait method on a generic type calls is only known
+                            // through a trait reference, which the backend does not translate.
+                            todo!("call to trait method {} with generic arguments", def.name())
+                        }
                     }
                     TyKind::RigidTy(RigidTy::FnPtr(..)) => todo!(),
                     x => unreachable!(
@@ -1832,20 +1885,24 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
 
     /// A pointer to the function `instance`.
     fn translate_fn_ptr(&mut self, instance: Instance) -> CharonFnPtr {
-        let def_id = instance.def.def_id();
+        // Not `instance.ty()`, which requires a monomorphic instance: in a generic body, the
+        // callee's arguments (e.g. the type a drop glue is for) can mention the caller's
+        // generic parameters.
+        self.translate_fn_def_ptr(instance.def.def_id(), instance.args())
+    }
+
+    /// A pointer to the function `def_id` with the generic arguments `args`, which may mention
+    /// the generic parameters of the function being translated.
+    fn translate_fn_def_ptr(&mut self, def_id: DefId, args: GenericArgs) -> CharonFnPtr {
         let fid = self.register_fun_decl_id(def_id);
-        let genarg_resolve = match instance.ty().kind() {
-            TyKind::RigidTy(RigidTy::FnDef(_, ga)) => ga,
-            _ => panic!("Expected a function type"),
-        };
-        let mut generics = self.translate_generic_args(genarg_resolve, def_id);
+        let mut generics = self.translate_generic_args(args, def_id);
         // The callee's declaration also binds its signature's late-bound regions
-        // (`generic_params_from_fndef`), which the instance's arguments do not carry. Pass them as
+        // (`generic_params_from_fndef`), which the arguments do not carry. Pass them as
         // erased, as Charon's own translation does; Charon's type check rejects the call otherwise.
-        let sig = match instance.ty().kind() {
-            TyKind::RigidTy(RigidTy::FnDef(fndef, _)) => fndef.fn_sig(),
-            _ => panic!("Expected a function type"),
-        };
+        let internal_def_id = rustc_internal::internal(self.tcx, def_id);
+        let sig: PolyFnSig = rustc_internal::stable(
+            self.tcx.fn_sig(internal_def_id).instantiate_identity().skip_normalization(),
+        );
         for _ in late_bound_regions(&sig) {
             generics.regions.push(CharonRegion::Erased);
         }
@@ -1957,7 +2014,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         let projection = self.translate_projection(place, &place.projection);
         let local = place.local;
         let var_id = CharonVarId::from_usize(local);
-        let basetype = self.translate_ty(self.place_ty(&place));
+        let basetype = self.translate_ty(self.local_ty(place.local));
         let mut prjplace = CharonPlace::new(var_id, basetype);
         for (projelem, ty) in projection.iter() {
             prjplace = prjplace.project(projelem.clone(), ty.clone());
@@ -1965,10 +2022,14 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         prjplace
     }
 
-    //Get the Ty of the Place
+    /// The type of `local` in the body being translated, where a place's projections start.
+    fn local_ty(&self, local: Local) -> Ty {
+        self.body_locals[local].ty
+    }
+
+    /// The type of `place` in the body being translated, after its projections.
     fn place_ty(&self, place: &Place) -> Ty {
-        let body = self.instance.body().unwrap();
-        body.local_decl(place.local).unwrap().ty
+        place.ty(&self.body_locals).unwrap()
     }
 
     fn translate_rvalue(&mut self, rvalue: &Rvalue) -> CharonRvalue {
@@ -2023,8 +2084,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                     (*operands).iter().map(|operand| self.translate_operand(operand)).collect();
                 // The type the aggregate builds, as `translate_ty` translates it: for ADTs and
                 // tuples this is the `TypeDeclRef` the aggregate names.
-                let agg_ty =
-                    self.translate_ty(rvalue.ty(self.instance.body().unwrap().locals()).unwrap());
+                let agg_ty = self.translate_ty(rvalue.ty(&self.body_locals).unwrap());
                 match agg_kind.clone() {
                     AggregateKind::Adt(adt_def, variant_id, _genarg, _user_anot, field_id) => {
                         let (c_variant_id, c_field_id) = match adt_def.kind() {
@@ -2104,9 +2164,23 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
                 CharonOperand::Copy(place, proof)
             }
             Operand::Move(place) => CharonOperand::Move(self.translate_place(&place)),
-            // `Operand::RuntimeChecks` (rust-lang/rust#148766) is not yet modeled by the
-            // experimental LLBC backend.
-            Operand::RuntimeChecks(_) => todo!(),
+            // `cfg!(ub_checks)` and friends, decided at codegen time (rust-lang/rust#148766).
+            // MIR keeps them at `-Zmir-opt-level=0`, which LLBC runs use. Charon emits
+            // `NullOp::UbChecks` and co., which mean the session's setting at runtime; a constant
+            // with that setting is the same (Kani does not translate const evaluation).
+            Operand::RuntimeChecks(check) => {
+                let sess = self.tcx.sess;
+                let enabled = match check {
+                    RuntimeChecks::UbChecks => sess.ub_checks(),
+                    RuntimeChecks::ContractChecks => sess.contract_checks(),
+                    RuntimeChecks::OverflowChecks => sess.overflow_checks(),
+                };
+                let bool_ty = CharonTy::new(CharonTyKind::Scalar(CharonLiteralTy::Bool));
+                CharonOperand::Const(CharonConstantExpr::new(
+                    CharonRawConstantExpr::Bool(enabled),
+                    bool_ty,
+                ))
+            }
         }
     }
 
@@ -2139,8 +2213,8 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         trace!("translate_constant_value: {constant:?}");
         match constant.kind() {
             ConstantKind::Allocated(alloc) => self.translate_allocation(alloc, constant.ty()),
-            ConstantKind::Ty(_) => todo!(),
-            // E.g. `()`, which MIR keeps as a constant operand as of nightly-2026-11-11.
+            ConstantKind::Ty(_) => todo!("type-level constant {constant:?}"),
+            // E.g. `()`, which MIR keeps as a constant operand at `-Zmir-opt-level=0`.
             ConstantKind::ZeroSized => self
                 .zero_sized_constant(constant.ty())
                 .unwrap_or_else(|| todo!("zero-sized constant of type {}", constant.ty())),
@@ -2198,7 +2272,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         targets: &SwitchTargets,
     ) -> (CharonSwitchData, CharonVector<CharonBranchId, CharonBlockId>) {
         trace!("translate_switch_targets: {discr:?} {targets:?}");
-        let ty = discr.ty(self.instance.body().unwrap().locals()).unwrap();
+        let ty = discr.ty(&self.body_locals).unwrap();
         let discr = self.translate_operand(discr);
         let switch_ty = self.translate_ty(ty);
         let switch_scalar_ty = *switch_ty.kind().as_scalar().unwrap();
@@ -2234,7 +2308,7 @@ impl<'a, 'tcx> Context<'a, 'tcx> {
         place: &Place,
         projection: &[ProjectionElem],
     ) -> Vec<(CharonProjectionElem, CharonTy)> {
-        let c_place_ty = self.translate_ty(self.place_ty(place));
+        let c_place_ty = self.translate_ty(self.local_ty(place.local));
         let mut c_provec = Vec::new();
         let mut current_ty = c_place_ty.clone();
         let mut current_var: usize = 0;
@@ -2363,17 +2437,19 @@ pub fn prepare_translated_crate(tcx: TyCtxt, translated: &mut CharonTranslatedCr
 
     // As in Charon's `register_target_info`.
     let target_data = &tcx.data_layout;
+    // The alignment of `i8` is not part of the data layout (it is always 1).
+    let i8_align = rustc_abi::Integer::I8.align(target_data).bytes();
     let mut primitive_alignments = charon_lib::ast::SeqHashMap::new();
-    primitive_alignments.insert(CharonLiteralTy::Bool, target_data.i8_align.bytes());
+    primitive_alignments.insert(CharonLiteralTy::Bool, i8_align);
     let int = |ty| CharonLiteralTy::Integer(ty);
     for (ty, alignment) in [
-        (CharonIntegerTy::Signed(CharonIntTy::I8), target_data.i8_align.bytes()),
+        (CharonIntegerTy::Signed(CharonIntTy::I8), i8_align),
         (CharonIntegerTy::Signed(CharonIntTy::I16), target_data.i16_align.bytes()),
         (CharonIntegerTy::Signed(CharonIntTy::I32), target_data.i32_align.bytes()),
         (CharonIntegerTy::Signed(CharonIntTy::I64), target_data.i64_align.bytes()),
         (CharonIntegerTy::Signed(CharonIntTy::I128), target_data.i128_align.bytes()),
         (CharonIntegerTy::Signed(CharonIntTy::Isize), target_data.pointer_align().bytes()),
-        (CharonIntegerTy::Unsigned(CharonUIntTy::U8), target_data.i8_align.bytes()),
+        (CharonIntegerTy::Unsigned(CharonUIntTy::U8), i8_align),
         (CharonIntegerTy::Unsigned(CharonUIntTy::U16), target_data.i16_align.bytes()),
         (CharonIntegerTy::Unsigned(CharonUIntTy::U32), target_data.i32_align.bytes()),
         (CharonIntegerTy::Unsigned(CharonUIntTy::U64), target_data.i64_align.bytes()),
