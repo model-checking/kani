@@ -20,7 +20,7 @@ use rustc_public::CrateDef;
 use rustc_public::abi::{CallConvention, PassMode};
 use rustc_public::mir::Place;
 use rustc_public::mir::mono::Instance;
-use rustc_public::ty::{RigidTy, TyKind};
+use rustc_public::ty::{RigidTy, Ty, TyKind};
 use tracing::{debug, trace};
 
 lazy_static! {
@@ -182,7 +182,7 @@ impl GotocCtx<'_, '_> {
                     arg_type.as_parameter(Some(arg_name.into()), Some(base_name.into()))
                 })
                 .collect();
-            let ret_type = self.codegen_ty_stable(sig.output());
+            let ret_type = self.codegen_ffi_ret_type(sig.output());
             return Type::variadic_code(params, ret_type);
         }
         let fn_abi = instance.fn_abi().unwrap();
@@ -215,12 +215,27 @@ impl GotocCtx<'_, '_> {
                 arg_type.as_parameter(Some(arg_name.into()), Some(base_name.into()))
             })
             .collect();
-        let ret_type = self.codegen_ty_stable(fn_abi.ret.ty);
+        let ret_type = self.codegen_ffi_ret_type(fn_abi.ret.ty);
 
         if fn_abi.c_variadic {
             Type::variadic_code(params, ret_type)
         } else {
             Type::code(params, ret_type)
+        }
+    }
+
+    /// Generate the return type of a foreign function.
+    ///
+    /// A C function returning `void` is declared in Rust as returning `()`, or `!` if it does
+    /// not return. Declare it as returning `void`, not `struct Unit` (or `struct Never`), so that
+    /// it links with its C definition. [`Self::codegen_foreign_call`] does not assign the result
+    /// of such a call.
+    fn codegen_ffi_ret_type(&mut self, ret_ty: Ty) -> Type {
+        let ret_kind = ret_ty.kind();
+        if ret_kind.is_unit() || matches!(ret_kind, TyKind::RigidTy(RigidTy::Never)) {
+            Type::empty()
+        } else {
+            self.codegen_ty_stable(ret_ty)
         }
     }
 
