@@ -49,7 +49,7 @@ KANI_LIB="${KANI_HOME}/lib"
 # Args every case shares. Deliberately omits every flag
 # KANI_REQUIRED_RUSTC_ARGS now defaults: -Cpanic=abort, -Coverflow-checks=on,
 # -Csymbol-mangling-version, -Zalways-encode-mir, -Zpanic_abort_tests,
-# -Zmir-enable-passes, --cfg=kani, --check-cfg=cfg(kani). What remains is
+# -Zmir-enable-passes, --cfg=kani, --check-cfg=cfg(kani), -Zthreads=1. What remains is
 # what every caller still has to pass: install paths, the routing marker,
 # -Zunstable-options (gates `--extern noprelude:`), -Zcrate-attr (errors on
 # duplicate so it stays caller-supplied), and the reachability intent.
