@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 // Test codegen for a raw pointer to a struct whose last field is a slice
 
-#![feature(layout_for_ptr)]
 #![feature(ptr_metadata)]
 
 // https://github.com/model-checking/kani/issues/3615
