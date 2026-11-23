@@ -52,3 +52,16 @@ fn check_static() {
 fn check_mut_static() {
     foo_mut_static(kani::any());
 }
+
+/// Add a contract using a mutable static.
+#[kani::requires(&foo == unsafe { &FOO_MUT })]
+#[kani::panics_if(foo.0 != 1)]
+pub fn foo_mut_static_with_panics_if(foo: Foo) -> Foo {
+    assert!(foo.0 == 1);
+    foo
+}
+
+#[kani::proof_for_contract(foo_mut_static_with_panics_if)]
+fn check_mut_static_with_panics_if() {
+    foo_mut_static_with_panics_if(kani::any());
+}

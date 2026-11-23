@@ -6,7 +6,7 @@ pub struct Counter {\
 // Full name: test::{Counter}::get\
 pub fn get<'_0>(self: &'_0 Counter) -> u32\
 {\
-    let _0: u32; // return\
+    let mut _0: u32; // return\
     let self: &'_ Counter; // arg #1\
 \
     storage_live(_0)\
@@ -18,10 +18,10 @@ pub fn get<'_0>(self: &'_0 Counter) -> u32\
 // Full name: test::main\
 pub fn main()\
 {\
-    let _0: (); // return\
+    let mut _0: (); // return\
     let c: Counter; // local\
-    let _2: u32; // anonymous local\
-    let _3: &'_ Counter; // anonymous local\
+    let mut _2: u32; // anonymous local\
+    let mut _3: &'_ Counter; // anonymous local\
 \
     storage_live(_0)\
     storage_live(c)\
@@ -34,6 +34,7 @@ pub fn main()\
     ↳⚡ undefined_behavior\
     storage_dead(_3)\
     storage_dead(_2)\
+    _0 = ()\
     storage_dead(c)\
     return\
 }

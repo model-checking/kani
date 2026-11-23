@@ -1,0 +1,25 @@
+- Status: FAILURE\
+- Description: "Check that bad is assignable"\
+in function loop_in_iterable_expression
+
+- Status: FAILURE\
+- Description: "Check that bad is assignable"\
+in function loop_in_on_entry
+
+- Status: FAILURE\
+- Description: "Check that bad is assignable"\
+in function first_in_loop_without_contract
+
+- Status: FAILURE\
+- Description: "Check that bad is assignable"\
+in function loop_in_decreases
+
+- Status: FAILURE\
+- Description: "Check that bad is assignable"\
+in function other_invariant_path
+
+- Status: FAILURE\
+- Description: "Check that bad is assignable"\
+in function other_modifies_path
+
+Complete - 0 successfully verified harnesses, 6 failures, 6 total.

@@ -7,3 +7,4 @@ The following are examples of unstable features that are not supported
 in Kani:
  * Generators
  * C-variadics
+ * Explicit tail calls (`become` / `explicit_tail_calls`)

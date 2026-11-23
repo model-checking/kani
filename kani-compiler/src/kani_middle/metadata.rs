@@ -7,7 +7,9 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::kani_middle::codegen_units::Harness;
-use crate::kani_middle::{KaniAttributes, SourceLocation, readable_name, strip_local_crate_prefix};
+use crate::kani_middle::{
+    KaniAttributes, SourceLocation, checked_body, readable_name, strip_local_crate_prefix,
+};
 use kani_metadata::ContractedFunction;
 use kani_metadata::{ArtifactType, HarnessAttributes, HarnessKind, HarnessMetadata};
 use rustc_middle::ty::TyCtxt;
@@ -25,7 +27,7 @@ pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> 
 
     // We get the body span to include the entire function definition.
     // This is required for concrete playback to properly position the generated test.
-    let loc = SourceLocation::new(instance.body().unwrap().span);
+    let loc = SourceLocation::new(checked_body(tcx, instance).unwrap().span);
     let file_stem = format!("{}_{mangled_name}", base_name.file_stem().unwrap().to_str().unwrap());
     let model_file = base_name.with_file_name(file_stem).with_extension(ArtifactType::SymTabGoto);
 
@@ -44,6 +46,7 @@ pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> 
         is_automatically_generated: false,
         is_bounded: false,
         is_ctor_based: false,
+        has_refcount_caveat: false,
     }
 }
 
@@ -69,26 +72,27 @@ pub fn gen_contracts_metadata(
         let attributes = KaniAttributes::for_def_id(tcx, item.def_id());
 
         if attributes.has_contract() {
-            fn_to_data
-                .insert(item.def_id(), ContractedFunction { function, file, harnesses: vec![] });
+            // A harness declared earlier may already have created this entry (#5099), so
+            // keep its harnesses instead of replacing the entry.
+            fn_to_data.entry(item.def_id()).or_insert_with(|| ContractedFunction {
+                function,
+                file,
+                harnesses: vec![],
+            });
         // This logic finds manual contract harnesses only (automatic harnesses are a Kani intrinsic, not crate items annotated with the proof_for_contract attribute).
         } else if let Some(def) = attributes.interpret_for_contract_attribute() {
-            let target_def_id = def.def_id();
-            if let Some(cf) = fn_to_data.get_mut(&target_def_id) {
-                cf.harnesses.push(function);
-            } else {
-                fn_to_data.insert(
-                    target_def_id,
-                    ContractedFunction {
-                        // Note that we use the item's (crate-relative) name, rather than the
-                        // target name specified in the attribute.
-                        // This is necessary for the automatic contract harness lookup, see below.
-                        function: strip_local_crate_prefix(item.name()),
-                        file,
-                        harnesses: vec![function],
-                    },
-                );
-            }
+            fn_to_data
+                .entry(def.def_id())
+                .or_insert_with(|| ContractedFunction {
+                    // Note that we use the target's (crate-relative) name, rather than the
+                    // target name specified in the attribute.
+                    // This is necessary for the automatic contract harness lookup, see below.
+                    function: strip_local_crate_prefix(def.name()),
+                    file: SourceLocation::new(def.span()).filename,
+                    harnesses: vec![],
+                })
+                .harnesses
+                .push(function);
         }
     }
 
@@ -125,13 +129,14 @@ pub fn gen_automatic_proof_metadata(
     harness_mangled_name: String,
     is_bounded: bool,
     is_ctor_based: bool,
+    has_refcount_caveat: bool,
 ) -> HarnessMetadata {
     let def = fn_to_verify.def;
     let pretty_name = readable_name(*fn_to_verify);
     let mangled_name = fn_to_verify.mangled_name();
 
     // Leave the concrete playback instrumentation for now, but this feature does not actually support concrete playback.
-    let loc = SourceLocation::new(fn_to_verify.body().unwrap().span);
+    let loc = SourceLocation::new(checked_body(tcx, *fn_to_verify).unwrap().span);
     let sha1_result = Sha1::try_digest(mangled_name);
     assert!(!sha1_result.has_collision());
     let file_stem = format!(
@@ -169,5 +174,6 @@ pub fn gen_automatic_proof_metadata(
         is_automatically_generated: true,
         is_bounded,
         is_ctor_based,
+        has_refcount_caveat,
     }
 }

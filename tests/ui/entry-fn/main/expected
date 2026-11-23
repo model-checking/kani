@@ -1,4 +1,4 @@
-main.assertion\
+main.panic\
 SUCCESS\
 Some(10).and_then(|v| Some(v * 2)) == Some(20)\
 in function main

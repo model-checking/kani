@@ -9,6 +9,7 @@ use rustc_span::DUMMY_SP;
 use std::collections::HashMap;
 use tracing::{debug, trace};
 
+use crate::kani_middle::attributes::KaniAttributes;
 use kani_metadata::HarnessMetadata;
 use rustc_hir::def_id::DefId;
 use rustc_middle::mir::Const;
@@ -33,6 +34,30 @@ pub fn harness_stub_map(
     let mut stub_pairs = HashMap::default();
     for stubs in &attrs.stubs {
         update_stub_mapping(tcx, def_id.expect_local(), stubs, &mut stub_pairs);
+    }
+
+    let attributes = KaniAttributes::for_item(tcx, def_id);
+    let check_conflict = |target: FnDef, attribute: &str| {
+        let target_id = rustc_internal::internal(tcx, target.def_id());
+        if stub_pairs.contains_key(&target_id) {
+            tcx.dcx().span_err(
+                tcx.def_span(def_id),
+                format!(
+                    "function `{}` cannot be both the target of `#[kani::{attribute}]` and replaced by `#[kani::stub]`",
+                    crate::kani_middle::strip_local_crate_prefix(target.name())
+                ),
+            );
+        }
+    };
+    if let Some(target) = attributes.interpret_for_contract_attribute() {
+        check_conflict(target, "proof_for_contract");
+    }
+    for target in attributes
+        .interpret_stub_verified_attribute()
+        .into_iter()
+        .unique_by(|target| target.def_id())
+    {
+        check_conflict(target, "stub_verified");
     }
     stub_pairs
 }
@@ -78,8 +103,12 @@ pub fn check_compatibility(tcx: TyCtxt, old_def: FnDef, new_def: FnDef) -> Resul
     // TODO: Validate stubs that do not have body.
     // We could potentially look at the function signature to see if they match.
     // However, they will include region information which can make types different.
-    let Some(old_body) = old_def.body() else { return Ok(()) };
-    let Some(new_body) = new_def.body() else { return Ok(()) };
+    let Some(old_body) = crate::kani_middle::checked_fn_def_body(tcx, old_def) else {
+        return Ok(());
+    };
+    let Some(new_body) = crate::kani_middle::checked_fn_def_body(tcx, new_def) else {
+        return Ok(());
+    };
     // Check whether the arities match.
     if old_body.arg_locals().len() != new_body.arg_locals().len() {
         let msg = format!(

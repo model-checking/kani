@@ -10,6 +10,7 @@ use syn::{Block, Stmt};
 
 use super::{
     ContractConditionsData, ContractConditionsHandler, ContractMode, INTERNAL_RESULT_IDENT,
+    INTERNAL_SELF_IDENT,
     helpers::*,
     shared::{build_ensures, split_for_remembers, try_as_result_assign},
 };
@@ -58,6 +59,10 @@ impl<'a> ContractConditionsHandler<'a> {
     fn split_replace(&self, mut stmts: Vec<Stmt>) -> (Vec<Stmt>, Vec<Stmt>) {
         // Pop the return result since we always re-add it.
         stmts.pop();
+        // Likewise the owned-receiver move (when present); re-added at the tail.
+        if stmts.last().is_some_and(is_replace_receiver_move) {
+            stmts.pop();
+        }
 
         let idx = stmts
             .iter()
@@ -81,6 +86,17 @@ impl<'a> ContractConditionsHandler<'a> {
     /// `use_nondet_result` will only be true if this is the first time we are
     /// generating a replace function.
     fn expand_replace_body(&self, before: &[Stmt], after: &[Stmt]) -> TokenStream {
+        // `self` cannot be re-bound like the arguments in `arg_redefinitions`
+        // (it is a keyword), so the replace closure would only borrow an owned
+        // receiver, leaving the annotated function's own scope to drop it, which
+        // `const fn`s whose receiver type has a destructor reject (E0493). Move
+        // it into the closure at the tail of the body, after every borrow of
+        // `self` (preconditions, remembers, modifies havocs, postconditions), so
+        // any drop lands outside const-checking.
+        let recv_move = self.has_owned_receiver().then(|| {
+            let self_repl = Ident::new(INTERNAL_SELF_IDENT, Span::call_site());
+            quote!(let #self_repl = self;)
+        });
         match &self.condition_type {
             ContractConditionsData::Requires { attr } => {
                 let Self { attr_copy, .. } = self;
@@ -91,6 +107,51 @@ impl<'a> ContractConditionsHandler<'a> {
                     #assert_bracketed
                     #(#before)*
                     #(#after)*
+                    #recv_move
+                    #result
+                })
+            }
+            ContractConditionsData::PanicsOnlyIf { attr } => {
+                // After checking the preconditions, the replacement may panic if the condition
+                // holds. The panic is a panic of the caller, checked against the caller's own
+                // contract.
+                let Self { attr_copy, .. } = self;
+                let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
+                let cond = bracket_clause_expr(quote!(#attr));
+                let fn_name = &self.annotated_fn.sig.ident;
+                let (asserts, rest_of_before) = split_for_remembers(before, ContractMode::Replace);
+                quote!({
+                    #(#asserts)*
+                    if #cond && kani::any::<bool>() {
+                        kani::panic(concat!(
+                            "`", stringify!(#fn_name), "` may panic: `panics_only_if(",
+                            stringify!(#attr_copy), ")` held"
+                        ));
+                    }
+                    #(#rest_of_before)*
+                    #(#after)*
+                    #recv_move
+                    #result
+                })
+            }
+            ContractConditionsData::PanicsIf { attr } => {
+                // After checking the preconditions, the replacement panics if the condition holds.
+                let Self { attr_copy, .. } = self;
+                let result = Ident::new(INTERNAL_RESULT_IDENT, Span::call_site());
+                let cond = bracket_clause_expr(quote!(#attr));
+                let fn_name = &self.annotated_fn.sig.ident;
+                let (asserts, rest_of_before) = split_for_remembers(before, ContractMode::Replace);
+                quote!({
+                    #(#asserts)*
+                    if #cond {
+                        kani::panic(concat!(
+                            "`", stringify!(#fn_name), "` panics: `panics_if(",
+                            stringify!(#attr_copy), ")` held"
+                        ));
+                    }
+                    #(#rest_of_before)*
+                    #(#after)*
+                    #recv_move
                     #result
                 })
             }
@@ -107,6 +168,7 @@ impl<'a> ContractConditionsHandler<'a> {
                     #(#rest_of_before)*
                     #(#after)*
                     kani::assume(#ensures_bracketed);
+                    #recv_move
                     #result
                 })
             }
@@ -128,6 +190,7 @@ impl<'a> ContractConditionsHandler<'a> {
                     #(#before)*
                     #(#havoc_stmts)*
                     #(#after)*
+                    #recv_move
                     #result
                 })
             }
@@ -159,6 +222,30 @@ impl<'a> ContractConditionsHandler<'a> {
         let stream = self.expand_replace_body(&before, &after);
         *body = syn::parse2(stream).unwrap();
     }
+}
+
+/// Is this the owned-receiver move statement (`let self_kani_internal = self;`)
+/// that [`ContractConditionsHandler::expand_replace_body`] emits at the tail of a
+/// replace body so the receiver drops inside the closure (see that method).
+fn is_replace_receiver_move(stmt: &syn::Stmt) -> bool {
+    let syn::Stmt::Local(syn::Local {
+        pat: syn::Pat::Ident(syn::PatIdent { ident, .. }),
+        init: Some(syn::LocalInit { expr, diverge: None, .. }),
+        ..
+    }) = stmt
+    else {
+        return false;
+    };
+    // Match the exact statement `expand_replace_body` emits: a bind of
+    // `self_kani_internal` to the bare receiver `self`, and nothing else.
+    ident == INTERNAL_SELF_IDENT
+        && matches!(
+            expr.as_ref(),
+            syn::Expr::Path(p)
+                if p.qself.is_none()
+                    && p.path.segments.len() == 1
+                    && p.path.segments[0].ident == "self"
+        )
 }
 
 /// Is this statement `let result_kani_internal : <...> = kani::any_modifies();`.

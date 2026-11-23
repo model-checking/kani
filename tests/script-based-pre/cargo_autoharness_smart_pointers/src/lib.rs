@@ -3,8 +3,10 @@
 
 // Test that the autoharness subcommand supports Box<T>, Rc<T>, and Arc<T> arguments, both for
 // pointee types that implement Arbitrary and for pointees whose Arbitrary implementation the
-// compiler derives (via the AnyBox/AnyRc/AnyArc models). These values are *unbounded*: a smart
-// pointer to T covers exactly the values of T, so no --bounded-arguments is needed.
+// compiler derives (via the AnyBox/AnyRc/AnyArc models). The pointee is *unbounded*: a smart
+// pointer to T covers all values of T, so no --bounded-arguments is needed. Rc/Arc reference
+// counts, however, are modeled with finitely many states, so those rows are marked "(refcount)"
+// (https://github.com/model-checking/kani/issues/4752).
 // The "TEST NOTE" comments explain the expected result per function.
 
 use std::rc::Rc;

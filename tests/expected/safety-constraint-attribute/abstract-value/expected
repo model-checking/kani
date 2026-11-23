@@ -1,4 +1,4 @@
-Check 1: check_abstract_value.assertion.1\
+Check 1: check_abstract_value.panic.1\
          - Status: SUCCESS\
          - Description: "assertion failed: value.is_safe()"
 

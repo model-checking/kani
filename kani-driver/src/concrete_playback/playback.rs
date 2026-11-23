@@ -52,7 +52,7 @@ fn run_test(exe: &Path, args: &KaniPlaybackArgs) -> Result<()> {
     let mut cmd = Command::new(exe);
 
     if args.playback.common_opts.verbose()
-        && !args.playback.test_args.contains(&"--nocapture".to_string())
+        && !args.playback.test_args.iter().any(|arg| arg == "--nocapture")
     {
         // Repeated arguments cause an execution error.
         cmd.arg("--nocapture");

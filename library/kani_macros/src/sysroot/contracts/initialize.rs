@@ -5,7 +5,7 @@
 
 use proc_macro::{Diagnostic, TokenStream};
 use proc_macro2::TokenStream as TokenStream2;
-use syn::ItemFn;
+use syn::ImplItemFn;
 
 use super::{
     ContractConditionsData, ContractConditionsHandler, ContractConditionsType,
@@ -53,13 +53,19 @@ impl<'a> ContractConditionsHandler<'a> {
     pub fn new(
         contract_typ: ContractConditionsType,
         attr: TokenStream,
-        annotated_fn: &'a mut ItemFn,
+        annotated_fn: &'a ImplItemFn,
         attr_copy: TokenStream2,
     ) -> Result<Self, syn::Error> {
         let mut output = TokenStream2::new();
         let condition_type = match contract_typ {
             ContractConditionsType::Requires => {
                 ContractConditionsData::Requires { attr: syn::parse(attr)? }
+            }
+            ContractConditionsType::PanicsOnlyIf => {
+                ContractConditionsData::PanicsOnlyIf { attr: syn::parse(attr)? }
+            }
+            ContractConditionsType::PanicsIf => {
+                ContractConditionsData::PanicsIf { attr: syn::parse(attr)? }
             }
             ContractConditionsType::Ensures => {
                 ContractConditionsData::Ensures { attr: syn::parse(attr)? }

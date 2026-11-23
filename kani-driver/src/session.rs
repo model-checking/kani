@@ -45,6 +45,16 @@ pub struct KaniSession {
     /// autoharness summary. Only meaningful if the autoharness subcommand is enabled.
     pub autoharness_bounds: AutoharnessBounds,
 
+    /// The loop unwinding bound automatic harnesses fall back to when nothing else sets one, c.f.
+    /// `resolve_unwind_value`. Kept apart from `args.default_unwind`, which applies to every
+    /// harness, so that it does not leak into manual harnesses (#5103). `None` outside autoharness.
+    pub autoharness_default_unwind: Option<u32>,
+
+    /// The timeout automatic harnesses fall back to when `--harness-timeout` is not passed, c.f.
+    /// `resolve_harness_timeout`. Like `autoharness_default_unwind`, it only applies to automatic
+    /// harnesses. `None` outside autoharness.
+    pub autoharness_harness_timeout: Option<Timeout>,
+
     /// The location we found the 'kani_rustc' command
     pub kani_compiler: PathBuf,
     /// The location we found 'kani_lib.c'
@@ -76,6 +86,8 @@ impl KaniSession {
             args,
             autoharness_compiler_flags: None,
             autoharness_bounds: AutoharnessBounds::default(),
+            autoharness_default_unwind: None,
+            autoharness_harness_timeout: None,
             kani_compiler: install.kani_compiler()?,
             kani_lib_c: install.kani_lib_c()?,
             temporaries: Mutex::new(vec![]),
@@ -138,12 +150,12 @@ impl KaniSession {
 
     /// Call [run_terminal_timeout] with the verbosity configured by the user.
     /// The `bool` value indicates whether the command timed out
-    pub fn run_terminal_timeout(&self, cmd: TokioCommand) -> Result<bool> {
-        self.runtime.block_on(run_terminal_timeout(
-            &self.args.common_args,
-            cmd,
-            self.args.harness_timeout,
-        ))
+    pub fn run_terminal_timeout(
+        &self,
+        cmd: TokioCommand,
+        timeout: Option<Timeout>,
+    ) -> Result<bool> {
+        self.runtime.block_on(run_terminal_timeout(&self.args.common_args, cmd, timeout))
     }
 
     /// Call [run_suppress] with the verbosity configured by the user.
@@ -442,6 +454,30 @@ pub fn setup_cargo_command() -> Result<Command> {
     setup_cargo_command_inner(None)
 }
 
+/// `time` as a UTC timestamp, `YYYY-MM-DDTHH:MM:SSZ`, e.g. for file names.
+///
+/// This uses only `std` (the date conversion is Howard Hinnant's `civil_from_days`), so the driver
+/// does not need a date-time crate for this one use.
+fn utc_timestamp(time: std::time::SystemTime) -> String {
+    let secs = time.duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs()) as i64;
+    let (days, rem) = (secs.div_euclid(86_400), secs.rem_euclid(86_400));
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        rem / 3_600,
+        rem % 3_600 / 60,
+        rem % 60
+    )
+}
+
 // Setup the default version of cargo being run, based on the type/mode of installation for kani.
 // Optionally takes a path to output compiler profiling info to.
 // If kani is being run in developer mode, then we use the one provided by rustup as we can assume that the developer will have rustup installed.
@@ -463,7 +499,7 @@ pub fn setup_cargo_command_inner(profiling_out_path: Option<String>) -> Result<C
             {
                 // create temporary flamegraph directory
                 std::fs::create_dir_all(FLAMEGRAPH_DIR)?;
-                let time_postfix = chrono::Local::now().format("%Y-%m-%dT%H:%M:%S");
+                let time_postfix = utc_timestamp(std::time::SystemTime::now());
 
                 let mut cmd = Command::new("samply");
                 cmd.arg("record");
@@ -546,4 +582,23 @@ pub fn get_cargo_path() -> Result<PathBuf> {
     };
 
     Ok(cargo_path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::utc_timestamp;
+    use std::time::{Duration, UNIX_EPOCH};
+
+    #[test]
+    fn utc_timestamp_matches_known_dates() {
+        let cases = [
+            (0, "1970-01-01T00:00:00Z"),
+            (951_782_400, "2000-02-29T00:00:00Z"), // leap day in a year divisible by 400
+            (4_107_542_399, "2100-02-28T23:59:59Z"), // 2100 is not a leap year
+            (1_795_000_000, "2026-11-18T11:06:40Z"),
+        ];
+        for (secs, expected) in cases {
+            assert_eq!(utc_timestamp(UNIX_EPOCH + Duration::from_secs(secs)), expected);
+        }
+    }
 }

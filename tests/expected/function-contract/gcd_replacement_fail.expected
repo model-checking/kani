@@ -1,12 +1,12 @@
-Frac::check_equals.assertion\
+Frac::check_equals.panic\
 - Status: FAILURE\
 - Description: "attempt to calculate the remainder with a divisor of zero"
 
-Frac::check_equals.assertion\
+Frac::check_equals.panic\
 - Status: FAILURE\
 - Description: "assertion failed: self.den % f2.den == 0"
 
-Frac::check_equals.assertion\
+Frac::check_equals.panic\
 - Status: FAILURE\
 - Description: "assertion failed: gcd1 == gcd2"
 

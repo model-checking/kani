@@ -53,6 +53,9 @@ pub enum ParserItem {
     Result {
         result: Vec<Property>,
     },
+    Properties {
+        properties: Vec<ListedProperty>,
+    },
     #[serde(rename_all = "camelCase")]
     ProverStatus {
         _c_prover_status: String,
@@ -84,6 +87,15 @@ pub struct Property {
     pub status: CheckStatus,
     pub reach: Option<CheckStatus>,
     pub trace: Option<Vec<TraceItem>>,
+}
+
+/// Struct that represents a single property listed by `--show-properties`.
+#[derive(Clone, Debug, Deserialize)]
+pub struct ListedProperty {
+    pub description: String,
+    pub name: String,
+    #[serde(rename = "sourceLocation")]
+    pub source_location: SourceLocation,
 }
 
 /// CBMC's somewhat-ish consistent format for naming properties.
@@ -853,6 +865,35 @@ mod tests {
         let result_struct: Result<ResultStruct, _> = serde_json::from_str(data);
         assert!(parser_item.is_ok());
         assert!(result_struct.is_ok());
+    }
+
+    /// Checks that a CBMC "properties" item, as printed by `--show-properties`,
+    /// can be deserialized into a `ParserItem`.
+    #[test]
+    fn check_properties_deserialization_works() {
+        let data = r#"{
+            "properties": [
+                {
+                    "class": "assertion",
+                    "description": "assertion failed: x.wrapping_add(0) == x",
+                    "expression": "x == x",
+                    "name": "main.assertion.1",
+                    "sourceLocation": {
+                        "column": "5",
+                        "comment": "assertion failed: x.wrapping_add(0) == x",
+                        "file": "/home/ubuntu/main.rs",
+                        "function": "main",
+                        "line": "9",
+                        "propertyClass": "assertion",
+                        "propertyId": "main.assertion.1"
+                    }
+                }
+            ]
+        }"#;
+        let parser_item: ParserItem = serde_json::from_str(data).unwrap();
+        assert!(
+            matches!(parser_item, ParserItem::Properties { properties } if properties[0].name == "main.assertion.1")
+        );
     }
 
     #[test]

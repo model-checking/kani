@@ -1,0 +1,3 @@
+error: nested quantifier predicates containing checks or function calls are not supported
+issue_4902.rs:8:18
+error: aborting due to 1 previous error

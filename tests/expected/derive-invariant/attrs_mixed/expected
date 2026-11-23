@@ -1,8 +1,8 @@
-Check 1: check_safety_constraint_cfg.assertion.1\
+Check 1: check_safety_constraint_cfg.panic.1\
          - Status: SUCCESS\
          - Description: "assertion failed: pos_point.x >= 0"
 
-Check 2: check_safety_constraint_cfg.assertion.2\
+Check 2: check_safety_constraint_cfg.panic.2\
          - Status: SUCCESS\
          - Description: "assertion failed: pos_point.y >= 0"
 

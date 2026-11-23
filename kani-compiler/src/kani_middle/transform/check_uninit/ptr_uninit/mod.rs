@@ -5,7 +5,8 @@
 //! uninitialized memory via raw pointers.
 
 use crate::args::ExtraChecks;
-use crate::kani_middle::kani_functions::{KaniFunction, KaniModel};
+use crate::kani_middle::attributes::attrs_by_path;
+use crate::kani_middle::kani_functions::{KaniFunction, KaniIntrinsic, KaniModel};
 use crate::kani_middle::transform::{
     TransformPass, TransformationType,
     body::{CheckType, InsertPosition, MutableBody, SourceInstruction},
@@ -70,7 +71,7 @@ impl TransformPass for UninitPass {
             self.safety_check_type.clone(),
             self.unsupported_check_type.clone(),
             &mut self.mem_init_fn_cache,
-            CheckUninitVisitor::new(),
+            CheckUninitVisitor::new(tcx, instance),
         );
 
         (changed || instrumentation_added, body)
@@ -79,6 +80,13 @@ impl TransformPass for UninitPass {
 
 /// Checks if the instance is a harness -- an entry point of Kani analysis.
 fn is_harness(instance: Instance, tcx: TyCtxt) -> bool {
+    // Automatic harnesses have a generated wrapper body but retain the intrinsic DefId.
+    if matches!(
+        KaniFunction::try_from(instance),
+        Ok(KaniFunction::Intrinsic(KaniIntrinsic::AutomaticHarness))
+    ) {
+        return true;
+    }
     let harness_identifiers = [
         vec![
             rustc_span::symbol::Symbol::intern("kanitool"),
@@ -90,7 +98,7 @@ fn is_harness(instance: Instance, tcx: TyCtxt) -> bool {
         ],
     ];
     harness_identifiers.iter().any(|attr_path| {
-        tcx.get_attrs_by_path(rustc_internal::internal(tcx, instance.def.def_id()), attr_path)
+        attrs_by_path(tcx, rustc_internal::internal(tcx, instance.def.def_id()), attr_path)
             .next()
             .is_some()
     })

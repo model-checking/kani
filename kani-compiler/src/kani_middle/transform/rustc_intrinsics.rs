@@ -6,7 +6,9 @@
 //! Note that some rustc intrinsics are lowered to MIR instructions. Those can also be handled
 //! here.
 
+use crate::args::BackendOption;
 use crate::intrinsics::Intrinsic;
+use crate::kani_middle::codegen_units::Stubs;
 use crate::kani_middle::kani_functions::{KaniFunction, KaniModel};
 use crate::kani_middle::transform::body::{
     InsertPosition, MutMirVisitor, MutableBody, SourceInstruction,
@@ -32,6 +34,10 @@ use tracing::debug;
 pub struct RustcIntrinsicsPass {
     /// Used to cache FnDef lookups for intrinsics models.
     models: HashMap<KaniModel, FnDef>,
+    /// The enabled user stubs, which take precedence over Kani's own models.
+    stubs: Stubs,
+    /// Lower native assertion failures only for GOTO, which hooks `PanicStub`.
+    lower_assert_failures: bool,
 }
 
 impl TransformPass for RustcIntrinsicsPass {
@@ -55,8 +61,14 @@ impl TransformPass for RustcIntrinsicsPass {
         debug!(function=?instance.name(), "transform");
 
         let mut new_body = MutableBody::from(body);
-        let mut visitor =
-            ReplaceIntrinsicCallVisitor::new(&self.models, new_body.locals().to_vec(), tcx);
+        let mut visitor = ReplaceIntrinsicCallVisitor {
+            models: &self.models,
+            stubs: &self.stubs,
+            locals: new_body.locals().to_vec(),
+            tcx,
+            lower_assert_failures: self.lower_assert_failures,
+            changed: false,
+        };
         visitor.visit_body(&mut new_body);
         let changed = self.replace_lowered_intrinsics(tcx, &mut new_body);
         (visitor.changed || changed, new_body.into())
@@ -71,8 +83,39 @@ fn is_panic_function(tcx: &TyCtxt, def_id: rustc_public::DefId) -> bool {
         || Some(def_id) == tcx.lang_items().begin_panic_fn()
 }
 
+/// Static diagnostics for the assertion failure entries alongside `panic_fmt`.
+fn core_assert_failure_message(tcx: TyCtxt, def_id: rustc_public::DefId) -> Option<&'static str> {
+    let def_id = rustc_internal::internal(tcx, def_id);
+    let panic_fmt = tcx.lang_items().panic_fmt()?;
+    if def_id.krate != panic_fmt.krate || tcx.opt_parent(def_id) != tcx.opt_parent(panic_fmt) {
+        return None;
+    }
+    match tcx.opt_item_name(def_id)?.as_str() {
+        "assert_failed" | "assert_failed_inner" => Some("assertion failed"),
+        "assert_matches_failed" => Some("pattern assertion failed"),
+        _ => None,
+    }
+}
+
+/// The Kani model of `def_id` if it is one of the `core::fmt::Formatter` helpers that
+/// `derive(Debug)` calls and that look up names with `memchr` (see the models in `kani_core`).
+fn fmt_derive_helper_model(tcx: &TyCtxt, def_id: rustc_public::DefId) -> Option<KaniModel> {
+    let def_id = rustc_internal::internal(*tcx, def_id);
+    let impl_id = tcx.impl_of_assoc(def_id)?;
+    let self_ty = tcx.type_of(impl_id).instantiate_identity().skip_normalization();
+    let rustc_middle::ty::Adt(adt, _) = self_ty.kind() else { return None };
+    if tcx.get_diagnostic_item(rustc_span::Symbol::intern("Formatter")) != Some(adt.did()) {
+        return None;
+    }
+    match tcx.item_name(def_id).as_str() {
+        "debug_struct_fields_finish" => Some(KaniModel::DebugStructFieldsFinish),
+        "debug_c_like_enum_write_str" => Some(KaniModel::DebugCLikeEnumWriteStr),
+        _ => None,
+    }
+}
+
 impl RustcIntrinsicsPass {
-    pub fn new(queries: &QueryDb) -> Self {
+    pub fn new(queries: &QueryDb, tcx: TyCtxt, stubs: &Stubs) -> Self {
         let models = queries
             .kani_functions()
             .iter()
@@ -81,7 +124,12 @@ impl RustcIntrinsicsPass {
             })
             .collect();
         debug!(?models, "RustcIntrinsicsPass::new");
-        RustcIntrinsicsPass { models }
+        let args = queries.args();
+        let stubs = if args.stubbing_enabled { stubs.clone() } else { Stubs::new() };
+        // Lowering an outer assertion entry would bypass a stub of an inner one.
+        let lower_assert_failures = args.backend == BackendOption::CProver
+            && !stubs.keys().any(|def| core_assert_failure_message(tcx, def.0).is_some());
+        RustcIntrinsicsPass { models, stubs, lower_assert_failures }
     }
 
     /// This function checks if we need to replace intrinsics that have been lowered.
@@ -144,19 +192,11 @@ impl RustcIntrinsicsPass {
 
 struct ReplaceIntrinsicCallVisitor<'a, 'tcx> {
     models: &'a HashMap<KaniModel, FnDef>,
+    stubs: &'a Stubs,
     locals: Vec<LocalDecl>,
     tcx: TyCtxt<'tcx>,
+    lower_assert_failures: bool,
     changed: bool,
-}
-
-impl<'a, 'tcx> ReplaceIntrinsicCallVisitor<'a, 'tcx> {
-    fn new(
-        models: &'a HashMap<KaniModel, FnDef>,
-        locals: Vec<LocalDecl>,
-        tcx: TyCtxt<'tcx>,
-    ) -> Self {
-        ReplaceIntrinsicCallVisitor { models, locals, changed: false, tcx }
-    }
 }
 
 impl MutMirVisitor for ReplaceIntrinsicCallVisitor<'_, '_> {
@@ -171,10 +211,16 @@ impl MutMirVisitor for ReplaceIntrinsicCallVisitor<'_, '_> {
     /// Note that we only need to replace function calls since intrinsics must always be called
     /// directly. I.e., no need to handle function pointers.
     fn visit_terminator(&mut self, term: &mut Terminator) {
-        if let TerminatorKind::Call { func, .. } = &mut term.kind
-            && let TyKind::RigidTy(RigidTy::FnDef(def, args)) =
+        if let TerminatorKind::Call { func, args: operands, .. } = &mut term.kind
+            && let TyKind::RigidTy(RigidTy::FnDef(def, mut args)) =
                 func.ty(&self.locals).unwrap().kind()
         {
+            // Cut off assertion formatting before reachability.
+            let assertion_message = if self.lower_assert_failures {
+                core_assert_failure_message(self.tcx, def.0)
+            } else {
+                None
+            };
             // Get the model we should use to replace this function call, if any.
             let replacement_model = if def.is_intrinsic() {
                 let instance = Instance::resolve(def, &args).unwrap();
@@ -192,9 +238,36 @@ impl MutMirVisitor for ReplaceIntrinsicCallVisitor<'_, '_> {
                         return self.super_terminator(term);
                     }
                 }
-            } else if is_panic_function(&self.tcx, def.0) {
-                // If we find a panic function, we replace it with our stub.
+            } else if is_panic_function(&self.tcx, def.0) || assertion_message.is_some() {
+                if let Some(message) = assertion_message {
+                    // The stub takes a string for its diagnostic. GOTO still evaluates
+                    // the original operands after it and before emitting the property.
+                    operands.insert(
+                        0,
+                        Operand::Constant(ConstOperand {
+                            span: term.source_info.span,
+                            user_ty: None,
+                            const_: MirConst::from_str(message),
+                        }),
+                    );
+                }
+                // PanicStub is non-generic, including when it replaces `begin_panic::<M>`.
+                args.0.clear();
                 self.models[&KaniModel::PanicStub]
+            } else if let Some(model) = fmt_derive_helper_model(&self.tcx, def.0)
+                // A user stub of the helper replaces its body (`FnStubPass`); redirecting the
+                // call to the model would bypass it.
+                && !self.stubs.contains_key(&def)
+            {
+                // The models are free functions with no generic parameters, while the
+                // `Formatter` methods they replace have (erased) lifetime parameters.
+                let new_instance =
+                    Instance::resolve(self.models[&model], &GenericArgs(vec![])).unwrap();
+                let literal = MirConst::try_new_zero_sized(new_instance.ty()).unwrap();
+                let span = term.source_info.span;
+                *func = Operand::Constant(ConstOperand { span, user_ty: None, const_: literal });
+                self.changed = true;
+                return self.super_terminator(term);
             } else {
                 return self.super_terminator(term);
             };

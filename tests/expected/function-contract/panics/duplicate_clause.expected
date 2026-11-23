@@ -1,0 +1,3 @@
+error: a function may have at most one `#[kani::panics_only_if]` clause
+error: a function may have at most one `#[kani::panics_if]` clause
+error: aborting due to 2 previous errors

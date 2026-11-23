@@ -21,6 +21,9 @@ impl<'a> ContractConditionsHandler<'a> {
     ///
     /// Wraps the conditions from this attribute around `self.body`.
     pub fn make_check_body(&self, mut body_stmts: Vec<Stmt>) -> TokenStream2 {
+        if let Some(error) = duplicate_panic_clause(&self.condition_type, &body_stmts) {
+            return error;
+        }
         let Self { attr_copy, .. } = self;
         match &self.condition_type {
             ContractConditionsData::Requires { attr } => {
@@ -28,6 +31,43 @@ impl<'a> ContractConditionsHandler<'a> {
                 quote!({
                     #assume_bracketed
                     #(#body_stmts)*
+                })
+            }
+            ContractConditionsData::PanicsOnlyIf { attr } => {
+                // Record on entry, after the preconditions are assumed, whether a panic is
+                // permitted, so that Kani checks every panic of the body against it. The
+                // permission is restored when the function returns.
+                let cond = bracket_clause_expr(quote!(#attr));
+                let return_expr = body_stmts.pop();
+                let (assumes, rest_of_body) =
+                    split_for_remembers(&body_stmts[..], ContractMode::SimpleCheck);
+                quote!({
+                    #(#assumes)*
+                    let __kani_panics_only_if_prev = kani::internal::set_panics_only_if(#cond);
+                    #(#rest_of_body)*
+                    kani::internal::restore_panic_permission(__kani_panics_only_if_prev);
+                    #return_expr
+                })
+            }
+            ContractConditionsData::PanicsIf { attr } => {
+                // As for `panics_only_if`, and additionally check on return that the condition
+                // did not hold: if it held, the function must have panicked.
+                let cond = bracket_clause_expr(quote!(#attr));
+                let return_expr = body_stmts.pop();
+                let (assumes, rest_of_body) =
+                    split_for_remembers(&body_stmts[..], ContractMode::SimpleCheck);
+                quote!({
+                    #(#assumes)*
+                    let __kani_panics_if_cond: bool = #cond;
+                    let __kani_panics_if_prev =
+                        kani::internal::set_panics_if(__kani_panics_if_cond);
+                    #(#rest_of_body)*
+                    kani::assert(
+                        !__kani_panics_if_cond,
+                        concat!("returned although `panics_if(", stringify!(#attr_copy), ")` held"),
+                    );
+                    kani::internal::restore_panic_permission(__kani_panics_if_prev);
+                    #return_expr
                 })
             }
             ContractConditionsData::Ensures { attr } => {
@@ -185,6 +225,15 @@ impl<'a> ContractConditionsHandler<'a> {
             .unwrap_or(false)
     }
 
+    /// Return whether the original function takes `self` by value (an owned
+    /// receiver), e.g. `fn into_inner(self)`.
+    pub fn has_owned_receiver(&self) -> bool {
+        let first_arg = self.annotated_fn.sig.inputs.first();
+        first_arg
+            .map(|arg| matches!(arg, FnArg::Receiver(syn::Receiver { reference: None, .. },)))
+            .unwrap_or(false)
+    }
+
     /// Generate argument re-definitions for arguments.
     ///
     /// This is used so Kani doesn't think that modifying a local argument value is a side effect,
@@ -207,5 +256,41 @@ impl<'a> ContractConditionsHandler<'a> {
             FnArg::Receiver(_) => vec![],
             FnArg::Typed(typed) => pat_to_bindings(typed.pat.as_ref()),
         })
+    }
+}
+
+/// A compile error if `body` already records a clause of the same panic kind as `condition`.
+///
+/// `contract_main` rejects a second clause by its attribute name, but a renamed import (`use
+/// kani::panics_if as p;`) escapes that check. The expansion of the first clause stays in the
+/// check closure, so look for its call to the matching `set_*` function instead.
+fn duplicate_panic_clause(
+    condition: &ContractConditionsData,
+    body: &[Stmt],
+) -> Option<TokenStream2> {
+    let (setter, clause) = match condition {
+        ContractConditionsData::PanicsOnlyIf { .. } => ("set_panics_only_if", "panics_only_if"),
+        ContractConditionsData::PanicsIf { .. } => ("set_panics_if", "panics_if"),
+        _ => return None,
+    };
+    let records_clause = body
+        .iter()
+        .any(|stmt| quote!(#stmt).into_iter().any(|token| token_mentions(&token, setter)));
+    records_clause.then(|| {
+        let message = format!("a function may have at most one `#[kani::{clause}]` clause");
+        let error = syn::Error::new(Span::call_site(), message).into_compile_error();
+        // The result replaces the check closure's body, which must be a block.
+        quote!({ #error })
+    })
+}
+
+/// Whether `token`, or any token nested in it, is the identifier `name`.
+fn token_mentions(token: &proc_macro2::TokenTree, name: &str) -> bool {
+    match token {
+        proc_macro2::TokenTree::Ident(ident) => ident == name,
+        proc_macro2::TokenTree::Group(group) => {
+            group.stream().into_iter().any(|token| token_mentions(&token, name))
+        }
+        _ => false,
     }
 }

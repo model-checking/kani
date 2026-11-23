@@ -16,12 +16,12 @@ Kani generated automatic harnesses for 5 function(s):
 Skipped Functions: None. Kani generated automatic harnesses for all functions in the available crate(s).
 
 Autoharness: Checking function panic against all possible inputs...
-panic.assertion\
+panic.panic\
 	 - Status: FAILURE\
 	 - Description: "explicit panic"
 
 Autoharness: Checking function integer_overflow against all possible inputs...
-assertion\
+panic\
 	 - Status: FAILURE
 	 - Description: "attempt to add with overflow"
 
@@ -31,7 +31,7 @@ oob_unsafe_array_access.pointer_dereference\
 	 - Description: "dereference failure: pointer outside object bounds"
 
 Autoharness: Checking function oob_safe_array_access against all possible inputs...
-assertion\
+panic\
 	- Status: FAILURE\
 	- Description: "index out of bounds: the length is less than or equal to the given index"
 
@@ -41,12 +41,12 @@ arithmetic_overflow\
 	 - Description: "attempt to compute `unchecked_mul` which would overflow"
 
 Checking harness panic_harness...
-panic.assertion\
+panic.panic\
 	 - Status: FAILURE\
 	 - Description: "explicit panic"
 
 Checking harness integer_overflow_harness...
-assertion\
+panic\
 	 - Status: FAILURE\
 	 - Description: "attempt to add with overflow"
 
@@ -55,7 +55,7 @@ oob_unsafe_array_access.pointer_dereference\
 	 - Status: FAILURE\
 
 Checking harness oob_safe_array_access_harness...
-assertion\
+panic\
 	 - Status: FAILURE\
 	 - Description: "index out of bounds: the length is less than or equal to the given index"
 
@@ -86,6 +86,6 @@ Autoharness Summary:
 |----------------------------------+-------------------------+---------------------------+---------------------|
 | cargo_autoharness_harnesses_fail | unchecked_mul           | #[kani::proof]            | Failure             |
 +----------------------------------+-------------------------+---------------------------+---------------------+
-Note that `kani autoharness` sets default --harness-timeout of 60s and --default-unwind of 20.
+Note that `kani autoharness` sets default --harness-timeout of 60s and --default-unwind of 20 for automatic harnesses.
 If verification failed because of timing out or too low of an unwinding bound, try passing larger values for these arguments (or, if possible, writing a loop contract).
 Complete - 0 successfully verified functions, 5 failures, 5 total.
