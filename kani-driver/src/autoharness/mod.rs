@@ -12,7 +12,7 @@ use crate::args::common::UnstableFeature;
 use crate::call_cbmc::VerificationStatus;
 use crate::harness_runner::HarnessResult;
 use crate::list::collect_metadata::process_metadata;
-use crate::list::output::output_list_results;
+use crate::list::output::{default_list_dir, output_list_results};
 use crate::project::{Project, standalone_project, std_project};
 use crate::session::KaniSession;
 use crate::util::warning;
@@ -138,11 +138,14 @@ fn postprocess_project(
         print_autoharness_metadata(project.metadata.clone());
     }
     if common_autoharness_args.list {
+        let output_dir = common_autoharness_args
+            .output
+            .unwrap_or_else(|| default_list_dir(&project, session.args.target_dir.as_deref()));
         let list_metadata = process_metadata(project.metadata.clone());
         return output_list_results(
             list_metadata,
             common_autoharness_args.format,
-            common_autoharness_args.output.as_deref(),
+            &output_dir,
             session.args.common_args.quiet,
         );
     }

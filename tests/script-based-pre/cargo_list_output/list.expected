@@ -1,3 +1,5 @@
+target/kani/kani-list.json
+target/other/kani/kani-list.json
 target/list-output/kani-list.json
 target/list-output/kani-list.md
 "verify::check_plain"

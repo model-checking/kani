@@ -17,8 +17,8 @@ pub struct CargoListArgs {
     #[clap(long, default_value = "pretty")]
     pub format: Format,
 
-    /// Write `kani-list.md` or `kani-list.json` to this directory instead of the current
-    /// directory. Kani creates the directory if it does not exist.
+    /// Write `kani-list.md` or `kani-list.json` to this directory instead of
+    /// `<target-dir>/kani/`. Kani creates the directory if it does not exist.
     #[arg(long, value_name = "DIR")]
     pub output: Option<PathBuf>,
 }

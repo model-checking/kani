@@ -5,7 +5,7 @@ The `list` subcommand provides an overview of harnesses and contracts in the pro
 ## Usage
 For basic usage, run `cargo kani list` or `kani list <FILE>`. The current options are:
 - `--format [pretty|markdown|json]`: Choose output format
-- `--output <DIR>`: Write `kani-list.md` or `kani-list.json` to `DIR` instead of the current directory. Kani creates `DIR` if it does not exist
+- `--output <DIR>`: Write `kani-list.md` or `kani-list.json` to `DIR` instead of the default location. Kani creates `DIR` if it does not exist
 - `--std`: List harnesses and contracts in the standard library (standalone `kani` only)
 
 The default format is `pretty`, which prints a table to the terminal, e.g:
@@ -43,7 +43,7 @@ Standard Harnesses (#[kani::proof]):
 The "Contracts" table shows functions that have contract attributes (`#[requires]`, `#[ensures]`, or `modifies`), and which harnesses exist for those functions.
 The "Standard Harnesses" table lists all of the `#[kani::proof]` harnesses found.
 
-The `markdown` and `json` options write the same information to Markdown or JSON files, respectively.
+The `markdown` and `json` options write the same information to Markdown or JSON files, respectively. `cargo kani list` writes `kani-list.md` or `kani-list.json` to `<target-dir>/kani/`, where `<target-dir>` is the cargo target directory, usually `target`. `kani list` writes them to the current directory.
 
 For `--std`, ensure that the provided path points to a local copy of the standard library, e.g. `kani list --std rust/library`. (Compiling the standard library [works differently](https://doc.rust-lang.org/cargo/reference/unstable.html#build-std) than compiling a normal Rust project, hence the separate option).
 

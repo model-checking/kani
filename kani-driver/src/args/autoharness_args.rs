@@ -93,7 +93,8 @@ pub struct CommonAutoharnessArgs {
     pub format: Format,
 
     /// Write the `list` results, `kani-list.md` or `kani-list.json`, to this directory instead of
-    /// the current directory. Kani creates the directory if it does not exist. Requires --list.
+    /// `<target-dir>/kani/` (`cargo kani`) or the current directory (`kani`). Kani creates the
+    /// directory if it does not exist. Requires --list.
     #[arg(long, value_name = "DIR", requires = "list")]
     pub output: Option<PathBuf>,
 }
