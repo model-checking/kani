@@ -15,7 +15,7 @@ use crate::{
     list::{ListMetadata, merge_list_metadata},
     version::KANI_VERSION,
 };
-use anyhow::Result;
+use anyhow::{Context, Result};
 use comfy_table::Table as PrettyTable;
 use serde_json::json;
 use to_markdown_table::MarkdownTable;
@@ -26,15 +26,18 @@ const FILE_VERSION: &str = "0.1";
 const OUTPUT_FILENAME: &str = "kani-list";
 
 /// Output the results of the list subcommand.
+/// The `markdown` and `json` formats write `kani-list.md` or `kani-list.json` to `output_dir`,
+/// creating it if needed, or to the current directory when `output_dir` is `None`.
 pub fn output_list_results(
     list_metadata: BTreeSet<ListMetadata>,
     format: Format,
+    output_dir: Option<&Path>,
     quiet: bool,
 ) -> Result<()> {
     match format {
         Format::Pretty => pretty(list_metadata),
-        Format::Markdown => markdown(list_metadata, quiet),
-        Format::Json => json(list_metadata, quiet),
+        Format::Markdown => markdown(list_metadata, output_dir, quiet),
+        Format::Json => json(list_metadata, output_dir, quiet),
     }
 }
 
@@ -89,11 +92,20 @@ fn pretty(list_metadata: BTreeSet<ListMetadata>) -> Result<()> {
 }
 
 /// Output results to a Markdown file.
-fn markdown(list_metadata: BTreeSet<ListMetadata>, quiet: bool) -> Result<()> {
+fn markdown(
+    list_metadata: BTreeSet<ListMetadata>,
+    output_dir: Option<&Path>,
+    quiet: bool,
+) -> Result<()> {
     let (contract_output, standard_output) = construct_output(list_metadata, markdown_constructor)?;
 
-    let out_path = Path::new(OUTPUT_FILENAME).with_extension("md");
-    let mut out_file = File::create(&out_path).unwrap();
+    let out_dir = output_dir.unwrap_or(Path::new("."));
+    std::fs::create_dir_all(out_dir).with_context(|| {
+        format!("Failed to create list output directory `{}`", out_dir.display())
+    })?;
+    let out_path = out_dir.join(OUTPUT_FILENAME).with_extension("md");
+    let mut out_file = File::create(&out_path)
+        .with_context(|| format!("Failed to create list output file `{}`", out_path.display()))?;
     out_file.write_all(contract_output.as_bytes()).unwrap();
     out_file.write_all(standard_output.as_bytes()).unwrap();
     if !quiet {
@@ -103,9 +115,18 @@ fn markdown(list_metadata: BTreeSet<ListMetadata>, quiet: bool) -> Result<()> {
 }
 
 /// Output results as a JSON file.
-fn json(list_metadata: BTreeSet<ListMetadata>, quiet: bool) -> Result<()> {
-    let out_path = Path::new(OUTPUT_FILENAME).with_extension("json");
-    let out_file = File::create(&out_path).unwrap();
+fn json(
+    list_metadata: BTreeSet<ListMetadata>,
+    output_dir: Option<&Path>,
+    quiet: bool,
+) -> Result<()> {
+    let out_dir = output_dir.unwrap_or(Path::new("."));
+    std::fs::create_dir_all(out_dir).with_context(|| {
+        format!("Failed to create list output directory `{}`", out_dir.display())
+    })?;
+    let out_path = out_dir.join(OUTPUT_FILENAME).with_extension("json");
+    let out_file = File::create(&out_path)
+        .with_context(|| format!("Failed to create list output file `{}`", out_path.display()))?;
     let writer = BufWriter::new(out_file);
 
     let combined_md = merge_list_metadata(list_metadata);

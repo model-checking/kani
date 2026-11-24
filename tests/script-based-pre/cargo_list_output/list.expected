@@ -1,0 +1,4 @@
+target/list-output/kani-list.json
+target/list-output/kani-list.md
+"verify::check_plain"
+| cargo_list_output | verify::check_plain |

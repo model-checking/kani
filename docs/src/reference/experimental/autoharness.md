@@ -196,7 +196,7 @@ Use `--list --format <FORMAT>` to choose the output format:
 | `markdown` | Write `kani-list.md` in the current directory. |
 | `json` | Write `kani-list.json` in the current directory. |
 
-For file-based formats, Kani prints the path of the written file. The `--format` option requires `--list`. Combining `--quiet` with `--list --format pretty` is not supported.
+For file-based formats, Kani prints the path of the written file. Pass `--output <DIR>` to write that file into `DIR` instead. The `--format` and `--output` options require `--list`. Combining `--quiet` with `--list --format pretty` is not supported.
 
 For example:
 

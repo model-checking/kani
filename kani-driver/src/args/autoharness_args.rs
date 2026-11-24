@@ -91,6 +91,11 @@ pub struct CommonAutoharnessArgs {
     /// The format of the `list` output. Requires --list.
     #[arg(long, default_value = "pretty", requires = "list")]
     pub format: Format,
+
+    /// Write the `list` results, `kani-list.md` or `kani-list.json`, to this directory instead of
+    /// the current directory. Kani creates the directory if it does not exist. Requires --list.
+    #[arg(long, value_name = "DIR", requires = "list")]
+    pub output: Option<PathBuf>,
 }
 
 /// The bounds automatic harnesses use for arguments that can only be generated up to a bound,
@@ -204,6 +209,27 @@ impl ValidateArgs for CommonAutoharnessArgs {
                     format!("`{option}` must be at least 1."),
                 ));
             }
+        }
+
+        // `pretty` prints to the terminal, so `--output` would have nothing to write.
+        if self.format == Format::Pretty && self.output.is_some() {
+            return Err(Error::raw(
+                ErrorKind::ArgumentConflict,
+                "The `--output` flag is not compatible with the `pretty` format, since `pretty` prints to the terminal. Either specify `--format markdown` or `--format json`, or don't pass `--output`.",
+            ));
+        }
+
+        if let Some(output) = &self.output
+            && output.exists()
+            && !output.is_dir()
+        {
+            return Err(Error::raw(
+                ErrorKind::InvalidValue,
+                format!(
+                    "Invalid argument: `--output` argument `{}` is not a directory",
+                    output.display()
+                ),
+            ));
         }
 
         Ok(())
@@ -373,6 +399,22 @@ mod tests {
         assert_eq!(args.slice_bound, AUTOHARNESS_SLICE_BOUND);
         assert_eq!(args.string_bound, AUTOHARNESS_STR_BOUND);
         assert_eq!(args.bounded_arbitrary_bound, AUTOHARNESS_BOUNDED_ARBITRARY_BOUND);
+    }
+
+    #[test]
+    fn output_requires_list() {
+        let err = CommonAutoharnessArgs::try_parse_from(["autoharness", "--output", "out"])
+            .expect_err("expected --output to require --list");
+        assert_eq!(err.kind(), ErrorKind::MissingRequiredArgument);
+    }
+
+    #[test]
+    fn output_conflicts_with_pretty_format() {
+        let args =
+            CommonAutoharnessArgs::try_parse_from(["autoharness", "--list", "--output", "out"])
+                .expect("--output parses with --list; validation rejects the pretty format");
+        let err = args.validate().expect_err("expected --output to reject the pretty format");
+        assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
     }
 
     /// Both subcommand forms reject `--constructor-args` with `--output-format=old`, and accept

@@ -5,6 +5,7 @@ The `list` subcommand provides an overview of harnesses and contracts in the pro
 ## Usage
 For basic usage, run `cargo kani list` or `kani list <FILE>`. The current options are:
 - `--format [pretty|markdown|json]`: Choose output format
+- `--output <DIR>`: Write `kani-list.md` or `kani-list.json` to `DIR` instead of the current directory. Kani creates `DIR` if it does not exist
 - `--std`: List harnesses and contracts in the standard library (standalone `kani` only)
 
 The default format is `pretty`, which prints a table to the terminal, e.g:

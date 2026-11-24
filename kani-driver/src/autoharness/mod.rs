@@ -142,6 +142,7 @@ fn postprocess_project(
         return output_list_results(
             list_metadata,
             common_autoharness_args.format,
+            common_autoharness_args.output.as_deref(),
             session.args.common_args.quiet,
         );
     }

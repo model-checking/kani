@@ -82,7 +82,7 @@ pub fn list_cargo(args: CargoListArgs, mut verify_opts: VerificationArgs) -> Res
     let project = cargo_project(&mut session, false)?;
     let list_metadata = process_metadata(project.metadata);
 
-    output_list_results(list_metadata, args.format, quiet)
+    output_list_results(list_metadata, args.format, args.output.as_deref(), quiet)
 }
 
 pub fn list_standalone(args: StandaloneListArgs, mut verify_opts: VerificationArgs) -> Result<()> {
@@ -102,5 +102,5 @@ pub fn list_standalone(args: StandaloneListArgs, mut verify_opts: VerificationAr
 
     let list_metadata = process_metadata(project.metadata);
 
-    output_list_results(list_metadata, args.format, quiet)
+    output_list_results(list_metadata, args.format, args.output.as_deref(), quiet)
 }
