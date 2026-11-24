@@ -120,7 +120,7 @@ macro_rules! kani_mem_init {
                         // Note that this preserves the value.
                     }
                 } else {
-                    self.bless::<LAYOUT_SIZE>(to_ptr, 1);
+                    self.bless::<LAYOUT_SIZE>(to_ptr, num_elts);
                 }
             }
 
