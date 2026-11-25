@@ -1,0 +1,75 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+# Records a Kani release in `nix/versions.json`, so that the Nix flake's `kaniReleases` (and
+# `kaniReleases.latest`) include it. See `nix/README.md`.
+
+name: Record Kani release for Nix
+
+on:
+  release:
+    types: [published]
+  schedule:
+    - cron: "0 4 * * Tue" # Every Tuesday at 04:00 UTC, in case a release event was missed.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Kani version to record, e.g. 0.68.0 (default: the latest release)"
+        required: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-nix-versions-update-pr:
+    # This workflow is restricted to the main repository (model-checking/kani) to prevent
+    # unnecessary PRs being created in forks.
+    if: github.repository == 'model-checking/kani'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v6
+        with:
+          # `update-versions` reads each release from its `kani-<version>` tag.
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+
+      - name: Determine the version to record
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_VERSION: ${{ inputs.version }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [[ -n $INPUT_VERSION ]]; then
+            version=$INPUT_VERSION
+          elif [[ -n $RELEASE_TAG ]]; then
+            version=${RELEASE_TAG#kani-}
+          else
+            version=$(gh release view --json tagName --jq .tagName)
+            version=${version#kani-}
+          fi
+          echo "version=$version" >> "$GITHUB_ENV"
+
+      - name: Record the release in nix/versions.json
+        env:
+          # Avoids GitHub's API rate limit when reading the release's bundle digests.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          nix run .#update-versions -- "$version"
+          git diff
+
+      # Opens no pull request if `nix/versions.json` did not change.
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v8
+        with:
+          commit-message: Record Kani ${{ env.version }} in nix/versions.json
+          branch: nix-versions-update-${{ env.version }}
+          delete-branch: true
+          title: 'Automatic Nix versions update for Kani ${{ env.version }}'
+          body: >
+            Records Kani ${{ env.version }} in `nix/versions.json` with `nix run .#update-versions`,
+            so that the Nix flake's `kaniReleases` include it.
