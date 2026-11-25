@@ -1,0 +1,624 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>0016-panics-only-if - Kani RFC Book</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Design documents for Kani Rust Verifier">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-ef079add.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-6e80c1ce.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Kani RFC Book</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/model-checking/kani" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/model-checking/kani/edit/main/rfc/src/rfcs/0016-panics-only-if.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <ul>
+<li><strong>Feature Name:</strong> Panic conditions in function contracts (<code>panics-only-if</code>)</li>
+<li><strong>Feature Request Issue:</strong> <a href="https://github.com/model-checking/kani/issues/3567">#3567</a></li>
+<li><strong>RFC PR:</strong> <a href="https://github.com/model-checking/kani/pull/3893">#3893</a></li>
+<li><strong>Status:</strong> Under Review</li>
+<li><strong>Version:</strong> 0</li>
+<li><strong>Proof-of-concept:</strong> <a href="https://github.com/model-checking/kani/pull/4230">#4230</a></li>
+</ul>
+<hr>
+<h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
+<p>Two new function contract clauses describe when a function panics:</p>
+<ul>
+<li><code>#[kani::panics_only_if(cond)]</code> states the only condition under which the function may panic;</li>
+<li><code>#[kani::panics_if(cond)]</code> states a condition under which it must panic.</li>
+</ul>
+<p>For a function with these clauses, Kani proves that:</p>
+<ul>
+<li>the function is free of undefined behavior on every path, including paths that panic;</li>
+<li>it panics only when the clauses permit it, and does not return when <code>panics_if</code> requires a panic;</li>
+<li>its postconditions hold whenever it returns.</li>
+</ul>
+<h2 id="user-impact"><a class="header" href="#user-impact">User Impact</a></h2>
+<p>Today a function contract has no way to say that a function is <em>meant</em> to panic in some cases. A
+<code>proof_for_contract</code> harness reports every reachable panic as a verification failure, so users can only verify
+functions such as <code>Option::unwrap</code>, <code>&lt;[T]&gt;::index</code> or <code>Vec::insert</code> in one of these ways:</p>
+<ul>
+<li><strong>Strengthen <code>requires</code> until no panic is reachable.</strong>
+<ul>
+<li>This hides the panicking inputs from verification, including any undefined behavior on the way to the panic.</li>
+<li>It misrepresents the contract: callers may pass those inputs, they just get a panic.</li>
+<li>With <code>stub_verified</code>, it also forces every caller to prove that it never passes them.</li>
+</ul>
+</li>
+<li><strong>Add <code>#[kani::should_panic]</code> to the harness.</strong>
+<ul>
+<li>This accepts <em>any</em> panic.</li>
+<li>It also accepts failures that are not panics (see
+<a href="#prerequisite-telling-panics-apart-from-kani-checks">Prerequisite</a>).</li>
+<li>It requires at least one panic to happen.</li>
+</ul>
+</li>
+<li><strong>Run with <code>-Z unstable-options --prove-safety-only</code></strong> (<a href="https://github.com/model-checking/kani/pull/4239">#4239</a>).
+<ul>
+<li>This assumes that no panic occurs anywhere. It checks the absence of undefined behavior, but it is a global,
+per-run switch.</li>
+<li>It cannot record or check when a given function may panic.</li>
+<li>A harness verified this way says nothing about panics to the callers of a function.</li>
+</ul>
+</li>
+</ul>
+<p>Rust APIs document their panics in the <code># Panics</code> section of their documentation, usually as “Panics if …”,
+and whether a function can panic matters to its callers. With the new clauses, users can:</p>
+<ol>
+<li>Prove the absence of undefined behavior for functions that are expected to panic for some inputs, without
+excluding those inputs.</li>
+<li>State, and have Kani check, exactly when a function panics: <code>panics_if(cond)</code> alone means “panics if and
+only if <code>cond</code>”, the direct translation of a <code># Panics</code> section. A panic outside the condition, or a return
+when the condition held, is reported.</li>
+<li>Describe functions whose panics cannot be stated exactly, such as functions that call user code, with
+<code>panics_only_if</code>: unexpected panics are still found.</li>
+<li>Use these specifications modularly. When <code>stub_verified</code> replaces a function with its contract, the
+replacement panics as the contract says, so callers have to account for those panics.</li>
+</ol>
+<p>Downsides:</p>
+<ul>
+<li>These are two more contract clauses to learn, and the difference between a necessary condition
+(<code>panics_only_if</code>) and a sufficient one (<code>panics_if</code>) needs to be documented well (see <a href="#naming">Naming</a>).</li>
+<li>They rely on a change to how Kani classifies its checks, which changes some property names in Kani’s output.</li>
+</ul>
+<h3 id="evidence-from-verify-rust-std"><a class="header" href="#evidence-from-verify-rust-std">Evidence from verify-rust-std</a></h3>
+<p>We surveyed <a href="https://github.com/model-checking/verify-rust-std">verify-rust-std</a> (main at <code>a43ef3d40d9</code>, 1890
+harnesses) with the Kani version it pins.</p>
+<p><strong><code>should_panic</code> rarely tests what it seems to.</strong> The 28 <code>#[kani::should_panic]</code> attributes expand to 116
+harnesses. Only 27 pass because the function under verification panics. The other 89 pass for unrelated reasons:</p>
+<ul>
+<li>79 because the harness itself panics, for example in <code>kani::any::&lt;Duration&gt;()</code> (where <code>Duration::new</code> panics) or
+in <code>unwrap()</code> on an expected <code>Err</code>;</li>
+<li>2 because the contract panics: <code>offset_from::&lt;()&gt;</code>’s <code>requires</code> divides by zero
+(<code>library/core/src/ptr/const_ptr.rs:649</code>);</li>
+<li>8 because a check that is not a panic fails: the <code>should_fail_*</code> harnesses in
+<code>library/core/src/intrinsics/mod.rs</code> rely on a failed <code>stub_verified</code> precondition.</li>
+</ul>
+<p>Fourteen of these are <code>proof_for_contract</code> harnesses whose target has <code>ensures</code> clauses, so a broken postcondition
+goes unnoticed (<a href="https://github.com/model-checking/kani/issues/5212">#5212</a>). We confirmed this on five std
+functions. For example, we changed <code>Duration::as_secs</code> (<code>library/core/src/time.rs:615</code>) to return
+<code>secs.wrapping_add(1)</code>. <code>duration_as_secs</code> then fails its postcondition, but <code>duration_as_secs_panics</code> still passes:
+it lists the failed postcondition among the failures it accepts as expected panics.</p>
+<p><strong>Restrictions hide inputs that are safe to verify.</strong> Of the 191 functions with a <code>requires</code>, 8 are safe. Three
+of those exclude exactly the inputs that their <code># Panics</code> documentation names, for example <code>copy_from_slice</code>’s
+<code>requires(self.len() == src.len())</code> (<code>library/core/src/slice/mod.rs:4385</code>). Eleven <code>kani::assume</code> calls do the same
+in harnesses, and one sits in library code (<code>library/core/src/num/imp/dec2flt/decimal_seq.rs:183</code>). We removed
+the restriction in 16 harnesses covering 13 functions and ran them with <code>--prove-safety-only</code>. None reported
+undefined behavior on the panicking inputs, and each run took under 6 seconds. Without the flag, every failure
+was a panic. So for these functions the restriction excluded panics only, and it also kept their absence of
+undefined behavior from being checked on those inputs.</p>
+<p><strong>The conditions are easy to state.</strong> For 12 of the 13 panicking functions we found, the <code># Panics</code> condition is
+a simple expression over the arguments, such as <code>index &gt;= self.len()</code>, <code>!align.is_power_of_two()</code> or
+<code>self.get() == MIN</code>, so <code>panics_if</code> alone describes them exactly. The exception is <code>NonNull::map_addr</code>, which
+panics if its closure does: its condition can only be stated as <code>panics_only_if</code>. For <code>NonZero::abs</code> and <code>Neg</code>,
+the panic is an overflow check, so <code>panics_if(self.get() == MIN)</code> holds when overflow checks are enabled, as they
+are when Kani verifies code (see <a href="#open-questions">Open questions</a>).</p>
+<h2 id="user-experience"><a class="header" href="#user-experience">User Experience</a></h2>
+<p>The clauses are part of function contracts and are available with <code>-Z function-contracts</code>.</p>
+<pre><code class="language-rust">#[kani::panics_only_if(cond)]   // the function may panic only if `cond` holds
+#[kani::panics_if(cond)]        // the function must panic if `cond` holds</code></pre>
+<p>Each <code>cond</code> is a Boolean expression with the same restrictions as a <code>requires</code> condition:</p>
+<ul>
+<li>it may refer to the function’s arguments;</li>
+<li>it may call side-effect-free functions;</li>
+<li>it may not refer to the result;</li>
+<li>it is evaluated on entry to the function, after the preconditions have been assumed.</li>
+</ul>
+<p>A function may have at most one clause of each kind. A function without either clause behaves as it does today:
+it may not panic.</p>
+<h3 id="what-kani-checks"><a class="header" href="#what-kani-checks">What Kani checks</a></h3>
+<p>Take a harness <code>#[kani::proof_for_contract(f)]</code>, where <code>f</code> has the contract <code>requires(P)</code>, <code>panics_only_if(C)</code>,
+<code>panics_if(Q)</code> and <code>ensures(R)</code>. Without a <code>panics_only_if</code> clause, <code>C</code> is <code>Q</code>; without a <code>panics_if</code> clause, <code>Q</code>
+is <code>false</code>. For all inputs that satisfy <code>P</code>, Kani checks that:</p>
+<ol>
+<li>No undefined behavior occurs on any path through <code>f</code>, including on paths that end in a panic, up to the panic.</li>
+<li>If <code>f</code> panics, <code>C</code> held on entry to <code>f</code>.</li>
+<li>If <code>f</code> returns, <code>Q</code> did not hold on entry: if it held, <code>f</code> must have panicked.</li>
+<li>If <code>f</code> returns, <code>R</code> holds. This applies whether or not <code>C</code> held: <code>C</code> permits a panic, it does not excuse a
+wrong result.</li>
+<li><code>f</code> modifies only what its <code>modifies</code> clauses allow.</li>
+</ol>
+<p>So <code>panics_if(Q)</code> alone states that <code>f</code> panics if and only if <code>Q</code> holds, and <code>panics_only_if(C)</code> alone states
+that <code>f</code> may panic only if <code>C</code> holds. With both clauses, the inputs where <code>C</code> holds but <code>Q</code> does not are those
+where <code>f</code> may or may not panic. <code>Q</code> must imply <code>C</code>: for an input where <code>Q</code> holds but <code>C</code> does not, <code>f</code> can
+neither panic (check 2) nor return (check 3), so any such input is reported.</p>
+<p>A panic that the clauses do not permit is reported as a failed check at the panic site, with the panic’s own
+message:</p>
+<pre><code>Check 3: core::option::unwrap_failed.panic.1
+	 - Status: FAILURE
+	 - Description: "called `Option::unwrap()` on a `None` value (not permitted by the contract)"
+</code></pre>
+<p>A return when <code>panics_if</code> required a panic is reported as a failed check with the description
+<code>returned although `panics_if(index &gt; self.len())` held</code>.</p>
+<h3 id="examples"><a class="header" href="#examples">Examples</a></h3>
+<p><code>Vec::insert</code> panics if and only if <code>index &gt; len</code>:</p>
+<pre><code class="language-rust">#[kani::panics_if(index &gt; self.len())]
+#[kani::ensures(|_| self.len() == old(self.len()) + 1)]
+pub fn insert(&amp;mut self, index: usize, element: T) { /* ... */ }</code></pre>
+<p><code>Option::unwrap</code> panics if and only if the option is <code>None</code> (shown for <code>T: Copy + PartialEq</code> to keep the
+postcondition short):</p>
+<pre><code class="language-rust">#[kani::panics_if(self.is_none())]
+#[kani::ensures(|result| old(self) == Some(*result))]
+pub fn unwrap(self) -&gt; T { /* ... */ }</code></pre>
+<p>A function whose panics cannot be stated exactly can bound them. A sort that calls a user comparator may panic
+whenever the comparator does, so it permits every panic, and Kani still proves the absence of undefined behavior
+and the postcondition on every return:</p>
+<pre><code class="language-rust">#[kani::panics_only_if(true)]
+#[kani::ensures(|result| result.is_sorted())]
+fn sort_with&lt;T: Ord&gt;(v: Vec&lt;T&gt;, is_less: impl FnMut(&amp;T, &amp;T) -&gt; bool) -&gt; Vec&lt;T&gt; { /* ... */ }</code></pre>
+<p>Both clauses together describe a function that must panic for some inputs and may panic for others. This one
+must panic if the index is out of bounds, and may also panic if the user’s closure does:</p>
+<pre><code class="language-rust">#[kani::panics_only_if(true)]
+#[kani::panics_if(index &gt;= self.len())]
+fn update(&amp;mut self, index: usize, f: impl FnOnce(&amp;mut T)) { /* ... */ }</code></pre>
+<h3 id="contract-replacement"><a class="header" href="#contract-replacement">Contract replacement</a></h3>
+<p><code>stub_verified(f)</code> replaces <code>f</code> with its contract, and Kani does the same for recursive calls. The replacement
+does three things:</p>
+<ol>
+<li>It checks <code>P</code>, as today.</li>
+<li>It evaluates <code>Q</code> and <code>C</code>. If <code>Q</code> holds, it panics. Otherwise, if <code>C</code> holds, it either panics or continues,
+nondeterministically.</li>
+<li>If it continues, it havocs the <code>modifies</code> targets and assumes <code>R</code>, as today.</li>
+</ol>
+<p>The panic in step 2 is a panic of the caller at the call site, so the caller’s own contract governs it.
+Verification of the caller fails at that call if the caller has no clause that permits this panic. Callers
+therefore account for the panics their callees are allowed or required to have. That is what makes the clauses
+sound to use modularly. Conversely, a caller may rely on a required panic: after a call that returns, <code>Q</code> did not
+hold.</p>
+<h3 id="interaction-with-other-features"><a class="header" href="#interaction-with-other-features">Interaction with other features</a></h3>
+<ul>
+<li><strong><code>#[kani::should_panic]</code></strong> keeps its meaning: verification succeeds only if at least one check fails and every
+failed check is a panic. A panic that the clauses permit is not a failed check, so it does not count. A panic
+that they do not permit does.</li>
+<li><strong><code>--prove-safety-only</code></strong> assumes that no panic occurs:
+<ul>
+<li>the clauses check nothing extra under it, and the replacement in step 2 never panics;</li>
+<li>postconditions, including the <code>panics_if</code> check on return, are still checked.</li>
+</ul>
+</li>
+<li><strong>Contracts checked as assertions.</strong> When a function with a contract is called but is neither the function
+under verification nor replaced, Kani checks its contract as assertions around the call (unless
+<code>--no-assert-contracts</code> is passed). In that mode, the <code>panics_if</code> condition is checked on return, and the
+clauses do not permit panics: the panics of the callee are panics of the caller.</li>
+<li><strong><code>autoharness</code></strong> generates <code>proof_for_contract</code> harnesses for functions with contracts, and those harnesses
+check the clauses like any other.</li>
+<li><strong>Multiple harnesses</strong> for the same function all check the clauses, as they do for <code>requires</code> and <code>ensures</code>.</li>
+</ul>
+<h3 id="errors"><a class="header" href="#errors">Errors</a></h3>
+<ul>
+<li>A second clause of the same kind on a function is a compile error.</li>
+<li>A function with these clauses and no <code>proof_for_contract</code> harness is reported like any other contract without
+a harness.</li>
+<li>If a condition refers to the result or is not a Boolean expression, that is a compile error, as for <code>requires</code>.</li>
+</ul>
+<h3 id="what-counts-as-a-panic"><a class="header" href="#what-counts-as-a-panic">What counts as a panic</a></h3>
+<p>A panic is any path that reaches Rust’s panic machinery as Kani models it. That covers:</p>
+<ul>
+<li><code>panic!</code>, <code>assert!</code>, <code>assert_eq!</code>, <code>assert_ne!</code>, <code>debug_assert!</code> and their variants, <code>unreachable!</code>, <code>todo!</code> and
+<code>unimplemented!</code>;</li>
+<li>library functions that panic, such as <code>Option::unwrap</code> and <code>Result::expect</code>;</li>
+<li>the panics rustc inserts for bounds checks, arithmetic overflow, division or remainder by zero, and invalid
+shifts;</li>
+<li>aborts, such as <code>std::process::abort</code>: Kani compiles code with <code>-C panic=abort</code>, and already reports an abort
+like a panic.</li>
+</ul>
+<p>The following are not panics:</p>
+<ul>
+<li>undefined behavior (safety checks);</li>
+<li>Kani’s own checks: <code>kani::assert</code>, <code>kani::check</code>, contract pre- and postconditions, and <code>kani::cover</code>;</li>
+<li>unsupported constructs.</li>
+</ul>
+<p>As today, Kani compiles code with overflow checks and debug assertions enabled, so overflow and <code>debug_assert!</code>
+failures are panics. See <a href="#open-questions">Open questions</a> for builds where they are disabled.</p>
+<h3 id="output-changes"><a class="header" href="#output-changes">Output changes</a></h3>
+<p>Rust panics and Kani’s own checks no longer share the <code>assertion</code> property class (see the
+<a href="#prerequisite-telling-panics-apart-from-kani-checks">prerequisite</a>). This changes some property names in Kani’s
+output, in <code>--export-json</code> and in SARIF. It does not change the description of any check, and it changes only
+verification results that are wrong today:</p>
+<ul>
+<li><code>should_panic</code> harnesses that pass only because a <code>kani::assert</code>, a postcondition or a precondition of a
+replaced contract failed now fail. In verify-rust-std, that affects the <code>should_fail_*</code> harnesses in
+<code>library/core/src/intrinsics/mod.rs</code>, which rely on a failed <code>stub_verified</code> precondition.</li>
+<li><code>--prove-safety-only</code> now checks postconditions and <code>kani::assert</code>.</li>
+</ul>
+<h2 id="software-design"><a class="header" href="#software-design">Software Design</a></h2>
+<h3 id="prerequisite-telling-panics-apart-from-kani-checks"><a class="header" href="#prerequisite-telling-panics-apart-from-kani-checks">Prerequisite: telling panics apart from Kani checks</a></h3>
+<p>Kani currently emits Rust panics and its own checks with the same property class, <code>assertion</code>:</p>
+<ul>
+<li><code>codegen_panic</code> (the panic hook and <code>PanicStub</code>) uses it for panics;</li>
+<li>MIR <code>Assert</code> terminators use it for bounds, overflow and division checks;</li>
+<li>the <code>kani::assert</code> hook uses it for <code>kani::assert</code>. That hook also serves Kani’s <code>assert!</code>, <code>assert_eq!</code> and
+<code>assert_ne!</code> overrides in <code>library/std</code>, and contract postconditions expand to <code>kani::assert</code>.</li>
+</ul>
+<p>So neither the compiler nor the driver can tell a panic from a failed postcondition. Two existing features are
+wrong because of this (<a href="https://github.com/model-checking/kani/issues/5212">#5212</a>):</p>
+<ul>
+<li><code>should_panic</code> accepts a failed postcondition or <code>kani::assert</code> as an expected panic.</li>
+<li><code>--prove-safety-only</code> assumes away <code>assertion</code> checks, so it also assumes away postconditions and <code>kani::assert</code>.
+For example, a <code>proof_for_contract</code> harness verifies under <code>--prove-safety-only</code> even when the function
+violates its <code>ensures</code> clause.</li>
+</ul>
+<p>The first step, which is useful on its own, is to give panics their own property class, <code>panic</code>:</p>
+<ul>
+<li><code>codegen_panic</code>, the panicking MIR assertions and the <code>abort</code> intrinsic use <code>panic</code>.</li>
+<li>The <code>assert!</code>, <code>assert_eq!</code> and <code>assert_ne!</code> overrides call a new hidden function, <code>kani::panic_assert</code>, hooked
+to emit a <code>panic</code> check, instead of <code>kani::assert</code>. Automatic harness generation, which mines <code>assert!</code> guards
+in constructors, recognizes both functions.</li>
+<li><code>kani::assert</code> and contract conditions keep <code>assertion</code>.</li>
+<li>The driver’s <code>should_panic</code> classification, <code>--export-json</code>’s <code>failure_kind</code> and <code>--prove-safety-only</code> use
+<code>panic</code> instead of <code>assertion</code>.</li>
+</ul>
+<h3 id="encoding"><a class="header" href="#encoding">Encoding</a></h3>
+<p>The check needs a single verification run per harness.</p>
+<ol>
+<li><strong>Library (<code>kani_core</code>).</strong> Verifier-internal statics record, for the current call of the function under
+verification, the <code>panics_only_if</code> condition (if any), the <code>panics_if</code> condition, and the resulting
+permission: the <code>panics_only_if</code> condition if there is one, the <code>panics_if</code> condition otherwise. Three hidden
+functions update them: <code>set_panics_only_if(cond)</code> and <code>set_panics_if(cond)</code> record a condition and return the
+previous state, and <code>restore_panic_permission(prev)</code> restores it.
+<ul>
+<li>As for the existing contract-clause depth counter, the statics use <code>__CPROVER_</code>-prefixed symbol names and
+the functions <code>__VERIFIER</code>-prefixed ones, so that CBMC’s contract instrumentation treats them as
+verifier-internal and does not check the updates against the write set of the function under contract.</li>
+<li>The statics are reset at harness entry, together with the clause depth counter.</li>
+</ul>
+</li>
+<li><strong>Macro expansion (<code>kani_macros</code>).</strong> Both clauses are parsed like <code>requires</code>.
+<ul>
+<li>In the check closure, each condition is evaluated after the preconditions are assumed and recorded with
+the matching <code>set_*</code> function. The previous state is restored when the function returns. <code>panics_if</code>
+also asserts, before returning, that its condition did not hold.</li>
+<li>In the replace closure, each condition is evaluated after the preconditions are checked: <code>panics_if</code>
+panics if its condition holds, and <code>panics_only_if</code> panics nondeterministically if its condition holds.
+The panics go through <code>kani::panic</code>, so they are <code>panic</code> checks of the caller.</li>
+</ul>
+</li>
+<li><strong>Codegen (<code>kani-compiler</code>).</strong> If a codegen unit contains the <code>set_*</code> functions, which happens only when the
+check closure of a function with one of these clauses is reachable, every <code>panic</code> check <code>assert(cond)</code> in the
+unit becomes <code>assert(cond || permitted)</code> followed by <code>assume(cond)</code>, where <code>permitted</code> is the recorded
+permission. The path ends at the panic either way, as today. Safety checks, postconditions and every other
+check are unchanged and are evaluated on all paths, so undefined behavior on the way to a permitted panic is
+reported. Other codegen units are unchanged.</li>
+<li><strong>Driver (<code>kani-driver</code>).</strong> No change beyond the <code>should_panic</code> classification above.</li>
+</ol>
+<p>The permission is outside the function under verification <code>false</code>, since the statics are reset at harness entry
+and restored on return, so panics in the harness itself, before or after the call, are reported as today. Panics
+in callees of the function count as its own, since they propagate through it. A callee replaced by its contract
+panics only as its own clauses say, and the permission of the function under verification then decides whether
+that panic is permitted.</p>
+<h3 id="corner-cases"><a class="header" href="#corner-cases">Corner cases</a></h3>
+<ul>
+<li><strong>Recursion.</strong> Recursive calls are replaced by the contract, so step 2 of the replacement applies to them, and
+their panics are checked against the outer call’s permission.</li>
+<li><strong>Closures and generic functions</strong> passed to the function under verification are part of its body. A panic in
+a user-supplied comparator is a panic of the function, and is permitted only if the clauses allow it.</li>
+<li><strong><code>kani::any_where</code> and <code>kani::assume</code> in the harness</strong> constrain inputs as today, and the conditions are
+evaluated on the constrained inputs.</li>
+<li><strong>A panic while evaluating a condition</strong> happens before the condition is recorded, so it is not permitted.</li>
+<li><strong>Loop contracts and quantifiers</strong> are unaffected, because the permission is ordinary state.</li>
+</ul>
+<h2 id="rationale-and-alternatives"><a class="header" href="#rationale-and-alternatives">Rationale and alternatives</a></h2>
+<h3 id="a-precondition-style-panics_if-first-version-of-4230"><a class="header" href="#a-precondition-style-panics_if-first-version-of-4230">A precondition-style <code>panics_if</code> (first version of #4230)</a></h3>
+<p>The first prototype in #4230 assumed <code>!cond</code> when checking the function and asserted <code>!cond</code> when replacing it.
+That made the clause a precondition by another name:</p>
+<ul>
+<li>The inputs that satisfy <code>cond</code> were not verified at all. Undefined behavior on those paths, including before
+the panic, was hidden.</li>
+<li>Callers had to prove they never pass such inputs, which is not what a panicking API promises.</li>
+</ul>
+<p>This RFC keeps all inputs in scope. It only changes whether reaching a panic, or returning, is a failure.</p>
+<h3 id="only-a-necessary-condition"><a class="header" href="#only-a-necessary-condition">Only a necessary condition</a></h3>
+<p>The first version of this RFC proposed only <code>panics_only_if</code>, and expressed “must panic” with a postcondition,
+for example <code>ensures(|_| index &lt;= old(self.len()))</code>. That works, but it is indirect, the failure does not say that
+a panic was expected, and it is not the natural reading of a <code># Panics</code> section.</p>
+<p>remi-delmas-3000 suggested in #4230 to state both directions, a condition under which the function does not
+panic and one under which it must, and to check that they are consistent (they do not overlap) and complete
+(they cover all inputs, so the inputs are partitioned). This RFC follows that suggestion with the two clauses:</p>
+<ul>
+<li><code>panics_only_if(C)</code> is the panic-freedom condition <code>!C</code>.</li>
+<li><code>panics_if(Q)</code> is the panic condition.</li>
+<li>Consistency is checked implicitly: an input where <code>Q</code> holds but <code>C</code> does not can neither panic nor return, so
+it is reported.</li>
+<li>Completeness is built into <code>panics_if</code> alone, which permits panics exactly where it requires them. With both
+clauses, the inputs where <code>C</code> holds but <code>Q</code> does not are deliberately left open, for functions such as sorting
+with a user comparator whose panics cannot be stated exactly (see #3567).</li>
+</ul>
+<h3 id="running-verification-twice"><a class="header" href="#running-verification-twice">Running verification twice</a></h3>
+<p>The first version of this RFC proposed two runs:</p>
+<ul>
+<li>one assuming that the condition does not hold, which checks that no panic occurs;</li>
+<li>one without assumptions that accepts only panics, like <code>should_panic</code>.</li>
+</ul>
+<p>The single-run encoding above checks the same properties in one run. It also does not rely on <code>should_panic</code>’s
+classification, which today accepts failures that are not panics.</p>
+<h3 id="reusing---prove-safety-only"><a class="header" href="#reusing---prove-safety-only">Reusing <code>--prove-safety-only</code></a></h3>
+<p><code>--prove-safety-only</code> remains the right tool for a quick, global check for undefined behavior. But it cannot
+express which panics a function is allowed to have, it does not report unexpected panics, and it does not let the
+contract of a function inform its callers.</p>
+<h3 id="naming"><a class="header" href="#naming">Naming</a></h3>
+<p><code>panics_if(cond)</code> reads like the <code># Panics</code> sections of Rust documentation (“Panics if <code>index &gt; len</code>”), and
+states a sufficient condition: if <code>cond</code> holds, the function panics.</p>
+<p><code>panics_only_if(cond)</code> states a necessary condition: the function panics only if <code>cond</code> holds. Earlier names for
+it were read the other way:</p>
+<ul>
+<li><code>may_panic_if(cond)</code> reads as “if <code>cond</code>, the function may panic”. It does not say that the function may not
+panic otherwise.</li>
+<li><code>should_panic</code>’s “should” already means “must” in Kani.</li>
+</ul>
+<p>Alternatives considered for <code>panics_only_if</code>:</p>
+<ul>
+<li><code>no_panic_unless(cond)</code>, which says the same thing;</li>
+<li>its dual, <code>no_panic_if(!cond)</code>, which states the panic-free inputs instead of the panicking ones.</li>
+</ul>
+<h3 id="multiple-clauses"><a class="header" href="#multiple-clauses">Multiple clauses</a></h3>
+<p>Several <code>panics_only_if</code> clauses would have to be OR-ed, which is the opposite of how several <code>requires</code> or
+<code>ensures</code> clauses combine. To avoid that confusion, a function has at most one clause of each kind, and users can
+write <code>||</code>.</p>
+<h2 id="open-questions"><a class="header" href="#open-questions">Open questions</a></h2>
+<ul>
+<li><strong>Builds without overflow checks or debug assertions.</strong> In such builds, overflow wraps and <code>debug_assert!</code> does
+not run, so code after them executes, while Kani ends the path at the panic. This is also true of every Kani
+harness today. <code>--prove-safety-only</code> turns off debug assertions for this reason
+(<a href="https://github.com/model-checking/kani/pull/4262">#4262</a>). A <code>panics_if</code> condition that relies on an
+overflow check, such as <code>NonZero::abs</code>’s, holds only with overflow checks enabled. Should the clauses offer, or
+default to, checking under both configurations?</li>
+<li><strong>Granularity.</strong> Should users be able to permit only some kinds of panics, such as arithmetic overflow, or to
+match panic messages?</li>
+<li><strong>Mutable arguments.</strong> The conditions are evaluated on entry. Is there a need to refer to the state at the time
+of the panic?</li>
+</ul>
+<h2 id="out-of-scope--future-improvements"><a class="header" href="#out-of-scope--future-improvements">Out of scope / Future Improvements</a></h2>
+<ul>
+<li><strong>Panic safety.</strong> Kani compiles code with <code>-C panic=abort</code> and does not explore unwinding. Drop glue and
+<code>catch_unwind</code> handlers that run during unwinding are therefore not checked.
+<ul>
+<li>A permitted panic says nothing about undefined behavior or broken invariants while unwinding. That is the
+concern for sorting with a panicking comparator
+(<a href="https://github.com/model-checking/kani/issues/3567#issuecomment-2569213652">#3567</a>,
+<a href="https://github.com/model-checking/verify-rust-std/issues/56">verify-rust-std Challenge 8</a>).</li>
+<li>Supporting it needs unwinding support in Kani and a postcondition on the panicking exit, comparable to SPARK’s
+<code>Exceptional_Cases</code> aspect or JML’s <code>signals</code> clauses.</li>
+</ul>
+</li>
+<li><strong>Checking <code># Panics</code> documentation</strong> against the contract.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../rfcs/0015-export-json.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../rfcs/0015-export-json.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>
