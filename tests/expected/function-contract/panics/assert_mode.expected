@@ -1,0 +1,25 @@
+Checking harness check_panics_if_then_two_ensures_nonzero...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_one_ensures_then_panics_if_nonzero...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_two_ensures_then_panics_if_nonzero...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_panics_if_then_two_ensures...
+Failed Checks: returned although `panics_if(*x == 0)` held
+VERIFICATION:- FAILED
+
+Checking harness check_one_ensures_then_panics_if...
+Failed Checks: returned although `panics_if(*x == 0)` held
+VERIFICATION:- FAILED
+
+Checking harness check_two_ensures_then_panics_if...
+Failed Checks: returned although `panics_if(*x == 0)` held
+VERIFICATION:- FAILED
+
+Verification failed for - check_panics_if_then_two_ensures
+Verification failed for - check_one_ensures_then_panics_if
+Verification failed for - check_two_ensures_then_panics_if
+Complete - 3 successfully verified harnesses, 3 failures, 6 total.

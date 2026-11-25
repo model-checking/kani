@@ -553,7 +553,7 @@ impl GotocCtx<'_, '_> {
                 let (msg, property_class) = match msg {
                     AssertMessage::BoundsCheck { .. } => (
                         "index out of bounds: the length is less than or equal to the given index",
-                        PropertyClass::Assertion,
+                        PropertyClass::Panic,
                     ),
                     AssertMessage::InvalidEnumConstruction { .. } => (
                         "invalid enum construction: value is not a valid discriminant for this enum",
@@ -576,7 +576,7 @@ impl GotocCtx<'_, '_> {
                     | AssertMessage::ResumedAfterReturn { .. }
                     | AssertMessage::ResumedAfterDrop { .. }
                     | AssertMessage::ResumedAfterPanic { .. } => {
-                        (msg.description().unwrap(), PropertyClass::Assertion)
+                        (msg.description().unwrap(), PropertyClass::Panic)
                     }
                 };
 

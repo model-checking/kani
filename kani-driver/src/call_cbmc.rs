@@ -690,10 +690,10 @@ fn determine_failed_properties(properties: &[Property]) -> FailedProperties {
     if failed_properties.is_empty() {
         FailedProperties::None
     } else {
-        // Check if all failed properties correspond to the `assertion` class.
-        // Note: Panics caused by `panic!` and `assert!` fall into this class.
+        // Check if all failed properties are panics. Kani's own checks (`kani::assert` and
+        // contract conditions, class `assertion`) are not.
         let all_failed_checks_are_panics =
-            failed_properties.iter().all(|prop| prop.property_class() == "assertion");
+            failed_properties.iter().all(|prop| prop.property_class() == "panic");
         if all_failed_checks_are_panics {
             FailedProperties::PanicsOnly
         } else {
@@ -832,15 +832,23 @@ mod tests {
         ));
         assert!(matches!(
             determine_failed_properties(&[
-                property("assertion", 1, CheckStatus::Failure),
+                property("panic", 1, CheckStatus::Failure),
                 property("assertion", 2, CheckStatus::Success),
             ]),
             FailedProperties::PanicsOnly
         ));
         assert!(matches!(
             determine_failed_properties(&[
-                property("assertion", 1, CheckStatus::Failure),
+                property("panic", 1, CheckStatus::Failure),
                 property("overflow", 2, CheckStatus::Failure),
+            ]),
+            FailedProperties::Other
+        ));
+        // A failed `kani::assert` or contract condition is not a panic.
+        assert!(matches!(
+            determine_failed_properties(&[
+                property("panic", 1, CheckStatus::Failure),
+                property("assertion", 2, CheckStatus::Failure),
             ]),
             FailedProperties::Other
         ));
@@ -850,7 +858,7 @@ mod tests {
         ));
         assert!(matches!(
             determine_failed_properties(&[
-                property("assertion", 1, CheckStatus::Failure),
+                property("panic", 1, CheckStatus::Failure),
                 property("cover", 2, CheckStatus::Error),
             ]),
             FailedProperties::Error
@@ -860,8 +868,8 @@ mod tests {
     #[test]
     fn verification_outcome_from_properties_truth_table() {
         let none = [property("assertion", 1, CheckStatus::Success)];
-        let panics_only = [property("assertion", 1, CheckStatus::Failure)];
-        let other = [property("overflow", 1, CheckStatus::Failure)];
+        let panics_only = [property("panic", 1, CheckStatus::Failure)];
+        let other = [property("assertion", 1, CheckStatus::Failure)];
         let error = [property("cover", 1, CheckStatus::Error)];
 
         assert!(matches!(

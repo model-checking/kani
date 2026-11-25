@@ -448,7 +448,7 @@ pub fn uses_ctor_generation(
     tcx: TyCtxt,
     ty: Ty,
     kani_any_def: FnDef,
-    kani_assert_def: FnDef,
+    assert_fns: mined_invariants::AssertFns,
     ty_arbitrary_cache: &mut FxHashMap<Ty, bool>,
     visited: &mut Vec<Ty>,
 ) -> bool {
@@ -458,34 +458,13 @@ pub fn uses_ctor_generation(
     visited.push(ty);
     match ty.kind() {
         TyKind::RigidTy(RigidTy::Ref(_, inner, _)) | TyKind::RigidTy(RigidTy::RawPtr(inner, _)) => {
-            uses_ctor_generation(
-                tcx,
-                inner,
-                kani_any_def,
-                kani_assert_def,
-                ty_arbitrary_cache,
-                visited,
-            )
+            uses_ctor_generation(tcx, inner, kani_any_def, assert_fns, ty_arbitrary_cache, visited)
         }
         TyKind::RigidTy(RigidTy::Array(inner, _)) | TyKind::RigidTy(RigidTy::Slice(inner)) => {
-            uses_ctor_generation(
-                tcx,
-                inner,
-                kani_any_def,
-                kani_assert_def,
-                ty_arbitrary_cache,
-                visited,
-            )
+            uses_ctor_generation(tcx, inner, kani_any_def, assert_fns, ty_arbitrary_cache, visited)
         }
         TyKind::RigidTy(RigidTy::Tuple(elems)) => elems.iter().any(|elem| {
-            uses_ctor_generation(
-                tcx,
-                *elem,
-                kani_any_def,
-                kani_assert_def,
-                ty_arbitrary_cache,
-                visited,
-            )
+            uses_ctor_generation(tcx, *elem, kani_any_def, assert_fns, ty_arbitrary_cache, visited)
         }),
         TyKind::RigidTy(RigidTy::Adt(def, args)) => {
             // Hand-written Arbitrary implementations take precedence over ctor generation
@@ -508,7 +487,7 @@ pub fn uses_ctor_generation(
             }
             // Mined-invariant assumptions are heuristic filters like constructor-based
             // generation, so harnesses using them carry the same marker.
-            if !mined_invariants::mine_self_assert_conjuncts(tcx, ty, kani_assert_def).is_empty() {
+            if !mined_invariants::mine_self_assert_conjuncts(tcx, ty, assert_fns).is_empty() {
                 return true;
             }
             def.variants_iter().any(|variant| {
@@ -517,7 +496,7 @@ pub fn uses_ctor_generation(
                         tcx,
                         field.ty_with_args(&args),
                         kani_any_def,
-                        kani_assert_def,
+                        assert_fns,
                         ty_arbitrary_cache,
                         visited,
                     )
@@ -527,7 +506,7 @@ pub fn uses_ctor_generation(
                     tcx,
                     *t,
                     kani_any_def,
-                    kani_assert_def,
+                    assert_fns,
                     ty_arbitrary_cache,
                     visited,
                 ),

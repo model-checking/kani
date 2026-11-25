@@ -104,4 +104,4 @@ If a function has a complex body, consider using a [stub](./reference/experiment
 
 If you're focusing on functional correctness rather than safety, you may disable memory safety checks (run `kani --help` for a list of options to do so). Note that disabling these checks may cause Kani to miss undefined behavior, so use it with caution.
 
-Alternatively, to assume that all assertions succeed and only focus on finding safety violations, use the `--prove-safety-only` option.
+Alternatively, to assume that no panic occurs and only focus on finding safety violations, use the `--prove-safety-only` option. Kani's own checks, such as `kani::assert` and contract postconditions, are still checked.

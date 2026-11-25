@@ -1,0 +1,1 @@
+error: a function may have at most one `#[kani::panics_only_if]` clause

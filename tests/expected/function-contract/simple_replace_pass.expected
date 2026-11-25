@@ -2,7 +2,7 @@
 - Status: SUCCESS\
 - Description: "divisor != 0"
 
-main.assertion\
+main.panic\
 - Status: SUCCESS\
 - Description: ""contract guarantees smallness""
 

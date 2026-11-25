@@ -1,0 +1,42 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+// kani-flags: -Z uninit-checks
+// compile-flags: --edition 2021 -C panic=abort -D warnings
+
+#![feature(core_intrinsics, custom_mir)]
+#![allow(internal_features)]
+
+use core::intrinsics::mir::*;
+
+union Word {
+    word: u32,
+}
+fn identity(value: u32) -> u32 {
+    value
+}
+
+// The call is the first instruction in the entry block. Loading the initialized union
+// parameter's memory initialization state allows the argument check to succeed.
+#[custom_mir(dialect = "runtime", phase = "optimized")]
+#[inline(never)]
+unsafe fn indirect(value: Word, f: fn(u32) -> u32) -> u32 {
+    mir! {
+        { Call(RET = f(value.word), ReturnTo(done), UnwindUnreachable()) }
+        done = { Return() }
+    }
+}
+
+// The copy intrinsic initializes the destination and creates an analysis target.
+#[inline(never)]
+fn seed() {
+    let source = 7u8;
+    let mut destination = 0u8;
+    unsafe { std::ptr::copy_nonoverlapping(&source, &mut destination, 1) };
+    assert_eq!(destination, source);
+}
+
+#[kani::proof]
+fn check() {
+    seed();
+    let _ = unsafe { indirect(Word { word: 42 }, identity) };
+}

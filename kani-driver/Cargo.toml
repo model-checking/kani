@@ -7,7 +7,6 @@ version = "0.68.0"
 edition = "2024"
 description = "Build a project with Kani and run all proof harnesses"
 license = "MIT OR Apache-2.0"
-homepage = "https://github.com/model-checking/kani"
 repository = "https://github.com/model-checking/kani"
 publish = false
 
@@ -64,3 +63,6 @@ indicatif = "0.18"
 
 # terminal progress indicator
 # https://github.com/console-rs/indicatif
+
+[lints]
+workspace = true

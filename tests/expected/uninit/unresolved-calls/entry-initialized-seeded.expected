@@ -1,0 +1,8 @@
+Checking harness check...
+indirect.safety_check.\
+ - Status: SUCCESS\
+ - Description: "Undefined Behavior: Reading from an uninitialized pointer of type `u32`"
+ - Status: FAILURE\
+ - Description: "Kani does not support memory initialization checks across calls through function pointers. For more information about planned support, see https://github.com/model-checking/kani/issues/3300."
+VERIFICATION:- FAILED
+Complete - 0 successfully verified harnesses, 1 failures, 1 total.

@@ -129,7 +129,7 @@ impl MirVisitor for InitialTargetVisitor {
 /// The instance a call operand refers to, if it is a function item rather than a function pointer.
 fn try_resolve_instance(locals: &[LocalDecl], func: &Operand) -> Option<Instance> {
     match func.ty(locals).unwrap().kind() {
-        TyKind::RigidTy(RigidTy::FnDef(def, args)) => Some(Instance::resolve(def, &args).unwrap()),
+        TyKind::RigidTy(RigidTy::FnDef(def, args)) => Instance::resolve(def, &args).ok(),
         _ => None,
     }
 }

@@ -173,6 +173,12 @@ pub enum KaniModel {
     PtrOffsetFromUnsigned,
     #[strum(serialize = "ResetContractClauseDepthModel")]
     ResetContractClauseDepth,
+    #[strum(serialize = "SetPanicsOnlyIfModel")]
+    SetPanicsOnlyIf,
+    #[strum(serialize = "SetPanicsIfModel")]
+    SetPanicsIf,
+    #[strum(serialize = "RestorePanicPermissionModel")]
+    RestorePanicPermission,
     #[strum(serialize = "RunContractModel")]
     RunContract,
     #[strum(serialize = "RunLoopContractModel")]
@@ -240,6 +246,8 @@ pub enum KaniHook {
     IsAllocated,
     #[strum(serialize = "PanicHook")]
     Panic,
+    #[strum(serialize = "PanicAssertHook")]
+    PanicAssert,
     #[strum(serialize = "PointerObjectHook")]
     PointerObject,
     #[strum(serialize = "PointerOffsetHook")]

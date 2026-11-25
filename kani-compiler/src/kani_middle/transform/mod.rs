@@ -82,7 +82,7 @@ mod stubs;
 ///
 /// The order however is always the same, we run optimizations first, and instrument the code
 /// after.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct BodyTransformation {
     /// The passes that may change the function body according to harness configuration.
     /// The stubbing passes should be applied before so user stubs take precedence.
@@ -144,7 +144,7 @@ impl BodyTransformation {
         );
         transformer.add_pass(queries, IntrinsicGeneratorPass::new(unsupported_check_type, queries));
         transformer.add_pass(queries, LoopContractPass::new(tcx, queries, unit));
-        transformer.add_pass(queries, RustcIntrinsicsPass::new(queries, &unit.stubs));
+        transformer.add_pass(queries, RustcIntrinsicsPass::new(queries, tcx, &unit.stubs));
         transformer
     }
 
