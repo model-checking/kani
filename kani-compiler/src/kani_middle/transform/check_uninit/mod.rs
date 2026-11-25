@@ -108,6 +108,10 @@ const SKIPPED_ITEMS: &[KaniFunction] = &[
     KANI_RESTORE_PANIC_PERMISSION,
     // Initializes the shadow memory and the argument buffer, which hold no user data.
     KaniFunction::Model(KaniModel::InitializeMemoryInitializationState),
+    // The state of `-Z valid-value-checks`, which `ValidValuePass` instruments the program with.
+    KaniFunction::Model(KaniModel::InitializeUntypedWriteState),
+    KaniFunction::Model(KaniModel::IsUntypedWrite),
+    KaniFunction::Model(KaniModel::SetUntypedWrite),
 ];
 
 /// Instruments the code with checks for uninitialized memory, agnostic to the source of targets.

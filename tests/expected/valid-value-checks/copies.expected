@@ -1,0 +1,7 @@
+Failed Checks: Undefined Behavior: Invalid value of type `char`
+
+Verification failed for - write_bytes_then_read
+Verification failed for - issue_check_with_ub
+Verification failed for - copy_nonoverlapping_invalid_char
+Verification failed for - copy_invalid_char
+Complete - 9 successfully verified harnesses, 4 failures, 13 total.
