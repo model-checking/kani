@@ -158,6 +158,7 @@ impl GotocHook for Assume {
     }
 }
 
+/// `kani::assert(cond, msg)`: a Kani check of class [`PropertyClass::Assertion`].
 struct Assert;
 impl GotocHook for Assert {
     fn hook_applies(
@@ -174,29 +175,68 @@ impl GotocHook for Assert {
         &self,
         gcx: &mut GotocCtx,
         _instance: Instance,
-        mut fargs: Vec<Expr>,
+        fargs: Vec<Expr>,
         _assign_to: &Place,
         target: Option<BasicBlockIdx>,
         span: Span,
     ) -> Stmt {
-        assert_eq!(fargs.len(), 2);
-        let cond = fargs.remove(0).cast_to(Type::bool());
-        let msg = fargs.remove(0);
-        let msg = extract_msg_or_err(gcx, &msg, span, "assert");
-        let target = target.unwrap();
-        let caller_loc = gcx.codegen_caller_span_stable(span);
-
-        let (msg, reach_stmt) = gcx.codegen_reachability_check(msg, span);
-
-        Stmt::block(
-            vec![
-                reach_stmt,
-                gcx.codegen_assert_assume(cond, PropertyClass::Assertion, &msg, caller_loc),
-                Stmt::goto(bb_label(target), caller_loc),
-            ],
-            caller_loc,
-        )
+        codegen_assert_hook(gcx, fargs, target, span, PropertyClass::Assertion)
     }
+}
+
+/// `kani::panic_assert(cond, msg)`, which Kani's `assert!`, `assert_eq!` and `assert_ne!`
+/// overrides call: a Rust assertion, so a failure is a panic ([`PropertyClass::Panic`]).
+struct PanicAssert;
+impl GotocHook for PanicAssert {
+    fn hook_applies(
+        &self,
+        _tcx: TyCtxt,
+        _instance: Instance,
+        _instance_name: &str,
+        _kani_tool_attr: Option<&String>,
+    ) -> bool {
+        unreachable!("{UNEXPECTED_CALL}")
+    }
+
+    fn handle(
+        &self,
+        gcx: &mut GotocCtx,
+        _instance: Instance,
+        fargs: Vec<Expr>,
+        _assign_to: &Place,
+        target: Option<BasicBlockIdx>,
+        span: Span,
+    ) -> Stmt {
+        codegen_assert_hook(gcx, fargs, target, span, PropertyClass::Panic)
+    }
+}
+
+/// Generate `assert(cond); assume(cond)` with a reachability check for a call to an
+/// assertion hook taking `(cond: bool, msg: &'static str)`.
+fn codegen_assert_hook(
+    gcx: &mut GotocCtx,
+    mut fargs: Vec<Expr>,
+    target: Option<BasicBlockIdx>,
+    span: Span,
+    property_class: PropertyClass,
+) -> Stmt {
+    assert_eq!(fargs.len(), 2);
+    let cond = fargs.remove(0).cast_to(Type::bool());
+    let msg = fargs.remove(0);
+    let msg = extract_msg_or_err(gcx, &msg, span, "assert");
+    let target = target.unwrap();
+    let caller_loc = gcx.codegen_caller_span_stable(span);
+
+    let (msg, reach_stmt) = gcx.codegen_reachability_check(msg, span);
+
+    Stmt::block(
+        vec![
+            reach_stmt,
+            gcx.codegen_assert_assume(cond, property_class, &msg, caller_loc),
+            Stmt::goto(bb_label(target), caller_loc),
+        ],
+        caller_loc,
+    )
 }
 
 struct UnsupportedCheck;
@@ -403,6 +443,9 @@ impl GotocHook for Nondet {
     }
 }
 
+/// Handles panic calls, including rewritten native assertions targeting `panic_stub`.
+/// For those calls, operand 0 supplies the diagnostic and the remaining operands are
+/// evaluated in order to preserve their safety checks.
 struct Panic;
 
 impl GotocHook for Panic {
@@ -1668,6 +1711,7 @@ pub fn fn_hooks() -> GotocHooks {
         (KaniHook::Exists, Rc::new(Exists)),
         (KaniHook::Forall, Rc::new(Forall)),
         (KaniHook::Panic, Rc::new(Panic)),
+        (KaniHook::PanicAssert, Rc::new(PanicAssert)),
         (KaniHook::Check, Rc::new(Check)),
         (KaniHook::Cover, Rc::new(Cover)),
         (KaniHook::AnyRaw, Rc::new(Nondet)),

@@ -10,7 +10,7 @@
 use crate::args::{Arguments, ReachabilityType};
 use crate::intrinsics::{Intrinsic, simd_mask_problem};
 use crate::kani_middle::attributes::{KaniAttributes, is_proof_harness};
-use crate::kani_middle::kani_functions::{KaniHook, KaniIntrinsic, KaniModel};
+use crate::kani_middle::kani_functions::{KaniIntrinsic, KaniModel};
 use crate::kani_middle::metadata::{
     gen_automatic_proof_metadata, gen_contracts_metadata, gen_proof_metadata,
 };
@@ -115,7 +115,7 @@ impl CodegenUnits {
                     *kani_fns.get(&KaniModel::Any.into()).unwrap(),
                     *kani_fns.get(&KaniModel::BoundedAny.into()).unwrap(),
                     SmartPointerModels::from_kani_functions(kani_fns),
-                    *kani_fns.get(&KaniHook::Assert.into()).unwrap(),
+                    crate::kani_middle::mined_invariants::AssertFns::from_kani_functions(kani_fns),
                     // Require *all three* unbounded models: eligibility admits `&[T]`, `&mut [T]`
                     // and `Vec<T>`, but generation resolves each model independently, so gating on
                     // only one could report a `&mut [T]`/`Vec<T>` arg as unbounded-verified while
@@ -421,6 +421,7 @@ fn get_all_automatic_harnesses(
                 harness.mangled_name(),
                 caveats.is_bounded,
                 caveats.is_ctor_based,
+                caveats.has_refcount_caveat,
             );
             (harness, metadata)
         })
@@ -1187,13 +1188,17 @@ fn choose_generic_instantiation(
 }
 
 /// The caveats that apply to a generated harness, reported in the summary table and stored in
-/// its metadata. They are independent: a harness can be both bounded and constructor-based.
+/// its metadata. They are independent: a harness can be, e.g., both bounded and constructor-based.
 #[derive(Clone, Copy, Debug, Default)]
 struct AutoHarnessCaveats {
     /// Some argument uses *bounded* nondeterministic values, c.f. `--bounded-arguments`.
     is_bounded: bool,
     /// Some value is generated through a type's public constructor, c.f. `--constructor-args`.
     is_ctor_based: bool,
+    /// Some generated value contains an `Rc`/`Arc`, whose reference counts are modeled with
+    /// finitely many states, c.f. `contains_refcounted_ptr`. Unlike `is_bounded`, this does not
+    /// require (or depend on) `--bounded-arguments`.
+    has_refcount_caveat: bool,
 }
 
 /// Partition every function in the crate into (chosen, skipped), where `chosen` is a vector of the Instances for which we'll generate automatic harnesses,
@@ -1206,7 +1211,7 @@ fn automatic_harness_partition(
     kani_any_def: FnDef,
     kani_bounded_any_def: FnDef,
     smart_pointer_models: SmartPointerModels,
-    kani_assert_def: FnDef,
+    assert_fns: crate::kani_middle::mined_invariants::AssertFns,
     unbounded_slice_available: bool,
     nondet_fns: &NondetFnModels,
 ) -> (Vec<(Instance, AutoHarnessCaveats)>, BTreeMap<String, AutoHarnessSkipReason>) {
@@ -1432,13 +1437,37 @@ fn automatic_harness_partition(
                                 tcx,
                                 arg.ty,
                                 kani_any_def,
-                                kani_assert_def,
+                                assert_fns,
                                 &mut ty_arbitrary_cache_ctor,
                                 &mut vec![],
                             )
                         })
                     });
-                chosen.push((instance, AutoHarnessCaveats { is_bounded, is_ctor_based }));
+                // Whether any generated value contains an `Rc`/`Arc`, whose reference-count
+                // state is only modeled finitely, which the summary reports as "(refcount)".
+                // Formatting trait harnesses generate a value of the impl's self type rather
+                // than of the function's arguments (`&self`, `&mut Formatter`), c.f.
+                // `fmt_impl_self_ty`.
+                let has_refcount_caveat = match fmt_impl_self_ty(tcx, instance) {
+                    Some((_, self_ty)) => crate::kani_middle::contains_refcounted_ptr(
+                        tcx,
+                        self_ty,
+                        &mut FxHashSet::default(),
+                    ),
+                    None => instance.body().is_some_and(|body| {
+                        body.arg_locals().iter().any(|arg| {
+                            crate::kani_middle::contains_refcounted_ptr(
+                                tcx,
+                                arg.ty,
+                                &mut FxHashSet::default(),
+                            )
+                        })
+                    }),
+                };
+                chosen.push((
+                    instance,
+                    AutoHarnessCaveats { is_bounded, is_ctor_based, has_refcount_caveat },
+                ));
             }
         }
     }

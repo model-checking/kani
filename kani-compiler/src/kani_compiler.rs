@@ -41,7 +41,7 @@ use tracing::debug;
 /// rustc flags kani-compiler requires for correct verification semantics, set
 /// unconditionally on every kani-mode invocation. kani's MIR analysis and
 /// goto-c codegen assume abort-on-panic, checked overflow, v0 mangling,
-/// encoded MIR, storage markers, and `cfg(kani)`. `cargo kani` already passes
+/// encoded MIR, storage markers, `cfg(kani)`, and a sequential front end. `cargo kani` already passes
 /// these (`kani_rustc_flags()` in kani-driver); for that path appending is
 /// idempotent — see "Override semantics" below. For any other caller — a build
 /// system that drives kani-compiler directly, or a contributor running
@@ -54,7 +54,8 @@ use tracing::debug;
 /// Override semantics. These are appended, not prepended, and the three
 /// relevant rustc behaviors are not uniform:
 /// - Scalar `-C`/`-Z` options (`panic`, `overflow-checks`,
-///   `symbol-mangling-version`, `always-encode-mir`, `panic_abort_tests`) are
+///   `symbol-mangling-version`, `always-encode-mir`, `panic_abort_tests`,
+///   `threads`) are
 ///   last-flag-wins, so appending makes them non-overridable by the caller.
 ///   That is the point: the caller cannot weaken a verification invariant.
 ///   The cost is that a future Kani feature wanting one of these *off* has to
@@ -67,6 +68,16 @@ use tracing::debug;
 ///   disables survive. Were it last-flag-wins, appending here would silently
 ///   re-enable `SingleUseConsts` under `--coverage`.
 /// - `--cfg`/`--check-cfg` are additive.
+///
+/// `-Zthreads=1`: since nightly-2026-11-17, rustc is built with a default of two
+/// front-end threads (`CFG_DEFAULT_FRONTEND_JOBS`). The front end then runs on a
+/// worker of rustc's thread pool, and queries may run on either worker. Kani
+/// keeps per-compilation state in thread-locals (`QUERY_DB`, the codegen
+/// `CACHE`), which assumes one compiler thread, and pool workers are not joined
+/// before the process exits, so a thread-local destructor may never run: the
+/// `CACHE_STATS` report is printed from one, and went missing intermittently
+/// (`tests/script-based-pre/codegen_cache`). One thread restores the
+/// sequential front end Kani was written for.
 ///
 /// One caveat for direct callers: appending `--check-cfg` *enables* cfg
 /// checking for a caller that passed none, so that crate's own undeclared cfgs
@@ -103,6 +114,7 @@ const KANI_REQUIRED_RUSTC_ARGS: &[&str] = &[
     "-Zmir-enable-passes=-RemoveStorageMarkers",
     "--cfg=kani",
     "--check-cfg=cfg(kani)",
+    "-Zthreads=1",
 ];
 
 /// Run the Kani flavour of the compiler.
@@ -198,6 +210,17 @@ impl Callbacks for KaniCompiler {
         // `after_crate_root_parsing` can decide whether to inject Kani's macro overrides.
         self.build_std = args.build_std;
         self.no_assert_overrides = args.no_assert_overrides;
+
+        // The LLBC backend feeds Charon's consumers (Aeneas), which model ownership: they need
+        // MIR where moves are still moves and nothing was removed on the assumption that the
+        // program has no undefined behaviour. Compile those runs the way Charon does. This only
+        // applies when the LLBC backend is selected; the CProver backend keeps rustc's default
+        // MIR optimizations.
+        #[cfg(feature = "llbc")]
+        if args.backend == BackendOption::Llbc {
+            config.opts.unstable_opts.mir_opt_level = Some(0);
+            config.opts.unstable_opts.mir_preserve_ub = true;
+        }
 
         // Capture args in the closure so they're available when the backend is created
         // (potentially on a different thread).

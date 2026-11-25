@@ -66,6 +66,12 @@ const KANI_EXIT_CONTRACT_CLAUSE: KaniFunction = KaniFunction::Model(KaniModel::E
 const KANI_IN_CONTRACT_CLAUSE: KaniFunction = KaniFunction::Model(KaniModel::InContractClause);
 const KANI_RESET_CONTRACT_CLAUSE_DEPTH: KaniFunction =
     KaniFunction::Model(KaniModel::ResetContractClauseDepth);
+// The panic-permission functions access verifier-internal statics, like the
+// contract-clause-depth functions above.
+const KANI_SET_PANICS_ONLY_IF: KaniFunction = KaniFunction::Model(KaniModel::SetPanicsOnlyIf);
+const KANI_SET_PANICS_IF: KaniFunction = KaniFunction::Model(KaniModel::SetPanicsIf);
+const KANI_RESTORE_PANIC_PERMISSION: KaniFunction =
+    KaniFunction::Model(KaniModel::RestorePanicPermission);
 
 // Function bodies of those functions will not be instrumented as not to cause infinite recursion.
 const SKIPPED_ITEMS: &[KaniFunction] = &[
@@ -85,6 +91,9 @@ const SKIPPED_ITEMS: &[KaniFunction] = &[
     KANI_EXIT_CONTRACT_CLAUSE,
     KANI_IN_CONTRACT_CLAUSE,
     KANI_RESET_CONTRACT_CLAUSE_DEPTH,
+    KANI_SET_PANICS_ONLY_IF,
+    KANI_SET_PANICS_IF,
+    KANI_RESTORE_PANIC_PERMISSION,
     // The state of `-Z valid-value-checks`, which `ValidValuePass` instruments the program with.
     KaniFunction::Model(KaniModel::InitializeUntypedWriteState),
     KaniFunction::Model(KaniModel::IsUntypedWrite),
@@ -207,6 +216,8 @@ impl<'a> UninitInstrumenter<'a> {
             MemoryInitOp::SetSliceChunk { .. }
             | MemoryInitOp::Set { .. }
             | MemoryInitOp::SetRef { .. }
+            | MemoryInitOp::SetVtable { .. }
+            | MemoryInitOp::SetAs { .. }
             | MemoryInitOp::CreateUnion { .. } => {
                 self.build_set(body, source, operation, pointee_info)
             }
@@ -315,8 +326,16 @@ impl<'a> UninitInstrumenter<'a> {
                 }
             }
             PointeeLayout::TraitObject => {
-                let reason = "Kani does not support reasoning about memory initialization of pointers to trait objects.";
-                self.inject_unsupported_check(body, source, operation.position(), reason);
+                // The layout of the value behind the pointer, and so which of its bytes must be
+                // initialized, is only known from the vtable at run time. Places `*ptr` of a trait
+                // object type are not checked (see `CheckUninitVisitor::visit_place`), so this is
+                // a check that a reference to a trait object points to a valid value, e.g. for a
+                // transmute from a raw pointer to a reference: report it as unsupported.
+                let reason = format!(
+                    "Kani does not support checking the initialization of the value behind a `{}`.",
+                    operation.operand_ty(body)
+                );
+                self.inject_unsupported_check(body, source, operation.position(), &reason);
                 return;
             }
             PointeeLayout::Union { .. } => {
@@ -377,7 +396,10 @@ impl<'a> UninitInstrumenter<'a> {
                 // Depending on whether writing to the known number of elements in the slice, need to
                 // pass is as an argument.
                 let (diagnostic, args) = match &operation {
-                    MemoryInitOp::Set { .. } | MemoryInitOp::SetRef { .. } => {
+                    MemoryInitOp::Set { .. }
+                    | MemoryInitOp::SetRef { .. }
+                    | MemoryInitOp::SetVtable { .. }
+                    | MemoryInitOp::SetAs { .. } => {
                         let diagnostic = KANI_SET_PTR_INITIALIZED;
                         let args = vec![
                             ptr_operand,
@@ -468,11 +490,24 @@ impl<'a> UninitInstrumenter<'a> {
                 }
             }
             PointeeLayout::TraitObject => {
-                // The layout, and so the padding, depends on the concrete type behind the vtable.
-                // As for reads (see `build_get_and_check`), report it rather than skip the update:
-                // a skipped update could leave uninitialized memory marked as initialized.
-                let reason = "Kani does not support reasoning about memory initialization of pointers to trait objects.";
-                self.inject_unsupported_check(body, source, operation.position(), reason);
+                // The layout, and so the padding, depends on the concrete type behind the vtable,
+                // so the update cannot be applied here.
+                //
+                // Marking the pointee initialized can be skipped soundly. For a trait object it only
+                // happens where a pointer to an existing, valid value is created: from a reference
+                // (`&raw const *r`) or for the place a `Drop` terminator drops. An unsized value
+                // cannot be assigned through a pointer. Creating a pointer does not change which
+                // bytes are initialized, so skipping the update leaves the tracked state as it was.
+                // At worst Kani then treats bytes that were not tracked yet as uninitialized: a
+                // false alarm rather than a missed one.
+                //
+                // Marking it uninitialized cannot be skipped: that would leave memory that is no
+                // longer initialized marked as initialized.
+                if !value {
+                    let reason = "Kani does not support marking the memory behind a pointer to a \
+                                  trait object as uninitialized.";
+                    self.inject_unsupported_check(body, source, operation.position(), reason);
+                }
                 return;
             }
             PointeeLayout::Union { field_layouts } => {

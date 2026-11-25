@@ -70,5 +70,11 @@ By leveraging the stubbing feature, we can replace the (expensive) `gcd` call wi
 > functions), or avoid calling the stubbed function from the `Arbitrary`
 > implementation.
 
+Contracts can also state when a function is allowed to panic.
+For example, `#[kani::panics_if(max == 0 || min == 0)]` would say that `gcd` panics if and only if one of its arguments is zero, instead of excluding those inputs with `requires`.
+`#[kani::panics_only_if(cond)]` states the only condition under which a function may panic, without requiring it to.
+Kani still checks for undefined behavior on the panicking inputs, and callers of a verified stub have to account for the panic.
+See the `contracts` module documentation for details.
+
 There is far more to learn about contracts.
 We highly recommend reading our [blog post about contracts](https://model-checking.github.io/kani-verifier-blog/2024/01/29/function-contracts.html) (from which this `gcd` example is taken). We also recommend looking at the `contracts` module in our [documentation](../../crates/index.md).

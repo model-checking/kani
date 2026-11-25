@@ -2,7 +2,7 @@ forloop.loop_invariant_base.1\
 	 - Status: SUCCESS\
 	 - Description: "Check invariant before entry for loop forloop.0"\
 
-forloop.assertion.4\
+forloop.panic.4\
 	 - Status: SUCCESS\
 	 - Description: "assertion failed: sum <= 100"\
 

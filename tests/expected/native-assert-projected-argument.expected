@@ -1,0 +1,3 @@
+Checking harness check_projected_diagnostic_operand...
+Failed Checks: dereference failure: pointer NULL
+VERIFICATION:- FAILED (encountered failures other than panics, which were unexpected)

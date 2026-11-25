@@ -22,7 +22,7 @@ assertion\
 	 - Description: "|result : &u32| *result == x"
 
 Autoharness: Checking function should_pass::has_loop_contract against all possible inputs...
-should_pass::has_loop_contract.assertion\
+should_pass::has_loop_contract.panic\
 	 - Status: SUCCESS\
 	 - Description: "assertion failed: x == 2"
 
@@ -63,6 +63,6 @@ Autoharness Summary:
 |-----------------------------+---------------------------------------------+-----------------------------+---------------------|
 | cargo_autoharness_contracts | should_fail::max                            | #[kani::proof_for_contract] | Failure             |
 +-----------------------------+---------------------------------------------+-----------------------------+---------------------+
-Note that `kani autoharness` sets default --harness-timeout of 60s and --default-unwind of 20.
+Note that `kani autoharness` sets default --harness-timeout of 60s and --default-unwind of 20 for automatic harnesses.
 If verification failed because of timing out or too low of an unwinding bound, try passing larger values for these arguments (or, if possible, writing a loop contract).
 Complete - 5 successfully verified functions, 1 failures, 6 total.

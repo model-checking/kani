@@ -1,16 +1,16 @@
-Check 1: check_invariant_helper_ok.assertion.1\
+Check 1: check_invariant_helper_ok.panic.1\
          - Status: SUCCESS\
          - Description: "assertion failed: pos_point.x >= 0"
 
-Check 2: check_invariant_helper_ok.assertion.2\
+Check 2: check_invariant_helper_ok.panic.2\
          - Status: SUCCESS\
          - Description: "assertion failed: pos_point.y >= 0"
 
-Check 1: check_invariant_helper_fail.assertion.1\
+Check 1: check_invariant_helper_fail.panic.1\
          - Status: FAILURE\
          - Description: "assertion failed: pos_point.x >= 0"
 
-Check 2: check_invariant_helper_fail.assertion.2\
+Check 2: check_invariant_helper_fail.panic.2\
          - Status: FAILURE\
          - Description: "assertion failed: pos_point.y >= 0"
 

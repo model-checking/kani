@@ -66,6 +66,7 @@ impl KaniSession {
 
         let lib_path = lib_folder().unwrap();
         let mut rustc_args = self.kani_rustc_flags(LibConfig::new(lib_path));
+        rustc_args.extend(self.kani_rustc_local_flags());
         rustc_args.push(file.into());
         rustc_args.push("--out-dir".into());
         rustc_args.push(RustcArg::from(outdir.as_os_str()));
@@ -118,6 +119,19 @@ impl KaniSession {
             flags.push("--ignore-global-asm".into());
         }
 
+        flags
+    }
+
+    /// The rustc arguments that should be passed only to the local crate being compiled.
+    /// Dependencies skip codegen, so passing these to them would only force recompilation.
+    pub fn kani_rustc_local_flags(&self) -> Vec<RustcArg> {
+        let mut flags = vec![];
+        // The MIR inliner copies a stubbed function into its callers, where the stub pass
+        // cannot replace it.
+        if self.args.is_stubbing_enabled() {
+            flags.push("-Z".into());
+            flags.push("inline-mir=no".into());
+        }
         flags
     }
 
@@ -236,6 +250,15 @@ impl KaniSession {
                 flags.push("-Z".into());
                 flags.push(format!("layout-seed={seed}").into());
             }
+        }
+
+        // The LLBC backend's consumers (Aeneas) need MIR where moves are still moves, and the
+        // backend translates the bodies of dependencies too, whose MIR comes from their metadata.
+        // So every crate of a Lean run is compiled at the MIR level the compiler sets for the
+        // local crate (see `KaniCompiler::config`); `--backend=llbc` only reaches the local crate.
+        if self.args.common_args.unstable_features.contains(UnstableFeature::Lean) {
+            flags.push("-Zmir-opt-level=0".into());
+            flags.push("-Zmir-preserve-ub".into());
         }
 
         if self.args.coverage {

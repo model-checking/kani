@@ -1,4 +1,4 @@
-func::{closure#3}::{closure#0}::{closure#1}.assertion.1\
+func::{closure#3}::{closure#0}::{closure#1}.panic.1\
 	 - Status: SUCCESS\
 	 - Description: "attempt to add with overflow"
 

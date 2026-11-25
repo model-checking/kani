@@ -677,15 +677,19 @@ impl GotocCtx<'_, '_> {
             AggregateKind::Adt(..) | AggregateKind::Closure(..) | AggregateKind::Tuple => {
                 let typ = self.codegen_ty_stable(res_ty);
                 let layout = self.layout_of_stable(res_ty);
-                Expr::struct_expr_from_values(
-                    typ,
+                // `index_by_increasing_offset` reports one pseudo-field for a primitive layout.
+                // A struct with no fields can still have one (the `x87_f80_raw` lang item is an
+                // x87 float), and then there are no operands: its type is only padding.
+                let values = if operands.is_empty() {
+                    vec![]
+                } else {
                     layout
                         .fields
                         .index_by_increasing_offset()
                         .map(|idx| self.codegen_operand_stable(&operands[idx]))
-                        .collect(),
-                    &self.symbol_table,
-                )
+                        .collect()
+                };
+                Expr::struct_expr_from_values(typ, values, &self.symbol_table)
             }
             AggregateKind::RawPtr(pointee_ty, _) => {
                 // We expect two operands: "data" and "meta"
@@ -1351,7 +1355,17 @@ impl GotocCtx<'_, '_> {
                     let instance = Instance::resolve(def, &args).unwrap();
                     // We need to handle this case in a special way because `codegen_operand_stable` compiles FnDefs to dummy structs.
                     // (cf. the function documentation)
-                    self.codegen_func_expr(instance, loc).address_of()
+                    let fn_ptr = self.codegen_func_expr(instance, loc).address_of();
+                    if instance.is_foreign_item() {
+                        // A foreign function returning `()` or `!` is declared as returning
+                        // `void` (see `codegen_ffi_ret_type`), while the Rust function pointer
+                        // type returns `struct Unit` (or `struct Never`). Calls through the
+                        // pointer do not use such a result, so CBMC accepts the function as a
+                        // target of the cast pointer.
+                        fn_ptr.cast_to(self.codegen_ty_stable(t))
+                    } else {
+                        fn_ptr
+                    }
                 }
                 _ => unreachable!(),
             },

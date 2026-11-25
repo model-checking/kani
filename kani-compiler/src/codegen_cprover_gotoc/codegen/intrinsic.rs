@@ -16,6 +16,9 @@ use rustc_public::rustc_internal;
 use rustc_public::ty::{GenericArgs, RigidTy, Span, Ty, TyKind, UintTy};
 use tracing::debug;
 
+const VOLATILE_LOAD_UNINHABITED: &str =
+    "volatile load of an uninhabited type has undefined behavior";
+
 pub struct SizeAlign {
     pub size: Expr,
     pub align: Expr,
@@ -77,8 +80,9 @@ impl GotocCtx<'_, '_> {
             // `abort` was renamed to `abort_immediate`; the current pinned toolchain
             // only emits the latter. The `"abort"` arm is kept so the match still
             // handles a toolchain that predates the rename.
+            // Kani compiles code with `-C panic=abort`, so an abort is reported like a panic.
             "abort" | "abort_immediate" => self.codegen_fatal_error(
-                PropertyClass::Assertion,
+                PropertyClass::Panic,
                 &format!("reached intrinsic::{intrinsic}"),
                 span,
             ),
@@ -88,12 +92,23 @@ impl GotocCtx<'_, '_> {
                 "transmuting to uninhabited type has undefined behavior",
                 span,
             ),
+            // Reject uninhabited ZST results even when MIR has no return target.
+            "volatile_load" if self.returns_uninhabited_zst(instance) => self.codegen_fatal_error(
+                PropertyClass::SafetyCheck,
+                VOLATILE_LOAD_UNINHABITED,
+                span,
+            ),
             _ => self.codegen_fatal_error(
                 PropertyClass::UnsupportedConstruct,
                 &format!("Unsupported intrinsic {intrinsic}"),
                 span,
             ),
         }
+    }
+
+    fn returns_uninhabited_zst(&self, instance: Instance) -> bool {
+        let ret_ty = instance.ty().kind().fn_sig().unwrap().skip_binder().output();
+        self.is_zst_stable(ret_ty) && self.layout_of_stable(ret_ty).is_uninhabited()
     }
 
     /// c.f. `rustc_codegen_llvm::intrinsic` `impl IntrinsicCallMethods<'tcx>
@@ -288,7 +303,7 @@ impl GotocCtx<'_, '_> {
                 let expr = Expr::int_constant(layout.align.bytes(), Type::size_t());
                 self.codegen_expr_to_place_stable(place, expr, loc)
             }
-            Intrinsic::ArithOffset => self.codegen_arith_offset(fargs, place, loc),
+            Intrinsic::ArithOffset => self.codegen_arith_offset(fargs, farg_types[0], place, loc),
             Intrinsic::AssertInhabited => {
                 self.codegen_assert_intrinsic(instance, intrinsic_str, span)
             }
@@ -1243,13 +1258,29 @@ impl GotocCtx<'_, '_> {
     /// This function handles code generation for the `arith_offset` intrinsic.
     ///     <https://doc.rust-lang.org/std/intrinsics/fn.arith_offset.html>
     /// According to the documentation, the operation is always safe.
-    fn codegen_arith_offset(&mut self, mut fargs: Vec<Expr>, p: &Place, loc: Location) -> Stmt {
+    fn codegen_arith_offset(
+        &mut self,
+        mut fargs: Vec<Expr>,
+        pointer_type: Ty,
+        p: &Place,
+        loc: Location,
+    ) -> Stmt {
         let src_ptr = fargs.remove(0);
         let offset = fargs.remove(0);
 
-        // Compute `dst_ptr` with standard addition to avoid conversion
-        let dst_ptr = src_ptr.plus(offset);
-        self.codegen_expr_to_place_stable(p, dst_ptr, loc)
+        if self.is_zst_stable(pointee_type_stable(pointer_type).unwrap()) {
+            // CBMC's SMT2 pointer addition treats zero-sized pointees as one-byte elements.
+            // Rust's arith_offset on a ZST has zero byte displacement (count * 0).
+
+            // Evaluate both MIR operands in order. Emitting the offset as a
+            // statement preserves safety checks on projected reads.
+            let (base, base_decl) =
+                self.decl_temp_variable(src_ptr.typ().clone(), Some(src_ptr), loc);
+            let assign = self.codegen_expr_to_place_stable(p, base, loc);
+            Stmt::block(vec![base_decl, offset.as_stmt(loc), assign], loc)
+        } else {
+            self.codegen_expr_to_place_stable(p, src_ptr.plus(offset), loc)
+        }
     }
 
     /// A transmute is a bitcast from the argument type to the return type.
@@ -1893,7 +1924,7 @@ impl GotocCtx<'_, '_> {
     /// <https://doc.rust-lang.org/std/ptr/fn.read_volatile.html>
     ///
     /// Undefined behavior if any of these conditions are violated:
-    ///  * `src` must be valid for writes (done by `--pointer-check`)
+    ///  * For non-ZSTs, `src` must be valid for reads (done by `--pointer-check`)
     ///  * `src` must be properly aligned (done by `align_check` below)
     ///
     /// TODO: Add a check for the condition:
@@ -1915,7 +1946,22 @@ impl GotocCtx<'_, '_> {
             "`src` must be properly aligned",
             loc,
         );
-        let expr = src.dereference();
+        let pointee_type = pointee_type_stable(src_typ).unwrap();
+        let expr = if self.is_zst_stable(pointee_type) {
+            // ZST reads do not access memory, but still require alignment and a valid value.
+            if self.layout_of_stable(pointee_type).is_uninhabited() {
+                let validity_check = self.codegen_assert_assume_false(
+                    PropertyClass::SafetyCheck,
+                    VOLATILE_LOAD_UNINHABITED,
+                    loc,
+                );
+                return Stmt::block(vec![align_check, validity_check], loc);
+            }
+            let typ = self.codegen_ty_stable(pointee_type);
+            Expr::init_unit(typ, &self.symbol_table)
+        } else {
+            src.dereference()
+        };
         let res_stmt = self.codegen_expr_to_place_stable(p, expr, loc);
         Stmt::block(vec![align_check, res_stmt], loc)
     }

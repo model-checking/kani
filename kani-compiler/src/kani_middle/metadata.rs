@@ -46,6 +46,7 @@ pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> 
         is_automatically_generated: false,
         is_bounded: false,
         is_ctor_based: false,
+        has_refcount_caveat: false,
     }
 }
 
@@ -128,6 +129,7 @@ pub fn gen_automatic_proof_metadata(
     harness_mangled_name: String,
     is_bounded: bool,
     is_ctor_based: bool,
+    has_refcount_caveat: bool,
 ) -> HarnessMetadata {
     let def = fn_to_verify.def;
     let pretty_name = readable_name(*fn_to_verify);
@@ -172,5 +174,6 @@ pub fn gen_automatic_proof_metadata(
         is_automatically_generated: true,
         is_bounded,
         is_ctor_based,
+        has_refcount_caveat,
     }
 }

@@ -82,7 +82,7 @@ mod stubs;
 ///
 /// The order however is always the same, we run optimizations first, and instrument the code
 /// after.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct BodyTransformation {
     /// The passes that may change the function body according to harness configuration.
     /// The stubbing passes should be applied before so user stubs take precedence.
@@ -145,7 +145,7 @@ impl BodyTransformation {
         );
         transformer.add_pass(queries, IntrinsicGeneratorPass::new(unsupported_check_type, queries));
         transformer.add_pass(queries, LoopContractPass::new(tcx, queries, unit));
-        transformer.add_pass(queries, RustcIntrinsicsPass::new(queries, &unit.stubs));
+        transformer.add_pass(queries, RustcIntrinsicsPass::new(queries, tcx, &unit.stubs));
         transformer
     }
 
@@ -160,8 +160,13 @@ impl BodyTransformation {
                     .unwrap_or_else(|| build_missing_body(tcx, instance));
 
                 let mut modified = false;
+                let mut body_source = instance;
                 for pass in self.stub_passes.iter_mut().chain(self.inst_passes.iter_mut()) {
-                    let result = pass.transform(tcx, body, instance);
+                    let transform_instance = pass.transform_instance(instance, body_source);
+                    let result = pass.transform(tcx, body, transform_instance);
+                    if let Some(source) = pass.take_body_source() {
+                        body_source = source;
+                    }
                     modified |= result.0;
                     body = result.1;
                     self.generated_loop_modifies.extend(
@@ -236,6 +241,17 @@ pub(crate) trait TransformPass: Debug {
 
     /// Run a transformation pass in the function body.
     fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body);
+
+    /// Select the instance whose attributes apply to this pass. `body_source` identifies the
+    /// resolved ordinary stub supplying the body when a replacement has been applied.
+    fn transform_instance(&self, instance: Instance, _body_source: Instance) -> Instance {
+        instance
+    }
+
+    /// Take the source instance of a successfully replaced body.
+    fn take_body_source(&mut self) -> Option<Instance> {
+        None
+    }
 
     /// Take the locals that codegen must add to the loop modifies clause of the loops of the body
     /// that this pass last transformed, by the instance of the register function that each

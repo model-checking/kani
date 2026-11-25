@@ -71,6 +71,29 @@ impl<'a> ContractConditionsHandler<'a> {
                     #(#body_stmts)*
                 })
             }
+            // When a contract is asserted, the function's panics are ordinary panics of the
+            // harness: `panics_only_if` does not permit them.
+            ContractConditionsData::PanicsOnlyIf { .. } => {
+                quote!({#(#body_stmts)*})
+            }
+            // A `panics_if` condition is checked like a postcondition: the function may only
+            // return if it did not hold on entry.
+            ContractConditionsData::PanicsIf { attr } => {
+                let cond = bracket_clause_expr(quote!(#attr));
+                let return_expr = body_stmts.pop();
+                let (asserts, rest_of_body) =
+                    split_for_remembers(&body_stmts[..], ContractMode::Assert);
+                quote!({
+                    #(#asserts)*
+                    let __kani_panics_if_cond: bool = #cond;
+                    #(#rest_of_body)*
+                    kani::assert(
+                        !__kani_panics_if_cond,
+                        concat!("returned although `panics_if(", stringify!(#attr_copy), ")` held"),
+                    );
+                    #return_expr
+                })
+            }
             ContractConditionsData::Ensures { attr } => {
                 let (remembers, ensures_clause) = build_ensures(attr);
                 let ensures_bracketed = bracket_clause_expr(quote!(#ensures_clause));

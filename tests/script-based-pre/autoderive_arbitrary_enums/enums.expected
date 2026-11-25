@@ -39,27 +39,27 @@ should_derive::alignment_pass\
 	 - Status: SUCCESS\
 	 - Description: "assertion failed: std::mem::align_of_val(&int) % (align as usize) == 0"
 
-should_derive::alignment_fail.assertion\
+should_derive::alignment_fail.panic\
 	 - Status: FAILURE\
 	 - Description: "assertion failed: std::mem::align_of_val(&int) % (align as usize) == 0"
 
-should_derive::foo.assertion\
+should_derive::foo.panic\
 	 - Status: FAILURE\
 	 - Description: "attempt to calculate the remainder with a divisor of zero"
 
-should_derive::foo.assertion\
+should_derive::foo.panic\
 	 - Status: FAILURE\
 	 - Description: "attempt to calculate the remainder with overflow"
 
-should_derive::foo.assertion\
+should_derive::foo.panic\
 	 - Status: FAILURE\
 	 - Description: "foo held an i28, but it didn't divide evenly"
 
-should_derive::partially_used_generics_test.assertion\
+should_derive::partially_used_generics_test.panic\
 	 - Status: SUCCESS\
 	 - Description: "attempt to add with overflow"
 
-multiple_generics_test.assertion\
+multiple_generics_test.panic\
 	 - Status: FAILURE\
 	 - Description: "assertion failed: n % 2 > 0"
 
@@ -83,6 +83,6 @@ Autoharness Summary:
 |----------------------------+-----------------------------------------------------------+-----------------------------+---------------------|
 | autoderive_arbitrary_enums | should_derive::multiple_generics_test                     | #[kani::proof]              | Failure             |
 +----------------------------+-----------------------------------------------------------+-----------------------------+---------------------+
-Note that `kani autoharness` sets default --harness-timeout of 60s and --default-unwind of 20.
+Note that `kani autoharness` sets default --harness-timeout of 60s and --default-unwind of 20 for automatic harnesses.
 If verification failed because of timing out or too low of an unwinding bound, try passing larger values for these arguments (or, if possible, writing a loop contract).
 Complete - 5 successfully verified functions, 3 failures, 8 total.

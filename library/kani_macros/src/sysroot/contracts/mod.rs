@@ -3,14 +3,14 @@
 
 //! Implementation of the function contracts code generation.
 //!
-//! The most exciting part is the handling of `requires` and `ensures`, the main
-//! entry point to which is [`requires_ensures_main`]. Most of the code
+//! The most exciting part is the handling of `requires`, `panics_if`,  and `ensures`, the main
+//! entry point to which is [`pre_post_main`]. Most of the code
 //! generation for that is implemented on [`ContractConditionsHandler`] with
 //! [`ContractFunctionState`] steering the code generation. The function state
 //! implements a state machine in order to be able to handle multiple attributes
 //! on the same function correctly.
 //!
-//! ## How the handling for `requires`, `modifies`, and `ensures` works.
+//! ## How the handling for `requires`, `panics_if`, `modifies`, and `ensures` works.
 //!
 //! Our aim is to generate a "check" function that can be used to verify the
 //! validity of the contract and a "replace" function that can be used as a
@@ -536,6 +536,14 @@ pub fn requires(attr: TokenStream, item: TokenStream) -> TokenStream {
     contract_main(attr, item, ContractConditionsType::Requires)
 }
 
+pub fn panics_only_if(attr: TokenStream, item: TokenStream) -> TokenStream {
+    contract_main(attr, item, ContractConditionsType::PanicsOnlyIf)
+}
+
+pub fn panics_if(attr: TokenStream, item: TokenStream) -> TokenStream {
+    contract_main(attr, item, ContractConditionsType::PanicsIf)
+}
+
 pub fn ensures(attr: TokenStream, item: TokenStream) -> TokenStream {
     contract_main(attr, item, ContractConditionsType::Ensures)
 }
@@ -623,9 +631,11 @@ struct ContractConditionsHandler<'a> {
 ///
 /// Pre-parsing version of [`ContractConditionsData`].
 #[derive(Copy, Clone, Eq, PartialEq, Display)]
-#[strum(serialize_all = "lowercase")]
+#[strum(serialize_all = "snake_case")]
 enum ContractConditionsType {
     Requires,
+    PanicsOnlyIf,
+    PanicsIf,
     Ensures,
     Modifies,
 }
@@ -635,6 +645,16 @@ enum ContractConditionsType {
 /// [`ContractConditionsType`] is the corresponding pre-parse version.
 enum ContractConditionsData {
     Requires {
+        /// The contents of the attribute.
+        attr: Expr,
+    },
+    /// `panics_only_if(attr)`: the function may panic only if `attr` holds on entry.
+    PanicsOnlyIf {
+        /// The contents of the attribute.
+        attr: Expr,
+    },
+    /// `panics_if(attr)`: the function must panic if `attr` holds on entry.
+    PanicsIf {
         /// The contents of the attribute.
         attr: Expr,
     },
@@ -668,7 +688,7 @@ impl<'a> ContractConditionsHandler<'a> {
     }
 }
 
-/// The main meat of handling requires/ensures contracts.
+/// The main meat of handling requires/panics_if/ensures contracts.
 ///
 /// See the [module level documentation][self] for a description of how the code
 /// generation works.
@@ -690,6 +710,17 @@ fn contract_main(
     }
     let attr_copy = TokenStream2::from(attr.clone());
     let item_fn = parse_macro_input!(item as ImplItemFn);
+    // A function may have at most one clause of each panic kind: several `panics_only_if`
+    // clauses would have to be OR-ed, unlike several `requires` or `ensures` clauses.
+    if matches!(
+        contract_typ,
+        ContractConditionsType::PanicsOnlyIf | ContractConditionsType::PanicsIf
+    ) && item_fn.attrs.iter().any(|attr| {
+        attr.path().segments.last().is_some_and(|segment| segment.ident == contract_typ.to_string())
+    }) {
+        let error_msg = format!("a function may have at most one `#[kani::{contract_typ}]` clause");
+        return Error::new(Span::call_site(), error_msg).into_compile_error().into();
+    }
     let function_state = ContractFunctionState::from_attributes(&item_fn.attrs);
     let handler = match ContractConditionsHandler::new(contract_typ, attr, &item_fn, attr_copy) {
         Ok(handler) => handler,

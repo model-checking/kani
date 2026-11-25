@@ -1,0 +1,23 @@
+Checking harness check_cond_panics2...
+Failed Checks: attempt to divide by zero (not permitted by the contract)
+VERIFICATION:- FAILED
+
+Checking harness check_cond_panics...
+Failed Checks: attempt to divide by zero (not permitted by the contract)
+VERIFICATION:- FAILED
+
+Checking harness check_post_before...
+Failed Checks: attempt to divide by zero (not permitted by the contract)
+Failed Checks: |r: &u8| 100 / *r > 0
+VERIFICATION:- FAILED
+
+Checking harness check_post_after...
+Failed Checks: |r: &u8| 100 / *r > 0
+Failed Checks: attempt to divide by zero (not permitted by the contract)
+VERIFICATION:- FAILED
+
+Verification failed for - check_cond_panics2
+Verification failed for - check_cond_panics
+Verification failed for - check_post_before
+Verification failed for - check_post_after
+Complete - 0 successfully verified harnesses, 4 failures, 4 total.
