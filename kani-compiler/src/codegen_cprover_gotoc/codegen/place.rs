@@ -546,8 +546,10 @@ impl GotocCtx<'_, '_> {
             ProjectionElem::Subslice { from, to, from_end } => {
                 // https://rust-lang.github.io/rfcs/2359-subslice-pattern-syntax.html
                 match before.mir_typ().kind() {
-                    // Sub-array binding is not supported yet; full support to be added in
-                    // https://github.com/model-checking/kani/issues/707
+                    // For an array, the place is the sub-array `[T; N]` that starts at element
+                    // `from`. Represent it as `*(T[N]*) &array[from]`. rustc inserts such a
+                    // projection itself, e.g. in its `InvalidEnumConstruction` check of a
+                    // transmute into an enum.
                     TyKind::RigidTy(RigidTy::Array(ty, len)) => {
                         let len = len.eval_target_usize().unwrap();
                         let subarray_len = if *from_end {
@@ -558,13 +560,19 @@ impl GotocCtx<'_, '_> {
                         };
                         let typ = Ty::try_new_array(ty, subarray_len).unwrap();
                         let goto_typ = self.codegen_ty_stable(typ);
-                        // unimplemented
-                        Err(Box::new(UnimplementedData::new(
-                            "Sub-array binding",
-                            "https://github.com/model-checking/kani/issues/707",
-                            goto_typ,
-                            *before.goto_expr.location(),
-                        )))
+                        let index = Expr::int_constant(*from, Type::ssize_t());
+                        let expr = self
+                            .codegen_idx_array(before.goto_expr, index)
+                            .address_of()
+                            .cast_to(goto_typ.to_pointer())
+                            .dereference();
+                        ProjectedPlace::try_new(
+                            expr,
+                            TypeOrVariant::Type(typ),
+                            before.fat_ptr_goto_expr,
+                            before.fat_ptr_mir_typ,
+                            self,
+                        )
                     }
                     TyKind::RigidTy(RigidTy::Slice(_)) => {
                         let len = if *from_end {
