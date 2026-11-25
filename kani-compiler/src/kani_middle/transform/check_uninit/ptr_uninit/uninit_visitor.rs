@@ -129,32 +129,69 @@ impl<'tcx> CheckUninitVisitor<'tcx> {
 
     /// Store the state of the call arguments that contain a union in the argument buffer, for the
     /// callee to load (see `LoadArgument`).
-    fn store_union_arguments(&mut self, args: &[Operand]) {
-        let union_args: Vec<_> = args
-            .iter()
-            .enumerate()
-            .filter(|(_, arg)| has_union_bytes(arg.ty(&self.locals).unwrap()))
-            .map(|(idx, arg)| (idx, arg.clone()))
-            .collect();
-        for (idx, operand) in union_args {
-            if let Operand::Constant(_) = operand {
-                // A constant has no place to point the argument buffer at. The callee marks an
-                // argument it finds no state for as initialized, which is right exactly when every
-                // byte of the constant is.
-                if !constant_init_mask(&operand).is_some_and(|mask| mask.iter().all(|byte| *byte)) {
-                    self.push_target(MemoryInitOp::Unsupported {
-                        reason: "Kani does not support passing a constant with uninitialized \
-                                 bytes in a union to a function."
-                            .to_string(),
-                    });
-                }
-                continue;
-            }
-            self.push_target(MemoryInitOp::StoreArgument {
-                operand,
-                argument_no: idx + 1, // since arguments are 1-indexed
-            })
+    ///
+    /// The arguments are numbered as the callee's body numbers its parameters. A call through the
+    /// `rust-call` ABI (e.g. `Fn::call(&c, (u, x))`, resolved to the closure) passes the last
+    /// arguments as one tuple, which a closure body receives as separate parameters: each field of
+    /// that tuple is then its own argument.
+    fn store_union_arguments(&mut self, callee: &Instance, args: &[Operand]) {
+        if !args.iter().any(|arg| has_union_bytes(arg.ty(&self.locals).unwrap())) {
+            return;
         }
+        let untupled = args.last().and_then(|last| {
+            let RigidTy::Tuple(fields) = last.ty(&self.locals).unwrap().kind().rigid()?.clone()
+            else {
+                return None;
+            };
+            // The callee's parameters after the ordinary arguments are the tuple's fields.
+            let body = callee.body()?;
+            let params: Vec<Ty> = body.arg_locals().iter().map(|local| local.ty).collect();
+            let rest = params.get(args.len() - 1..)?;
+            (body.spread_arg().is_none() && rest == fields.as_slice())
+                .then_some((last.clone(), fields))
+        });
+        let ordinary = if untupled.is_some() { &args[..args.len() - 1] } else { args };
+        for (idx, operand) in ordinary.iter().enumerate() {
+            if has_union_bytes(operand.ty(&self.locals).unwrap()) {
+                self.store_union_argument(operand.clone(), idx + 1); // arguments are 1-indexed
+            }
+        }
+        let Some((tuple, fields)) = untupled else { return };
+        let first = ordinary.len() + 1;
+        let place = match &tuple {
+            Operand::Copy(place) | Operand::Move(place) => place.clone(),
+            Operand::Constant(_) | Operand::RuntimeChecks(_) => {
+                // The fields of a constant tuple have no place of their own either.
+                self.store_union_argument(tuple.clone(), first);
+                return;
+            }
+        };
+        for (idx, field_ty) in fields.into_iter().enumerate() {
+            if has_union_bytes(field_ty) {
+                let mut field = place.clone();
+                field.projection.push(ProjectionElem::Field(idx, field_ty));
+                self.store_union_argument(Operand::Copy(field), first + idx);
+            }
+        }
+    }
+
+    /// Store the state of `operand`, which contains a union, as the callee's argument
+    /// `argument_no`.
+    fn store_union_argument(&mut self, operand: Operand, argument_no: usize) {
+        if let Operand::Constant(_) = operand {
+            // A constant has no place to point the argument buffer at. The callee marks an
+            // argument it finds no state for as initialized, which is right exactly when every
+            // byte of the constant is.
+            if !constant_init_mask(&operand).is_some_and(|mask| mask.iter().all(|byte| *byte)) {
+                self.push_target(MemoryInitOp::Unsupported {
+                    reason: "Kani does not support passing a constant with uninitialized \
+                             bytes in a union to a function."
+                        .to_string(),
+                });
+            }
+            return;
+        }
+        self.push_target(MemoryInitOp::StoreArgument { operand, argument_no })
     }
 
     /// Give `*dst` the state of the value `src`, whose type contains a union.
@@ -643,7 +680,7 @@ impl MirVisitor for CheckUninitVisitor<'_> {
                         // The callee stores the state of a returned value containing a union in
                         // the argument buffer before it returns; copy it to the destination. Then
                         // mark the destination's data and padding bytes as for any write.
-                        self.store_union_arguments(args);
+                        self.store_union_arguments(&instance, args);
                         self.push_target(MemoryInitOp::LoadReturnValue {
                             operand: Operand::Copy(destination.clone()),
                         });
@@ -684,7 +721,7 @@ impl MirVisitor for CheckUninitVisitor<'_> {
                                 _ => {}
                             }
                         } else {
-                            self.store_union_arguments(args);
+                            self.store_union_arguments(&instance, args);
                         }
                     }
                     InstanceKind::Virtual { .. } | InstanceKind::LlvmIntrinsic => {
