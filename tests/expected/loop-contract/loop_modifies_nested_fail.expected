@@ -18,4 +18,8 @@ in function sequential_loops
 - Description: "Check that t is assignable"\
 in function three_levels
 
-Complete - 0 successfully verified harnesses, 5 failures, 5 total.
+- Status: FAILURE\
+- Description: "Check assigns clause inclusion for loop kani_named_variable.0"\
+in function kani_named_variable
+
+Complete - 0 successfully verified harnesses, 6 failures, 6 total.

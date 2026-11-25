@@ -1468,10 +1468,16 @@ impl LoopContractPass {
             .iter()
             .filter_map(|info| info.local().map(|local| (local, info.name.as_str())))
             .collect();
+        // Every name `#[kani::loop_invariant]` generates for a loop contains the loop's id, except
+        // the bindings of its clauses. Don't match on a `kani_` prefix: user variables can have it.
         let is_generated = |local: usize| match names.get(&local) {
             None => true,
             Some(name) => {
-                name.contains(loop_id) || name.starts_with("kani_") || name.starts_with("__kani")
+                name.contains(loop_id)
+                    || matches!(
+                        *name,
+                        "kani_loop_modifies" | "kani_loop_decreases" | "__kani_empty_loop_clause"
+                    )
             }
         };
         let mut locals: HashSet<usize> = names
