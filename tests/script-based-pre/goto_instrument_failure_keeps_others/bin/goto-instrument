@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+# A fake `goto-instrument` that simulates goto-instrument running out of memory on one harness:
+# when it is given the goto model of the harness named `instrument_oom` (the model's file name
+# contains the harness's mangled name), it prints the message and exit status goto-instrument
+# reports for `std::bad_alloc`. Every other call goes to the real goto-instrument.
+
+if [[ " $* " == *instrument_oom* ]]; then
+    echo "Out of memory"
+    exit 6
+fi
+
+exec "${REAL_GOTO_INSTRUMENT}" "$@"

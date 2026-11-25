@@ -1,0 +1,4 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+script: instrument_failure.sh
+expected: instrument_failure.expected
