@@ -766,9 +766,12 @@ impl<'tcx, 'r> GotocCtx<'tcx, 'r> {
     /// For a given function instance, generate a ZST struct and return a singleton reference to that.
     /// This is the Rust "function item". See <https://doc.rust-lang.org/reference/types/function-item.html>
     /// This is not the function pointer, for that use `codegen_func_expr`.
+    ///
+    /// The singleton does not refer to the function's symbol, which may not exist: like rustc's
+    /// collector, reachability does not always collect a function whose item is never called or
+    /// converted to a function pointer, e.g. one that is only stored in a struct field.
     fn codegen_fn_item(&mut self, instance: Instance, loc: Location) -> Expr {
-        let func_symbol = self.codegen_func_symbol(instance);
-        let mangled_name = func_symbol.name;
+        let mangled_name = instance.mangled_name();
         let fn_item_struct_ty = self.codegen_fndef_type_stable(instance);
         // This zero-sized object that a function name refers to in Rust is globally unique, so we create such a global object.
         let fn_singleton_name = format!("{mangled_name}::FnDefSingleton");
