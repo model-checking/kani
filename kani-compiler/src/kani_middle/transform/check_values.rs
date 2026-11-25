@@ -14,12 +14,14 @@
 //!   1. We could merge the invalid values by the offset.
 //!   2. We could avoid checking places that have been checked before.
 use crate::args::ExtraChecks;
+use crate::kani_middle::attributes::attrs_by_path;
+use crate::kani_middle::kani_functions::{KaniFunction, KaniIntrinsic, KaniModel};
 use crate::kani_middle::transform::body::{
-    CheckType, InsertPosition, MutableBody, SourceInstruction,
+    CheckType, InsertPosition, MutableBody, SourceInstruction, synthetic_source_info,
 };
 use crate::kani_middle::transform::{TransformPass, TransformationType};
 use crate::kani_queries::QueryDb;
-use rustc_middle::ty::{Const, TyCtxt};
+use rustc_middle::ty::TyCtxt;
 use rustc_public::CrateDef;
 use rustc_public::CrateDefType;
 use rustc_public::abi::{
@@ -28,14 +30,17 @@ use rustc_public::abi::{
 use rustc_public::mir::mono::Instance;
 use rustc_public::mir::visit::{Location, PlaceContext, PlaceRef};
 use rustc_public::mir::{
-    AggregateKind, BasicBlockIdx, BinOp, Body, BorrowKind, CastKind, FieldIdx, Local, LocalDecl,
-    MirVisitor, Mutability, NonDivergingIntrinsic, Operand, Place, ProjectionElem, RawPtrKind,
-    Rvalue, Statement, StatementKind, Terminator, TerminatorKind, WithRetag,
+    AggregateKind, BasicBlock, BasicBlockIdx, BinOp, Body, BorrowKind, CastKind, ConstOperand,
+    FieldIdx, Local, LocalDecl, MirVisitor, Mutability, NonDivergingIntrinsic, Operand, Place,
+    ProjectionElem, RawPtrKind, Rvalue, Statement, StatementKind, SwitchTargets, Terminator,
+    TerminatorKind, UnOp, UnwindAction, WithRetag,
 };
 use rustc_public::rustc_internal;
 use rustc_public::target::{MachineInfo, MachineSize};
 use rustc_public::ty::{AdtKind, GenericArgs, RigidTy, Span, Ty, TyKind, UintTy, VariantDef};
+use rustc_public::ty::{FnDef, GenericArgKind, MirConst};
 use rustc_public_bridge::IndexedVal;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use strum_macros::AsRefStr;
 use tracing::{debug, trace};
@@ -45,6 +50,8 @@ use tracing::{debug, trace};
 pub struct ValidValuePass {
     pub safety_check_type: CheckType,
     pub unsupported_check_type: CheckType,
+    /// Kani's functions, for the model of untyped writes (`kani_core::kani_valid_value!`).
+    pub kani_functions: HashMap<KaniFunction, FnDef>,
 }
 
 impl TransformPass for ValidValuePass {
@@ -67,18 +74,40 @@ impl TransformPass for ValidValuePass {
     /// For every unsafe dereference or a transmute operation, we check all values are valid.
     fn transform(&mut self, tcx: TyCtxt, body: Body, instance: Instance) -> (bool, Body) {
         trace!(function=?instance.name(), "transform");
+        let harness = is_harness(instance, tcx);
+        // Kani's own functions are not instrumented, nor are the instrumentation models of the
+        // validity and initialization checks, which have helpers without markers: the model of
+        // untyped writes reads its state through a reference, and checking that read would call
+        // the model again.
+        if !harness
+            && (KaniFunction::try_from(instance).is_ok() || is_instrumentation_model(instance))
+        {
+            return (false, body);
+        }
         let mut new_body = MutableBody::from(body);
         let orig_len = new_body.blocks().len();
-        // Do not cache body.blocks().len() since it will change as we add new checks.
-        for bb_idx in 0..new_body.blocks().len() {
-            let Some(candidate) =
-                CheckValueVisitor::find_next(tcx, &new_body, bb_idx, bb_idx >= orig_len)
-            else {
+        let address_taken = address_taken_locals(&new_body);
+        // The checks split blocks, and the instructions after an instrumented one end up in a new
+        // block at the end, so the number of blocks is read on every iteration.
+        let mut bb_idx = 0;
+        while bb_idx < new_body.blocks().len() {
+            let Some(candidate) = CheckValueVisitor::find_next(
+                tcx,
+                &new_body,
+                bb_idx,
+                bb_idx >= orig_len,
+                &address_taken,
+            ) else {
+                bb_idx += 1;
                 continue;
             };
             self.build_check(&mut new_body, candidate);
+            bb_idx += 1;
         }
-        (orig_len != new_body.blocks().len(), new_body.into())
+        if harness {
+            self.initialize_untyped_write_state(&mut new_body);
+        }
+        (harness || orig_len != new_body.blocks().len(), new_body.into())
     }
 }
 
@@ -124,8 +153,203 @@ impl ValidValuePass {
                     );
                     self.unsupported_check(body, &mut source, &reason);
                 }
+                SourceOp::SetUntyped { ptr, count, elem_size, untyped } => {
+                    let span = source.span(body.blocks());
+                    let ptr = body.insert_assignment(ptr, &mut source, InsertPosition::Before);
+                    let pointee = pointee_ty(body.locals()[ptr].ty);
+                    let count =
+                        count.unwrap_or_else(|| body.new_uint_operand(1, UintTy::Usize, span));
+                    let elem_size = body.new_uint_operand(elem_size as u128, UintTy::Usize, span);
+                    let untyped = bool_operand(untyped, span);
+                    self.call_model(
+                        body,
+                        &mut source,
+                        KaniModel::SetUntypedWrite,
+                        pointee,
+                        vec![Operand::Move(Place::from(ptr)), count, elem_size, untyped],
+                        Ty::new_tuple(&[]),
+                    );
+                }
+                SourceOp::UntypedLoad { ptr, dest, ty, ranges } => {
+                    let span = source.span(body.blocks());
+                    let ptr = body.insert_assignment(
+                        Rvalue::Use(ptr, WithRetag::No),
+                        &mut source,
+                        InsertPosition::Before,
+                    );
+                    let size = ty.layout().unwrap().shape().size.bytes() as u128;
+                    let size = body.new_uint_operand(size, UintTy::Usize, span);
+                    let untyped = self.call_model(
+                        body,
+                        &mut source,
+                        KaniModel::IsUntypedWrite,
+                        ty,
+                        vec![Operand::Copy(Place::from(ptr)), size],
+                        Ty::bool_ty(),
+                    );
+                    // Continue after the call, where `dest` holds the loaded value.
+                    let dest_ptr = body.insert_assignment(
+                        Rvalue::AddressOf(RawPtrKind::Const, dest),
+                        &mut source,
+                        InsertPosition::After,
+                    );
+                    // Insert the checks after that assignment, before the new block's `goto`.
+                    source = SourceInstruction::Terminator { bb: source.bb() };
+                    self.check_untyped_value(body, &mut source, dest_ptr, untyped, ty, ranges);
+                }
+                SourceOp::UntypedRead { place, ty, ranges } => {
+                    let span = source.span(body.blocks());
+                    let ptr = body.insert_assignment(
+                        Rvalue::AddressOf(RawPtrKind::Const, place),
+                        &mut source,
+                        InsertPosition::Before,
+                    );
+                    let size = ty.layout().unwrap().shape().size.bytes() as u128;
+                    let size = body.new_uint_operand(size, UintTy::Usize, span);
+                    let untyped = self.call_model(
+                        body,
+                        &mut source,
+                        KaniModel::IsUntypedWrite,
+                        ty,
+                        vec![Operand::Copy(Place::from(ptr)), size],
+                        Ty::bool_ty(),
+                    );
+                    self.check_untyped_value(body, &mut source, ptr, untyped, ty, ranges);
+                }
             }
         }
+    }
+
+    /// Check that the `ty` at `ptr` is valid if `untyped` holds, or report `ty` as unsupported if
+    /// Kani can't express its validity (`ranges` is `Err`).
+    fn check_untyped_value(
+        &self,
+        body: &mut MutableBody,
+        source: &mut SourceInstruction,
+        ptr: Local,
+        untyped: Local,
+        ty: Ty,
+        ranges: Result<Vec<ValidValueReq>, String>,
+    ) {
+        let typed = body.insert_assignment(
+            Rvalue::UnaryOp(UnOp::Not, Operand::Copy(Place::from(untyped))),
+            source,
+            InsertPosition::Before,
+        );
+        match ranges {
+            Ok(ranges) => {
+                for range in ranges {
+                    let valid = build_limits(
+                        body,
+                        &range,
+                        Rvalue::Use(Operand::Copy(Place::from(ptr)), WithRetag::No),
+                        source,
+                    );
+                    let result = body.insert_binary_op(
+                        BinOp::BitOr,
+                        Operand::Copy(Place::from(typed)),
+                        Operand::Copy(Place::from(valid)),
+                        source,
+                        InsertPosition::Before,
+                    );
+                    let msg = format!("Undefined Behavior: Invalid value of type `{ty}`");
+                    body.insert_check(
+                        &self.safety_check_type,
+                        source,
+                        InsertPosition::Before,
+                        Some(result),
+                        &msg,
+                    );
+                }
+            }
+            Err(_) => {
+                let reason = format!(
+                    "Kani currently doesn't support checking validity of `read of bytes \
+                                 written without a type check` for `{ty}`"
+                );
+                self.unsupported_check_if(body, source, untyped, &reason);
+            }
+        }
+    }
+
+    /// Insert the unsupported check `reason`, reached only if `cond` holds: split the block at
+    /// `source` on `cond`, into a block with the check, which then continues where `source` is.
+    fn unsupported_check_if(
+        &self,
+        body: &mut MutableBody,
+        source: &mut SourceInstruction,
+        cond: Local,
+        reason: &str,
+    ) {
+        let CheckType::UnsupportedCheck(check_fn) = &self.unsupported_check_type else {
+            unreachable!("the unsupported check type is an unsupported check")
+        };
+        let span = source.span(body.blocks());
+        let msg = body.new_str_operand(reason, span);
+        let func = Operand::Copy(Place::from(body.new_local(check_fn.ty(), span, Mutability::Not)));
+        let unit = body.new_local(Ty::new_tuple(&[]), span, Mutability::Not);
+        // The switch's targets are filled in once the blocks exist.
+        let switch = Terminator {
+            kind: TerminatorKind::Goto { target: 0 },
+            source_info: synthetic_source_info(span),
+        };
+        let (switch_bb, rest_bb) = body.split_with_terminator(source, switch);
+        let check_bb = body.push_raw_bb(BasicBlock {
+            statements: vec![],
+            terminator: Terminator {
+                kind: TerminatorKind::Call {
+                    func,
+                    args: vec![msg],
+                    destination: Place::from(unit),
+                    target: Some(rest_bb),
+                    unwind: UnwindAction::Terminate,
+                },
+                source_info: synthetic_source_info(span),
+            },
+        });
+        body.replace_terminator(
+            &SourceInstruction::Terminator { bb: switch_bb },
+            Terminator {
+                kind: TerminatorKind::SwitchInt {
+                    discr: Operand::Copy(Place::from(cond)),
+                    targets: SwitchTargets::new(vec![(0, rest_bb)], check_bb),
+                },
+                source_info: synthetic_source_info(span),
+            },
+        );
+    }
+
+    /// Insert a call to the model `model::<ty>(args)` and return the local with its result.
+    fn call_model(
+        &self,
+        body: &mut MutableBody,
+        source: &mut SourceInstruction,
+        model: KaniModel,
+        ty: Ty,
+        args: Vec<Operand>,
+        ret_ty: Ty,
+    ) -> Local {
+        let span = source.span(body.blocks());
+        let def = self.kani_functions[&model.into()];
+        let instance =
+            Instance::resolve(def, &GenericArgs(vec![GenericArgKind::Type(ty)])).unwrap();
+        let ret = body.new_local(ret_ty, span, Mutability::Not);
+        body.insert_call(&instance, source, InsertPosition::Before, args, Place::from(ret));
+        ret
+    }
+
+    /// Choose the byte whose untyped writes the checks track, where the harness starts.
+    fn initialize_untyped_write_state(&self, body: &mut MutableBody) {
+        let mut source = if body.blocks()[0].statements.is_empty() {
+            SourceInstruction::Terminator { bb: 0 }
+        } else {
+            SourceInstruction::Statement { idx: 0, bb: 0 }
+        };
+        let span = source.span(body.blocks());
+        let def = self.kani_functions[&KaniModel::InitializeUntypedWriteState.into()];
+        let instance = Instance::resolve(def, &GenericArgs(vec![])).unwrap();
+        let ret = body.new_local(Ty::new_tuple(&[]), span, Mutability::Not);
+        body.insert_call(&instance, &mut source, InsertPosition::Before, vec![], Place::from(ret));
     }
 
     fn unsupported_check(
@@ -314,6 +538,25 @@ enum SourceOp {
     /// TODO: Consider replacing the assertion(false) by an unsupported operation that emits a
     /// compilation warning.
     UnsupportedCheck { check: String, ty: Ty },
+
+    /// Record that the `count` (one if `None`) values of `elem_size` bytes at the pointer `ptr`
+    /// evaluates to were
+    /// written without a type check (`untyped`), or by a typed store of a type with validity
+    /// requirements (not `untyped`).
+    ///
+    /// Writing bytes that are invalid for a type is not undefined behavior: reading them as that
+    /// type is. So untyped writes are only recorded, and the reads that cover them are checked.
+    SetUntyped { ptr: Rvalue, count: Option<Operand>, elem_size: u64, untyped: bool },
+
+    /// A typed read of `place`, of type `ty`, from memory that may have been written untyped:
+    /// check its value if one of its bytes was. `ranges` is `Err` if Kani can't express the
+    /// validity of `ty`, which is then reported as unsupported, but only if the read covers bytes
+    /// written untyped.
+    UntypedRead { place: Place, ty: Ty, ranges: Result<Vec<ValidValueReq>, String> },
+    /// The call this instruction is, an unaligned load of a `ty` at the pointer `ptr` into
+    /// `dest`: check the value it loads, after the call, if one of the bytes at `ptr` was written
+    /// untyped. The bytes at `ptr` can't be read as `ty` in place, as they may be misaligned.
+    UntypedLoad { ptr: Operand, dest: Place, ty: Ty, ranges: Result<Vec<ValidValueReq>, String> },
 }
 
 /// The unsafe instructions that may generate invalid values.
@@ -367,6 +610,8 @@ struct CheckValueVisitor<'a, 'b> {
     bb: BasicBlockIdx,
     /// Machine information needed to calculate Niche.
     machine: MachineInfo,
+    /// Locals whose address the function takes: a pointer may write them untyped.
+    address_taken: &'a HashSet<Local>,
 }
 
 impl<'a, 'b> CheckValueVisitor<'a, 'b> {
@@ -375,6 +620,7 @@ impl<'a, 'b> CheckValueVisitor<'a, 'b> {
         body: &'a MutableBody,
         bb: BasicBlockIdx,
         skip_first: bool,
+        address_taken: &'a HashSet<Local>,
     ) -> Option<UnsafeInstruction> {
         let mut visitor = CheckValueVisitor {
             access: PlaceAccessKind::Conservative,
@@ -385,6 +631,7 @@ impl<'a, 'b> CheckValueVisitor<'a, 'b> {
             target: None,
             bb,
             machine: MachineInfo::target(),
+            address_taken,
         };
         visitor.visit_basic_block(&body.blocks()[bb]);
         visitor.target
@@ -402,6 +649,110 @@ impl<'a, 'b> CheckValueVisitor<'a, 'b> {
         self.access = access;
         visit(self);
         self.access = previous;
+    }
+
+    /// Whether the memory of `place` may have been written untyped: it is reached through a
+    /// pointer, or it is a local whose address is taken.
+    fn may_be_untyped(&self, place: &Place) -> bool {
+        place.projection.iter().any(|elem| matches!(elem, ProjectionElem::Deref))
+            || self.address_taken.contains(&place.local)
+    }
+
+    /// Whether `place` is a value a closure captured, read through its environment (`env.field`
+    /// or `(*env).field`). These reads are not checked: a closure is only called through a borrow
+    /// or a move of the closure value, and that read of the closure is checked where the closure
+    /// lives if its bytes may have been written untyped. Reads through a captured reference, into
+    /// other memory, are still checked. Quantifier predicates, which can't contain checks, read
+    /// their captures this way.
+    fn is_closure_capture(&self, place: &Place) -> bool {
+        let is_closure = |ty: Ty| {
+            matches!(
+                ty.kind(),
+                TyKind::RigidTy(RigidTy::Closure(..) | RigidTy::CoroutineClosure(..))
+            )
+        };
+        let env_ty = self.locals[place.local].ty;
+        match place.projection.as_slice() {
+            [ProjectionElem::Field(..)] => is_closure(env_ty),
+            [ProjectionElem::Deref, ProjectionElem::Field(..)] => match env_ty.kind() {
+                TyKind::RigidTy(RigidTy::Ref(_, pointee, _)) => is_closure(pointee),
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
+    /// Whether `place` dereferences a raw pointer.
+    fn derefs_raw_pointer(&self, place: &Place) -> bool {
+        place.projection.iter().enumerate().any(|(idx, elem)| {
+            matches!(elem, ProjectionElem::Deref)
+                && PlaceRef { local: place.local, projection: &place.projection[..idx] }
+                    .ty(self.locals)
+                    .is_ok_and(|ty| ty.kind().is_raw_ptr())
+        })
+    }
+
+    /// A typed read of `place`: check it if it reads bytes written untyped.
+    fn check_untyped_read(&mut self, place: &Place) {
+        if !self.may_be_untyped(place) || self.is_closure_capture(place) {
+            return;
+        }
+        let Ok(ty) = place.ty(self.locals) else { return };
+        if !ty.layout().is_ok_and(|layout| layout.shape().is_sized()) {
+            return;
+        }
+        match ty_validity_per_offset(self.tcx, &self.machine, ty, 0) {
+            Ok(ranges) if ranges.is_empty() => {}
+            ranges => self.push_target(SourceOp::UntypedRead { place: place.clone(), ty, ranges }),
+        }
+    }
+
+    /// A store to `place`. A store of a restricted type directly into a local writes a valid value
+    /// of the local's type. A store through a pointer is recorded as untyped: if the pointee type
+    /// has no validity requirements, its bytes may be invalid for the memory's type; if it does,
+    /// the pointer may alias memory of another restricted type (a `*mut NonZeroU8` cast from a
+    /// `*mut bool`), and the reads that cover the bytes check them. A restricted type whose
+    /// validity can't be expressed clears the mark instead, so that its later reads don't report
+    /// an unsupported check.
+    fn record_store(&mut self, place: &Place) {
+        if !self.may_be_untyped(place) {
+            return;
+        }
+        let Ok(ty) = place.ty(self.locals) else { return };
+        let Ok(layout) = ty.layout() else { return };
+        let shape = layout.shape();
+        if !shape.is_sized() || shape.size.bytes() == 0 {
+            return;
+        }
+        let through_pointer =
+            place.projection.iter().any(|elem| matches!(elem, ProjectionElem::Deref));
+        let validity = ty_validity_per_offset(self.tcx, &self.machine, ty, 0);
+        let unrestricted = matches!(&validity, Ok(ranges) if ranges.is_empty());
+        if unrestricted && !through_pointer {
+            // A typed store of an unrestricted type into a local: nothing reads it as a
+            // restricted type without a cast, and reads through casts are checked.
+            return;
+        }
+        let untyped = through_pointer && validity.is_ok();
+        self.push_target(SourceOp::SetUntyped {
+            ptr: Rvalue::AddressOf(RawPtrKind::Const, place.clone()),
+            count: None,
+            elem_size: shape.size.bytes() as u64,
+            untyped,
+        });
+    }
+
+    /// A write of `count` values at the pointer `ptr` (of type `*mut T`) that doesn't check types.
+    fn record_untyped_write(&mut self, ptr: &Operand, count: Option<Operand>) {
+        let ptr_ty = ptr.ty(self.locals).unwrap();
+        let elem_ty = pointee_ty(ptr_ty);
+        let Ok(layout) = elem_ty.layout() else { return };
+        self.push_target(SourceOp::SetUntyped {
+            ptr: Rvalue::Use(ptr.clone(), WithRetag::No),
+            count,
+            elem_size: layout.shape().size.bytes() as u64,
+            untyped: true,
+        });
     }
 
     /// Narrow checks only for an optional leading dereference and ordinary struct/tuple fields.
@@ -489,12 +840,9 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
             // Leave it as an exhaustive match to be notified when a new kind is added.
             match &stmt.kind {
                 StatementKind::Intrinsic(NonDivergingIntrinsic::CopyNonOverlapping(copy)) => {
-                    // Source is a *const T and it must be safe for read.
-                    // TODO: Implement value check.
-                    self.push_target(SourceOp::UnsupportedCheck {
-                        check: "copy_nonoverlapping".to_string(),
-                        ty: copy.src.ty(self.locals).unwrap(),
-                    });
+                    // A copy writes bytes, not values: the destination's bytes are written
+                    // untyped, and the reads that cover them are checked.
+                    self.record_untyped_write(&copy.dst, Some(copy.count.clone()));
                 }
                 StatementKind::Assign(place, rvalue) => {
                     // First check rvalue.
@@ -517,6 +865,7 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                             ranges,
                         });
                     }
+                    self.record_store(place);
                 }
                 StatementKind::FakeRead(_, _)
                 | StatementKind::SetDiscriminant { .. }
@@ -539,7 +888,7 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
             self.current = SourceInstruction::Terminator { bb: self.bb };
             // Leave it as an exhaustive match to be notified when a new kind is added.
             match &term.kind {
-                TerminatorKind::Call { func, args, .. } => {
+                TerminatorKind::Call { func, args, destination, .. } => {
                     // Note: For transmute, both Src and Dst must be valid type.
                     // In this case, we need to save the Dst, and invoke super_terminator.
                     // The return destination is a store; argument operands are reads.
@@ -547,42 +896,59 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                         visitor.super_terminator(term, location);
                     });
                     match intrinsic_name(self.locals, func).as_deref() {
-                        Some("write_bytes") => {
-                            // The write bytes intrinsic may trigger UB in safe code.
-                            // pub unsafe fn write_bytes<T>(dst: *mut T, val: u8, count: usize)
-                            // <https://doc.rust-lang.org/stable/core/intrinsics/fn.write_bytes.html>
-                            // This is an over-approximation since writing an invalid value is
-                            // not UB, only reading it will be.
-                            assert_eq!(
-                                args.len(),
-                                3,
-                                "Unexpected number of arguments for `write_bytes`"
-                            );
-                            let TyKind::RigidTy(RigidTy::RawPtr(target_ty, Mutability::Mut)) =
-                                args[0].ty(self.locals).unwrap().kind()
-                            else {
-                                unreachable!()
-                            };
-                            let validity =
-                                ty_validity_per_offset(self.tcx, &self.machine, target_ty, 0);
-                            match validity {
+                        // Intrinsics that write bytes, not values: record the untyped write.
+                        // <https://doc.rust-lang.org/stable/core/intrinsics/fn.write_bytes.html>
+                        Some("write_bytes") | Some("volatile_set_memory") => {
+                            self.record_untyped_write(&args[0], Some(args[2].clone()));
+                        }
+                        Some("copy") => self.record_untyped_write(&args[1], Some(args[2].clone())),
+                        Some("volatile_copy_memory")
+                        | Some("volatile_copy_nonoverlapping_memory") => {
+                            self.record_untyped_write(&args[0], Some(args[2].clone()));
+                        }
+                        Some("typed_swap_nonoverlapping") => {
+                            self.record_untyped_write(&args[0], None);
+                            self.record_untyped_write(&args[1], None);
+                        }
+                        // Volatile accesses read and write through the pointer without a MIR
+                        // place: treat them as a typed read and a store through the pointer.
+                        Some("volatile_load") => {
+                            if let Some(place) = deref_place(&args[0]) {
+                                self.check_untyped_read(&place);
+                            }
+                        }
+                        Some("unaligned_volatile_load") => {
+                            let ty = destination.ty(self.locals).unwrap();
+                            match ty_validity_per_offset(self.tcx, &self.machine, ty, 0) {
                                 Ok(ranges) if ranges.is_empty() => {}
-                                Ok(ranges) => {
-                                    let sz = rustc_internal::stable(Const::from_target_usize(
-                                        self.tcx,
-                                        target_ty.layout().unwrap().shape().size.bytes() as u64,
-                                    ));
-                                    self.push_target(SourceOp::BytesValidity {
-                                        target_ty,
-                                        rvalue: Rvalue::Repeat(args[1].clone(), sz),
-                                        ranges,
-                                    })
-                                }
-                                _ => self.push_target(SourceOp::UnsupportedCheck {
-                                    check: "write_bytes".to_string(),
-                                    ty: target_ty,
+                                ranges => self.push_target(SourceOp::UntypedLoad {
+                                    ptr: args[0].clone(),
+                                    dest: destination.clone(),
+                                    ty,
+                                    ranges,
                                 }),
                             }
+                        }
+                        Some("volatile_store") => {
+                            if let Some(place) = deref_place(&args[0]) {
+                                self.record_store(&place);
+                            }
+                        }
+                        // The pointer may be misaligned, so it's not a place: record the bytes
+                        // it writes as untyped, as for any store through a pointer.
+                        Some("unaligned_volatile_store") => {
+                            self.record_untyped_write(&args[0], None);
+                        }
+                        // Atomic operations other than loads and fences write an integer or a
+                        // pointer, types without validity requirements, through the pointer.
+                        Some(name)
+                            if name.starts_with("atomic_")
+                                && !matches!(
+                                    name,
+                                    "atomic_load" | "atomic_fence" | "atomic_singlethreadfence"
+                                ) =>
+                        {
+                            self.record_untyped_write(&args[0], None);
                         }
                         Some("transmute") | Some("transmute_copy") => {
                             unreachable!("Should've been lowered")
@@ -686,6 +1052,9 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
     }
 
     fn visit_operand(&mut self, operand: &Operand, location: Location) {
+        if let Operand::Copy(place) | Operand::Move(place) = operand {
+            self.check_untyped_read(place);
+        }
         self.with_access(PlaceAccessKind::Read, |visitor| {
             visitor.super_operand(operand, location);
         });
@@ -715,6 +1084,16 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                     let TyKind::RigidTy(RigidTy::RawPtr(src_pointee_ty, _)) = src_ty.kind() else {
                         unreachable!()
                     };
+
+                    // Writes through a pointer to a type without validity requirements are
+                    // recorded as untyped (see `record_store`), and the reads that cover them
+                    // are checked.
+                    if matches!(
+                        ty_validity_per_offset(self.tcx, &self.machine, dest_pointee_ty, 0),
+                        Ok(ranges) if ranges.is_empty()
+                    ) {
+                        return;
+                    }
 
                     if src_pointee_ty.kind().is_unit() {
                         // We cannot track what was the initial type. Thus, fail.
@@ -825,14 +1204,22 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                 | AggregateKind::RawPtr(_, _)
                 | AggregateKind::Tuple => {}
             },
-            Rvalue::AddressOf(_, _)
+            // Reading a discriminant, or a place to dereference it, is a typed read.
+            // So is forming a reference: Kani requires the target of a reference to be valid, as
+            // it does for `&*ptr`. Dropping a value borrows it, and its drop glue reads it.
+            Rvalue::CopyForDeref(place) | Rvalue::Discriminant(place) => {
+                self.check_untyped_read(place);
+            }
+            // A borrow through a raw pointer is checked unconditionally (`DerefValidity`).
+            Rvalue::Ref(_, _, place) if !self.derefs_raw_pointer(place) => {
+                self.check_untyped_read(place);
+            }
+            Rvalue::Ref(..)
+            | Rvalue::AddressOf(_, _)
             | Rvalue::BinaryOp(_, _, _)
             | Rvalue::CheckedBinaryOp(_, _, _)
-            | Rvalue::CopyForDeref(_)
-            | Rvalue::Discriminant(_)
             | Rvalue::Len(_)
             | Rvalue::Reborrow(..)
-            | Rvalue::Ref(_, _, _)
             | Rvalue::Repeat(_, _)
             | Rvalue::ThreadLocalRef(_)
             | Rvalue::UnaryOp(_, _)
@@ -1232,12 +1619,21 @@ pub fn ty_validity_per_offset(
                             for idx in layout.fields.fields_by_offset_order() {
                                 let field_offset = offsets[idx].bytes();
                                 let field_ty = fields[idx].ty_with_args(args);
-                                struct_validity.append(&mut ty_validity_per_offset(
+                                for req in ty_validity_per_offset(
                                     tcx,
                                     machine_info,
                                     field_ty,
                                     field_offset + current_offset,
-                                )?);
+                                )? {
+                                    // A struct whose layout is a single scalar (e.g. the
+                                    // `#[repr(packed)]` `Unaligned<bool>`) has the requirement of
+                                    // its scalar field already; repeating it changes nothing, but
+                                    // would make the struct's validity compare unequal to the
+                                    // field's.
+                                    if !struct_validity.contains(&req) {
+                                        struct_validity.push(req);
+                                    }
+                                }
                             }
                             Ok(struct_validity)
                         }
@@ -1262,6 +1658,26 @@ pub fn ty_validity_per_offset(
                     }
                     Ok(tuple_validity)
                 }
+                // A closure is laid out like a tuple of its captures.
+                RigidTy::Closure(_, _) => {
+                    let rustc_middle::ty::TyKind::Closure(_, args) =
+                        rustc_internal::internal(tcx, ty).kind()
+                    else {
+                        unreachable!("Expected a closure: {ty:?}")
+                    };
+                    let upvars: Vec<Ty> =
+                        args.as_closure().upvar_tys().iter().map(rustc_internal::stable).collect();
+                    let mut closure_validity = vec![];
+                    for idx in layout.fields.fields_by_offset_order() {
+                        closure_validity.append(&mut ty_validity_per_offset(
+                            tcx,
+                            machine_info,
+                            upvars[idx],
+                            offsets[idx].bytes() + current_offset,
+                        )?);
+                    }
+                    Ok(closure_validity)
+                }
                 RigidTy::Bool
                 | RigidTy::Char
                 | RigidTy::Int(_)
@@ -1279,7 +1695,6 @@ pub fn ty_validity_per_offset(
                 }
                 RigidTy::FnDef(_, _)
                 | RigidTy::FnPtr(_)
-                | RigidTy::Closure(_, _)
                 | RigidTy::Coroutine(_, _)
                 | RigidTy::CoroutineClosure(_, _)
                 | RigidTy::CoroutineWitness(_, _)
@@ -1292,4 +1707,73 @@ pub fn ty_validity_per_offset(
             Ok(vec![])
         }
     }
+}
+
+/// The place `*ptr`, if the pointer operand is a place.
+fn deref_place(ptr: &Operand) -> Option<Place> {
+    let (Operand::Copy(place) | Operand::Move(place)) = ptr else { return None };
+    let mut projection = place.projection.clone();
+    projection.push(ProjectionElem::Deref);
+    Some(Place { local: place.local, projection })
+}
+
+/// The pointee of the raw pointer or reference type `ty`.
+fn pointee_ty(ty: Ty) -> Ty {
+    match ty.kind() {
+        TyKind::RigidTy(RigidTy::RawPtr(pointee, _))
+        | TyKind::RigidTy(RigidTy::Ref(_, pointee, _)) => pointee,
+        _ => unreachable!("expected a pointer, found `{ty}`"),
+    }
+}
+
+fn bool_operand(value: bool, span: Span) -> Operand {
+    Operand::Constant(ConstOperand { span, user_ty: None, const_: MirConst::from_bool(value) })
+}
+
+/// The locals whose address the body takes, by a reference or a raw borrow of any place in them.
+fn address_taken_locals(body: &MutableBody) -> HashSet<Local> {
+    body.blocks()
+        .iter()
+        .flat_map(|block| &block.statements)
+        .filter_map(|stmt| match &stmt.kind {
+            StatementKind::Assign(_, Rvalue::Ref(_, _, place) | Rvalue::AddressOf(_, place))
+                if !place.projection.iter().any(|elem| matches!(elem, ProjectionElem::Deref)) =>
+            {
+                Some(place.local)
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// Whether `instance` is a harness: a proof, a contract's proof, or an automatic harness.
+fn is_harness(instance: Instance, tcx: TyCtxt) -> bool {
+    if KaniFunction::try_from(instance)
+        == Ok(KaniFunction::Intrinsic(KaniIntrinsic::AutomaticHarness))
+    {
+        return true;
+    }
+    let harness_identifiers = [
+        vec![
+            rustc_span::symbol::Symbol::intern("kanitool"),
+            rustc_span::symbol::Symbol::intern("proof_for_contract"),
+        ],
+        vec![
+            rustc_span::symbol::Symbol::intern("kanitool"),
+            rustc_span::symbol::Symbol::intern("proof"),
+        ],
+    ];
+    harness_identifiers.iter().any(|attr_path| {
+        attrs_by_path(tcx, rustc_internal::internal(tcx, instance.def.def_id()), attr_path)
+            .next()
+            .is_some()
+    })
+}
+
+/// Whether `instance` belongs to the state Kani's checks keep (`kani_core::kani_mem_init!` and
+/// `kani_core::kani_valid_value!`), which is in the `kani` crate, or in `core` for the standard
+/// library.
+fn is_instrumentation_model(instance: Instance) -> bool {
+    let name = instance.name();
+    name.contains("kani::mem_init::") || name.contains("kani::valid_value::")
 }

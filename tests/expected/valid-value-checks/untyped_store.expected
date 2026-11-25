@@ -1,0 +1,5 @@
+Failed Checks: Undefined Behavior: Invalid value of type `bool`
+
+Verification failed for - via_transmuted_ref
+Verification failed for - via_const_ptr
+Complete - 1 successfully verified harnesses, 2 failures, 3 total.

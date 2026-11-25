@@ -15,5 +15,7 @@ fn second(i: usize) -> bool {
 #[kani::proof]
 fn indirect_predicate() {
     let predicate: fn(usize) -> bool = if kani::any() { first } else { second };
-    assert!(kani::forall!(|i in (0, 2)| predicate(i)));
+    // Captured by `move`: a capture read through a reference would be rejected first, as a
+    // safety check in the predicate (see `captured_reference.rs`).
+    assert!(kani::internal::kani_forall(0, 2, move |i: usize| predicate(i)));
 }
