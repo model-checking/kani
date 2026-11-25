@@ -125,3 +125,24 @@ fn three_levels() {
         i += 1;
     }
 }
+
+/// A user variable whose name starts with `kani_` is not a local that Kani generates: when the
+/// inner loop's clause mentions it, it must still be in the outer loop's clause.
+#[kani::proof]
+fn kani_named_variable() {
+    let mut i: u8 = 0;
+    let mut j: u8 = 0;
+    let mut kani_count: u8 = 0;
+    #[kani::loop_invariant(i <= 3)]
+    #[kani::loop_modifies(&i, &j)]
+    while i < 3 {
+        j = 0;
+        #[kani::loop_invariant(j <= 3)]
+        #[kani::loop_modifies(&j, &kani_count)]
+        while j < 3 {
+            kani_count = kani_count.wrapping_add(1);
+            j += 1;
+        }
+        i += 1;
+    }
+}
