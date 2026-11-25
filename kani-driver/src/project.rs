@@ -248,7 +248,7 @@ pub fn cargo_project(session: &mut KaniSession, keep_going: bool) -> Result<Proj
             "info:",
             "Compilation succeeded up until codegen. Skipping codegen because of `--no-codegen` option. Rerun without `--no-codegen` to perform codegen.",
         );
-        return Ok(Project::default());
+        return Ok(Project { cargo_metadata: Some(outputs.cargo_metadata), ..Default::default() });
     }
     // No `canonicalize` here: `CargoOutputs::outdir` is the parent of an artifact path, and
     // `Artifact::try_new` canonicalizes, so it is already canonical. Canonicalizing would also turn
