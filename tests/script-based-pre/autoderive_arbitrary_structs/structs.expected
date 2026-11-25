@@ -54,59 +54,59 @@ should_derive::alignment_pass\
 	 - Status: SUCCESS\
 	 - Description: "assertion failed: std::mem::align_of_val(&int) % align.0 == 0"
 
-should_derive::alignment_fail.assertion\
+should_derive::alignment_fail.panic\
 	 - Status: FAILURE\
 	 - Description: "assertion failed: std::mem::align_of_val(&int) % align.0 == 0"
 
-should_derive::alignment_fail.assertion\
+should_derive::alignment_fail.panic\
 	 - Status: FAILURE\
 	 - Description: "attempt to calculate the remainder with a divisor of zero"
 
-should_derive::named_multiple.assertion\
+should_derive::named_multiple.panic\
 	 - Status: FAILURE\
 	 - Description: "attempt to calculate the remainder with a divisor of zero"
 
-should_derive::named_multiple.assertion\
+should_derive::named_multiple.panic\
 	 - Status: FAILURE\
 	 - Description: "attempt to calculate the remainder with overflow"
 
-should_derive::named_multiple.assertion\
+should_derive::named_multiple.panic\
 	 - Status: FAILURE\
 	 - Description: "foo held an i28, but it didn't divide evenly"
 
-should_derive::named_struct.assertion\
+should_derive::named_struct.panic\
 	 - Status: FAILURE\
 	 - Description: "attempt to calculate the remainder with a divisor of zero"
 
-should_derive::named_struct.assertion\
+should_derive::named_struct.panic\
 	 - Status: FAILURE\
 	 - Description: "foo held an u32, but it didn't divide evenly"
 
-should_derive::anon_multiple_struct.assertion\
+should_derive::anon_multiple_struct.panic\
 	 - Status: FAILURE\
 	 - Description: "attempt to calculate the remainder with a divisor of zero"
 
-should_derive::anon_multiple_struct.assertion\
+should_derive::anon_multiple_struct.panic\
 	 - Status: FAILURE\
 	 - Description: "foo held an u32, but it didn't divide evenly"
 
-should_derive::anon_struct.assertion\
+should_derive::anon_struct.panic\
 	 - Status: FAILURE\
 	 - Description: "attempt to calculate the remainder with a divisor of zero"
 
-should_derive::anon_struct.assertion\
+should_derive::anon_struct.panic\
 	 - Status: FAILURE\
 	 - Description: "foo held an u32, but it didn't divide evenly"
 
-should_derive::unit_struct.assertion\
+should_derive::unit_struct.panic\
 	 - Status: SUCCESS\
 	 - Description: "assertion failed: foo == bar"
 
-should_derive::partially_used_generics_test.assertion\
+should_derive::partially_used_generics_test.panic\
 	 - Status: SUCCESS\
 	 - Description: "attempt to add with overflow"
 
-multiple_generics_test.assertion\
+multiple_generics_test.panic\
 	 - Status: FAILURE\
 	 - Description: "assertion failed: foo.first % 2 > 0"
 

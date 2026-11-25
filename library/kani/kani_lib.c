@@ -10,13 +10,6 @@ void *memcpy(void *dst, const void *src, size_t n);
 void *calloc(size_t nmemb, size_t size);
 void *malloc(size_t size);
 
-/// Mapping unit to `void` works for functions with no return type but not for
-/// variables with type unit. We treat both uniformly by declaring an empty
-/// struct type: `struct Unit {}` and a global variable `struct Unit VoidUnit`
-/// returned by all void functions (both declared by the Kani compiler).
-struct Unit;
-extern struct Unit VoidUnit;
-
 // `assert` then `assume`
 #define __KANI_assert(cond, msg)            \
     do {                                    \
@@ -76,7 +69,7 @@ uint8_t *__rust_alloc_zeroed(size_t size, size_t align)
 // definition.
 // For safety, refer to the documentation of GlobalAlloc::dealloc:
 // https://doc.rust-lang.org/std/alloc/trait.GlobalAlloc.html#tymethod.dealloc
-struct Unit __rust_dealloc(uint8_t *ptr, size_t size, size_t align)
+void __rust_dealloc(uint8_t *ptr, size_t size, size_t align)
 {
     // TODO: Ensure we are doing the right thing with align
     // https://github.com/model-checking/kani/issues/1168
@@ -85,7 +78,6 @@ struct Unit __rust_dealloc(uint8_t *ptr, size_t size, size_t align)
     __KANI_assert(__CPROVER_OBJECT_SIZE(ptr) == size,
                   "rust_dealloc must be called on an object whose allocated size matches its layout");
     free(ptr);
-    return VoidUnit;
 }
 
 // This is a C implementation of the __rust_realloc function that has the following signature:
@@ -119,7 +111,4 @@ uint8_t *__rust_realloc(uint8_t *ptr, size_t old_size, size_t align, size_t new_
 }
 
 // Function required by the linker, see https://github.com/rust-lang/rust/pull/141061
-struct Unit __rust_no_alloc_shim_is_unstable_v2(void)
-{
-    return VoidUnit;
-}
+void __rust_no_alloc_shim_is_unstable_v2(void) {}

@@ -1,0 +1,9 @@
+Checking harness check_unpermitted_panic...
+Failed Checks: one (not permitted by the contract)
+VERIFICATION:- SUCCESSFUL (encountered one or more panics as expected)
+
+Checking harness check_permitted_panic...
+VERIFICATION:- FAILED (encountered no panics, but at least one was expected)
+
+Verification failed for - check_permitted_panic
+Complete - 1 successfully verified harnesses, 1 failures, 2 total.

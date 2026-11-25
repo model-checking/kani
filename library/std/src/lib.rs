@@ -12,6 +12,11 @@
 // re-export all std symbols
 pub use std::*;
 
+// The macro overrides below expand to `kani::...` paths in the crates that use them, and the
+// `concrete_playback` feature is forwarded to `kani`, so this crate depends on `kani` without
+// referring to it. Mark the dependency as used.
+use kani as _;
+
 #[cfg(not(feature = "concrete_playback"))]
 // Override process calls with stubs.
 pub mod process;
@@ -87,7 +92,7 @@ macro_rules! assert {
     ($cond:expr $(,)?) => {{
         // Emit a block expression so assert! works in expression positions (#4874).
         // The double negation is to resolve https://github.com/model-checking/kani/issues/2108
-        kani::assert(!!$cond, concat!("assertion failed: ", stringify!($cond)));
+        kani::panic_assert(!!$cond, concat!("assertion failed: ", stringify!($cond)));
     }};
     // Before edition 2021, the `assert!` macro could take a single argument
     // that wasn't a string literal. This is not supported in edition 2021 and above.
@@ -97,7 +102,7 @@ macro_rules! assert {
     // If it isn't a literal: We add a default format
     // specifier to the macro (see https://github.com/model-checking/kani/issues/1375).
     ($cond:expr, $first:literal $(,)?) => {{
-        kani::assert(!!$cond, stringify!($first));
+        kani::panic_assert(!!$cond, stringify!($first));
         // Process the arguments of the assert inside an unreachable block. This
         // is to make sure errors in the arguments (e.g. an unknown variable or
         // an argument that does not implement the Display or Debug traits) are
@@ -114,14 +119,14 @@ macro_rules! assert {
         }
     }};
     ($cond:expr, $first:expr $(,)?) => {{
-        kani::assert(!!$cond, stringify!($first));
+        kani::panic_assert(!!$cond, stringify!($first));
         // See comment above
         if false {
             kani::__kani__workaround_core_assert!(true, "{}", $first);
         }
     }};
     ($cond:expr, $($arg:tt)+) => {{
-        kani::assert(!!$cond, concat!(stringify!($($arg)+)));
+        kani::panic_assert(!!$cond, concat!(stringify!($($arg)+)));
         // See comment above
         if false {
             kani::__kani__workaround_core_assert!(true, $($arg)+);
@@ -138,15 +143,16 @@ macro_rules! assert {
 //    instead of the uninformative:
 //        a panicking function core::panicking::assert_failed is invoked
 //    (see https://github.com/model-checking/kani/issues/13)
-// 3. Call kani::assert so that any instrumentation that it does (e.g. injecting
-//    reachability checks) is done for assert_eq and assert_ne
+// 3. Call kani::panic_assert so that any instrumentation that it does (e.g. injecting
+//    reachability checks) is done for assert_eq and assert_ne, and so that a failure is
+//    reported as a panic
 #[cfg(not(feature = "concrete_playback"))]
 #[macro_export]
 macro_rules! assert_eq {
     ($left:expr, $right:expr $(,)?) => ({
         // Add parentheses around the operands to avoid a "comparison operators
         // cannot be chained" error, but exclude the parentheses in the message
-        kani::assert(($left) == ($right), concat!("assertion failed: ", stringify!($left == $right)));
+        kani::panic_assert(($left) == ($right), concat!("assertion failed: ", stringify!($left == $right)));
     });
     ($left:expr, $right:expr, $($arg:tt)+) => ({
         assert!(($left) == ($right), $($arg)+);
@@ -159,7 +165,7 @@ macro_rules! assert_ne {
     ($left:expr, $right:expr $(,)?) => ({
         // Add parentheses around the operands to avoid a "comparison operators
         // cannot be chained" error, but exclude the parentheses in the message
-        kani::assert(($left) != ($right), concat!("assertion failed: ", stringify!($left != $right)));
+        kani::panic_assert(($left) != ($right), concat!("assertion failed: ", stringify!($left != $right)));
     });
     ($left:expr, $right:expr, $($arg:tt)+) => ({
         assert!(($left) != ($right), $($arg)+);

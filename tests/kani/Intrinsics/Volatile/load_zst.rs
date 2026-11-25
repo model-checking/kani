@@ -13,7 +13,9 @@ struct Z;
 
 #[kani::proof]
 fn read_volatile_unit_reference() {
-    assert_eq!(unsafe { ptr::read_volatile(&()) }, ());
+    // Borrow a local as in #5072; `&()` would be promoted to a static.
+    let x = ();
+    assert_eq!(unsafe { ptr::read_volatile(&x) }, ());
 }
 
 #[kani::proof]

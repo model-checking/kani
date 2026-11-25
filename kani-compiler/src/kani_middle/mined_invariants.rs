@@ -410,9 +410,43 @@ fn getter_receiver_path(receiver: &Place) -> Option<Vec<(usize, Ty)>> {
     Some(path)
 }
 
+/// The Kani functions that a user assertion calls: `kani::assert`, and `kani::panic_assert`,
+/// which Kani's `assert!`, `assert_eq!` and `assert_ne!` overrides call.
+#[derive(Clone, Copy, Debug)]
+pub struct AssertFns {
+    /// `kani::assert`, also used to insert Kani's own checks.
+    pub kani_assert: FnDef,
+    /// `kani::panic_assert`.
+    pub panic_assert: FnDef,
+}
+
+impl AssertFns {
+    pub fn from_kani_functions(
+        kani_fns: &std::collections::HashMap<
+            crate::kani_middle::kani_functions::KaniFunction,
+            FnDef,
+        >,
+    ) -> Self {
+        use crate::kani_middle::kani_functions::KaniHook;
+        AssertFns {
+            kani_assert: kani_fns[&KaniHook::Assert.into()],
+            panic_assert: kani_fns[&KaniHook::PanicAssert.into()],
+        }
+    }
+
+    /// Whether `def` is one of the assertion functions.
+    pub fn contains(&self, def: FnDef) -> bool {
+        def == self.kani_assert || def == self.panic_assert
+    }
+}
+
 /// Mine the invariant conjuncts of `ty` (a struct ADT) from its inherent `&self` methods.
 /// Results are cached by the caller.
-pub fn mine_self_assert_conjuncts(tcx: TyCtxt, ty: Ty, kani_assert: FnDef) -> Vec<MinedConjunct> {
+pub fn mine_self_assert_conjuncts(
+    tcx: TyCtxt,
+    ty: Ty,
+    assert_fns: AssertFns,
+) -> Vec<MinedConjunct> {
     let TyKind::RigidTy(RigidTy::Adt(adt_def, ref adt_args)) = ty.kind() else {
         return vec![];
     };
@@ -458,7 +492,7 @@ pub fn mine_self_assert_conjuncts(tcx: TyCtxt, ty: Ty, kani_assert: FnDef) -> Ve
                 };
                 let Ok(fn_ty) = func.ty(body.locals()) else { continue };
                 let TyKind::RigidTy(RigidTy::FnDef(def, _)) = fn_ty.kind() else { continue };
-                if def != kani_assert {
+                if !assert_fns.contains(def) {
                     continue;
                 }
                 // Unconditional claim (post-dominates entry), or a claim guarded by a

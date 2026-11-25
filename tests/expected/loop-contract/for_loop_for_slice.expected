@@ -2,7 +2,7 @@ forloop.loop_invariant_step.1\
 	 - Status: SUCCESS\
 	 - Description: "Check invariant after step for loop forloop.0"
 
-forloop.assertion.4\
+forloop.panic.4\
 	 - Status: SUCCESS\
 	 - Description: "assertion failed: sum <= (255 as u32 * len as u32)"
 

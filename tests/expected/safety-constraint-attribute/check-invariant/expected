@@ -1,7 +1,7 @@
-Check 1: check_invariant.assertion.1\
+Check 1: check_invariant.panic.1\
          - Status: SUCCESS\
          - Description: "assertion failed: point.is_safe()"
 
-Check 2: check_invariant.assertion.2\
+Check 2: check_invariant.panic.2\
          - Status: UNREACHABLE\
          - Description: ""this assertion should be unreachable""

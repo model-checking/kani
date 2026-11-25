@@ -51,10 +51,13 @@ pub fn split_for_remembers(stmts: &[Stmt], contract_mode: ContractMode) -> (&[St
         ContractMode::Replace | ContractMode::Assert => "assert",
     };
 
+    // Only the leading statements are preconditions: in assert mode, postconditions are also
+    // `kani::assert` calls, but they come after the body.
     for stmt in stmts {
-        if stmt_is_precondition(stmt, check_str) {
-            pos += 1;
+        if !stmt_is_precondition(stmt, check_str) {
+            break;
         }
+        pos += 1;
     }
     stmts.split_at(pos)
 }

@@ -11,7 +11,7 @@ Skipped Functions: None. Kani generated automatic harnesses for all functions in
 Autoharness: Checking function gcd_recursion against all possible inputs...
 Not unwinding recursion gcd_recursion iteration 21
 
-gcd_recursion.assertion\
+gcd_recursion.panic\
 	 - Status: FAILURE\
 	 - Description: "attempt to calculate the remainder with a divisor of zero"
 

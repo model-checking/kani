@@ -15,3 +15,6 @@ kani = {path="../kani"}
 
 [features]
 concrete_playback = ["kani/concrete_playback"]
+
+[lints]
+workspace = true

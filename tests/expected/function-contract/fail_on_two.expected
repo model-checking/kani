@@ -1,4 +1,4 @@
-assertion\
+panic\
 - Status: FAILURE\
 - Description: "internal error: entered unreachable code: fail on two"
 

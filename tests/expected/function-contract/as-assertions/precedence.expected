@@ -1,5 +1,5 @@
 
-assertion\
+panic\
 	 - Status: SUCCESS\
 	 - Description: "attempt to add with overflow"
 

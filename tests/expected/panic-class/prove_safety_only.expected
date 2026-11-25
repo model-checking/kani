@@ -1,0 +1,14 @@
+Checking harness postcondition...
+Failed Checks: |result: &u8| *result == x
+VERIFICATION:- FAILED
+
+Checking harness kani_assert...
+Failed Checks: kani check
+VERIFICATION:- FAILED
+
+Checking harness rust_assert...
+VERIFICATION:- SUCCESSFUL
+
+Verification failed for - postcondition
+Verification failed for - kani_assert
+Complete - 1 successfully verified harnesses, 2 failures, 3 total.

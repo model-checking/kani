@@ -1,0 +1,3 @@
+Checking harness check_offset_operand...
+Failed Checks: dereference failure: pointer NULL
+VERIFICATION:- FAILED

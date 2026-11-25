@@ -1,0 +1,16 @@
+Checking harness check_permit_all...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_callee...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_modifies...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_method...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_unwrap...
+VERIFICATION:- SUCCESSFUL
+
+Complete - 5 successfully verified harnesses, 0 failures, 5 total.
