@@ -18,9 +18,6 @@ macro_rules! kani_mem_init {
         #[kanitool::fn_marker = "KaniMemoryInitializationState"]
         static mut MEM_INIT_STATE: MemoryInitializationState = MemoryInitializationState::new();
 
-        /// Global object for tracking union initialization state across function boundaries.
-        static mut ARGUMENT_BUFFER: Option<ArgumentBuffer> = None;
-
         /// Bytewise mask, representing which bytes of a type are data and which are padding.
         /// For example, for a type like this:
         /// ```
@@ -38,13 +35,22 @@ macro_rules! kani_mem_init {
             pub tracked_object_id: usize,
             pub tracked_offset: usize,
             pub value: bool,
+            /// Passes the state of unions across function boundaries. It is part of this static,
+            /// rather than a static of its own, because every contract's write set includes this
+            /// static: a second one made the write-set checks far more expensive.
+            argument_buffer: ArgumentBuffer,
         }
 
         impl MemoryInitializationState {
             /// This is a dummy initialization function -- the values will be eventually overwritten by a
             /// call to `initialize_memory_initialization_state`.
             pub const fn new() -> Self {
-                Self { tracked_object_id: 0, tracked_offset: 0, value: false }
+                Self {
+                    tracked_object_id: 0,
+                    tracked_offset: 0,
+                    value: false,
+                    argument_buffer: ArgumentBuffer::EMPTY,
+                }
             }
 
             /// Return currently tracked memory initialization state if `ptr` points to the currently
@@ -105,7 +111,18 @@ macro_rules! kani_mem_init {
             ) {
                 let from_obj = super::mem::pointer_object(from_ptr);
                 let from_offset = super::mem::pointer_offset(from_ptr);
+                self.copy_from_location::<LAYOUT_SIZE>(from_obj, from_offset, to_ptr, num_elts);
+            }
 
+            /// As [Self::copy], from the location `from_offset` in the object `from_obj`.
+            #[kanitool::disable_checks(pointer)]
+            pub fn copy_from_location<const LAYOUT_SIZE: usize>(
+                &mut self,
+                from_obj: usize,
+                from_offset: usize,
+                to_ptr: *const u8,
+                num_elts: usize,
+            ) {
                 let to_obj = super::mem::pointer_object(to_ptr);
                 let to_offset = super::mem::pointer_offset(to_ptr);
 
@@ -116,11 +133,61 @@ macro_rules! kani_mem_init {
                     let should_reset: bool = super::any();
                     if should_reset {
                         self.tracked_object_id = to_obj;
-                        self.tracked_offset += to_offset - from_offset;
+                        // `tracked_offset >= from_offset` here; subtract first so that a copy to a
+                        // lower offset does not underflow.
+                        self.tracked_offset = self.tracked_offset - from_offset + to_offset;
                         // Note that this preserves the value.
+                    } else {
+                        // The tracked byte stays where it is. If the copy overlaps it (`copy`
+                        // may overlap), it now holds another, untracked, source byte, which is
+                        // initialized here; the branch above tracks that byte precisely.
+                        self.bless::<LAYOUT_SIZE>(to_ptr, num_elts);
                     }
                 } else {
-                    self.bless::<LAYOUT_SIZE>(to_ptr, 1);
+                    // The source is not tracked, so it is initialized: so is the whole
+                    // destination, all `num_elts` elements of it.
+                    self.bless::<LAYOUT_SIZE>(to_ptr, num_elts);
+                }
+            }
+
+            /// As [Self::copy] for one value, but only for the bytes that `mask` marks (the bytes of
+            /// unions nested in the type): the destination's other bytes are left unchanged, for
+            /// the caller to mark as for any write of the type.
+            #[kanitool::disable_checks(pointer)]
+            pub fn copy_masked<const LAYOUT_SIZE: usize>(
+                &mut self,
+                from_ptr: *const u8,
+                to_ptr: *const u8,
+                mask: Layout<LAYOUT_SIZE>,
+            ) {
+                let from_obj = super::mem::pointer_object(from_ptr);
+                let from_offset = super::mem::pointer_offset(from_ptr);
+                let to_obj = super::mem::pointer_object(to_ptr);
+                let to_offset = super::mem::pointer_offset(to_ptr);
+                let in_to = |obj: usize, offset: usize| {
+                    obj == to_obj
+                        && offset >= to_offset
+                        && offset < to_offset + LAYOUT_SIZE
+                        && mask[offset - to_offset]
+                };
+                if self.tracked_object_id == from_obj
+                    && self.tracked_offset >= from_offset
+                    && self.tracked_offset < from_offset + LAYOUT_SIZE
+                    && mask[self.tracked_offset - from_offset]
+                {
+                    let should_reset: bool = super::any();
+                    if should_reset {
+                        self.tracked_object_id = to_obj;
+                        // `tracked_offset >= from_offset` here; subtract first so that a copy to a
+                        // lower offset does not underflow.
+                        self.tracked_offset = self.tracked_offset - from_offset + to_offset;
+                    } else if in_to(self.tracked_object_id, self.tracked_offset) {
+                        // An overlapping copy put another, untracked, source byte here.
+                        self.value = true;
+                    }
+                } else if in_to(self.tracked_object_id, self.tracked_offset) {
+                    // The corresponding source byte is not tracked, so it is initialized.
+                    self.value = true;
                 }
             }
 
@@ -137,6 +204,30 @@ macro_rules! kani_mem_init {
                     && self.tracked_offset < offset + num_elts * LAYOUT_SIZE
                 {
                     self.value = true;
+                }
+            }
+
+            /// As [Self::set_slice], but leave the state of the bytes that `keep` marks unchanged:
+            /// the bytes of unions nested in the type, whose state does not follow from the type.
+            #[kanitool::disable_checks(pointer)]
+            pub fn set_slice_keep<const LAYOUT_SIZE: usize>(
+                &mut self,
+                ptr: *const u8,
+                layout: Layout<LAYOUT_SIZE>,
+                keep: Layout<LAYOUT_SIZE>,
+                num_elts: usize,
+                value: bool,
+            ) {
+                let obj = super::mem::pointer_object(ptr);
+                let offset = super::mem::pointer_offset(ptr);
+                if self.tracked_object_id == obj
+                    && self.tracked_offset >= offset
+                    && self.tracked_offset < offset + num_elts * LAYOUT_SIZE
+                {
+                    let idx = (self.tracked_offset - offset) % LAYOUT_SIZE;
+                    if !keep[idx] {
+                        self.value = layout[idx] && value;
+                    }
                 }
             }
 
@@ -190,7 +281,8 @@ macro_rules! kani_mem_init {
             }
         }
 
-        /// Set tracked object and tracked offset to a non-deterministic value.
+        /// Set tracked object and tracked offset to a non-deterministic value, and empty the argument
+        /// buffer.
         #[kanitool::disable_checks(pointer)]
         #[kanitool::fn_marker = "InitializeMemoryInitializationStateModel"]
         fn initialize_memory_initialization_state() {
@@ -198,6 +290,8 @@ macro_rules! kani_mem_init {
                 MEM_INIT_STATE.tracked_object_id = super::any();
                 MEM_INIT_STATE.tracked_offset = super::any();
                 MEM_INIT_STATE.value = false;
+                // Statics may start with arbitrary values, e.g. in a harness for a contract.
+                MEM_INIT_STATE.argument_buffer = ArgumentBuffer::EMPTY;
             }
         }
 
@@ -296,6 +390,63 @@ macro_rules! kani_mem_init {
             }
         }
 
+        /// As [set_ptr_initialized], but leave the bytes that `keep` marks (nested unions) unchanged.
+        #[kanitool::disable_checks(pointer)]
+        #[kanitool::fn_marker = "SetPtrInitializedKeepModel"]
+        fn set_ptr_initialized_keep<const LAYOUT_SIZE: usize, T>(
+            ptr: *const T,
+            layout: Layout<LAYOUT_SIZE>,
+            keep: Layout<LAYOUT_SIZE>,
+            value: bool,
+        ) {
+            if LAYOUT_SIZE == 0 {
+                return;
+            }
+            let (ptr, _) = ptr.to_raw_parts();
+            unsafe {
+                MEM_INIT_STATE.set_slice_keep(ptr as *const u8, layout, keep, 1, value);
+            }
+        }
+
+        /// As [set_slice_chunk_ptr_initialized], but leave the bytes that `keep` marks (nested
+        /// unions) unchanged.
+        #[kanitool::disable_checks(pointer)]
+        #[kanitool::fn_marker = "SetSliceChunkPtrInitializedKeepModel"]
+        fn set_slice_chunk_ptr_initialized_keep<const LAYOUT_SIZE: usize, T>(
+            ptr: *const T,
+            layout: Layout<LAYOUT_SIZE>,
+            keep: Layout<LAYOUT_SIZE>,
+            num_elts: usize,
+            value: bool,
+        ) {
+            if LAYOUT_SIZE == 0 {
+                return;
+            }
+            let (ptr, _) = ptr.to_raw_parts();
+            unsafe {
+                MEM_INIT_STATE.set_slice_keep(ptr as *const u8, layout, keep, num_elts, value);
+            }
+        }
+
+        /// As [set_slice_ptr_initialized], but leave the bytes that `keep` marks (nested unions)
+        /// unchanged.
+        #[kanitool::disable_checks(pointer)]
+        #[kanitool::fn_marker = "SetSlicePtrInitializedKeepModel"]
+        fn set_slice_ptr_initialized_keep<const LAYOUT_SIZE: usize, T>(
+            ptr: *const [T],
+            layout: Layout<LAYOUT_SIZE>,
+            keep: Layout<LAYOUT_SIZE>,
+            value: bool,
+        ) {
+            if LAYOUT_SIZE == 0 {
+                return;
+            }
+            let (ptr, num_elts) = ptr.to_raw_parts();
+            unsafe {
+                MEM_INIT_STATE.set_slice_keep(ptr as *const u8, layout, keep, num_elts, value);
+            }
+        }
+
         /// Get initialization state of the string slice, items of which are laid out according to the `layout` starting at address `ptr`.
         #[kanitool::disable_checks(pointer)]
         #[kanitool::fn_marker = "IsStrPtrInitializedModel"]
@@ -358,14 +509,52 @@ macro_rules! kani_mem_init {
             copy_init_state::<LAYOUT_SIZE, T>(from, to, 1);
         }
 
+        /// As [copy_init_state_single], but only for the bytes `mask` marks: the bytes of unions
+        /// nested in `T`, whose state is the source's. The caller marks the other bytes.
+        #[kanitool::disable_checks(pointer)]
+        #[kanitool::fn_marker = "CopyInitStateMaskedModel"]
+        fn copy_init_state_masked<const LAYOUT_SIZE: usize, T>(
+            from: *const T,
+            to: *const T,
+            mask: Layout<LAYOUT_SIZE>,
+        ) {
+            if LAYOUT_SIZE == 0 {
+                return;
+            }
+            let (from_ptr, _) = from.to_raw_parts();
+            let (to_ptr, _) = to.to_raw_parts();
+            unsafe {
+                MEM_INIT_STATE.copy_masked::<LAYOUT_SIZE>(
+                    from_ptr as *const u8,
+                    to_ptr as *const u8,
+                    mask,
+                );
+            }
+        }
+
         /// Information about currently tracked argument, used for passing union initialization
         /// state across function boundaries. This struct is written to by the caller and read from
         /// by the callee.
         #[derive(Clone, Copy)]
+        ///
+        /// The saved location is an object and an offset rather than a pointer, like the tracked
+        /// byte in [MemoryInitializationState].
         struct ArgumentBuffer {
+            is_set: bool,
             selected_argument: usize,
-            saved_address: *const (),
+            saved_object: usize,
+            saved_offset: usize,
             layout_size: usize,
+        }
+
+        impl ArgumentBuffer {
+            const EMPTY: ArgumentBuffer = ArgumentBuffer {
+                is_set: false,
+                selected_argument: 0,
+                saved_object: 0,
+                saved_offset: 0,
+                layout_size: 0,
+            };
         }
 
         /// Non-deterministically store information about currently tracked argument in the argument
@@ -377,11 +566,13 @@ macro_rules! kani_mem_init {
             let should_store: bool = super::any();
             if should_store {
                 unsafe {
-                    ARGUMENT_BUFFER = Some(ArgumentBuffer {
+                    MEM_INIT_STATE.argument_buffer = ArgumentBuffer {
+                        is_set: true,
                         selected_argument,
-                        saved_address: from_ptr,
+                        saved_object: super::mem::pointer_object(from_ptr),
+                        saved_offset: super::mem::pointer_offset(from_ptr),
                         layout_size: LAYOUT_SIZE,
-                    })
+                    }
                 }
             }
         }
@@ -394,15 +585,28 @@ macro_rules! kani_mem_init {
         #[kanitool::fn_marker = "LoadArgumentModel"]
         fn load_argument<const LAYOUT_SIZE: usize, T>(to: *const T, selected_argument: usize) {
             let (to_ptr, _) = to.to_raw_parts();
-            if let Some(buffer) = unsafe { ARGUMENT_BUFFER } {
-                if buffer.selected_argument == selected_argument {
-                    assert!(buffer.layout_size == LAYOUT_SIZE);
-                    copy_init_state_single::<LAYOUT_SIZE, ()>(buffer.saved_address, to_ptr);
+            let buffer = unsafe { MEM_INIT_STATE.argument_buffer };
+            if buffer.is_set && buffer.selected_argument == selected_argument {
+                // `super::assert` rather than `assert!`, like the other models: no panic or
+                // formatting code is needed for an internal check.
+                super::assert(
+                    buffer.layout_size == LAYOUT_SIZE,
+                    "the argument buffer holds an argument of another size",
+                );
+                if LAYOUT_SIZE != 0 {
                     unsafe {
-                        ARGUMENT_BUFFER = None;
+                        MEM_INIT_STATE.copy_from_location::<LAYOUT_SIZE>(
+                            buffer.saved_object,
+                            buffer.saved_offset,
+                            to_ptr as *const u8,
+                            1,
+                        );
                     }
-                    return;
                 }
+                unsafe {
+                    MEM_INIT_STATE.argument_buffer = ArgumentBuffer::EMPTY;
+                }
+                return;
             }
             unsafe {
                 MEM_INIT_STATE.bless::<LAYOUT_SIZE>(to_ptr as *const u8, 1);

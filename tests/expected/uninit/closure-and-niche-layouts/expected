@@ -1,0 +1,12 @@
+Checking harness transmute_into_niche_enum_ok...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness closure_capturing_uninit_ub...
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const std::mem::MaybeUninit<u64>`
+VERIFICATION:- FAILED
+
+Checking harness closure_with_captures_ok...
+VERIFICATION:- SUCCESSFUL
+
+Verification failed for - closure_capturing_uninit_ub
+Complete - 2 successfully verified harnesses, 1 failures, 3 total.

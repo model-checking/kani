@@ -1,0 +1,69 @@
+Checking harness transmute_union_should_fail...
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const U`
+VERIFICATION:- FAILED
+
+Checking harness transmute_union_should_pass...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness union_as_subfields_should_fail...
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `u32`
+VERIFICATION:- FAILED
+
+Checking harness union_as_subfields_should_pass...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness pointer_union_should_fail...
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `u32`
+VERIFICATION:- FAILED
+
+Checking harness pointer_union_should_pass...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness raw_pointer_to_union_ub...
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const std::mem::MaybeUninit<u32>`
+VERIFICATION:- FAILED
+
+Checking harness raw_pointer_to_union_ok...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness struct_with_union_field_ub...
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const std::mem::MaybeUninit<u64>`
+VERIFICATION:- FAILED
+
+Checking harness struct_with_union_field_ok...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness copy_whole_buffer_ub...
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const std::mem::MaybeUninit<u16>`
+VERIFICATION:- FAILED
+
+Checking harness copy_whole_buffer_ok...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness raw_write_then_read_ok...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness buffer_partly_written_ub...
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*const u32`
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `u32`
+VERIFICATION:- FAILED
+
+Checking harness buffer_written_then_read_ok...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness drop_init_in_array_ok...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness drop_uninit_in_array_ub...
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*mut D`
+VERIFICATION:- FAILED
+
+Verification failed for - transmute_union_should_fail
+Verification failed for - union_as_subfields_should_fail
+Verification failed for - pointer_union_should_fail
+Verification failed for - raw_pointer_to_union_ub
+Verification failed for - struct_with_union_field_ub
+Verification failed for - copy_whole_buffer_ub
+Verification failed for - buffer_partly_written_ub
+Verification failed for - drop_uninit_in_array_ub
+Complete - 9 successfully verified harnesses, 8 failures, 17 total.

@@ -1,0 +1,22 @@
+Checking harness fn_once_closure...
+Failed Checks: Kani does not support memory initialization checks across shadow transfers through Shim instances. For more information about planned support, see https://github.com/model-checking/kani/issues/3300.
+VERIFICATION:- FAILED
+
+Checking harness union_second_uninit_read...
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `u32`
+VERIFICATION:- FAILED
+
+Checking harness union_first_uninit_read...
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `u32`
+VERIFICATION:- FAILED
+
+Checking harness union_second_initialized...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness union_first_initialized...
+VERIFICATION:- SUCCESSFUL
+
+Verification failed for - fn_once_closure
+Verification failed for - union_second_uninit_read
+Verification failed for - union_first_uninit_read
+Complete - 2 successfully verified harnesses, 3 failures, 5 total.
