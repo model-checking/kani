@@ -45,6 +45,9 @@ fn harness_kind_label(harness: &HarnessMetadata) -> String {
     if harness.has_refcount_caveat {
         kind.push_str(" (refcount)");
     }
+    if harness.is_aliasing {
+        kind.push_str(" (aliasing)");
+    }
     kind
 }
 
@@ -88,14 +91,7 @@ fn setup_session(session: &mut KaniSession, common_autoharness_args: &CommonAuto
     if common_autoharness_args.bounded_arguments {
         warn_if_bounds_reach_unwind(bounds, &session.args, session.autoharness_default_unwind);
     }
-    session.add_auto_harness_args(
-        &common_autoharness_args.include_pattern,
-        &common_autoharness_args.exclude_pattern,
-        common_autoharness_args.bounded_arguments,
-        common_autoharness_args.constructor_args,
-        common_autoharness_args.check_invariants,
-        bounds,
-    );
+    session.add_auto_harness_args(common_autoharness_args, bounds);
 }
 
 /// Warn about a bound that reaches the effective unwinding bound. A loop iterating over such an
@@ -243,21 +239,17 @@ impl KaniSession {
     /// Add the compiler arguments specific to the `autoharness` subcommand.
     pub fn add_auto_harness_args(
         &mut self,
-        included: &[String],
-        excluded: &[String],
-        bounded_arguments: bool,
-        constructor_args: bool,
-        check_invariants: bool,
+        autoharness_args: &CommonAutoharnessArgs,
         bounds: AutoharnessBounds,
     ) {
         let mut args = vec![];
-        for pattern in included {
+        for pattern in &autoharness_args.include_pattern {
             args.push(format!("--autoharness-include-pattern {pattern}"));
         }
-        for pattern in excluded {
+        for pattern in &autoharness_args.exclude_pattern {
             args.push(format!("--autoharness-exclude-pattern {pattern}"));
         }
-        if bounded_arguments {
+        if autoharness_args.bounded_arguments {
             args.push("--autoharness-bounded-arguments".to_string());
             args.push(format!("--autoharness-slice-bound {}", bounds.slice));
             args.push(format!("--autoharness-string-bound {}", bounds.string));
@@ -266,11 +258,14 @@ impl KaniSession {
                 bounds.bounded_arbitrary
             ));
         }
-        if constructor_args {
+        if autoharness_args.constructor_args {
             args.push("--autoharness-constructor-args".to_string());
         }
-        if check_invariants {
+        if autoharness_args.check_invariants {
             args.push("--autoharness-check-invariants".to_string());
+        }
+        if autoharness_args.alias_arguments {
+            args.push("--autoharness-alias-arguments".to_string());
         }
         self.autoharness_compiler_flags = Some(args);
         self.autoharness_bounds = bounds;
@@ -313,11 +308,13 @@ impl KaniSession {
         let mut any_bounded = false;
         let mut any_ctor = false;
         let mut any_refcount = false;
+        let mut any_aliasing = false;
 
         for success in successes {
             any_bounded |= success.harness.is_bounded;
             any_ctor |= success.harness.is_ctor_based;
             any_refcount |= success.harness.has_refcount_caveat;
+            any_aliasing |= success.harness.is_aliasing;
             verified_fns.add_row(vec![
                 success.harness.crate_name.clone(),
                 success.harness.pretty_name.clone(),
@@ -330,6 +327,7 @@ impl KaniSession {
             any_bounded |= failure.harness.is_bounded;
             any_ctor |= failure.harness.is_ctor_based;
             any_refcount |= failure.harness.has_refcount_caveat;
+            any_aliasing |= failure.harness.is_aliasing;
             verified_fns.add_row(vec![
                 failure.harness.crate_name.clone(),
                 failure.harness.pretty_name.clone(),
@@ -360,6 +358,12 @@ impl KaniSession {
         }
         if any_refcount {
             println!("{REFCOUNT_NOTE}");
+        }
+        if any_aliasing {
+            println!(
+                "Note: harnesses marked \"(aliasing)\" let some shared reference or raw pointer argument be the same as an earlier argument (--alias-arguments);\n\
+                 their verification results also cover callers that pass the same reference or pointer for those arguments."
+            );
         }
 
         if failing > 0 {
@@ -397,6 +401,20 @@ mod tests {
         h.is_bounded = true;
         h.is_ctor_based = true;
         assert_eq!(harness_kind_label(&h), "#[kani::proof] (bounded) (ctor) (refcount)");
+    }
+
+    /// "(aliasing)" (--alias-arguments) is its own marker, independent of the others; it comes
+    /// last, so a harness with every caveat lists them in a fixed order.
+    #[test]
+    fn harness_kind_label_marks_aliasing() {
+        let mut h = mock_proof_harness("f", None, None, None);
+        h.is_aliasing = true;
+        assert_eq!(harness_kind_label(&h), "#[kani::proof] (aliasing)");
+        h.has_refcount_caveat = true;
+        assert_eq!(harness_kind_label(&h), "#[kani::proof] (refcount) (aliasing)");
+        h.is_bounded = true;
+        h.is_ctor_based = true;
+        assert_eq!(harness_kind_label(&h), "#[kani::proof] (bounded) (ctor) (refcount) (aliasing)");
     }
 
     /// The marker fits the summary table's "Kind of Automatic Harness" header, so marking a

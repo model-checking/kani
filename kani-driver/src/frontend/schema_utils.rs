@@ -475,6 +475,7 @@ struct HarnessExport {
     /// of `is_bounded`: a harness can report `is_bounded == false` and still not cover every
     /// reference count.
     has_refcount_caveat: bool,
+    is_aliasing: bool,
     attributes: HarnessAttributes,
     outcome: Outcome,
     resolved_solver: Option<String>,
@@ -827,6 +828,7 @@ impl HarnessExport {
             has_loop_contracts: harness.has_loop_contracts,
             is_bounded: harness.is_bounded,
             has_refcount_caveat: harness.has_refcount_caveat,
+            is_aliasing: harness.is_aliasing,
             attributes: harness.attributes.clone(),
             outcome,
             resolved_solver,
@@ -873,6 +875,7 @@ mod tests {
             is_bounded: false,
             is_ctor_based: false,
             has_refcount_caveat: false,
+            is_aliasing: false,
         }
     }
 
@@ -1269,6 +1272,7 @@ mod tests {
         assert!(hj["has_loop_contracts"].is_boolean(), "has_loop_contracts: {hj}");
         assert!(hj["is_bounded"].is_boolean(), "is_bounded: {hj}");
         assert!(hj["has_refcount_caveat"].is_boolean(), "has_refcount_caveat: {hj}");
+        assert!(hj["is_aliasing"].is_boolean(), "is_aliasing: {hj}");
         assert!(hj["attributes"].is_object(), "attributes: {hj}");
         assert!(hj.get("resolved_solver").is_some(), "resolved_solver: {hj}");
         assert!(hj.get("resolved_unwind").is_some(), "resolved_unwind: {hj}");
@@ -1847,6 +1851,7 @@ mod tests {
             has_loop_contracts: false,
             is_bounded: false,
             has_refcount_caveat: false,
+            is_aliasing: false,
             attributes: h2.attributes.clone(),
             outcome: Outcome::Timeout,
             resolved_solver: None,
@@ -2564,6 +2569,21 @@ mod tests {
         v.as_object_mut().unwrap().remove("has_refcount_caveat");
         let h: HarnessMetadata = serde_json::from_value(v).unwrap();
         assert!(!h.has_refcount_caveat);
+    }
+
+    #[test]
+    fn export_is_aliasing_true_iff_autoharness_aliasing_arguments() {
+        let mut h_aliasing = harness("aliasing_autoharness");
+        h_aliasing.is_automatically_generated = true;
+        h_aliasing.is_aliasing = true;
+        let hr_aliasing = HarnessResult { harness: &h_aliasing, result: success_result(vec![]) };
+        let v_aliasing = serde_json::to_value(export_one(hr_aliasing)).unwrap();
+        assert_eq!(v_aliasing["harnesses"][0]["is_aliasing"], true);
+
+        let h_distinct = harness("manual_harness");
+        let hr_distinct = HarnessResult { harness: &h_distinct, result: success_result(vec![]) };
+        let v_distinct = serde_json::to_value(export_one(hr_distinct)).unwrap();
+        assert_eq!(v_distinct["harnesses"][0]["is_aliasing"], false);
     }
 
     #[test]

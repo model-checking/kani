@@ -47,6 +47,7 @@ pub fn gen_proof_metadata(tcx: TyCtxt, instance: Instance, base_name: &Path) -> 
         is_bounded: false,
         is_ctor_based: false,
         has_refcount_caveat: false,
+        is_aliasing: false,
     }
 }
 
@@ -122,6 +123,7 @@ pub fn gen_contracts_metadata(
 /// the metdata from that function uniquely identifies the harness.
 /// TODO: In future iterations of this feature, we will likely have multiple harnesses for a single function (e.g., for generic functions),
 /// in which case HarnessMetadata will need to change further to differentiate between those harnesses.
+#[allow(clippy::too_many_arguments)]
 pub fn gen_automatic_proof_metadata(
     tcx: TyCtxt,
     base_name: &Path,
@@ -130,6 +132,7 @@ pub fn gen_automatic_proof_metadata(
     is_bounded: bool,
     is_ctor_based: bool,
     has_refcount_caveat: bool,
+    is_aliasing: bool,
 ) -> HarnessMetadata {
     let def = fn_to_verify.def;
     let pretty_name = readable_name(*fn_to_verify);
@@ -175,5 +178,6 @@ pub fn gen_automatic_proof_metadata(
         is_bounded,
         is_ctor_based,
         has_refcount_caveat,
+        is_aliasing,
     }
 }

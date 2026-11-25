@@ -50,6 +50,7 @@
       "has_loop_contracts": false,
       "is_bounded": false,
       "has_refcount_caveat": false,
+      "is_aliasing": false,
       "attributes": {
         "kind": "Proof",
         "should_panic": false,
