@@ -1,0 +1,12 @@
+Checking harness check_valid_aggregate_enum_tag...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_invalid_aggregate_enum_tag_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `G`
+VERIFICATION:- FAILED
+
+Checking harness check_boundary_invalid_aggregate_enum_tag_should_fail...
+Failed Checks: Undefined Behavior: Invalid value of type `G`
+VERIFICATION:- FAILED
+
+Complete - 1 successfully verified harnesses, 2 failures, 3 total.
