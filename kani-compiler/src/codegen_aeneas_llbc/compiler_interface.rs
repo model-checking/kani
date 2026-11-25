@@ -14,7 +14,7 @@ use crate::kani_middle::provide;
 use crate::kani_middle::reachability::{collect_reachable_items, filter_crate_items};
 use crate::kani_middle::transform::{BodyTransformation, GlobalPasses};
 use crate::kani_queries::QUERY_DB;
-use charon_lib::ast::{ItemId, RuntimeChecks, TranslatedCrate};
+use charon_lib::ast::{DedupSerializer, ItemId, RuntimeChecks, TranslatedCrate};
 use charon_lib::errors::ErrorCtx;
 use charon_lib::options::{CliOpts, Preset, SerializationFormat, TranslateOptions};
 use charon_lib::transform::{TransformCtx, run_transformation_passes};
@@ -152,7 +152,9 @@ impl LlbcCodegenBackend {
             let mut pb = llbc_file.to_path_buf();
             pb.set_extension("llbc");
             println!("Writing LLBC file to {}", pb.display());
-            if let Err(()) = crate_data.serialize_to_file(&pb, SerializationFormat::Json) {
+            // Deduplicate the serialized AST, as `charon` does by default.
+            let state = DedupSerializer::default();
+            if let Err(()) = crate_data.serialize_to_file(&pb, SerializationFormat::Json, &state) {
                 tcx.sess.dcx().err("Failed to write LLBC file");
             }
         }
@@ -384,7 +386,7 @@ fn charon_cli_options(print_llbc: bool) -> CliOpts {
 fn create_charon_transformation_context(tcx: TyCtxt) -> TransformCtx {
     let crate_name = tcx.crate_name(LOCAL_CRATE).as_str().into();
     let cli_options = charon_cli_options(false);
-    // Record the options in the crate: consumers check them (Aeneas rejects a crate that was not
+    // Record the preset in the crate: consumers check it (Aeneas rejects a crate that was not
     // translated with `--preset=aeneas`).
     let runtime_checks = RuntimeChecks {
         ub_checks: tcx.sess.ub_checks(),
@@ -393,7 +395,7 @@ fn create_charon_transformation_context(tcx: TyCtxt) -> TransformCtx {
     };
     let mut translated = TranslatedCrate {
         crate_name,
-        options: cli_options.clone(),
+        preset: cli_options.preset,
         runtime_checks,
         ..TranslatedCrate::default()
     };
