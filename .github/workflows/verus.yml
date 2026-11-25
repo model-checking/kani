@@ -1,0 +1,47 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+#
+# Runs the Verus proof of the aliasing checks' monitor (`library/kani_core/verus`) when the
+# monitor or its proof changes.
+name: Verus proof of the aliasing monitor
+permissions:
+  contents: read
+on:
+  pull_request:
+    paths:
+      - 'library/kani_core/src/aliasing_monitor.rs'
+      - 'library/kani_core/verus/**'
+      - '.github/workflows/verus.yml'
+  merge_group:
+  push:
+    branches:
+      - 'main'
+    paths:
+      - 'library/kani_core/src/aliasing_monitor.rs'
+      - 'library/kani_core/verus/**'
+      - '.github/workflows/verus.yml'
+
+env:
+  VERUS_VERSION: 0.2026.10.04.426d8b0
+  VERUS_TOOLCHAIN: 1.98.1
+
+jobs:
+  verus:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Kani
+        uses: actions/checkout@v6
+
+      - name: Install Verus
+        run: |
+          curl -sSfL -o verus.zip \
+            "https://github.com/verus-lang/verus/releases/download/release/${VERUS_VERSION}/verus-${VERUS_VERSION}-x86-linux.zip"
+          unzip -q verus.zip -d "$HOME/verus"
+          rustup toolchain install "${VERUS_TOOLCHAIN}" --profile minimal
+          echo "$HOME/verus/verus-x86-linux" >> "$GITHUB_PATH"
+
+      - name: Run the proof
+        run: |
+          RUSTUP_TOOLCHAIN="${VERUS_TOOLCHAIN}" verus library/kani_core/verus/aliasing_monitor.rs \
+            2>&1 | tee verus.log
+          grep -E "verification results:: [0-9]+ verified, 0 errors" verus.log
