@@ -94,6 +94,10 @@ const SKIPPED_ITEMS: &[KaniFunction] = &[
     KANI_SET_PANICS_ONLY_IF,
     KANI_SET_PANICS_IF,
     KANI_RESTORE_PANIC_PERMISSION,
+    // The state of `-Z valid-value-checks`, which `ValidValuePass` instruments the program with.
+    KaniFunction::Model(KaniModel::InitializeUntypedWriteState),
+    KaniFunction::Model(KaniModel::IsUntypedWrite),
+    KaniFunction::Model(KaniModel::SetUntypedWrite),
 ];
 
 /// Instruments the code with checks for uninitialized memory, agnostic to the source of targets.

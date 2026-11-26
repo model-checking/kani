@@ -26,6 +26,7 @@ mod iter;
 mod mem;
 mod mem_init;
 mod models;
+mod valid_value;
 
 pub use kani_macros::*;
 
@@ -62,6 +63,10 @@ macro_rules! kani_lib {
 
             mod mem_init {
                 kani_core::kani_mem_init!(core);
+            }
+
+            mod valid_value {
+                kani_core::kani_valid_value!(core);
             }
         }
     };
@@ -124,6 +129,15 @@ macro_rules! kani_lib {
             //! Note that for each harness, tracked object and tracked offset are chosen non-deterministically,
             //! so calls to `is_xxx_initialized` should be only used in assertion contexts.
             kani_core::kani_mem_init!(std);
+        }
+
+        mod valid_value {
+            //! State for `-Z valid-value-checks`: whether the bytes a typed read covers may have
+            //! been written without a type check, as `write_bytes` and copies write them. Like
+            //! memory initialization, it is tracked for one byte chosen nondeterministically per
+            //! harness, so a read of an invalid value at any byte is found by the execution that
+            //! tracks that byte.
+            kani_core::kani_valid_value!(std);
         }
     };
 }
