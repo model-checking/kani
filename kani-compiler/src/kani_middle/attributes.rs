@@ -105,6 +105,8 @@ enum KaniAttributeKind {
     /// Attribute used to mark unstable APIs.
     Unstable,
     Unwind,
+    /// Turns off the unwinding assertions of a harness, c.f. `--no-unwinding-checks`.
+    NoUnwindingChecks,
     /// A sound [`Self::Stub`] that replaces a function by a stub generated from
     /// its contract.
     StubVerified,
@@ -163,7 +165,8 @@ impl KaniAttributeKind {
             | KaniAttributeKind::ProofForContract
             | KaniAttributeKind::StubVerified
             | KaniAttributeKind::UseStubSet
-            | KaniAttributeKind::Unwind => true,
+            | KaniAttributeKind::Unwind
+            | KaniAttributeKind::NoUnwindingChecks => true,
             KaniAttributeKind::Unstable
             | KaniAttributeKind::StubSet
             | KaniAttributeKind::FnMarker
@@ -405,7 +408,7 @@ impl<'tcx> KaniAttributes<'tcx> {
                 ));
             }
             match kind {
-                KaniAttributeKind::ShouldPanic => {
+                KaniAttributeKind::ShouldPanic | KaniAttributeKind::NoUnwindingChecks => {
                     expect_single(self.tcx, kind, attrs);
                     attrs.iter().for_each(|attr| {
                         expect_no_args(self.tcx, kind, attr);
@@ -448,6 +451,14 @@ impl<'tcx> KaniAttributes<'tcx> {
                     if self.map.contains_key(&KaniAttributeKind::Proof) {
                         local_error(
                             "`proof` and `proof_for_contract` may not be used on the same function.".to_string(),
+                        );
+                    }
+                    if self.map.contains_key(&KaniAttributeKind::NoUnwindingChecks) {
+                        local_error(
+                            "`proof_for_contract` and `no_unwinding_checks` may not be used on \
+                             the same function, because the contract would be trusted beyond \
+                             the unwinding bound."
+                                .to_string(),
                         );
                     }
                     expect_single(self.tcx, kind, attrs);
@@ -635,6 +646,7 @@ impl<'tcx> KaniAttributes<'tcx> {
         self.map.iter().fold(harness_attrs, |mut harness, (kind, attributes)| {
             match kind {
                 KaniAttributeKind::ShouldPanic => harness.should_panic = true,
+                KaniAttributeKind::NoUnwindingChecks => harness.no_unwinding_checks = true,
                 KaniAttributeKind::Recursion => {
                     self.tcx.dcx().span_err(self.tcx.def_span(self.item), "The attribute `kani::recursion` should only be used in combination with function contracts.");
                 }

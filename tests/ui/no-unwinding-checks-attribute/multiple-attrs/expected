@@ -1,0 +1,2 @@
+error: only one '#[kani::no_unwinding_checks]' attribute is allowed per harness
+error: aborting due to 1 previous error

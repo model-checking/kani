@@ -15,6 +15,7 @@ fn divide(a: i32, b: i32) -> i32 {
 }
 
 #[kani::proof]
+#[kani::no_unwinding_checks]
 fn verify_multiply_positive() {
     let x: i32 = kani::any();
     let y: i32 = kani::any();
