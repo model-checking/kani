@@ -23,6 +23,25 @@ mod vtable;
 
 pub use unstable::{EnabledUnstableFeatures, UnstableFeature};
 
+/// The rustc target tuples Kani can verify for, exactly as `rustc --target` spells them. Each one
+/// needs a CBMC machine model in kani-compiler (`machine_model_from_session`). kani-driver checks
+/// `--target` against this list, build-kani checks `--lib-target`, and kani-compiler's
+/// `check_target` checks the session, so the three cannot disagree about what is supported.
+pub const SUPPORTED_TARGETS: [&str; 5] = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "riscv64gc-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+];
+
+/// `SUPPORTED_TARGETS` as a list for an error message: "`a`, `b` or `c`".
+pub fn supported_targets_list() -> String {
+    let quoted: Vec<String> = SUPPORTED_TARGETS.iter().map(|t| format!("`{t}`")).collect();
+    let (last, rest) = quoted.split_last().unwrap();
+    format!("{} or {last}", rest.join(", "))
+}
+
 /// The default maximum length for nondeterministic slices that automatic harnesses generate.
 /// Verification results for functions taking `&[T]`/`&mut [T]` arguments are only valid up to
 /// this bound. The default must stay below Kani's default unwinding bound (20), so that loops

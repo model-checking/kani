@@ -40,6 +40,14 @@ impl ValidateArgs for VerifyStdArgs {
             ));
         }
 
+        if self.verify_opts.target_triple.is_some() {
+            // Kani's `no_core` library, which `verify-std` builds against, exists for the host only.
+            return Err(Error::raw(
+                ErrorKind::ArgumentConflict,
+                "The `verify-std` subcommand does not support `--target`",
+            ));
+        }
+
         validate_std_path(&self.std_path)
     }
 }
