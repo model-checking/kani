@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 //! Implements the subcommand handling of the list subcommand
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::args::{CommonArgs, ValidateArgs, validate_std_path};
 use clap::{Error, Parser, ValueEnum, error::ErrorKind};
@@ -63,6 +63,31 @@ pub enum Format {
     Json,
 }
 
+/// Check the `--output` directory of `list` and `autoharness --list`.
+pub(crate) fn validate_list_output(format: Format, output: Option<&Path>) -> Result<(), Error> {
+    if format == Format::Pretty && output.is_some() {
+        return Err(Error::raw(
+            ErrorKind::ArgumentConflict,
+            "The `--output` flag is not compatible with the `pretty` format, since `pretty` prints to the terminal. Either specify `--format markdown` or `--format json`, or don't pass `--output`.",
+        ));
+    }
+
+    if let Some(output) = output
+        && output.exists()
+        && !output.is_dir()
+    {
+        return Err(Error::raw(
+            ErrorKind::InvalidValue,
+            format!(
+                "Invalid argument: `--output` argument `{}` is not a directory",
+                output.display()
+            ),
+        ));
+    }
+
+    Ok(())
+}
+
 impl ValidateArgs for CargoListArgs {
     fn validate(&self) -> Result<(), Error> {
         self.common_args.validate()?;
@@ -74,27 +99,7 @@ impl ValidateArgs for CargoListArgs {
             ));
         }
 
-        if self.format == Format::Pretty && self.output.is_some() {
-            return Err(Error::raw(
-                ErrorKind::ArgumentConflict,
-                "The `--output` flag is not compatible with the `pretty` format, since `pretty` prints to the terminal. Either specify `--format markdown` or `--format json`, or don't pass `--output`.",
-            ));
-        }
-
-        if let Some(output) = &self.output
-            && output.exists()
-            && !output.is_dir()
-        {
-            return Err(Error::raw(
-                ErrorKind::InvalidValue,
-                format!(
-                    "Invalid argument: `--output` argument `{}` is not a directory",
-                    output.display()
-                ),
-            ));
-        }
-
-        Ok(())
+        validate_list_output(self.format, self.output.as_deref())
     }
 }
 
@@ -109,25 +114,7 @@ impl ValidateArgs for StandaloneListArgs {
             ));
         }
 
-        if self.format == Format::Pretty && self.output.is_some() {
-            return Err(Error::raw(
-                ErrorKind::ArgumentConflict,
-                "The `--output` flag is not compatible with the `pretty` format, since `pretty` prints to the terminal. Either specify `--format markdown` or `--format json`, or don't pass `--output`.",
-            ));
-        }
-
-        if let Some(output) = &self.output
-            && output.exists()
-            && !output.is_dir()
-        {
-            return Err(Error::raw(
-                ErrorKind::InvalidValue,
-                format!(
-                    "Invalid argument: `--output` argument `{}` is not a directory",
-                    output.display()
-                ),
-            ));
-        }
+        validate_list_output(self.format, self.output.as_deref())?;
 
         if self.std {
             validate_std_path(&self.input)

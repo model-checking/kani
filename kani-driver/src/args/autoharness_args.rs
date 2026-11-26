@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use crate::args::list_args::Format;
+use crate::args::list_args::{Format, validate_list_output};
 use crate::args::{OutputFormat, ValidateArgs, VerificationArgs, validate_std_path};
 use crate::util::warning;
 use clap::{Error, Parser, error::ErrorKind};
@@ -212,28 +212,7 @@ impl ValidateArgs for CommonAutoharnessArgs {
             }
         }
 
-        // `pretty` prints to the terminal, so `--output` would have nothing to write.
-        if self.format == Format::Pretty && self.output.is_some() {
-            return Err(Error::raw(
-                ErrorKind::ArgumentConflict,
-                "The `--output` flag is not compatible with the `pretty` format, since `pretty` prints to the terminal. Either specify `--format markdown` or `--format json`, or don't pass `--output`.",
-            ));
-        }
-
-        if let Some(output) = &self.output
-            && output.exists()
-            && !output.is_dir()
-        {
-            return Err(Error::raw(
-                ErrorKind::InvalidValue,
-                format!(
-                    "Invalid argument: `--output` argument `{}` is not a directory",
-                    output.display()
-                ),
-            ));
-        }
-
-        Ok(())
+        validate_list_output(self.format, self.output.as_deref())
     }
 }
 
