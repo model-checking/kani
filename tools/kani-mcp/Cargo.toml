@@ -1,0 +1,18 @@
+# Copyright Kani Contributors
+# SPDX-License-Identifier: Apache-2.0 OR MIT
+
+[package]
+name = "kani-mcp"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "A minimal Model Context Protocol (MCP) server that exposes Kani to coding agents"
+publish = false
+
+[dependencies]
+anyhow = "1"
+serde_json = "1"
+tempfile = "3"
+
+[lints]
+workspace = true

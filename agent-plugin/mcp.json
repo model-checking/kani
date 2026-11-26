@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "kani": {
+      "command": "kani-mcp",
+      "args": []
+    }
+  }
+}

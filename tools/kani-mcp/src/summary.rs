@@ -1,0 +1,312 @@
+// Copyright Kani Contributors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Compact summary of a Kani `--export-json` document (RFC 0015).
+//!
+//! This mirrors `agent-plugin/scripts/summarize-results.py`, so agents get the same shape
+//! whether or not the MCP server is available; the `agent-plugin` smoke test checks that the
+//! two agree. Keep them in sync.
+
+use serde_json::{Map, Value, json};
+
+pub const DEFAULT_MAX_FAILED: usize = 5;
+
+fn verdict_of(harness: &Value) -> Value {
+    let outcome = &harness["outcome"];
+    let field = if outcome["kind"] == "COMPLETED" { "verdict" } else { "kind" };
+    outcome.get(field).cloned().unwrap_or(json!("UNKNOWN"))
+}
+
+fn location(prop: &Value) -> Option<String> {
+    let file = prop["file"].as_str()?;
+    Some(match prop["line"].as_str() {
+        Some(line) => format!("{file}:{line}"),
+        None => file.to_string(),
+    })
+}
+
+pub fn len(value: &Value) -> usize {
+    value.as_array().map_or(0, Vec::len)
+}
+
+fn summarize_harness(harness: &Value, max_failed: usize) -> Value {
+    let mut out = Map::new();
+    out.insert("name".into(), harness["name"].clone());
+    out.insert("verdict".into(), verdict_of(harness));
+    out.insert(
+        "location".into(),
+        json!(format!("{}:{}", harness["file"].as_str().unwrap_or_default(), harness["line"])),
+    );
+    let time = harness["resources"]["verification_time_s"].as_f64().unwrap_or(0.0);
+    out.insert("time_s".into(), json!((time * 100.0).round() / 100.0));
+    if let Some(message) = harness["outcome"]["message"].as_str().filter(|m| !m.is_empty()) {
+        out.insert("message".into(), json!(message));
+    }
+    let failed = harness["failed_properties"].as_array().cloned().unwrap_or_default();
+    let shown: Vec<Value> = failed
+        .iter()
+        .take(max_failed)
+        .map(|p| {
+            let mut entry = Map::new();
+            entry.insert("class".into(), p["class"].clone());
+            entry.insert("description".into(), p["description"].clone());
+            if let Some(loc) = location(p) {
+                entry.insert("location".into(), json!(loc));
+            }
+            Value::Object(entry)
+        })
+        .collect();
+    out.insert("failed".into(), json!(shown));
+    if failed.len() > max_failed {
+        out.insert("failed_omitted".into(), json!(failed.len() - max_failed));
+    }
+    let checks = &harness["checks"];
+    let covers = &harness["covers"];
+    let warnings =
+        len(&harness["warnings"]) as u64 + harness["warnings_truncated"].as_u64().unwrap_or(0);
+    for (key, value) in [
+        ("checks_total", json!(checks["total"].as_u64().unwrap_or(0))),
+        ("unreachable_checks", json!(len(&checks["unreachable"]))),
+        ("undetermined_checks", json!(len(&checks["undetermined"]))),
+        ("covers_total", json!(covers["total"].as_u64().unwrap_or(0))),
+        ("unsatisfiable_covers", json!(len(&covers["unsatisfiable"]))),
+        ("unreachable_covers", json!(len(&covers["unreachable"]))),
+        ("unsupported_constructs", json!(len(&harness["unsupported_constructs"]))),
+        ("warnings", json!(warnings)),
+    ] {
+        out.insert(key.to_string(), value);
+    }
+    let unsupported: Vec<Value> = harness["unsupported_constructs"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .take(max_failed)
+        .map(|p| {
+            let mut entry = Map::new();
+            if let Some(d) = p["description"].as_str() {
+                entry.insert("description".into(), json!(d));
+            }
+            if let Some(loc) = location(p) {
+                entry.insert("location".into(), json!(loc));
+            }
+            Value::Object(entry)
+        })
+        .collect();
+    if !unsupported.is_empty() {
+        out.insert("unsupported".into(), json!(unsupported));
+    }
+    let flags: Vec<&str> = [
+        ("automatically_generated", harness["is_automatically_generated"] == true),
+        ("bounded", harness["is_bounded"] == true),
+        ("contract", !harness["contract"].is_null()),
+        ("should_panic", harness["attributes"]["should_panic"] == true),
+        ("concrete_test_generated", harness["generated_concrete_test"] == true),
+    ]
+    .into_iter()
+    .filter_map(|(name, on)| on.then_some(name))
+    .collect();
+    out.insert("flags".into(), json!(flags));
+    let trusted = trusted_constructs(harness);
+    if !trusted.is_empty() {
+        out.insert("trusted".into(), Value::Object(trusted));
+    }
+    if let Some(run) = run_resources(&harness["plugin_run"]) {
+        if run.get("killed").is_some() {
+            out.insert("killed".into(), run["killed"].clone());
+            out.insert("message".into(), run["killed_message"].clone());
+        }
+        out.insert("run".into(), Value::Object(run));
+    }
+    Value::Object(out)
+}
+
+/// The resource record of a guarded run (`plugin_run`, see `process::Output::record`), as shown
+/// in summaries.
+fn run_resources(record: &Value) -> Option<Map<String, Value>> {
+    let record = record.as_object()?;
+    let out: Map<String, Value> = [
+        "peak_memory_mb",
+        "cpu_s",
+        "elapsed_s",
+        "limit_mb",
+        "guard",
+        "peak_is_sampled",
+        "killed",
+        "killed_message",
+    ]
+    .iter()
+    .filter_map(|k| record.get(*k).filter(|v| !v.is_null()).map(|v| (k.to_string(), v.clone())))
+    .collect();
+    (!out.is_empty()).then_some(out)
+}
+
+/// Each entry: (`configuration.checks` key, value that weakens the proof, the flag that set it).
+const WEAKENING_CHECKS: &[(&str, bool, &str)] = &[
+    ("memory_safety", false, "--no-memory-safety-checks"),
+    ("overflow", false, "--no-overflow-checks"),
+    ("unwinding", false, "--no-unwinding-checks"),
+    ("undefined_function", false, "--no-undefined-function-checks"),
+    ("assertion_reach_checks", false, "--no-assertion-reach-checks"),
+    ("assert_contracts", false, "--no-assert-contracts"),
+    ("prove_safety_only", true, "--prove-safety-only"),
+    ("ignore_global_asm", true, "--ignore-global-asm"),
+];
+
+/// The Kani options of this run that disable checks or change what a SUCCESS means.
+fn weakened_checks(doc: &Value) -> Vec<String> {
+    let config = &doc["configuration"];
+    let mut weakened: Vec<String> = WEAKENING_CHECKS
+        .iter()
+        .filter(|(key, bad, _)| config["checks"][key].as_bool() == Some(*bad))
+        .map(|(_, _, flag)| flag.to_string())
+        .collect();
+    let cbmc_args: Vec<&str> =
+        config["cbmc_args"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
+    if !cbmc_args.is_empty() {
+        weakened.push(format!("--cbmc-args {}", cbmc_args.join(" ")));
+    }
+    weakened
+}
+
+/// What the harness's result relies on besides the code itself, as recorded by Kani.
+fn trusted_constructs(harness: &Value) -> Map<String, Value> {
+    let attributes = &harness["attributes"];
+    let stubs: Vec<String> = attributes["stubs"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|s| {
+            format!(
+                "{} -> {}",
+                s["original"].as_str().unwrap_or_default(),
+                s["replacement"].as_str().unwrap_or_default()
+            )
+        })
+        .collect();
+    let mut trusted = Map::new();
+    if !stubs.is_empty() {
+        trusted.insert("stubs".into(), json!(stubs));
+    }
+    if len(&attributes["verified_stubs"]) > 0 {
+        trusted.insert("verified_stubs".into(), attributes["verified_stubs"].clone());
+    }
+    // Where the stubs come from, unless the export itself lists them.
+    match attributes["stubs_source"].as_str() {
+        Some("unknown") => {
+            trusted.insert(
+                "stubs_source".into(),
+                json!(
+                    "unknown: the export does not list stubs and the harness source was not found"
+                ),
+            );
+        }
+        Some(source) if source != "export" && !trusted.is_empty() => {
+            trusted.insert("stubs_source".into(), json!(source));
+        }
+        _ => {}
+    }
+    trusted
+}
+
+pub fn summarize(doc: &Value, failures_only: bool, max_failed: usize) -> Value {
+    let all: Vec<Value> = doc["harnesses"]
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or_default()
+        .iter()
+        .map(|h| summarize_harness(h, max_failed))
+        .collect();
+    let mut by_verdict: std::collections::BTreeMap<String, u64> = Default::default();
+    for h in &all {
+        *by_verdict.entry(h["verdict"].as_str().unwrap_or("UNKNOWN").to_string()).or_default() += 1;
+    }
+    let harnesses: Vec<Value> =
+        all.into_iter().filter(|h| !failures_only || h["verdict"] != "SUCCESS").collect();
+    let n = |v: &str| by_verdict.get(v).copied().unwrap_or(0);
+    let total = doc["summary"]["total"].as_u64().unwrap_or_else(|| by_verdict.values().sum());
+    let inconclusive: u64 =
+        ["TIMEOUT", "OUT_OF_MEMORY", "CRASHED", "KILLED"].iter().map(|v| n(v)).sum();
+    let mut out = json!({
+        "kani": doc["tools"]["kani"],
+        "run_state": doc["run_state"],
+        "started_at": doc["started_at"],
+        "total": total,
+        "successful": n("SUCCESS"),
+        "failed": n("FAILURE"),
+        "inconclusive": inconclusive,
+        "by_verdict": by_verdict,
+        "all_ok": total > 0 && n("SUCCESS") == total,
+        "harnesses": harnesses,
+    });
+    let weakened = weakened_checks(doc);
+    if !weakened.is_empty() {
+        out["weakened_checks"] = json!(weakened);
+    }
+    let unmatched = &doc["harness_selection"]["unmatched_filters"];
+    if len(unmatched) > 0 {
+        out["unmatched_filters"] = unmatched.clone();
+    }
+    let stopped: Vec<Value> = harnesses
+        .iter()
+        .filter(|h| h.get("killed").is_some())
+        .map(|h| json!({ "harness": h["name"], "reason": h["killed"], "message": h["message"] }))
+        .collect();
+    if !stopped.is_empty() {
+        out["killed"] = json!(stopped);
+    }
+    if let Some(run) = run_resources(&doc["plugin_run"]) {
+        if run.get("killed").is_some() && stopped.is_empty() {
+            out["killed"] = json!([{ "harness": null, "reason": run["killed"],
+                                     "message": run["killed_message"] }]);
+        }
+        out["run"] = Value::Object(run);
+    }
+    out["export_shape"] = doc.get("export_shape").cloned().unwrap_or(json!("flat"));
+    let detectable = crate::export::weakened_checks_detectable(doc);
+    out["weakened_checks_detectable"] = json!(detectable);
+    if !detectable {
+        out["weakened_checks_note"] = json!(crate::export::NO_CONFIGURATION_NOTE);
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const FIXTURE: &str = include_str!(
+        "../../../tests/json-handler/schema-validation/fixture-completed-failure.json"
+    );
+
+    #[test]
+    fn summarizes_failure_fixture() {
+        let doc: Value = serde_json::from_str(FIXTURE).unwrap();
+        let summary = summarize(&doc, false, 1);
+        let harness = &summary["harnesses"][0];
+        assert_eq!(harness["verdict"], "FAILURE");
+        assert_eq!(harness["failed"].as_array().unwrap().len(), 1);
+        assert_eq!(harness["failed_omitted"], 1);
+        assert_eq!(harness["failed"][0]["location"], "test.rs:10");
+        assert_eq!(harness["unsatisfiable_covers"], 1);
+        assert_eq!(harness["unreachable_checks"], 0);
+        assert_eq!(harness["flags"], json!(["contract"]));
+        assert_eq!(summary["inconclusive"], 0);
+        assert_eq!(summary["all_ok"], false);
+        assert_eq!(harness["trusted"]["stubs"], json!(["real_fn -> stub_fn"]));
+        assert_eq!(harness["trusted"]["verified_stubs"], json!(["verified_target_fn"]));
+    }
+
+    #[test]
+    fn reports_weakened_checks() {
+        let doc = json!({
+            "configuration": {
+                "checks": { "overflow": false, "memory_safety": true, "prove_safety_only": true },
+                "cbmc_args": ["--unwind", "3"]
+            }
+        });
+        assert_eq!(
+            summarize(&doc, false, 1)["weakened_checks"],
+            json!(["--no-overflow-checks", "--prove-safety-only", "--cbmc-args --unwind 3"])
+        );
+    }
+}

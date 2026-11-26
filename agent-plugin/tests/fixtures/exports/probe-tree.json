@@ -1,0 +1,314 @@
+{
+ "metadata": {
+  "version": "1.0",
+  "timestamp": "2026-11-07T01:51:53.000000000Z",
+  "kani_version": "0.68.0",
+  "target": "x86_64-unknown-linux-gnu",
+  "build_mode": "release"
+ },
+ "project": {
+  "crate_name": [
+   "export_probe"
+  ],
+  "workspace_root": "/work/export-probe",
+  "output_dir": "/work/target"
+ },
+ "tools": {
+  "kani": "0.68.0",
+  "rustc": "rustc 1.100.0-nightly (8925ea358 2026-08-20)",
+  "cbmc": "6.11.0 (cbmc-6.11.0)",
+  "goto_cc": "gcc (goto-cc 6.11.0 (cbmc-6.11.0)) 11.5.0",
+  "goto_instrument": "6.11.0 (cbmc-6.11.0)",
+  "solvers": [
+   {
+    "name": "cadical",
+    "version": null
+   }
+  ]
+ },
+ "harness_metadata": [
+  {
+   "pretty_name": "proofs::passes",
+   "mangled_name": "_RNvproofs_passes",
+   "crate_name": "export_probe",
+   "source": {
+    "file": "src/lib.rs",
+    "start_line": 31,
+    "end_line": 36
+   },
+   "goto_file": "/work/target/proofs_passes.symtab.out",
+   "attributes": {
+    "kind": "Proof",
+    "should_panic": false
+   },
+   "contract": {
+    "contracted_function_name": null,
+    "recursion_tracker": null
+   },
+   "has_loop_contracts": false,
+   "is_automatically_generated": false,
+   "is_bounded": false,
+   "is_ctor_based": false
+  },
+  {
+   "pretty_name": "proofs::fails",
+   "mangled_name": "_RNvproofs_fails",
+   "crate_name": "export_probe",
+   "source": {
+    "file": "src/lib.rs",
+    "start_line": 42,
+    "end_line": 47
+   },
+   "goto_file": "/work/target/proofs_fails.symtab.out",
+   "attributes": {
+    "kind": "Proof",
+    "should_panic": false
+   },
+   "contract": {
+    "contracted_function_name": null,
+    "recursion_tracker": null
+   },
+   "has_loop_contracts": false,
+   "is_automatically_generated": false,
+   "is_bounded": false,
+   "is_ctor_based": false
+  },
+  {
+   "pretty_name": "proofs::check_checked_double",
+   "mangled_name": "_RNvproofs_check_checked_double",
+   "crate_name": "export_probe",
+   "source": {
+    "file": "src/lib.rs",
+    "start_line": 48,
+    "end_line": 53
+   },
+   "goto_file": "/work/target/proofs_check_checked_double.symtab.out",
+   "attributes": {
+    "kind": "ProofForContract { target_fn: \"checked_double\" }",
+    "should_panic": false
+   },
+   "contract": {
+    "contracted_function_name": "_RNCNCNvNtCslyoFghIStgp_3lib6proofs14checked_doubles0_0s_0B7_",
+    "recursion_tracker": null
+   },
+   "has_loop_contracts": false,
+   "is_automatically_generated": false,
+   "is_bounded": false,
+   "is_ctor_based": false
+  },
+  {
+   "pretty_name": "proofs::stubbed",
+   "mangled_name": "_RNvproofs_stubbed",
+   "crate_name": "export_probe",
+   "source": {
+    "file": "src/lib.rs",
+    "start_line": 56,
+    "end_line": 61
+   },
+   "goto_file": "/work/target/proofs_stubbed.symtab.out",
+   "attributes": {
+    "kind": "Proof",
+    "should_panic": false
+   },
+   "contract": {
+    "contracted_function_name": null,
+    "recursion_tracker": null
+   },
+   "has_loop_contracts": false,
+   "is_automatically_generated": false,
+   "is_bounded": false,
+   "is_ctor_based": false
+  }
+ ],
+ "error_details": [],
+ "property_details": [],
+ "cbmc": [
+  {
+   "harness_id": "proofs::passes",
+   "cbmc_metadata": {
+    "version": "6.11.0",
+    "os_info": "x86_64 linux unix"
+   },
+   "configuration": {
+    "object_bits": 16,
+    "solver": "cadical"
+   },
+   "cbmc_stats": {}
+  },
+  {
+   "harness_id": "proofs::fails",
+   "cbmc_metadata": {
+    "version": "6.11.0",
+    "os_info": "x86_64 linux unix"
+   },
+   "configuration": {
+    "object_bits": 16,
+    "solver": "cadical"
+   },
+   "cbmc_stats": {}
+  },
+  {
+   "harness_id": "proofs::check_checked_double",
+   "cbmc_metadata": {
+    "version": "6.11.0",
+    "os_info": "x86_64 linux unix"
+   },
+   "configuration": {
+    "object_bits": 16,
+    "solver": "cadical"
+   },
+   "cbmc_stats": {}
+  },
+  {
+   "harness_id": "proofs::stubbed",
+   "cbmc_metadata": {
+    "version": "6.11.0",
+    "os_info": "x86_64 linux unix"
+   },
+   "configuration": {
+    "object_bits": 16,
+    "solver": "cadical"
+   },
+   "cbmc_stats": {}
+  }
+ ],
+ "verification_results": {
+  "summary": {
+   "total_harnesses": 4,
+   "executed": 4,
+   "status": "completed",
+   "successful": 3,
+   "failed": 1,
+   "duration_ms": 455
+  },
+  "results": [
+   {
+    "harness_id": "proofs::passes",
+    "status": "Success",
+    "duration_ms": 24,
+    "checks": [
+     {
+      "id": 1,
+      "function": "proofs::passes",
+      "status": "Unreachable",
+      "description": "cannot happen",
+      "location": {
+       "file": "src/lib.rs",
+       "line": "34",
+       "column": "9"
+      },
+      "category": "assertion"
+     },
+     {
+      "id": 2,
+      "function": "proofs::passes",
+      "status": "Success",
+      "description": "attempt to multiply with overflow",
+      "location": {
+       "file": "src/lib.rs",
+       "line": "37",
+       "column": "9"
+      },
+      "category": "assertion"
+     },
+     {
+      "id": 1,
+      "function": "proofs::passes",
+      "status": "Unsatisfiable",
+      "description": "impossible",
+      "location": {
+       "file": "src/lib.rs",
+       "line": "36",
+       "column": "9"
+      },
+      "category": "cover"
+     }
+    ]
+   },
+   {
+    "harness_id": "proofs::fails",
+    "status": "Failure",
+    "duration_ms": 31,
+    "checks": [
+     {
+      "id": 1,
+      "function": "proofs::fails",
+      "status": "Failure",
+      "description": "attempt to add with overflow",
+      "location": {
+       "file": "src/lib.rs",
+       "line": "44",
+       "column": "9"
+      },
+      "category": "assertion"
+     }
+    ]
+   },
+   {
+    "harness_id": "proofs::check_checked_double",
+    "status": "Success",
+    "duration_ms": 210,
+    "checks": [
+     {
+      "id": 1,
+      "function": "proofs::checked_double",
+      "status": "Unreachable",
+      "description": "assertion",
+      "location": {
+       "file": "src/lib.rs",
+       "line": "22",
+       "column": "9"
+      },
+      "category": "assertion"
+     },
+     {
+      "id": 2,
+      "function": "proofs::checked_double",
+      "status": "Success",
+      "description": "attempt to multiply with overflow",
+      "location": {
+       "file": "src/lib.rs",
+       "line": "23",
+       "column": "9"
+      },
+      "category": "assertion"
+     }
+    ]
+   },
+   {
+    "harness_id": "proofs::stubbed",
+    "status": "Success",
+    "duration_ms": 190,
+    "checks": [
+     {
+      "id": 1,
+      "function": "proofs::checked_double",
+      "status": "Unreachable",
+      "description": "assertion",
+      "location": {
+       "file": "src/lib.rs",
+       "line": "22",
+       "column": "9"
+      },
+      "category": "assertion"
+     },
+     {
+      "id": 2,
+      "function": "proofs::checked_double",
+      "status": "Success",
+      "description": "attempt to multiply with overflow",
+      "location": {
+       "file": "src/lib.rs",
+       "line": "23",
+       "column": "9"
+      },
+      "category": "assertion"
+     }
+    ]
+   }
+  ]
+ },
+ "coverage": {
+  "enabled": false
+ }
+}

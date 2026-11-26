@@ -1,0 +1,11 @@
+{
+  "_comment": "Kani versions supported by this plugin release. Bump min_kani whenever the skill, scripts, or kani-mcp start relying on a newer Kani feature. max_kani_exclusive is the first unsupported version.",
+  "plugin_version": "0.1.0",
+  "min_kani": "0.68.0",
+  "max_kani_exclusive": "1.0.0",
+  "required_unstable_features": {
+    "--export-json": "export-json",
+    "--concrete-playback": "concrete-playback",
+    "autoharness": "autoharness"
+  }
+}
