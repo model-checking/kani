@@ -7,15 +7,16 @@ use std::{
     fmt::Display,
     fs::File,
     io::{BufWriter, Write},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use crate::{
     args::list_args::Format,
     list::{ListMetadata, merge_list_metadata},
+    project::Project,
     version::KANI_VERSION,
 };
-use anyhow::Result;
+use anyhow::{Context, Result};
 use comfy_table::Table as PrettyTable;
 use serde_json::json;
 use to_markdown_table::MarkdownTable;
@@ -25,16 +26,31 @@ use to_markdown_table::MarkdownTable;
 const FILE_VERSION: &str = "0.1";
 const OUTPUT_FILENAME: &str = "kani-list";
 
+/// The directory for `kani-list.md` or `kani-list.json` when `--output` is not given.
+/// Cargo projects use Kani's folder in the cargo target directory, the same folder the build uses.
+/// Standalone and `--std` projects have no cargo target directory and use the current directory.
+pub fn default_list_dir(project: &Project, target_dir: Option<&Path>) -> PathBuf {
+    match &project.cargo_metadata {
+        Some(cargo_metadata) => target_dir
+            .map_or_else(|| cargo_metadata.target_directory.clone().into(), Path::to_path_buf)
+            .join("kani"),
+        None => PathBuf::from("."),
+    }
+}
+
 /// Output the results of the list subcommand.
+/// The `markdown` and `json` formats write `kani-list.md` or `kani-list.json` to `output_dir`,
+/// creating it if needed.
 pub fn output_list_results(
     list_metadata: BTreeSet<ListMetadata>,
     format: Format,
+    output_dir: &Path,
     quiet: bool,
 ) -> Result<()> {
     match format {
         Format::Pretty => pretty(list_metadata),
-        Format::Markdown => markdown(list_metadata, quiet),
-        Format::Json => json(list_metadata, quiet),
+        Format::Markdown => markdown(list_metadata, output_dir, quiet),
+        Format::Json => json(list_metadata, output_dir, quiet),
     }
 }
 
@@ -89,11 +105,15 @@ fn pretty(list_metadata: BTreeSet<ListMetadata>) -> Result<()> {
 }
 
 /// Output results to a Markdown file.
-fn markdown(list_metadata: BTreeSet<ListMetadata>, quiet: bool) -> Result<()> {
+fn markdown(list_metadata: BTreeSet<ListMetadata>, output_dir: &Path, quiet: bool) -> Result<()> {
     let (contract_output, standard_output) = construct_output(list_metadata, markdown_constructor)?;
 
-    let out_path = Path::new(OUTPUT_FILENAME).with_extension("md");
-    let mut out_file = File::create(&out_path).unwrap();
+    std::fs::create_dir_all(output_dir).with_context(|| {
+        format!("Failed to create list output directory `{}`", output_dir.display())
+    })?;
+    let out_path = output_dir.join(OUTPUT_FILENAME).with_extension("md");
+    let mut out_file = File::create(&out_path)
+        .with_context(|| format!("Failed to create list output file `{}`", out_path.display()))?;
     out_file.write_all(contract_output.as_bytes()).unwrap();
     out_file.write_all(standard_output.as_bytes()).unwrap();
     if !quiet {
@@ -103,9 +123,13 @@ fn markdown(list_metadata: BTreeSet<ListMetadata>, quiet: bool) -> Result<()> {
 }
 
 /// Output results as a JSON file.
-fn json(list_metadata: BTreeSet<ListMetadata>, quiet: bool) -> Result<()> {
-    let out_path = Path::new(OUTPUT_FILENAME).with_extension("json");
-    let out_file = File::create(&out_path).unwrap();
+fn json(list_metadata: BTreeSet<ListMetadata>, output_dir: &Path, quiet: bool) -> Result<()> {
+    std::fs::create_dir_all(output_dir).with_context(|| {
+        format!("Failed to create list output directory `{}`", output_dir.display())
+    })?;
+    let out_path = output_dir.join(OUTPUT_FILENAME).with_extension("json");
+    let out_file = File::create(&out_path)
+        .with_context(|| format!("Failed to create list output file `{}`", out_path.display()))?;
     let writer = BufWriter::new(out_file);
 
     let combined_md = merge_list_metadata(list_metadata);
@@ -226,4 +250,14 @@ fn format_results<T: Display>(
     }
 
     output.join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_list_dir_is_current_dir_without_cargo() {
+        assert_eq!(default_list_dir(&Project::default(), None), PathBuf::from("."));
+    }
 }

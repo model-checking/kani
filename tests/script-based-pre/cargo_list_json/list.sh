@@ -8,13 +8,14 @@
 
 output=$(cargo kani list -Z function-contracts --format json)
 
-# Check that Kani prints the absolute path to kani-list.json
-absolute_path="$(cd "$(dirname "kani-list.json")" && pwd -P && cd - > /dev/null)/$(basename "kani-list.json")"
+# Check that Kani prints the absolute path to target/kani/kani-list.json
+list_file="target/kani/kani-list.json"
+absolute_path="$(cd "$(dirname "$list_file")" && pwd -P && cd - > /dev/null)/$(basename "$list_file")"
 expected_last_line="Wrote list results to $absolute_path"
 last_line=$(echo "$output" | tail -n 1)
 
 if [ "$last_line" = "$expected_last_line" ]; then
-    cat kani-list.json
+    cat "$list_file"
     exit 0
 else
     echo "Test failed: Absolute path to kani-list.json is missing from printed output"

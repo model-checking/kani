@@ -10,7 +10,7 @@ use crate::{
         VerificationArgs,
         list_args::{CargoListArgs, StandaloneListArgs},
     },
-    list::output::output_list_results,
+    list::output::{default_list_dir, output_list_results},
     list::{FileName, HarnessName, ListMetadata},
     project::{Project, cargo_project, standalone_project, std_project},
     session::KaniSession,
@@ -80,9 +80,12 @@ pub fn list_cargo(args: CargoListArgs, mut verify_opts: VerificationArgs) -> Res
     }
 
     let project = cargo_project(&mut session, false)?;
+    let output_dir = args
+        .output
+        .unwrap_or_else(|| default_list_dir(&project, session.args.target_dir.as_deref()));
     let list_metadata = process_metadata(project.metadata);
 
-    output_list_results(list_metadata, args.format, quiet)
+    output_list_results(list_metadata, args.format, &output_dir, quiet)
 }
 
 pub fn list_standalone(args: StandaloneListArgs, mut verify_opts: VerificationArgs) -> Result<()> {
@@ -100,7 +103,10 @@ pub fn list_standalone(args: StandaloneListArgs, mut verify_opts: VerificationAr
         standalone_project(&args.input, args.crate_name, &session)?
     };
 
+    let output_dir = args
+        .output
+        .unwrap_or_else(|| default_list_dir(&project, session.args.target_dir.as_deref()));
     let list_metadata = process_metadata(project.metadata);
 
-    output_list_results(list_metadata, args.format, quiet)
+    output_list_results(list_metadata, args.format, &output_dir, quiet)
 }

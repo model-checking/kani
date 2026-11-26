@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use crate::args::list_args::Format;
+use crate::args::list_args::{Format, validate_list_output};
 use crate::args::{OutputFormat, ValidateArgs, VerificationArgs, validate_std_path};
 use crate::util::warning;
 use clap::{Error, Parser, error::ErrorKind};
@@ -91,6 +91,12 @@ pub struct CommonAutoharnessArgs {
     /// The format of the `list` output. Requires --list.
     #[arg(long, default_value = "pretty", requires = "list")]
     pub format: Format,
+
+    /// Write the `list` results, `kani-list.md` or `kani-list.json`, to this directory instead of
+    /// `<target-dir>/kani/` (`cargo kani`) or the current directory (`kani`). Kani creates the
+    /// directory if it does not exist. Requires --list.
+    #[arg(long, value_name = "DIR", requires = "list")]
+    pub output: Option<PathBuf>,
 }
 
 /// The bounds automatic harnesses use for arguments that can only be generated up to a bound,
@@ -206,7 +212,7 @@ impl ValidateArgs for CommonAutoharnessArgs {
             }
         }
 
-        Ok(())
+        validate_list_output(self.format, self.output.as_deref())
     }
 }
 
@@ -373,6 +379,22 @@ mod tests {
         assert_eq!(args.slice_bound, AUTOHARNESS_SLICE_BOUND);
         assert_eq!(args.string_bound, AUTOHARNESS_STR_BOUND);
         assert_eq!(args.bounded_arbitrary_bound, AUTOHARNESS_BOUNDED_ARBITRARY_BOUND);
+    }
+
+    #[test]
+    fn output_requires_list() {
+        let err = CommonAutoharnessArgs::try_parse_from(["autoharness", "--output", "out"])
+            .expect_err("expected --output to require --list");
+        assert_eq!(err.kind(), ErrorKind::MissingRequiredArgument);
+    }
+
+    #[test]
+    fn output_conflicts_with_pretty_format() {
+        let args =
+            CommonAutoharnessArgs::try_parse_from(["autoharness", "--list", "--output", "out"])
+                .expect("--output parses with --list; validation rejects the pretty format");
+        let err = args.validate().expect_err("expected --output to reject the pretty format");
+        assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
     }
 
     /// Both subcommand forms reject `--constructor-args` with `--output-format=old`, and accept
