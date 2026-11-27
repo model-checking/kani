@@ -1,0 +1,19 @@
+array_elem_cast_nonzero.cover.1\
+- Status: SATISFIED
+
+array_elem_write_then_read.cover.1\
+- Status: SATISFIED
+
+nested_array_elem_cast.cover.1\
+- Status: SATISFIED
+
+Failed Checks: Undefined Behavior: Invalid value of type `[std::num::NonZero<u8>; 4]`
+
+Failed Checks: Kani currently doesn't support checking validity of `mutable cast` for `*mut [bool; 2]`
+
+Failed Checks: Kani currently doesn't support checking validity of `mutable cast` for `*mut [std::num::NonZero<u8>; 4]`
+
+Verification failed for - ub_invalid_byte_through_elem_ptr
+Verification failed for - bool_array_to_nonzero
+Verification failed for - nonzero_array_to_wider_nonzero
+Complete - 3 successfully verified harnesses, 3 failures, 6 total.

@@ -1111,7 +1111,12 @@ impl MirVisitor for CheckValueVisitor<'_, '_> {
                             if let Ok(dest_validity) =
                                 ty_validity_per_offset(self.tcx, &self.machine, dest_pointee_ty, 0)
                             {
-                                if dest_validity != src_validity {
+                                // A pointer to the element of an array (e.g. `*mut [T; N]` as
+                                // `*mut T`) reaches, by pointer arithmetic, only slots that hold
+                                // a `T`.
+                                if dest_validity != src_validity
+                                    && !is_array_element(self.tcx, src_pointee_ty, dest_pointee_ty)
+                                {
                                     self.push_target(SourceOp::UnsupportedCheck {
                                         check: "mutable cast".to_string(),
                                         ty: src_ty,
@@ -1715,6 +1720,20 @@ fn deref_place(ptr: &Operand) -> Option<Place> {
     let mut projection = place.projection.clone();
     projection.push(ProjectionElem::Deref);
     Some(Place { local: place.local, projection })
+}
+
+/// Whether `elem_ty` is the element type of the array `ty`, or of an array nested in it.
+fn is_array_element(tcx: TyCtxt, ty: Ty, elem_ty: Ty) -> bool {
+    let mut ty = ty;
+    while !is_pattern_type(tcx, ty)
+        && let TyKind::RigidTy(RigidTy::Array(inner, _)) = ty.kind()
+    {
+        if inner == elem_ty {
+            return true;
+        }
+        ty = inner;
+    }
+    false
 }
 
 /// The pointee of the raw pointer or reference type `ty`.
