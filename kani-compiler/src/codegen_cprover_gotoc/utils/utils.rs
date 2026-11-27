@@ -9,6 +9,11 @@ use rustc_public::rustc_internal;
 use rustc_public::ty::Span;
 use tracing::debug;
 
+/// CBMC's bit-vector solver needs unsigned operands to order Rust `bool` values.
+pub fn cast_bool_for_ordering(operand: Expr) -> Expr {
+    if operand.typ().is_c_bool() { operand.cast_to(Type::unsigned_int(8)) } else { operand }
+}
+
 // Should move into rvalue
 //make this a member function
 pub fn slice_fat_ptr(typ: Type, data: Expr, len: Expr, symbol_table: &SymbolTable) -> Expr {

@@ -4,7 +4,7 @@
 use crate::codegen_cprover_gotoc::codegen::PropertyClass;
 use crate::codegen_cprover_gotoc::codegen::place::ProjectedPlace;
 use crate::codegen_cprover_gotoc::codegen::ty_stable::pointee_type_stable;
-use crate::codegen_cprover_gotoc::utils::{dynamic_fat_ptr, slice_fat_ptr};
+use crate::codegen_cprover_gotoc::utils::{cast_bool_for_ordering, dynamic_fat_ptr, slice_fat_ptr};
 use crate::codegen_cprover_gotoc::{GotocCtx, VtableCtx};
 use crate::kani_middle::abi::LayoutOf;
 use crate::kani_middle::coercion::{
@@ -1843,6 +1843,13 @@ impl GotocCtx<'_, '_> {
         res_ty: Ty,
         is_float: bool,
     ) -> Expr {
+        let (left, right) =
+            if matches!(op, BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Cmp) {
+                (cast_bool_for_ordering(left), cast_bool_for_ordering(right))
+            } else {
+                (left, right)
+            };
+
         match op {
             BinOp::Eq => {
                 if is_float {

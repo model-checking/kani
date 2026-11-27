@@ -1,0 +1,9 @@
+Status: SATISFIED\
+Description: "a can be less than b"
+
+Status: UNSATISFIABLE\
+Description: "a and b cannot both be less than each other"
+
+ ** 1 of 2 cover properties satisfied
+
+VERIFICATION:- SUCCESSFUL
