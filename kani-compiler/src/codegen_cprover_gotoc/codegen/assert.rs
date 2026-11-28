@@ -23,7 +23,7 @@ use crate::codegen_cprover_gotoc::GotocCtx;
 use cbmc::InternedString;
 use cbmc::goto_program::{Expr, Location, Stmt, Type};
 use rustc_public::mir::{Place, ProjectionElem};
-use rustc_public::ty::{Span as SpanStable, Ty};
+use rustc_public::ty::{RigidTy, Span as SpanStable, Ty, TyKind};
 use strum_macros::{AsRefStr, EnumString};
 use tracing::debug;
 
@@ -391,6 +391,47 @@ impl GotocCtx<'_, '_> {
         );
 
         self.codegen_assert_assume(cond, PropertyClass::SanityCheck, &assert_msg, loc)
+    }
+
+    /// Taking the address of `(*ptr)[i]` for a raw slice pointer `ptr` is what
+    /// `<usize as SliceIndex<[T]>>::get_unchecked{,_mut}` lowers to (the `slice_get_unchecked`
+    /// intrinsic), and Kani turns off the standard library's precondition that `i < len`. Unlike
+    /// safe indexing, MIR has no bounds-check assertion for it, so assert it here.
+    pub fn codegen_raw_slice_index_bounds_check(
+        &mut self,
+        place: &Place,
+        loc: &Location,
+    ) -> Option<Stmt> {
+        let [.., ProjectionElem::Deref, ProjectionElem::Index(idx)] = place.projection.as_slice()
+        else {
+            return None;
+        };
+        // The slice place is the pointer dereference, i.e. the place without the index.
+        let mut slice_place = place.clone();
+        slice_place.projection.pop();
+        let mut ptr_place = slice_place.clone();
+        ptr_place.projection.pop();
+        let ptr_ty = self.place_ty_stable(&ptr_place);
+        if !ptr_ty.kind().is_raw_ptr()
+            || !matches!(
+                self.place_ty_stable(&slice_place).kind(),
+                TyKind::RigidTy(RigidTy::Slice(_))
+            )
+        {
+            return None;
+        }
+        let len = self
+            .codegen_place_stable(&slice_place, *loc)
+            .unwrap()
+            .fat_ptr_goto_expr?
+            .member("len", &self.symbol_table);
+        let idx = self.codegen_local(*idx, *loc);
+        Some(self.codegen_assert_assume(
+            idx.lt(len),
+            PropertyClass::SafetyCheck,
+            "slice index out of bounds: the index must be less than the slice length",
+            *loc,
+        ))
     }
 
     /// If converting a raw pointer to a reference, &(*ptr), need to inject
