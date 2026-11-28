@@ -792,6 +792,13 @@ impl GotocCtx<'_, '_> {
             Rvalue::Ref(_, _, p) | Rvalue::AddressOf(_, p) => {
                 let place_ref = self.codegen_place_ref_stable(p, loc);
                 let place_ref_type = place_ref.typ().clone();
+                if let Some(bounds_check) = self.codegen_raw_slice_index_bounds_check(p, &loc) {
+                    return Expr::statement_expression(
+                        vec![bounds_check, place_ref.as_stmt(loc)],
+                        place_ref_type,
+                        loc,
+                    );
+                }
                 match self.codegen_raw_ptr_deref_validity_check(
                     p,
                     place_ref.clone(),
