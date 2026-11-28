@@ -479,10 +479,13 @@ impl GotocCtx<'_, '_> {
         let value_expr = self.codegen_operand_stable(value);
         let distance_expr = self.codegen_operand_stable(distance);
         let value_width = value_expr.typ().sizeof_in_bits(&self.symbol_table);
-        let value_width_expr = Expr::int_constant(value_width, distance_expr.typ().clone());
+        // Compare as unsigned: a width of 128 does not fit in an `i8` distance. Negative
+        // distances are ruled out by the check below, which runs first.
+        let unsigned_typ = distance_expr.typ().to_unsigned().unwrap();
+        let value_width_expr = Expr::int_constant(value_width, unsigned_typ.clone());
 
         let excessive_distance_check = self.codegen_assert_assume(
-            distance_expr.clone().lt(value_width_expr),
+            distance_expr.clone().cast_to(unsigned_typ).lt(value_width_expr),
             PropertyClass::ArithmeticOverflow,
             "attempt to shift by excessive shift distance",
             loc,
