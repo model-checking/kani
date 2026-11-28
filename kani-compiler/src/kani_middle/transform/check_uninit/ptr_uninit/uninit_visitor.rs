@@ -439,8 +439,16 @@ impl MirVisitor for CheckUninitVisitor<'_> {
                         // initialization state for union arguments.
                         if instance.is_foreign_item() {
                             match instance.name().as_str() {
-                                "alloc::alloc::__rust_alloc" | "alloc::alloc::__rust_realloc" => {
+                                "alloc::alloc::__rust_alloc" => {
                                     /* Memory is uninitialized, nothing to do here. */
+                                }
+                                "alloc::alloc::__rust_realloc" => {
+                                    /* Old bytes are copied, so copy their init state too. */
+                                    self.push_target(MemoryInitOp::Copy {
+                                        from: raw_ptr_arg(&args[0], self.locals.as_slice()),
+                                        to: Operand::Copy(destination.clone()),
+                                        count: args[1].clone(),
+                                    });
                                 }
                                 "alloc::alloc::__rust_alloc_zeroed" => {
                                     /* Memory is initialized here, need to update shadow memory. */

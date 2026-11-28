@@ -1,0 +1,31 @@
+Checking harness check_copy_into_fresh_allocation...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_realloc_carries_uninit...
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*mut u8`
+VERIFICATION:- FAILED
+
+Checking harness check_realloc_grow_tail_uninit...
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*mut u8`
+VERIFICATION:- FAILED
+
+Checking harness check_realloc_shrink_keeps_prefix...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_realloc_grow_keeps_prefix...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_alloc_zeroed_initialized...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_alloc_zeroed_then_realloc...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_realloc_wide_elements_keep_prefix...
+VERIFICATION:- SUCCESSFUL
+
+Checking harness check_realloc_wide_elements_carry_uninit...
+Failed Checks: Undefined Behavior: Reading from an uninitialized pointer of type `*mut u32`
+VERIFICATION:- FAILED
+
+Complete - 6 successfully verified harnesses, 3 failures, 9 total.
